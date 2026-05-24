@@ -1,12 +1,52 @@
-site:.de webagentur webdesign
-site:.de webdesign agentur wordpress
-site:.de wordpress agentur
-site:.de woocommerce entwickler
-site:.de seo agentur
-site:.de kommunikationsagentur website
-site:.de webentwicklung wordpress
-site:.de digitalagentur webdesign
-site:.de website erstellen unternehmen
-site:.de content strategie website
-site:.de webflow agentur deutschland
-site:.de ux design website agentur
+# --- Allgemeine Agenturen ---
+digitalagentur websites deutschland
+webdesign agentur deutschland
+webentwicklung deutschland
+erstellt websites unternehmen deutschland
+websites für unternehmen deutschland
+ux design websites deutschland
+werbeagentur websites deutschland
+kommunikationsagentur website deutschland
+inhaltsstrategie websites deutschland
+veröffentlichung websites gemeinde deutschland
+seo agentur deutschland
+
+# --- WordPress-Ökosystem ---
+wordpress agentur deutschland
+woocommerce entwickler deutschland
+wordpress webentwicklung deutschland
+elementor agentur deutschland
+
+# --- Enterprise CMS (Episerver/Optimizely, Umbraco, TYPO3) ---
+episerver agentur deutschland
+optimizely cms agentur deutschland
+umbraco cms agentur deutschland
+umbraco cms webentwicklung deutschland
+typo3 agentur deutschland
+sitecore agentur deutschland
+
+# --- E-Commerce ---
+shopify agentur deutschland
+shopify webentwicklung deutschland
+magento agentur deutschland
+magento webentwicklung deutschland
+prestashop agentur deutschland
+shopware agentur deutschland
+onlineshop webentwicklung agentur deutschland
+
+# --- Website Builder ---
+wix agentur deutschland
+wix webentwicklung deutschland
+squarespace agentur deutschland
+
+# --- Headless / modernes CMS ---
+webflow agentur deutschland
+contentful agentur deutschland
+sanity cms agentur deutschland
+headless cms agentur deutschland
+jamstack agentur deutschland
+
+# --- Marketing / Marketing-Tech ---
+hubspot agentur deutschland
+hubspot partner deutschland
+digitales marketing agentur deutschland

@@ -1,12 +1,52 @@
-site:.dk webbureau hjemmesider
-site:.dk webdesign bureau
-site:.dk wordpress bureau
-site:.dk woocommerce udvikler
-site:.dk seo bureau
-site:.dk kommunikationsbureau hjemmeside
-site:.dk webudvikling wordpress
-site:.dk digitalbureau webdesign
-site:.dk hjemmesider virksomheder
-site:.dk indholdsstrategi hjemmeside
-site:.dk webflow bureau danmark
-site:.dk ux design hjemmeside
+# --- Generelle bureauer ---
+digitalbureau hjemmesider danmark
+webdesign bureau danmark
+webudvikling danmark
+bygger hjemmesider virksomheder danmark
+hjemmesider til virksomheder danmark
+ux design hjemmesider danmark
+reklamebureau hjemmesider danmark
+kommunikationsbureau hjemmeside danmark
+indholdsstrategi hjemmesider danmark
+publicering hjemmesider kommune danmark
+seo bureau danmark
+
+# --- WordPress-økosystem ---
+wordpress bureau danmark
+woocommerce udvikler danmark
+wordpress webudvikling danmark
+elementor bureau danmark
+
+# --- Enterprise CMS (Episerver/Optimizely, Umbraco, TYPO3) ---
+episerver bureau danmark
+optimizely cms bureau danmark
+umbraco cms bureau danmark
+umbraco cms webudvikling danmark
+typo3 bureau danmark
+sitecore bureau danmark
+
+# --- E-handel ---
+shopify bureau danmark
+shopify webudvikling danmark
+magento bureau danmark
+magento webudvikling danmark
+prestashop bureau danmark
+shopware bureau danmark
+netbutik webudvikling bureau danmark
+
+# --- Website builders ---
+wix bureau danmark
+wix webudvikling danmark
+squarespace bureau danmark
+
+# --- Headless / moderne CMS ---
+webflow bureau danmark
+contentful bureau danmark
+sanity cms bureau danmark
+headless cms bureau danmark
+jamstack bureau danmark
+
+# --- Markedsføring / marketing tech ---
+hubspot bureau danmark
+hubspot partner danmark
+digital markedsføring bureau danmark

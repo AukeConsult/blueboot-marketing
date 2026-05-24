@@ -1,14 +1,52 @@
-site:.no digitalbyrå nettsider
-site:.no webdesign byrå
-site:.no wordpress byrå
-site:.no woocommerce utvikler
-site:.no seo byrå
-site:.no kommunikasjonsbyrå nettside
-site:.no webutvikling wordpress
-site:.no lager nettsider bedrifter
-site:.no nettsider for bedrifter
-site:.no publisering nettsider kommune
-site:.no innholdsstrategi nettsider
-site:.no webflow byrå norge
-site:.no ux design nettsider
-site:.no reklamebyrå nettsider wordpress
+# --- Generelle byråer ---
+digitalbyrå nettsider norge
+webdesign byrå norge
+webutvikling norge
+bygger nettsider bedrifter norge
+nettsider for bedrifter norge
+ux design nettsider norge
+reklamebyrå nettsider norge
+kommunikasjonsbyrå nettside norge
+innholdsstrategi nettsider norge
+publisering nettsider kommune norge
+seo byrå norge
+
+# --- WordPress-økosystem ---
+wordpress byrå norge
+woocommerce utvikler norge
+wordpress webutvikling norge
+elementor byrå norge
+
+# --- Enterprise CMS (Episerver/Optimizely, Umbraco, TYPO3) ---
+episerver byrå norge
+optimizely cms byrå norge
+umbraco cms byrå norge
+umbraco cms webutvikling norge
+typo3 byrå norge
+sitecore byrå norge
+
+# --- E-handel ---
+shopify byrå norge
+shopify webutvikling norge
+magento byrå norge
+magento webutvikling norge
+prestashop byrå norge
+shopware byrå norge
+nettbutikk webutvikling byrå norge
+
+# --- Website builders ---
+wix byrå norge
+wix webutvikling norge
+squarespace byrå norge
+
+# --- Headless / moderne CMS ---
+webflow byrå norge
+contentful byrå norge
+sanity cms byrå norge
+headless cms byrå norge
+jamstack byrå norge
+
+# --- Markedsføring / marketing tech ---
+hubspot byrå norge
+hubspot partner norge
+digital markedsføring byrå norge

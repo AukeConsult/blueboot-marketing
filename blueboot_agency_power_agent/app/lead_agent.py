@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import hashlib
 import json
@@ -21,6 +22,8 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from rapidfuzz import fuzz
 
+from send_mail import make_outreach
+
 USER_AGENT = "BlueBootLeadAgent/1.1 (+https://blueboot.ai)"
 EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+")
 GENERIC_PHONE_RE = re.compile(r"(?:(?:\+|00)\d{1,3}\s*)?(?:\d[\s().-]?){7,15}")
@@ -28,15 +31,50 @@ DEFAULT_COUNTRIES = ["NO"]
 COUNTRY_CONFIG_PATH = Path("config/countries.json")
 
 TECH_SIGNATURES = {
-    "WordPress": ["wp-content", "wp-includes", "wordpress"],
-    "WooCommerce": ["woocommerce", "wc-blocks", "wp-content/plugins/woocommerce"],
-    "Webflow": ["webflow", "assets.website-files.com"],
-    "Shopify": ["cdn.shopify.com", "shopify"],
-    "Squarespace": ["squarespace"],
-    "Wix": ["wixstatic", "wix.com"],
-    "HubSpot": ["hs-scripts", "hubspot"],
-    "Sanity": ["sanity.io", "cdn.sanity.io"],
-    "Craft CMS": ["craftcms", "craft-cms"]
+    # --- WordPress ecosystem ---
+    "WordPress":        ["wp-content", "wp-includes", "wordpress"],
+    "WooCommerce":      ["woocommerce", "wc-blocks", "wp-content/plugins/woocommerce"],
+    "Elementor":        ["elementor-frontend", "elementor/assets"],
+    "Divi":             ["et-pb-", "divi/js", "extra/css"],
+
+    # --- Enterprise / .NET CMS (very common with Scandinavian agencies) ---
+    "Episerver":        ["episerver", "epi-", "/EPiServer/", "episerver.js"],
+    "Optimizely CMS":   ["optimizely", "optimizelycms", "optly"],
+    "Umbraco":          ["umbraco", "/umbraco/", "umbraco.js"],
+    "Sitecore":         ["sitecore", "/-/media/", "sitecore/shell"],
+    "Kentico":          ["kentico", "cmsdesk", "/CMSPages/"],
+    "TYPO3":            ["typo3", "typo3conf", "typo3/sysext"],
+    "DotNetNuke":       ["dnn", "dotnetnuke", "/desktopmodules/"],
+
+    # --- E-commerce platforms ---
+    "Shopify":          ["cdn.shopify.com", "shopify"],
+    "Magento":          ["magento", "mage/", "Magento_"],
+    "PrestaShop":       ["prestashop", "/modules/prestashop", "presta-"],
+    "WooCommerce":      ["woocommerce", "wc-blocks"],
+    "Shopware":         ["shopware", "sw-plugin"],
+    "BigCommerce":      ["bigcommerce", "bc-sf-filter"],
+    "OpenCart":         ["opencart", "catalog/view/theme"],
+
+    # --- Headless / modern CMS ---
+    "Contentful":       ["contentful", "ctfassets.net"],
+    "Sanity":           ["sanity.io", "cdn.sanity.io"],
+    "Storyblok":        ["storyblok", "a.storyblok.com"],
+    "Prismic":          ["prismic.io", "cdn.prismic.io"],
+    "Strapi":           ["strapi", "/api/strapi"],
+    "Craft CMS":        ["craftcms", "craft-cms"],
+    "Ghost":            ["ghost.io", "/ghost/", "ghost-theme"],
+
+    # --- Website builders / SaaS ---
+    "Webflow":          ["webflow", "assets.website-files.com"],
+    "Squarespace":      ["squarespace"],
+    "Wix":              ["wixstatic", "wix.com"],
+    "Framer":           ["framer.com", "framerusercontent.com"],
+
+    # --- Marketing / CRM platforms ---
+    "HubSpot":          ["hs-scripts", "hubspot"],
+    "Salesforce":       ["salesforce", "force.com", "sfdcstatic"],
+    "Marketo":          ["marketo", "munchkin.js"],
+    "ActiveCampaign":   ["activecampaign", "trackcmp.net"],
 }
 
 @dataclass
@@ -48,6 +86,7 @@ class Lead:
     title: str = ""
     description: str = ""
     emails: str = ""
+    email_titles: str = ""
     phones: str = ""
     contact_page: str = ""
     linkedin: str = ""
@@ -156,8 +195,27 @@ def clean_search_url(url: str) -> str:
                 val = qs[key][0]
                 if val.startswith("a1"):
                     val = val[2:]
+                    try:
+                        padding = (4 - len(val) % 4) % 4
+                        val = base64.b64decode(val + "=" * padding).decode("utf-8")
+                    except Exception:
+                        pass
                 return unquote(val)
     return url
+
+
+PRODUCT_PAGE_PATTERNS = [
+    "/c/", "/category/", "/katalog/", "/kategori/",
+    "/product/", "/produkt/", "/products/", "/produkter/",
+    "/shop/", "/store/", "/butikk/",
+    "/p/", "/item/", "/items/",
+    "/blogg/", "/blog/", "/news/", "/nyheter/",
+    "/article/", "/artikkel/",
+]
+
+def is_product_or_content_url(url: str) -> bool:
+    path = urlparse(url).path.lower()
+    return any(pat in path for pat in PRODUCT_PAGE_PATTERNS)
 
 
 def allowed_domain(domain: str, blocklist: set[str], countries: list[str], configs: dict) -> bool:
@@ -194,14 +252,41 @@ def visible_text(soup: BeautifulSoup) -> str:
     return re.sub(r"\s+", " ", soup.get_text(" ", strip=True))[:120_000]
 
 
-def extract_emails(html: str, text: str) -> set[str]:
-    emails = set(EMAIL_RE.findall(html + " " + text))
-    cleaned = set()
-    for e in emails:
+TITLE_KEYWORDS = re.compile(
+    r"\b(ceo|cto|coo|cmo|cfo|vp|partner|founder|co-founder|owner|president|"
+    r"director|head of|lead|manager|chief|principal|consultant|advisor|"
+    r"daglig leder|administrerende direkt[oø]r|gründer|sjef|leder|direkt[oø]r|"
+    r"vd|verkst[äa]llande direkt[öo]r|"
+    r"gesch[äa]ftsf[üu]hrer|inhaber|leiter|gesch[äa]ftsleitung|"
+    r"directeur|g[eé]rant|fondateur|responsable|chef de projet|"
+    r"director|gerente|fundador|responsable|jefe de proyecto)\b",
+    re.IGNORECASE
+)
+
+
+def extract_contacts(html: str, text: str) -> dict[str, str]:
+    """Return {email: title} — title is best-effort from surrounding text."""
+    combined = html + " " + text
+    raw_emails = EMAIL_RE.findall(combined)
+    contacts: dict[str, str] = {}
+    for e in raw_emails:
         e = e.strip(".,;:()[]<>").lower()
-        if not any(e.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]):
-            cleaned.add(e)
-    return cleaned
+        if any(e.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]):
+            continue
+        if e in contacts:
+            continue
+        # Search ±300 chars around the email for a job title
+        title = ""
+        idx = combined.lower().find(e)
+        if idx != -1:
+            window = combined[max(0, idx - 300): idx + 300]
+            m = TITLE_KEYWORDS.search(window)
+            if m:
+                # Grab up to 60 chars starting from the match for context
+                title = window[m.start(): m.start() + 60].strip()
+                title = re.sub(r"\s+", " ", title)[:60]
+        contacts[e] = title
+    return contacts
 
 
 def extract_phones(text: str, country="NO") -> set[str]:
@@ -253,14 +338,24 @@ def categorize(text: str, html: str, country_cfg: dict) -> tuple[set[str], list[
             cats.add(cat)
             score += weights[cat]
             reasons.append(f"{cat}: " + ", ".join(hits[:4]))
-    # Boost likely agencies with services language
-    if any(x in hay for x in country_cfg.get("service_words", ["services", "customers", "clients", "case"])): 
+    if any(x in hay for x in country_cfg.get("service_words", ["services", "customers", "clients", "case"])):
         score += 8
         reasons.append("has services/customers/cases language")
     if any(x in hay for x in country_cfg.get("support_words", ["support", "hosting", "maintenance"])):
         score += 6
         reasons.append("offers maintenance/support")
-    return cats, reasons, min(score, 100)
+    # Boost confirmed agency language
+    agency_hits = [x for x in country_cfg.get("agency_words", []) if x.lower() in hay]
+    if agency_hits:
+        score += min(len(agency_hits) * 10, 20)
+        reasons.append("agency language: " + ", ".join(agency_hits[:3]))
+    # Penalise clearly non-agency businesses
+    neg_hits = [kw for kw in country_cfg.get("negative_keywords", []) if kw.lower() in hay]
+    if neg_hits:
+        penalty = min(len(neg_hits) * 30, 90)
+        score -= penalty
+        reasons.append(f"NON-AGENCY penalty ({', '.join(neg_hits[:3])}): -{penalty}")
+    return cats, reasons, max(min(score, 100), 0)
 
 
 def priority(score: int) -> str:
@@ -271,36 +366,36 @@ def priority(score: int) -> str:
 
 
 def angle(cats: set[str], tech: set[str]) -> str:
-    if "wordpress" in cats or "WordPress" in tech:
+    # Enterprise CMS — high-value, content-heavy installs
+    if any(t in tech for t in ("Episerver", "Optimizely CMS")):
+        return "Position BlueSearch as an AI search layer on top of Episerver/Optimizely — no rebuild needed, instant upgrade for content-heavy customer sites."
+    if "Umbraco" in tech:
+        return "Offer BlueSearch as a plug-in AI search add-on for their Umbraco customer base — great fit for large content and documentation sites."
+    if "Sitecore" in tech:
+        return "Sitecore agencies can offer BlueSearch as an AI search upgrade — positions them ahead of competitors on search experience."
+    if any(t in tech for t in ("TYPO3", "Kentico", "DotNetNuke")):
+        return f"BlueSearch adds modern AI search to {next(t for t in tech if t in ('TYPO3','Kentico','DotNetNuke'))} sites — a recurring managed service with no core changes needed."
+
+    # E-commerce
+    if any(t in tech for t in ("Shopify", "Magento", "WooCommerce", "PrestaShop", "Shopware")):
+        platform = next(t for t in tech if t in ("Shopify", "Magento", "WooCommerce", "PrestaShop", "Shopware"))
+        return f"Offer BlueSearch as an AI product-search add-on for {platform} stores — boosts conversion and can be sold as a recurring service."
+
+    # Headless / modern CMS
+    if any(t in tech for t in ("Contentful", "Sanity", "Storyblok", "Prismic")):
+        return "BlueSearch integrates via API with headless CMS setups — pitch it as the missing AI search layer for their Jamstack/headless customers."
+
+    # WordPress ecosystem
+    if "WordPress" in tech or "wordpress" in cats:
         return "Offer BlueSearch as a WordPress/WooCommerce AI-search add-on for their customer base."
+
+    # SEO / communication
     if "seo" in cats:
         return "Position BlueSearch as AI visibility + better on-site discovery for SEO clients."
     if "communication" in cats or "public_sector" in cats:
         return "Focus on public-information sites: help visitors find answers across pages, PDFs and articles."
+
     return "General reseller angle: add AI-powered search to existing customer websites without rebuilding them."
-
-
-def make_outreach(company: str, domain: str, cats: set[str], lead_angle: str, country_name: str) -> tuple[str, str]:
-    subject = f"AI search add-on for {company}'s website customers"
-    email = f"""Hi {company},
-
-I noticed you work with websites and digital customer communication in {country_name}. We build BlueSearch, an AI-powered search layer that can be added to existing websites so visitors can ask questions and get answers with source links.
-
-Why this may fit your customers:
-- easy add-on for existing sites
-- useful for content-heavy websites, WordPress/WooCommerce, public information and documentation
-- can be sold as a recurring managed service
-
-Suggested angle for {domain}: {lead_angle}
-
-Would it be useful if I sent a short demo showing how it works on a real website?
-
-Best regards,
-Leif Auke
-BlueBoot R&D AS
-https://blueboot.ai
-"""
-    return subject, email
 
 
 def crawl_site(url: str, source_query: str, max_pages: int, delay: float, country_code: str, country_cfg: dict) -> Lead | None:
@@ -308,7 +403,8 @@ def crawl_site(url: str, source_query: str, max_pages: int, delay: float, countr
     dom = domain_of(website)
     seen, queue = set(), [website]
     all_text, all_html = "", ""
-    emails, phones, tech = set(), set(), set()
+    contacts: dict[str, str] = {}
+    phones, tech = set(), set()
     title = desc = contact_page = linkedin = ""
 
     while queue and len(seen) < max_pages:
@@ -328,7 +424,7 @@ def crawl_site(url: str, source_query: str, max_pages: int, delay: float, countr
         text = visible_text(soup)
         all_text += " " + text
         all_html += " " + html[:300000]
-        emails |= extract_emails(html, text)
+        contacts.update(extract_contacts(html, text))
         phones |= extract_phones(text, country_cfg.get("phone_region", country_code))
         tech |= detect_tech(html, soup)
         links, cp, li = extract_links(page, soup)
@@ -350,7 +446,10 @@ def crawl_site(url: str, source_query: str, max_pages: int, delay: float, countr
     subject, email_body = make_outreach(company_from_domain(dom), dom, cats, lead_angle, country_cfg.get("name", country_code))
     return Lead(
         company=company_from_domain(dom), domain=dom, website=website, source_query=source_query,
-        title=title, description=desc, emails=", ".join(sorted(emails)), phones=", ".join(sorted(phones)),
+        title=title, description=desc,
+        emails=", ".join(sorted(contacts.keys())),
+        email_titles=", ".join(contacts.get(e, "") for e in sorted(contacts.keys())),
+        phones=", ".join(sorted(phones)),
         contact_page=contact_page, linkedin=linkedin, detected_tech=", ".join(sorted(tech)),
         categories=", ".join(sorted(cats)), reseller_score=score, priority=priority(score), reasons="; ".join(reasons),
         suggested_angle=lead_angle, outreach_subject=subject, outreach_email=email_body,
@@ -368,6 +467,57 @@ def dedupe_leads(leads: list[Lead]) -> list[Lead]:
     return sorted(best.values(), key=lambda x: x.reseller_score, reverse=True)
 
 
+def build_contacts_df(leads: list[Lead]) -> pd.DataFrame:
+    """One row per email address per lead, with title when available."""
+    contact_rows = []
+    for lead in leads:
+        lead_id = hashlib.sha1(lead.domain.encode()).hexdigest()[:10]
+        emails = [e.strip() for e in lead.emails.split(",") if e.strip()] if lead.emails else []
+        titles = [t.strip() for t in lead.email_titles.split(",") if True] if lead.email_titles else []
+        if not emails:
+            contact_rows.append({
+                "lead_id": lead_id,
+                "email": "",
+                "title": "",
+                "company": lead.company,
+                "domain": lead.domain,
+                "website": lead.website,
+                "country": lead.country_name,
+                "priority": lead.priority,
+                "reseller_score": lead.reseller_score,
+                "phones": lead.phones,
+                "linkedin": lead.linkedin,
+                "contact_page": lead.contact_page,
+                "outreach_subject": lead.outreach_subject,
+                "outreach_email": lead.outreach_email,
+            })
+        for i, email in enumerate(emails):
+            contact_rows.append({
+                "lead_id": lead_id,
+                "email": email,
+                "title": titles[i] if i < len(titles) else "",
+                "company": lead.company,
+                "domain": lead.domain,
+                "website": lead.website,
+                "country": lead.country_name,
+                "priority": lead.priority,
+                "reseller_score": lead.reseller_score,
+                "phones": lead.phones,
+                "linkedin": lead.linkedin,
+                "contact_page": lead.contact_page,
+                "outreach_subject": lead.outreach_subject,
+                "outreach_email": lead.outreach_email,
+            })
+    return pd.DataFrame(contact_rows)
+
+
+def autofit_sheet(ws) -> None:
+    ws.freeze_panes = "A2"
+    for col in ws.columns:
+        max_len = min(max(len(str(c.value or "")) for c in col) + 2, 55)
+        ws.column_dimensions[col[0].column_letter].width = max_len
+
+
 def export(leads: list[Lead], outdir: Path) -> None:
     outdir.mkdir(parents=True, exist_ok=True)
     rows = [asdict(l) for l in leads]
@@ -377,22 +527,24 @@ def export(leads: list[Lead], outdir: Path) -> None:
     else:
         df = pd.DataFrame(columns=["lead_id"] + list(Lead.__dataclass_fields__.keys()))
     df.to_csv(outdir / "agency_leads.csv", index=False, quoting=csv.QUOTE_MINIMAL)
+
+    contacts_df = build_contacts_df(leads)
+
     with pd.ExcelWriter(outdir / "agency_leads.xlsx", engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="Leads", index=False)
+        contacts_df.to_excel(writer, sheet_name="Contacts", index=False)
         summary = pd.DataFrame([
             {"metric": "Total leads", "value": len(df)},
             {"metric": "A priority", "value": int((df.get("priority", pd.Series(dtype=str)).astype(str).str.startswith("A")).sum()) if not df.empty else 0},
             {"metric": "With email", "value": int((df.get("emails", pd.Series(dtype=str)).astype(str).str.len() > 0).sum()) if not df.empty else 0},
+            {"metric": "Total contacts", "value": int((contacts_df["email"] != "").sum()) if not contacts_df.empty else 0},
             {"metric": "Generated at", "value": datetime.now().isoformat(timespec="seconds")},
         ])
         summary.to_excel(writer, sheet_name="Dashboard", index=False)
         qdf = pd.DataFrame({"query": load_lines(Path("config/queries_all.txt"))})
         qdf.to_excel(writer, sheet_name="Queries", index=False)
-        ws = writer.book["Leads"]
-        ws.freeze_panes = "A2"
-        for col in ws.columns:
-            max_len = min(max(len(str(c.value or "")) for c in col) + 2, 55)
-            ws.column_dimensions[col[0].column_letter].width = max_len
+        autofit_sheet(writer.book["Leads"])
+        autofit_sheet(writer.book["Contacts"])
     (outdir / "agency_leads.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -429,15 +581,33 @@ def run() -> None:
 
     print(f"Countries: {', '.join(countries)}")
     print(f"Running {len(query_pairs)} search queries...")
-    for query, query_country in query_pairs:
-        urls = google_cse_search(query, args.max_results) or bing_search(query, args.max_results)
+    for qi, (query, query_country) in enumerate(query_pairs, 1):
+        print(f"[Query {qi}/{len(query_pairs)}] {query_country}: {query}")
+        google_urls = google_cse_search(query, args.max_results)
+        if google_urls:
+            print(f"  Google: {len(google_urls)} results")
+            urls = google_urls
+        else:
+            bing_urls = bing_search(query, args.max_results)
+            print(f"  Bing fallback: {len(bing_urls)} results")
+            urls = bing_urls
+        added = 0
         for raw in urls:
             url = clean_search_url(raw)
             dom = domain_of(url)
             detected_country = country_for_domain(dom, countries, configs) or (query_country if query_country != "AUTO" else None)
+            in_blocklist = dom in blocklist or any(dom.endswith("." + b) or dom == b for b in blocklist)
+            is_product = is_product_or_content_url(url)
+            if is_product:
+                # Strip to root domain so we still crawl the agency homepage
+                parsed = urlparse(url)
+                url = f"{parsed.scheme}://{parsed.netloc}/"
+            print(f"    url={dom} country={detected_country} blocklist={in_blocklist} product_page={is_product} duplicate={dom in seen_domains}")
             if allowed_domain(dom, blocklist, countries, configs) and dom not in seen_domains and detected_country:
                 candidates.append((url, query, detected_country))
                 seen_domains.add(dom)
+                added += 1
+        print(f"  -> {added} new candidates (total so far: {len(candidates)})")
         time.sleep(args.delay)
 
     print(f"Crawling {len(candidates)} candidate domains...")
@@ -452,6 +622,7 @@ def run() -> None:
     leads = dedupe_leads(leads)
     export(leads, Path(args.output))
     print(f"Done. Exported {len(leads)} leads to {args.output}/agency_leads.xlsx")
+
 
 if __name__ == "__main__":
     run()

@@ -1,12 +1,52 @@
-site:.co.uk web agency website design
-site:.co.uk wordpress agency
-site:.co.uk woocommerce developer
-site:.co.uk seo agency web design
-site:.co.uk communications agency website
-site:.co.uk digital agency web development
-site:.co.uk website design for businesses
-site:.co.uk public sector web agency
-site:.co.uk webflow agency uk
-site:.co.uk ux design website agency
-site:.uk web agency website design
-site:.uk wordpress agency
+# --- General agencies ---
+digital agency websites uk
+web design agency uk
+web development uk
+builds websites businesses uk
+websites for businesses uk
+ux design websites uk
+advertising agency websites uk
+communications agency website uk
+content strategy websites uk
+web agency public sector uk
+seo agency uk
+
+# --- WordPress ecosystem ---
+wordpress agency uk
+woocommerce developer uk
+wordpress web development uk
+elementor agency uk
+
+# --- Enterprise CMS (Episerver/Optimizely, Umbraco, TYPO3) ---
+episerver agency uk
+optimizely cms agency uk
+umbraco cms agency uk
+umbraco cms web development uk
+typo3 agency uk
+sitecore agency uk
+
+# --- E-commerce ---
+shopify agency uk
+shopify web development uk
+magento agency uk
+magento web development uk
+prestashop agency uk
+shopware agency uk
+ecommerce web development agency uk
+
+# --- Website builders ---
+wix agency uk
+wix web development uk
+squarespace agency uk
+
+# --- Headless / modern CMS ---
+webflow agency uk
+contentful agency uk
+sanity cms agency uk
+headless cms agency uk
+jamstack agency uk
+
+# --- Marketing / marketing tech ---
+hubspot agency uk
+hubspot partner uk
+digital marketing agency uk
