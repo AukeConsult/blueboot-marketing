@@ -3,7 +3,7 @@
     "Sortlist: JS infinite-scroll — URL pagination does not work. pages=1 only (scrapes ~20 top agencies). Requires minimal headers (no Sec-Fetch-*) to avoid bot detection.",
     "Clutch: Cloudflare WAF blocks all requests with 403. Removed from all countries.",
     "GoodFirms: WAF drops connection after ~20s timeout. Removed from all countries.",
-    "DesignRush: supports ?page=N pagination."
+    "DesignRush: supports ?page=N pagination. 404 = no more pages — set pages high, scraper stops on 404."
   ],
   "NO": [
     {
@@ -48,7 +48,7 @@
       "name": "DesignRush SE",
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/se?page={page}",
-      "pages": 8
+      "pages": 50
     }
   ],
   "DK": [
@@ -74,7 +74,7 @@
       "name": "DesignRush DK",
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/dk?page={page}",
-      "pages": 8
+      "pages": 50
     }
   ],
   "DE": [
@@ -100,13 +100,13 @@
       "name": "DesignRush DE – web design",
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/de?page={page}",
-      "pages": 10
+      "pages": 50
     },
     {
       "name": "DesignRush DE – web development",
       "type": "designrush",
       "url": "https://www.designrush.com/agency/web-development-companies/de?page={page}",
-      "pages": 10
+      "pages": 50
     }
   ],
   "UK": [
@@ -132,13 +132,13 @@
       "name": "DesignRush UK – web development",
       "type": "designrush",
       "url": "https://www.designrush.com/agency/web-development-companies/uk?page={page}",
-      "pages": 10
+      "pages": 50
     },
     {
       "name": "DesignRush UK – web design",
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/uk?page={page}",
-      "pages": 10
+      "pages": 50
     }
   ],
   "FR": [
@@ -164,7 +164,7 @@
       "name": "DesignRush FR",
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/fr?page={page}",
-      "pages": 10
+      "pages": 50
     }
   ],
   "ES": [
@@ -190,7 +190,7 @@
       "name": "DesignRush ES",
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/es?page={page}",
-      "pages": 10
+      "pages": 50
     }
   ]
 }

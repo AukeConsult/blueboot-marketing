@@ -1,0 +1,351 @@
+"""Shared utilities — no internal project imports."""
+from __future__ import annotations
+
+import json
+import os
+import re
+import time
+from fnmatch import fnmatch
+from pathlib import Path
+from urllib.parse import urljoin, urlparse
+
+import phonenumbers
+import requests
+import tldextract
+from bs4 import BeautifulSoup
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+USER_AGENT      = "BlueBootLeadAgent/1.1 (+https://blueboot.ai)"
+BROWSER_UA      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+EMAIL_RE        = re.compile(r"[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+")
+GENERIC_PHONE_RE = re.compile(r"(?:(?:\+|00)\d{1,3}\s*)?(?:\d[\s().-]?){7,15}")
+DEFAULT_COUNTRIES      = ["NO"]
+COUNTRY_CONFIG_PATH    = Path("config/countries.json")
+
+PRODUCT_PAGE_PATTERNS = [
+    "/c/", "/category/", "/katalog/", "/kategori/",
+    "/product/", "/produkt/", "/products/", "/produkter/",
+    "/shop/", "/store/", "/butikk/",
+    "/p/", "/item/", "/items/",
+    "/blogg/", "/blog/", "/news/", "/nyheter/",
+    "/article/", "/artikkel/",
+]
+
+TITLE_KEYWORDS = re.compile(
+    r"\b(ceo|cto|coo|cmo|cfo|vp|partner|founder|co-founder|owner|president|"
+    r"director|head of|lead|manager|chief|principal|consultant|advisor|"
+    r"daglig leder|administrerende direkt[oø]r|gründer|sjef|leder|direkt[oø]r|"
+    r"vd|verkst[äa]llande direkt[öo]r|"
+    r"gesch[äa]ftsf[üu]hrer|inhaber|leiter|gesch[äa]ftsleitung|"
+    r"directeur|g[eé]rant|fondateur|responsable|chef de projet|"
+    r"director|gerente|fundador|responsable|jefe de proyecto)\b",
+    re.IGNORECASE
+)
+
+TECH_SIGNATURES = {
+    "WordPress":      ["wp-content", "wp-includes", "wordpress"],
+    "WooCommerce":    ["woocommerce", "wc-blocks", "wp-content/plugins/woocommerce"],
+    "Elementor":      ["elementor-frontend", "elementor/assets"],
+    "Divi":           ["et-pb-", "divi/js", "extra/css"],
+    "Episerver":      ["episerver", "epi-", "/EPiServer/", "episerver.js"],
+    "Optimizely CMS": ["optimizely", "optimizelycms", "optly"],
+    "Umbraco":        ["umbraco", "/umbraco/", "umbraco.js"],
+    "Sitecore":       ["sitecore", "/-/media/", "sitecore/shell"],
+    "Kentico":        ["kentico", "cmsdesk", "/CMSPages/"],
+    "TYPO3":          ["typo3", "typo3conf", "typo3/sysext"],
+    "DotNetNuke":     ["dnn", "dotnetnuke", "/desktopmodules/"],
+    "Shopify":        ["cdn.shopify.com", "shopify"],
+    "Magento":        ["magento", "mage/", "Magento_"],
+    "PrestaShop":     ["prestashop", "/modules/prestashop", "presta-"],
+    "Shopware":       ["shopware", "sw-plugin"],
+    "BigCommerce":    ["bigcommerce", "bc-sf-filter"],
+    "OpenCart":       ["opencart", "catalog/view/theme"],
+    "Contentful":     ["contentful", "ctfassets.net"],
+    "Sanity":         ["sanity.io", "cdn.sanity.io"],
+    "Storyblok":      ["storyblok", "a.storyblok.com"],
+    "Prismic":        ["prismic.io", "cdn.prismic.io"],
+    "Craft CMS":      ["craftcms", "craft-cms"],
+    "Ghost":          ["ghost.io", "/ghost/", "ghost-theme"],
+    "Webflow":        ["webflow", "assets.website-files.com"],
+    "Squarespace":    ["squarespace"],
+    "Wix":            ["wixstatic", "wix.com"],
+    "Framer":         ["framer.com", "framerusercontent.com"],
+    "HubSpot":        ["hs-scripts", "hubspot"],
+    "Salesforce":     ["salesforce", "force.com", "sfdcstatic"],
+    "Marketo":        ["marketo", "munchkin.js"],
+    "ActiveCampaign": ["activecampaign", "trackcmp.net"],
+}
+
+# Module-level cache: website home URL → LinkedIn URL (populated by catalog_scrapers)
+linkedin_hints: dict[str, str] = {}
+
+# ---------------------------------------------------------------------------
+# URL / domain helpers
+# ---------------------------------------------------------------------------
+
+def normalize_url(url: str) -> str:
+    url = url.strip()
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
+
+
+def domain_of(url: str) -> str:
+    ext = tldextract.extract(url)
+    return ".".join(part for part in [ext.domain, ext.suffix] if part)
+
+
+def company_from_domain(domain: str) -> str:
+    name = domain.split(".")[0].replace("-", " ").replace("_", " ")
+    return " ".join(w.capitalize() for w in name.split())
+
+
+def is_product_or_content_url(url: str) -> bool:
+    path = urlparse(url).path.lower()
+    return any(pat in path for pat in PRODUCT_PAGE_PATTERNS)
+
+
+def is_blocked(domain: str, blocklist: set[str]) -> bool:
+    domain = domain.lower()
+    for entry in blocklist:
+        if "*" in entry:
+            if fnmatch(domain, entry):
+                return True
+        else:
+            if domain == entry or domain.endswith("." + entry):
+                return True
+    return False
+
+
+def allowed_domain(domain: str, blocklist: set[str], countries: list[str], configs: dict) -> bool:
+    if not domain or is_blocked(domain, blocklist):
+        return False
+    if domain in {"blueboot.ai"}:
+        return True
+    return country_for_domain(domain, countries, configs) is not None
+
+
+def country_for_domain(domain: str, countries: list[str], configs: dict) -> str | None:
+    domain_l = domain.lower()
+    for code in countries:
+        for tld in configs.get(code, {}).get("tlds", []):
+            if domain_l.endswith(tld):
+                return code
+    return None
+
+# ---------------------------------------------------------------------------
+# Config / file helpers
+# ---------------------------------------------------------------------------
+
+def load_lines(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    return [x.strip() for x in path.read_text(encoding="utf-8").splitlines()
+            if x.strip() and not x.strip().startswith("#")]
+
+
+def load_country_configs(path: Path = COUNTRY_CONFIG_PATH) -> dict:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def selected_countries(value: str | None, configs: dict) -> list[str]:
+    if not value:
+        return []
+    if value.upper() == "ALL":
+        return list(configs.keys())
+    result = [x.strip().upper() for x in value.split(",") if x.strip()]
+    return [x for x in result if x in configs]
+
+# ---------------------------------------------------------------------------
+# HTTP
+# ---------------------------------------------------------------------------
+
+def fetch(url: str, timeout: int = 15, accept_language: str = "en;q=0.8",
+          browser_ua: bool = False) -> str:
+    if browser_ua:
+        headers = {
+            "User-Agent": BROWSER_UA,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": accept_language if accept_language != "en;q=0.8" else "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Cache-Control": "max-age=0",
+        }
+    else:
+        headers = {"User-Agent": USER_AGENT, "Accept-Language": accept_language}
+    r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+    r.raise_for_status()
+    ct = r.headers.get("content-type", "")
+    if "text" not in ct and "html" not in ct:
+        return ""
+    return r.text[:2_000_000]
+
+# ---------------------------------------------------------------------------
+# HTML extraction
+# ---------------------------------------------------------------------------
+
+def extract_meta(soup: BeautifulSoup) -> tuple[str, str]:
+    title = soup.title.get_text(" ", strip=True) if soup.title else ""
+    desc = ""
+    tag = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", property="og:description")
+    if tag and tag.get("content"):
+        desc = tag["content"].strip()
+    return title[:250], desc[:500]
+
+
+def visible_text(soup: BeautifulSoup) -> str:
+    for s in soup(["script", "style", "noscript"]):
+        s.extract()
+    return re.sub(r"\s+", " ", soup.get_text(" ", strip=True))[:120_000]
+
+
+def extract_contacts(html: str, text: str) -> dict[str, str]:
+    """Return {email: title} — title is best-effort from surrounding text."""
+    combined = html + " " + text
+    raw_emails = EMAIL_RE.findall(combined)
+    contacts: dict[str, str] = {}
+    _strip_tags = re.compile(r"<[^>]+>")
+    for e in raw_emails:
+        e = e.strip(".,;:()[]<>").lower()
+        e = _strip_tags.sub("", e).strip()
+        if not e or "@" not in e:
+            continue
+        if any(e.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]):
+            continue
+        domain_part = e.split("@", 1)[-1]
+        if all(seg.isdigit() for seg in domain_part.split(".")):
+            continue
+        tld = domain_part.rsplit(".", 1)[-1]
+        if tld.isdigit():
+            continue
+        # Reject hash/UUID local parts — automated addresses like
+        # bfb679c754744c58a7374ee6e25cfc13@sentry.wixpress.com
+        local_part = e.split("@", 1)[0]
+        if len(local_part) >= 16 and re.fullmatch(r"[0-9a-f\-]+", local_part):
+            continue
+        if e in contacts:
+            continue
+        title = ""
+        idx = combined.lower().find(e)
+        if idx != -1:
+            window = combined[max(0, idx - 300): idx + 300]
+            m = TITLE_KEYWORDS.search(window)
+            if m:
+                raw_title = window[m.start(): m.start() + 120]
+                title = _strip_tags.sub(" ", raw_title)
+                title = re.sub(r"\s+", " ", title).strip()[:60]
+        contacts[e] = title
+    return contacts
+
+
+def extract_phones(text: str, country: str = "NO") -> set[str]:
+    phones = set()
+    for m in GENERIC_PHONE_RE.findall(text):
+        raw = re.sub(r"[^+0-9]", "", m)
+        try:
+            num = phonenumbers.parse(raw, country)
+            if phonenumbers.is_valid_number(num):
+                phones.add(phonenumbers.format_number(num, phonenumbers.PhoneNumberFormat.INTERNATIONAL))
+        except Exception:
+            pass
+    return phones
+
+
+def extract_links(base_url: str, soup: BeautifulSoup) -> tuple[list[str], str, str]:
+    links, contact_page, linkedin = [], "", ""
+    for a in soup.find_all("a", href=True):
+        href = urljoin(base_url, a["href"])
+        txt = a.get_text(" ", strip=True).lower()
+        links.append(href)
+        if not contact_page and any(x in href.lower() or x in txt for x in ["kontakt", "contact", "om-oss", "about"]):
+            contact_page = href
+        if "linkedin.com/company" in href.lower() and not linkedin:
+            linkedin = href
+    return links, contact_page, linkedin
+
+
+def detect_tech(html: str, soup: BeautifulSoup) -> set[str]:
+    low = html.lower()
+    tech = set()
+    for name, sigs in TECH_SIGNATURES.items():
+        if any(sig.lower() in low for sig in sigs):
+            tech.add(name)
+    gen = soup.find("meta", attrs={"name": "generator"})
+    if gen and gen.get("content"):
+        tech.add(gen["content"][:80])
+    return tech
+
+# ---------------------------------------------------------------------------
+# Scoring
+# ---------------------------------------------------------------------------
+
+def categorize(text: str, html: str, country_cfg: dict) -> tuple[set[str], list[str], int]:
+    hay = (text + " " + html[:250000]).lower()
+    cats, reasons = set(), []
+    score = 0
+    weights = {"web_agency": 25, "wordpress": 25, "seo": 18,
+               "communication": 18, "public_sector": 10, "ai_interest": 8}
+    for cat, kws in country_cfg.get("keywords", {}).items():
+        hits = [kw for kw in kws if kw.lower() in hay]
+        if hits:
+            cats.add(cat)
+            score += weights.get(cat, 10)
+            reasons.append(f"{cat}: " + ", ".join(hits[:4]))
+    if any(x in hay for x in country_cfg.get("service_words", ["services", "customers", "clients", "case"])):
+        score += 8
+        reasons.append("has services/customers/cases language")
+    if any(x in hay for x in country_cfg.get("support_words", ["support", "hosting", "maintenance"])):
+        score += 6
+        reasons.append("offers maintenance/support")
+    agency_hits = [x for x in country_cfg.get("agency_words", []) if x.lower() in hay]
+    if agency_hits:
+        score += min(len(agency_hits) * 10, 20)
+        reasons.append("agency language: " + ", ".join(agency_hits[:3]))
+    neg_hits = [kw for kw in country_cfg.get("negative_keywords", []) if kw.lower() in hay]
+    if neg_hits:
+        penalty = min(len(neg_hits) * 30, 90)
+        score -= penalty
+        reasons.append(f"NON-AGENCY penalty ({', '.join(neg_hits[:3])}): -{penalty}")
+    return cats, reasons, max(min(score, 100), 0)
+
+
+def priority(score: int) -> str:
+    if score >= 75: return "A - High fit"
+    if score >= 55: return "B - Good fit"
+    if score >= 35: return "C - Maybe"
+    return "D - Low fit"
+
+
+def angle(cats: set[str], tech: set[str]) -> str:
+    if any(t in tech for t in ("Episerver", "Optimizely CMS")):
+        return "Position BlueSearch as an AI search layer on top of Episerver/Optimizely — no rebuild needed."
+    if "Umbraco" in tech:
+        return "Offer BlueSearch as a plug-in AI search add-on for their Umbraco customer base."
+    if "Sitecore" in tech:
+        return "Sitecore agencies can offer BlueSearch as an AI search upgrade."
+    if any(t in tech for t in ("TYPO3", "Kentico", "DotNetNuke")):
+        name = next(t for t in tech if t in ("TYPO3", "Kentico", "DotNetNuke"))
+        return f"BlueSearch adds modern AI search to {name} sites — a recurring managed service."
+    if any(t in tech for t in ("Shopify", "Magento", "WooCommerce", "PrestaShop", "Shopware")):
+        platform = next(t for t in tech if t in ("Shopify", "Magento", "WooCommerce", "PrestaShop", "Shopware"))
+        return f"Offer BlueSearch as an AI product-search add-on for {platform} stores."
+    if any(t in tech for t in ("Contentful", "Sanity", "Storyblok", "Prismic")):
+        return "BlueSearch integrates via API with headless CMS setups — pitch as the missing AI search layer."
+    if "WordPress" in tech or "wordpress" in cats:
+        return "Offer BlueSearch as a WordPress/WooCommerce AI-search add-on for their customer base."
+    if "seo" in cats:
+        return "Position BlueSearch as AI visibility + better on-site discovery for SEO clients."
+    if "communication" in cats or "public_sector" in cats:
+        return "Focus on public-information sites: help visitors find answers across pages, PDFs and articles."
+    return "General reseller angle: add AI-powered search to existing customer websites without rebuilding them."
