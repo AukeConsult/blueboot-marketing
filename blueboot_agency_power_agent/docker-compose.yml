@@ -1,0 +1,10 @@
+services:
+  blueboot-agency-agent:
+    build: .
+    container_name: blueboot-agency-agent
+    env_file:
+      - .env
+    volumes:
+      - ./output:/app/output
+      - ./config:/app/config:ro
+    command: ["--output", "output", "--max-results", "25", "--max-pages", "8", "--delay", "1.0"]
