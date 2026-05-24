@@ -363,6 +363,13 @@ def catalog_run(args) -> None:
 
     all_leads: list[Lead] = load_existing_leads(Path(args.output))
     seen_domains: set[str] = {l.domain.strip().lower() for l in all_leads if l.domain}
+
+    preloaded = getattr(args, "preloaded_domains", set())
+    if preloaded:
+        before = len(seen_domains)
+        seen_domains |= preloaded
+        print(f"  [firebase] added {len(seen_domains) - before} new domains from Firestore preload to skip list")
+
     country_leads: dict[str, int] = {}
     batch_size: int = args.workers
     max_pages = getattr(args, "max_catalog_pages", None)
@@ -410,11 +417,13 @@ def catalog_run(args) -> None:
             print(f"\n  [{code}] Flushing final batch of {len(pending)} sites")
             _crawl_batch(pending, args, code, configs, all_leads, Path(args.output), country_leads)
 
-        print(f"\n[{code}] Done — {country_leads.get(code, 0)} new leads from catalogs")
+        print(f"\n[{code}] Done \u2014 {country_leads.get(code, 0)} new leads from catalogs")
 
     print(f"\n{'='*60}\nCatalog run complete.")
     final_leads = dedupe_leads(all_leads)
-    export(final_leads, Path(args.output))
-    print(f"Exported {len(final_leads)} leads to {args.output}/agency_leads.xlsx")
-    from firebase_sync import sync_leads
-    sync_leads(final_leads)
+    if getattr(args, "no_output", False):
+        print(f"  [output] skipped (--no-output). {len(final_leads)} leads in memory.")
+    else:
+        export(final_leads, Path(args.output))
+        print(f"Exported {len(final_leads)} leads to {args.output}/agency_leads.xlsx")
+    return final_leads

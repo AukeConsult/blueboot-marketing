@@ -1,135 +1,2464 @@
 {
   "NO": {
     "name": "Norway",
-    "tlds": [".no"],
+    "tlds": [
+      ".no"
+    ],
     "phone_region": "NO",
     "accept_language": "no,en;q=0.8",
     "keywords": {
-      "web_agency": ["webdesign", "nettside", "nettsider", "webutvikling", "hjemmeside", "digitalbyrå", "web design", "website"],
-      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
-      "seo": ["seo", "søkemotoroptimalisering", "google ads", "synlighet", "search engine optimization"],
-      "communication": ["kommunikasjonsbyrå", "kommunikasjon", "innhold", "content", "public relations", "pr-byrå"],
-      "public_sector": ["kommune", "offentlig", "stat", "fylkeskommune", "helse", "universitet"],
-      "ai_interest": ["ai", "ki", "kunstig intelligens", "chatgpt", "automatisering"]
+      "web_agency": [
+        "webdesign",
+        "nettside",
+        "nettsider",
+        "webutvikling",
+        "hjemmeside",
+        "digitalbyrå",
+        "web design",
+        "website"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "søkemotoroptimalisering",
+        "google ads",
+        "synlighet",
+        "search engine optimization"
+      ],
+      "communication": [
+        "kommunikasjonsbyrå",
+        "kommunikasjon",
+        "innhold",
+        "content",
+        "public relations",
+        "pr-byrå"
+      ],
+      "public_sector": [
+        "kommune",
+        "offentlig",
+        "stat",
+        "fylkeskommune",
+        "helse",
+        "universitet"
+      ],
+      "ai_interest": [
+        "ai",
+        "ki",
+        "kunstig intelligens",
+        "chatgpt",
+        "automatisering"
+      ]
     },
-    "service_words": ["våre tjenester", "tjenester", "kunder", "case", "referanser", "services"],
-    "support_words": ["drift", "vedlikehold", "support", "hosting"],
-    "contact_words": ["kontakt", "contact", "om-oss", "about", "tjenester", "services", "case", "referanser"],
-    "agency_words": ["vi bygger nettsider", "vi lager nettsider", "vi utvikler", "webprosjekt", "våre kunder", "referanser", "case study", "digitale løsninger for", "partner", "vi hjelper bedrifter", "portefølje", "oppdrag"],
-    "negative_keywords": ["legg i handlekurv", "kjøp nå", "fri frakt", "til kassen", "handlekurv", "antall på lager", "inkl. mva", "ekskl. mva", "bestill her", "produktkatalog", "varenummer", "lagerstatus", "minilager", "lagerplass", "lagerbod", "self storage", "frisør", "restaurant", "kafé", "rørlegger", "elektriker", "tannlege", "legesenter", "eiendomsmegler", "bilverksted", "barnehage", "treningssenter", "dagligvare", "supermarked", "apotek", "forsikring", "bank ", "revisjon", "regnskap"]
+    "service_words": [
+      "våre tjenester",
+      "tjenester",
+      "kunder",
+      "case",
+      "referanser",
+      "services"
+    ],
+    "support_words": [
+      "drift",
+      "vedlikehold",
+      "support",
+      "hosting"
+    ],
+    "contact_words": [
+      "kontakt",
+      "contact",
+      "om-oss",
+      "about",
+      "tjenester",
+      "services",
+      "case",
+      "referanser"
+    ],
+    "agency_words": [
+      "vi bygger nettsider",
+      "vi lager nettsider",
+      "vi utvikler",
+      "webprosjekt",
+      "våre kunder",
+      "referanser",
+      "case study",
+      "digitale løsninger for",
+      "partner",
+      "vi hjelper bedrifter",
+      "portefølje",
+      "oppdrag"
+    ],
+    "negative_keywords": [
+      "legg i handlekurv",
+      "kjøp nå",
+      "fri frakt",
+      "til kassen",
+      "handlekurv",
+      "antall på lager",
+      "inkl. mva",
+      "ekskl. mva",
+      "bestill her",
+      "produktkatalog",
+      "varenummer",
+      "lagerstatus",
+      "minilager",
+      "lagerplass",
+      "lagerbod",
+      "self storage",
+      "frisør",
+      "restaurant",
+      "kafé",
+      "rørlegger",
+      "elektriker",
+      "tannlege",
+      "legesenter",
+      "eiendomsmegler",
+      "bilverksted",
+      "barnehage",
+      "treningssenter",
+      "dagligvare",
+      "supermarked",
+      "apotek",
+      "forsikring",
+      "bank ",
+      "revisjon",
+      "regnskap"
+    ]
   },
   "SE": {
     "name": "Sweden",
-    "tlds": [".se"],
+    "tlds": [
+      ".se"
+    ],
     "phone_region": "SE",
     "accept_language": "sv,en;q=0.8",
     "keywords": {
-      "web_agency": ["webbyrå", "webbdesign", "webbutveckling", "hemsida", "hemsidor", "digitalbyrå", "web design", "website"],
-      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
-      "seo": ["seo", "sökmotoroptimering", "google ads", "synlighet", "search engine optimization"],
-      "communication": ["kommunikationsbyrå", "kommunikation", "innehåll", "content", "public relations", "pr-byrå"],
-      "public_sector": ["kommun", "offentlig", "region", "myndighet", "universitet", "vård"],
-      "ai_interest": ["ai", "artificiell intelligens", "chatgpt", "automatisering"]
+      "web_agency": [
+        "webbyrå",
+        "webbdesign",
+        "webbutveckling",
+        "hemsida",
+        "hemsidor",
+        "digitalbyrå",
+        "web design",
+        "website"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "sökmotoroptimering",
+        "google ads",
+        "synlighet",
+        "search engine optimization"
+      ],
+      "communication": [
+        "kommunikationsbyrå",
+        "kommunikation",
+        "innehåll",
+        "content",
+        "public relations",
+        "pr-byrå"
+      ],
+      "public_sector": [
+        "kommun",
+        "offentlig",
+        "region",
+        "myndighet",
+        "universitet",
+        "vård"
+      ],
+      "ai_interest": [
+        "ai",
+        "artificiell intelligens",
+        "chatgpt",
+        "automatisering"
+      ]
     },
-    "service_words": ["våra tjänster", "tjänster", "kunder", "case", "referenser", "services"],
-    "support_words": ["drift", "underhåll", "support", "hosting"],
-    "contact_words": ["kontakt", "contact", "om-oss", "om oss", "about", "tjänster", "services", "case", "referenser"],
-    "agency_words": ["vi bygger webbplatser", "vi utvecklar", "webbprojekt", "våra kunder", "referenser", "case study", "digitala lösningar för", "partner", "vi hjälper företag", "portfölj", "uppdrag"],
-    "negative_keywords": ["lägg i varukorgen", "köp nu", "fri frakt", "till kassan", "varukorg", "antal i lager", "inkl. moms", "exkl. moms", "beställ här", "produktkatalog", "artikelnummer", "lagerstatus", "självförvaring", "minilager", "frisör", "restaurang", "kafé", "rörmokare", "elektriker", "tandläkare", "fastighetsförmedling", "bilverkstad", "förskola", "dagligvaror", "apotek", "försäkring", "bank ", "redovisning"]
+    "service_words": [
+      "våra tjänster",
+      "tjänster",
+      "kunder",
+      "case",
+      "referenser",
+      "services"
+    ],
+    "support_words": [
+      "drift",
+      "underhåll",
+      "support",
+      "hosting"
+    ],
+    "contact_words": [
+      "kontakt",
+      "contact",
+      "om-oss",
+      "om oss",
+      "about",
+      "tjänster",
+      "services",
+      "case",
+      "referenser"
+    ],
+    "agency_words": [
+      "vi bygger webbplatser",
+      "vi utvecklar",
+      "webbprojekt",
+      "våra kunder",
+      "referenser",
+      "case study",
+      "digitala lösningar för",
+      "partner",
+      "vi hjälper företag",
+      "portfölj",
+      "uppdrag"
+    ],
+    "negative_keywords": [
+      "lägg i varukorgen",
+      "köp nu",
+      "fri frakt",
+      "till kassan",
+      "varukorg",
+      "antal i lager",
+      "inkl. moms",
+      "exkl. moms",
+      "beställ här",
+      "produktkatalog",
+      "artikelnummer",
+      "lagerstatus",
+      "självförvaring",
+      "minilager",
+      "frisör",
+      "restaurang",
+      "kafé",
+      "rörmokare",
+      "elektriker",
+      "tandläkare",
+      "fastighetsförmedling",
+      "bilverkstad",
+      "förskola",
+      "dagligvaror",
+      "apotek",
+      "försäkring",
+      "bank ",
+      "redovisning"
+    ]
   },
   "DK": {
     "name": "Denmark",
-    "tlds": [".dk"],
+    "tlds": [
+      ".dk"
+    ],
     "phone_region": "DK",
     "accept_language": "da,en;q=0.8",
     "keywords": {
-      "web_agency": ["webbureau", "webdesign", "webudvikling", "hjemmeside", "hjemmesider", "digitalbureau", "web design", "website"],
-      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
-      "seo": ["seo", "søgemaskineoptimering", "google ads", "synlighed", "search engine optimization"],
-      "communication": ["kommunikationsbureau", "kommunikation", "indhold", "content", "public relations", "pr-bureau"],
-      "public_sector": ["kommune", "offentlig", "region", "myndighed", "universitet", "sundhed"],
-      "ai_interest": ["ai", "kunstig intelligens", "chatgpt", "automatisering"]
+      "web_agency": [
+        "webbureau",
+        "webdesign",
+        "webudvikling",
+        "hjemmeside",
+        "hjemmesider",
+        "digitalbureau",
+        "web design",
+        "website"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "søgemaskineoptimering",
+        "google ads",
+        "synlighed",
+        "search engine optimization"
+      ],
+      "communication": [
+        "kommunikationsbureau",
+        "kommunikation",
+        "indhold",
+        "content",
+        "public relations",
+        "pr-bureau"
+      ],
+      "public_sector": [
+        "kommune",
+        "offentlig",
+        "region",
+        "myndighed",
+        "universitet",
+        "sundhed"
+      ],
+      "ai_interest": [
+        "ai",
+        "kunstig intelligens",
+        "chatgpt",
+        "automatisering"
+      ]
     },
-    "service_words": ["vores ydelser", "ydelser", "services", "kunder", "cases", "referencer"],
-    "support_words": ["drift", "vedligeholdelse", "support", "hosting"],
-    "contact_words": ["kontakt", "contact", "om-os", "om os", "about", "ydelser", "services", "cases", "referencer"],
-    "agency_words": ["vi bygger websites", "vi udvikler", "webprojekt", "vores kunder", "referencer", "case study", "digitale løsninger til", "partner", "vi hjælper virksomheder", "portefølje", "opgave"],
-    "negative_keywords": ["læg i kurv", "køb nu", "gratis fragt", "til kassen", "indkøbskurv", "antal på lager", "inkl. moms", "ekskl. moms", "bestil her", "produktkatalog", "varenummer", "lagerstatus", "selvopbevaring", "lagerrum", "frisør", "restaurant", "café", "VVS", "elektriker", "tandlæge", "ejendomsmægler", "bilværksted", "børnehave", "dagligvarer", "apotek", "forsikring", "bank ", "revision", "bogføring"]
+    "service_words": [
+      "vores ydelser",
+      "ydelser",
+      "services",
+      "kunder",
+      "cases",
+      "referencer"
+    ],
+    "support_words": [
+      "drift",
+      "vedligeholdelse",
+      "support",
+      "hosting"
+    ],
+    "contact_words": [
+      "kontakt",
+      "contact",
+      "om-os",
+      "om os",
+      "about",
+      "ydelser",
+      "services",
+      "cases",
+      "referencer"
+    ],
+    "agency_words": [
+      "vi bygger websites",
+      "vi udvikler",
+      "webprojekt",
+      "vores kunder",
+      "referencer",
+      "case study",
+      "digitale løsninger til",
+      "partner",
+      "vi hjælper virksomheder",
+      "portefølje",
+      "opgave"
+    ],
+    "negative_keywords": [
+      "læg i kurv",
+      "køb nu",
+      "gratis fragt",
+      "til kassen",
+      "indkøbskurv",
+      "antal på lager",
+      "inkl. moms",
+      "ekskl. moms",
+      "bestil her",
+      "produktkatalog",
+      "varenummer",
+      "lagerstatus",
+      "selvopbevaring",
+      "lagerrum",
+      "frisør",
+      "restaurant",
+      "café",
+      "VVS",
+      "elektriker",
+      "tandlæge",
+      "ejendomsmægler",
+      "bilværksted",
+      "børnehave",
+      "dagligvarer",
+      "apotek",
+      "forsikring",
+      "bank ",
+      "revision",
+      "bogføring"
+    ]
+  },
+  "FI": {
+    "name": "Finland",
+    "tlds": [
+      ".fi"
+    ],
+    "phone_region": "FI",
+    "accept_language": "fi,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "web-toimisto",
+        "verkkosivut",
+        "verkkosivusto",
+        "webdesign",
+        "web-kehitys",
+        "digitoimisto",
+        "web design",
+        "website"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "hakukoneoptimointi",
+        "google ads",
+        "näkyvyys",
+        "search engine optimization"
+      ],
+      "communication": [
+        "viestintätoimisto",
+        "viestintä",
+        "sisältö",
+        "content",
+        "pr-toimisto",
+        "public relations"
+      ],
+      "public_sector": [
+        "kunta",
+        "julkinen",
+        "kaupunki",
+        "virasto",
+        "yliopisto",
+        "terveys"
+      ],
+      "ai_interest": [
+        "tekoäly",
+        "ai",
+        "chatgpt",
+        "automaatio",
+        "keinoäly"
+      ]
+    },
+    "service_words": [
+      "palvelut",
+      "palvelumme",
+      "asiakkaat",
+      "referenssit",
+      "projektit",
+      "case",
+      "services"
+    ],
+    "support_words": [
+      "ylläpito",
+      "tuki",
+      "hosting",
+      "huolto"
+    ],
+    "contact_words": [
+      "yhteystiedot",
+      "ota yhteyttä",
+      "contact",
+      "meistä",
+      "about",
+      "palvelut",
+      "referenssit",
+      "projektit"
+    ],
+    "agency_words": [
+      "rakennamme verkkosivuja",
+      "kehitämme",
+      "web-projekti",
+      "asiakkaamme",
+      "referenssit",
+      "case study",
+      "digitaalisia ratkaisuja",
+      "kumppani",
+      "autamme yrityksiä",
+      "portfolio",
+      "toimeksianto"
+    ],
+    "negative_keywords": [
+      "lisää ostoskoriin",
+      "osta nyt",
+      "ilmainen toimitus",
+      "kassalle",
+      "ostoskori",
+      "varastossa",
+      "sis. alv",
+      "ilman alv",
+      "tilaa nyt",
+      "tuoteluettelo",
+      "tuotenumero",
+      "varastotilanne",
+      "itsesäilytys",
+      "varastointi",
+      "kampaamo",
+      "ravintola",
+      "kahvila",
+      "putkimies",
+      "sähköasentaja",
+      "hammaslääkäri",
+      "lääkärikeskus",
+      "kiinteistönvälitys",
+      "autokorjaamo",
+      "päiväkoti",
+      "päivittäistavarat",
+      "apteekki",
+      "vakuutus",
+      "pankki ",
+      "kirjanpito",
+      "tilitoimisto"
+    ]
+  },
+  "NL": {
+    "name": "Netherlands",
+    "tlds": [
+      ".nl"
+    ],
+    "phone_region": "NL",
+    "accept_language": "nl,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "webbureau",
+        "webdesign",
+        "webontwikkeling",
+        "website",
+        "digitaal bureau",
+        "web design",
+        "website bouwen"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "zoekmachineoptimalisatie",
+        "google ads",
+        "zichtbaarheid",
+        "search engine optimization"
+      ],
+      "communication": [
+        "communicatiebureau",
+        "communicatie",
+        "content",
+        "pr-bureau",
+        "public relations"
+      ],
+      "public_sector": [
+        "gemeente",
+        "overheid",
+        "provincie",
+        "rijksoverheid",
+        "universiteit",
+        "zorg"
+      ],
+      "ai_interest": [
+        "ai",
+        "kunstmatige intelligentie",
+        "chatgpt",
+        "automatisering"
+      ]
+    },
+    "service_words": [
+      "onze diensten",
+      "diensten",
+      "klanten",
+      "cases",
+      "referenties",
+      "services"
+    ],
+    "support_words": [
+      "beheer",
+      "onderhoud",
+      "support",
+      "hosting"
+    ],
+    "contact_words": [
+      "contact",
+      "over ons",
+      "about",
+      "diensten",
+      "cases",
+      "referenties"
+    ],
+    "agency_words": [
+      "wij bouwen websites",
+      "wij ontwikkelen",
+      "webproject",
+      "onze klanten",
+      "referenties",
+      "case study",
+      "digitale oplossingen voor",
+      "partner",
+      "wij helpen bedrijven",
+      "portfolio",
+      "opdracht"
+    ],
+    "negative_keywords": [
+      "in winkelwagen",
+      "koop nu",
+      "gratis verzending",
+      "naar kassa",
+      "winkelwagen",
+      "op voorraad",
+      "incl. btw",
+      "excl. btw",
+      "bestel nu",
+      "productcatalogus",
+      "artikelnummer",
+      "voorraadstatus",
+      "self storage",
+      "opslagruimte",
+      "kapper",
+      "restaurant",
+      "café",
+      "loodgieter",
+      "elektricien",
+      "tandarts",
+      "huisarts",
+      "makelaar",
+      "autogarage",
+      "kinderopvang",
+      "supermarkt",
+      "apotheek",
+      "verzekering",
+      "bank ",
+      "accountant",
+      "boekhouding"
+    ]
+  },
+  "BE": {
+    "name": "Belgium",
+    "tlds": [
+      ".be"
+    ],
+    "phone_region": "BE",
+    "accept_language": "nl,fr;q=0.9,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "webbureau",
+        "webdesign",
+        "webontwikkeling",
+        "agence web",
+        "digitaal bureau",
+        "agence digitale",
+        "website",
+        "web design"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "zoekmachineoptimalisatie",
+        "référencement",
+        "google ads",
+        "zichtbaarheid",
+        "search engine optimization"
+      ],
+      "communication": [
+        "communicatiebureau",
+        "agence de communication",
+        "content",
+        "pr-bureau",
+        "public relations"
+      ],
+      "public_sector": [
+        "gemeente",
+        "commune",
+        "overheid",
+        "province",
+        "universiteit",
+        "université",
+        "zorg"
+      ],
+      "ai_interest": [
+        "ai",
+        "kunstmatige intelligentie",
+        "intelligence artificielle",
+        "chatgpt",
+        "automatisering"
+      ]
+    },
+    "service_words": [
+      "onze diensten",
+      "nos services",
+      "diensten",
+      "klanten",
+      "clients",
+      "cases",
+      "références"
+    ],
+    "support_words": [
+      "beheer",
+      "maintenance",
+      "support",
+      "hosting"
+    ],
+    "contact_words": [
+      "contact",
+      "over ons",
+      "à propos",
+      "about",
+      "diensten",
+      "services",
+      "cases"
+    ],
+    "agency_words": [
+      "wij bouwen websites",
+      "nous créons des sites",
+      "wij ontwikkelen",
+      "webproject",
+      "onze klanten",
+      "nos clients",
+      "partner",
+      "portfolio"
+    ],
+    "negative_keywords": [
+      "in winkelwagen",
+      "panier",
+      "koop nu",
+      "acheter",
+      "gratis verzending",
+      "livraison gratuite",
+      "op voorraad",
+      "en stock",
+      "incl. btw",
+      "ttc",
+      "bestel nu",
+      "commander",
+      "kapper",
+      "coiffeur",
+      "restaurant",
+      "café",
+      "loodgieter",
+      "plombier",
+      "tandarts",
+      "dentiste",
+      "makelaar",
+      "agent immobilier",
+      "supermarkt",
+      "supermarché",
+      "apotheek",
+      "pharmacie",
+      "verzekering",
+      "assurance",
+      "bank ",
+      "banque ",
+      "boekhouding",
+      "comptabilité"
+    ]
   },
   "DE": {
     "name": "Germany",
-    "tlds": [".de"],
+    "tlds": [
+      ".de"
+    ],
     "phone_region": "DE",
     "accept_language": "de,en;q=0.8",
     "keywords": {
-      "web_agency": ["webagentur", "webdesign", "webentwicklung", "website erstellen", "homepage", "internetagentur", "digitalagentur", "web design"],
-      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
-      "seo": ["seo", "suchmaschinenoptimierung", "google ads", "sichtbarkeit", "search engine optimization"],
-      "communication": ["kommunikationsagentur", "kommunikation", "content", "inhalte", "public relations", "pr-agentur"],
-      "public_sector": ["kommune", "öffentlich", "behörde", "stadt", "universität", "gesundheit"],
-      "ai_interest": ["ki", "künstliche intelligenz", "ai", "chatgpt", "automatisierung"]
+      "web_agency": [
+        "webagentur",
+        "webdesign",
+        "webentwicklung",
+        "website erstellen",
+        "homepage",
+        "internetagentur",
+        "digitalagentur",
+        "web design"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "suchmaschinenoptimierung",
+        "google ads",
+        "sichtbarkeit",
+        "search engine optimization"
+      ],
+      "communication": [
+        "kommunikationsagentur",
+        "kommunikation",
+        "content",
+        "inhalte",
+        "public relations",
+        "pr-agentur"
+      ],
+      "public_sector": [
+        "kommune",
+        "öffentlich",
+        "behörde",
+        "stadt",
+        "universität",
+        "gesundheit"
+      ],
+      "ai_interest": [
+        "ki",
+        "künstliche intelligenz",
+        "ai",
+        "chatgpt",
+        "automatisierung"
+      ]
     },
-    "service_words": ["leistungen", "services", "kunden", "referenzen", "case studies", "projekte"],
-    "support_words": ["wartung", "support", "hosting", "betreuung", "pflege"],
-    "contact_words": ["kontakt", "contact", "über-uns", "ueber-uns", "about", "leistungen", "services", "referenzen", "projekte"],
-    "agency_words": ["wir bauen websites", "wir entwickeln", "webprojekt", "unsere kunden", "referenzen", "case study", "digitale lösungen für", "partner", "wir helfen unternehmen", "portfolio", "auftrag"],
-    "negative_keywords": ["in den warenkorb", "jetzt kaufen", "kostenloser versand", "zur kasse", "warenkorb", "auf lager", "inkl. mwst", "exkl. mwst", "jetzt bestellen", "produktkatalog", "artikelnummer", "lagerstatus", "selfstorage", "lagerraum", "friseur", "restaurant", "café", "klempner", "elektriker", "zahnarzt", "arztpraxis", "immobilienmakler", "autowerkstatt", "kindergarten", "supermarkt", "apotheke", "versicherung", "bank ", "steuerberatung", "buchhaltung"]
+    "service_words": [
+      "leistungen",
+      "services",
+      "kunden",
+      "referenzen",
+      "case studies",
+      "projekte"
+    ],
+    "support_words": [
+      "wartung",
+      "support",
+      "hosting",
+      "betreuung",
+      "pflege"
+    ],
+    "contact_words": [
+      "kontakt",
+      "contact",
+      "über-uns",
+      "ueber-uns",
+      "about",
+      "leistungen",
+      "services",
+      "referenzen",
+      "projekte"
+    ],
+    "agency_words": [
+      "wir bauen websites",
+      "wir entwickeln",
+      "webprojekt",
+      "unsere kunden",
+      "referenzen",
+      "case study",
+      "digitale lösungen für",
+      "partner",
+      "wir helfen unternehmen",
+      "portfolio",
+      "auftrag"
+    ],
+    "negative_keywords": [
+      "in den warenkorb",
+      "jetzt kaufen",
+      "kostenloser versand",
+      "zur kasse",
+      "warenkorb",
+      "auf lager",
+      "inkl. mwst",
+      "exkl. mwst",
+      "jetzt bestellen",
+      "produktkatalog",
+      "artikelnummer",
+      "lagerstatus",
+      "selfstorage",
+      "lagerraum",
+      "friseur",
+      "restaurant",
+      "café",
+      "klempner",
+      "elektriker",
+      "zahnarzt",
+      "arztpraxis",
+      "immobilienmakler",
+      "autowerkstatt",
+      "kindergarten",
+      "supermarkt",
+      "apotheke",
+      "versicherung",
+      "bank ",
+      "steuerberatung",
+      "buchhaltung"
+    ]
+  },
+  "AT": {
+    "name": "Austria",
+    "tlds": [
+      ".at"
+    ],
+    "phone_region": "AT",
+    "accept_language": "de-AT,de;q=0.9,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "webagentur",
+        "webdesign",
+        "webentwicklung",
+        "website erstellen",
+        "homepage",
+        "digitalagentur",
+        "web design",
+        "internetagentur"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "suchmaschinenoptimierung",
+        "google ads",
+        "sichtbarkeit",
+        "search engine optimization"
+      ],
+      "communication": [
+        "kommunikationsagentur",
+        "kommunikation",
+        "content",
+        "inhalte",
+        "public relations",
+        "pr-agentur"
+      ],
+      "public_sector": [
+        "gemeinde",
+        "öffentlich",
+        "behörde",
+        "bundesland",
+        "universität",
+        "gesundheit"
+      ],
+      "ai_interest": [
+        "ki",
+        "künstliche intelligenz",
+        "ai",
+        "chatgpt",
+        "automatisierung"
+      ]
+    },
+    "service_words": [
+      "leistungen",
+      "services",
+      "kunden",
+      "referenzen",
+      "case studies",
+      "projekte"
+    ],
+    "support_words": [
+      "wartung",
+      "support",
+      "hosting",
+      "betreuung",
+      "pflege"
+    ],
+    "contact_words": [
+      "kontakt",
+      "über uns",
+      "about",
+      "leistungen",
+      "referenzen",
+      "projekte"
+    ],
+    "agency_words": [
+      "wir bauen websites",
+      "wir entwickeln",
+      "webprojekt",
+      "unsere kunden",
+      "referenzen",
+      "case study",
+      "digitale lösungen",
+      "partner",
+      "wir helfen unternehmen",
+      "portfolio",
+      "auftrag"
+    ],
+    "negative_keywords": [
+      "in den warenkorb",
+      "jetzt kaufen",
+      "kostenloser versand",
+      "zur kasse",
+      "warenkorb",
+      "auf lager",
+      "inkl. mwst",
+      "exkl. mwst",
+      "jetzt bestellen",
+      "produktkatalog",
+      "artikelnummer",
+      "selfstorage",
+      "friseur",
+      "restaurant",
+      "café",
+      "klempner",
+      "elektriker",
+      "zahnarzt",
+      "arztpraxis",
+      "immobilienmakler",
+      "autowerkstatt",
+      "kindergarten",
+      "supermarkt",
+      "apotheke",
+      "versicherung",
+      "bank ",
+      "steuerberatung",
+      "buchhaltung"
+    ]
   },
   "UK": {
     "name": "United Kingdom",
-    "tlds": [".co.uk", ".uk"],
+    "tlds": [
+      ".co.uk",
+      ".uk"
+    ],
     "phone_region": "GB",
     "accept_language": "en-GB,en;q=0.9",
     "keywords": {
-      "web_agency": ["web agency", "web design", "web development", "website design", "digital agency", "website build"],
-      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
-      "seo": ["seo", "search engine optimisation", "search engine optimization", "google ads", "visibility"],
-      "communication": ["communications agency", "communication", "content", "public relations", "pr agency"],
-      "public_sector": ["council", "public sector", "government", "nhs", "university", "charity"],
-      "ai_interest": ["ai", "artificial intelligence", "chatgpt", "automation"]
+      "web_agency": [
+        "web agency",
+        "web design",
+        "web development",
+        "website design",
+        "digital agency",
+        "website build"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "search engine optimisation",
+        "search engine optimization",
+        "google ads",
+        "visibility"
+      ],
+      "communication": [
+        "communications agency",
+        "communication",
+        "content",
+        "public relations",
+        "pr agency"
+      ],
+      "public_sector": [
+        "council",
+        "public sector",
+        "government",
+        "nhs",
+        "university",
+        "charity"
+      ],
+      "ai_interest": [
+        "ai",
+        "artificial intelligence",
+        "chatgpt",
+        "automation"
+      ]
     },
-    "service_words": ["our services", "services", "clients", "case studies", "portfolio", "work"],
-    "support_words": ["maintenance", "support", "hosting", "care plan"],
-    "contact_words": ["contact", "about", "about-us", "services", "case-studies", "portfolio", "work"],
-    "agency_words": ["we build websites", "we develop", "web project", "our clients", "case studies", "digital solutions for", "partner", "we help businesses", "portfolio", "projects"],
-    "negative_keywords": ["add to cart", "add to basket", "buy now", "free shipping", "checkout", "shopping basket", "in stock", "incl. vat", "excl. vat", "order now", "product catalogue", "sku", "stock level", "self storage", "storage unit", "hairdresser", "restaurant", "café", "plumber", "electrician", "dentist", "gp surgery", "estate agent", "car repair", "nursery", "supermarket", "pharmacy", "insurance broker", "bank ", "accountancy", "bookkeeping"]
+    "service_words": [
+      "our services",
+      "services",
+      "clients",
+      "case studies",
+      "portfolio",
+      "work"
+    ],
+    "support_words": [
+      "maintenance",
+      "support",
+      "hosting",
+      "care plan"
+    ],
+    "contact_words": [
+      "contact",
+      "about",
+      "about-us",
+      "services",
+      "case-studies",
+      "portfolio",
+      "work"
+    ],
+    "agency_words": [
+      "we build websites",
+      "we develop",
+      "web project",
+      "our clients",
+      "case studies",
+      "digital solutions for",
+      "partner",
+      "we help businesses",
+      "portfolio",
+      "projects"
+    ],
+    "negative_keywords": [
+      "add to cart",
+      "add to basket",
+      "buy now",
+      "free shipping",
+      "checkout",
+      "shopping basket",
+      "in stock",
+      "incl. vat",
+      "excl. vat",
+      "order now",
+      "product catalogue",
+      "sku",
+      "stock level",
+      "self storage",
+      "storage unit",
+      "hairdresser",
+      "restaurant",
+      "café",
+      "plumber",
+      "electrician",
+      "dentist",
+      "gp surgery",
+      "estate agent",
+      "car repair",
+      "nursery",
+      "supermarket",
+      "pharmacy",
+      "insurance broker",
+      "bank ",
+      "accountancy",
+      "bookkeeping"
+    ]
+  },
+  "IE": {
+    "name": "Ireland",
+    "tlds": [
+      ".ie"
+    ],
+    "phone_region": "IE",
+    "accept_language": "en-IE,en;q=0.9",
+    "keywords": {
+      "web_agency": [
+        "web agency",
+        "web design",
+        "web development",
+        "website design",
+        "digital agency",
+        "website build"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "search engine optimisation",
+        "search engine optimization",
+        "google ads",
+        "visibility"
+      ],
+      "communication": [
+        "communications agency",
+        "communication",
+        "content",
+        "public relations",
+        "pr agency"
+      ],
+      "public_sector": [
+        "council",
+        "public sector",
+        "government",
+        "hse",
+        "university",
+        "charity"
+      ],
+      "ai_interest": [
+        "ai",
+        "artificial intelligence",
+        "chatgpt",
+        "automation"
+      ]
+    },
+    "service_words": [
+      "our services",
+      "services",
+      "clients",
+      "case studies",
+      "portfolio",
+      "work"
+    ],
+    "support_words": [
+      "maintenance",
+      "support",
+      "hosting",
+      "care plan"
+    ],
+    "contact_words": [
+      "contact",
+      "about",
+      "about-us",
+      "services",
+      "case-studies",
+      "portfolio",
+      "work"
+    ],
+    "agency_words": [
+      "we build websites",
+      "we develop",
+      "web project",
+      "our clients",
+      "case studies",
+      "digital solutions for",
+      "partner",
+      "we help businesses",
+      "portfolio",
+      "projects"
+    ],
+    "negative_keywords": [
+      "add to cart",
+      "add to basket",
+      "buy now",
+      "free shipping",
+      "checkout",
+      "shopping basket",
+      "in stock",
+      "incl. vat",
+      "excl. vat",
+      "order now",
+      "product catalogue",
+      "sku",
+      "stock level",
+      "self storage",
+      "hairdresser",
+      "restaurant",
+      "café",
+      "plumber",
+      "electrician",
+      "dentist",
+      "gp surgery",
+      "estate agent",
+      "car repair",
+      "crèche",
+      "supermarket",
+      "pharmacy",
+      "insurance broker",
+      "bank ",
+      "accountancy",
+      "bookkeeping"
+    ]
   },
   "FR": {
     "name": "France",
-    "tlds": [".fr"],
+    "tlds": [
+      ".fr"
+    ],
     "phone_region": "FR",
     "accept_language": "fr,en;q=0.8",
     "keywords": {
-      "web_agency": ["agence web", "création de sites", "développement web", "site internet", "sites web", "agence digitale", "web design", "website"],
-      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
-      "seo": ["seo", "référencement naturel", "référencement", "google ads", "visibilité", "search engine optimization"],
-      "communication": ["agence de communication", "communication", "contenu", "content", "relations publiques", "agence rp"],
-      "public_sector": ["commune", "collectivité", "mairie", "région", "université", "santé publique"],
-      "ai_interest": ["ia", "intelligence artificielle", "ai", "chatgpt", "automatisation"]
+      "web_agency": [
+        "agence web",
+        "création de sites",
+        "développement web",
+        "site internet",
+        "sites web",
+        "agence digitale",
+        "web design",
+        "website"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "référencement naturel",
+        "référencement",
+        "google ads",
+        "visibilité",
+        "search engine optimization"
+      ],
+      "communication": [
+        "agence de communication",
+        "communication",
+        "contenu",
+        "content",
+        "relations publiques",
+        "agence rp"
+      ],
+      "public_sector": [
+        "commune",
+        "collectivité",
+        "mairie",
+        "région",
+        "université",
+        "santé publique"
+      ],
+      "ai_interest": [
+        "ia",
+        "intelligence artificielle",
+        "ai",
+        "chatgpt",
+        "automatisation"
+      ]
     },
-    "service_words": ["nos services", "services", "clients", "références", "réalisations", "projets", "case studies"],
-    "support_words": ["maintenance", "support", "hébergement", "infogérance"],
-    "contact_words": ["contact", "à propos", "about", "services", "réalisations", "références", "projets"],
-    "agency_words": ["nous créons des sites", "nous développons", "projet web", "nos clients", "références", "solutions digitales pour", "partenaire", "nous aidons les entreprises", "portfolio", "missions"],
-    "negative_keywords": ["ajouter au panier", "acheter maintenant", "livraison gratuite", "passer commande", "panier", "en stock", "ttc", "ht ", "commander", "catalogue produits", "référence produit", "self-stockage", "garde-meuble", "coiffeur", "restaurant", "café", "plombier", "électricien", "dentiste", "cabinet médical", "agence immobilière", "garage auto", "crèche", "école", "salle de sport", "supermarché", "pharmacie", "assurance", "banque ", "comptabilité", "cabinet comptable"]
+    "service_words": [
+      "nos services",
+      "services",
+      "clients",
+      "références",
+      "réalisations",
+      "projets",
+      "case studies"
+    ],
+    "support_words": [
+      "maintenance",
+      "support",
+      "hébergement",
+      "infogérance"
+    ],
+    "contact_words": [
+      "contact",
+      "à propos",
+      "about",
+      "services",
+      "réalisations",
+      "références",
+      "projets"
+    ],
+    "agency_words": [
+      "nous créons des sites",
+      "nous développons",
+      "projet web",
+      "nos clients",
+      "références",
+      "solutions digitales pour",
+      "partenaire",
+      "nous aidons les entreprises",
+      "portfolio",
+      "missions"
+    ],
+    "negative_keywords": [
+      "ajouter au panier",
+      "acheter maintenant",
+      "livraison gratuite",
+      "passer commande",
+      "panier",
+      "en stock",
+      "ttc",
+      "ht ",
+      "commander",
+      "catalogue produits",
+      "référence produit",
+      "self-stockage",
+      "garde-meuble",
+      "coiffeur",
+      "restaurant",
+      "café",
+      "plombier",
+      "électricien",
+      "dentiste",
+      "cabinet médical",
+      "agence immobilière",
+      "garage auto",
+      "crèche",
+      "école",
+      "salle de sport",
+      "supermarché",
+      "pharmacie",
+      "assurance",
+      "banque ",
+      "comptabilité",
+      "cabinet comptable"
+    ]
   },
   "ES": {
     "name": "Spain",
-    "tlds": [".es"],
+    "tlds": [
+      ".es"
+    ],
     "phone_region": "ES",
     "accept_language": "es,en;q=0.8",
     "keywords": {
-      "web_agency": ["agencia web", "diseño web", "desarrollo web", "página web", "sitio web", "agencia digital", "web design", "website"],
-      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
-      "seo": ["seo", "posicionamiento web", "posicionamiento en buscadores", "google ads", "visibilidad", "search engine optimization"],
-      "communication": ["agencia de comunicación", "comunicación", "contenido", "content", "relaciones públicas", "agencia de rr.pp."],
-      "public_sector": ["ayuntamiento", "municipio", "administración pública", "comunidad autónoma", "universidad", "sanidad pública"],
-      "ai_interest": ["ia", "inteligencia artificial", "ai", "chatgpt", "automatización"]
+      "web_agency": [
+        "agencia web",
+        "diseño web",
+        "desarrollo web",
+        "página web",
+        "sitio web",
+        "agencia digital",
+        "web design",
+        "website"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "posicionamiento web",
+        "posicionamiento en buscadores",
+        "google ads",
+        "visibilidad",
+        "search engine optimization"
+      ],
+      "communication": [
+        "agencia de comunicación",
+        "comunicación",
+        "contenido",
+        "content",
+        "relaciones públicas",
+        "agencia de rr.pp."
+      ],
+      "public_sector": [
+        "ayuntamiento",
+        "municipio",
+        "administración pública",
+        "comunidad autónoma",
+        "universidad",
+        "sanidad pública"
+      ],
+      "ai_interest": [
+        "ia",
+        "inteligencia artificial",
+        "ai",
+        "chatgpt",
+        "automatización"
+      ]
     },
-    "service_words": ["nuestros servicios", "servicios", "clientes", "referencias", "proyectos", "portfolio", "case studies"],
-    "support_words": ["mantenimiento", "soporte", "alojamiento", "hosting"],
-    "contact_words": ["contacto", "sobre nosotros", "about", "servicios", "proyectos", "referencias", "portfolio"],
-    "agency_words": ["creamos páginas web", "desarrollamos", "proyecto web", "nuestros clientes", "referencias", "soluciones digitales para", "partner", "ayudamos a empresas", "portfolio", "proyectos"],
-    "negative_keywords": ["añadir al carrito", "comprar ahora", "envío gratis", "finalizar compra", "carrito", "en stock", "iva incluido", "sin iva", "pedir ahora", "catálogo de productos", "referencia producto", "trasteros", "guardamuebles", "peluquería", "restaurante", "cafetería", "fontanero", "electricista", "dentista", "consulta médica", "agencia inmobiliaria", "taller mecánico", "guardería", "colegio", "gimnasio", "supermercado", "farmacia", "seguro", "banco ", "contabilidad", "asesoría fiscal"]
+    "service_words": [
+      "nuestros servicios",
+      "servicios",
+      "clientes",
+      "referencias",
+      "proyectos",
+      "portfolio",
+      "case studies"
+    ],
+    "support_words": [
+      "mantenimiento",
+      "soporte",
+      "alojamiento",
+      "hosting"
+    ],
+    "contact_words": [
+      "contacto",
+      "sobre nosotros",
+      "about",
+      "servicios",
+      "proyectos",
+      "referencias",
+      "portfolio"
+    ],
+    "agency_words": [
+      "creamos páginas web",
+      "desarrollamos",
+      "proyecto web",
+      "nuestros clientes",
+      "referencias",
+      "soluciones digitales para",
+      "partner",
+      "ayudamos a empresas",
+      "portfolio",
+      "proyectos"
+    ],
+    "negative_keywords": [
+      "añadir al carrito",
+      "comprar ahora",
+      "envío gratis",
+      "finalizar compra",
+      "carrito",
+      "en stock",
+      "iva incluido",
+      "sin iva",
+      "pedir ahora",
+      "catálogo de productos",
+      "referencia producto",
+      "trasteros",
+      "guardamuebles",
+      "peluquería",
+      "restaurante",
+      "cafetería",
+      "fontanero",
+      "electricista",
+      "dentista",
+      "consulta médica",
+      "agencia inmobiliaria",
+      "taller mecánico",
+      "guardería",
+      "colegio",
+      "gimnasio",
+      "supermercado",
+      "farmacia",
+      "seguro",
+      "banco ",
+      "contabilidad",
+      "asesoría fiscal"
+    ]
+  },
+  "IT": {
+    "name": "Italy",
+    "tlds": [
+      ".it"
+    ],
+    "phone_region": "IT",
+    "accept_language": "it,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "agenzia web",
+        "web design",
+        "sviluppo web",
+        "sito web",
+        "siti web",
+        "agenzia digitale",
+        "creazione siti",
+        "web agency"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "ottimizzazione motori di ricerca",
+        "posizionamento google",
+        "google ads",
+        "visibilità",
+        "search engine optimization"
+      ],
+      "communication": [
+        "agenzia di comunicazione",
+        "comunicazione",
+        "contenuti",
+        "content",
+        "relazioni pubbliche",
+        "agenzia pr"
+      ],
+      "public_sector": [
+        "comune",
+        "pubblica amministrazione",
+        "regione",
+        "provincia",
+        "università",
+        "sanità pubblica"
+      ],
+      "ai_interest": [
+        "intelligenza artificiale",
+        "ia",
+        "ai",
+        "chatgpt",
+        "automazione"
+      ]
+    },
+    "service_words": [
+      "i nostri servizi",
+      "servizi",
+      "clienti",
+      "referenze",
+      "portfolio",
+      "case study",
+      "progetti"
+    ],
+    "support_words": [
+      "manutenzione",
+      "supporto",
+      "hosting",
+      "assistenza"
+    ],
+    "contact_words": [
+      "contatti",
+      "chi siamo",
+      "about",
+      "servizi",
+      "portfolio",
+      "referenze",
+      "progetti"
+    ],
+    "agency_words": [
+      "creiamo siti web",
+      "sviluppiamo",
+      "progetto web",
+      "i nostri clienti",
+      "referenze",
+      "case study",
+      "soluzioni digitali per",
+      "partner",
+      "aiutiamo le aziende",
+      "portfolio",
+      "progetti"
+    ],
+    "negative_keywords": [
+      "aggiungi al carrello",
+      "acquista ora",
+      "spedizione gratuita",
+      "vai al checkout",
+      "carrello",
+      "disponibile",
+      "iva inclusa",
+      "iva esclusa",
+      "ordina ora",
+      "catalogo prodotti",
+      "codice prodotto",
+      "magazzino",
+      "self storage",
+      "parrucchiere",
+      "ristorante",
+      "bar",
+      "idraulico",
+      "elettricista",
+      "dentista",
+      "medico",
+      "agenzia immobiliare",
+      "officina",
+      "asilo nido",
+      "supermercato",
+      "farmacia",
+      "assicurazione",
+      "banca ",
+      "contabilità",
+      "studio commercialista"
+    ]
+  },
+  "PL": {
+    "name": "Poland",
+    "tlds": [
+      ".pl"
+    ],
+    "phone_region": "PL",
+    "accept_language": "pl,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "agencja web",
+        "agencja internetowa",
+        "web design",
+        "tworzenie stron",
+        "strony internetowe",
+        "agencja cyfrowa",
+        "web agency"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "pozycjonowanie",
+        "optymalizacja wyszukiwarek",
+        "google ads",
+        "widoczność",
+        "search engine optimization"
+      ],
+      "communication": [
+        "agencja komunikacji",
+        "komunikacja",
+        "treści",
+        "content",
+        "public relations",
+        "agencja pr"
+      ],
+      "public_sector": [
+        "gmina",
+        "urząd",
+        "powiat",
+        "województwo",
+        "uczelnia",
+        "ochrona zdrowia"
+      ],
+      "ai_interest": [
+        "sztuczna inteligencja",
+        "ai",
+        "chatgpt",
+        "automatyzacja"
+      ]
+    },
+    "service_words": [
+      "nasze usługi",
+      "usługi",
+      "klienci",
+      "realizacje",
+      "portfolio",
+      "case study",
+      "projekty"
+    ],
+    "support_words": [
+      "utrzymanie",
+      "wsparcie",
+      "hosting",
+      "obsługa"
+    ],
+    "contact_words": [
+      "kontakt",
+      "o nas",
+      "about",
+      "usługi",
+      "realizacje",
+      "portfolio",
+      "projekty"
+    ],
+    "agency_words": [
+      "tworzymy strony",
+      "rozwijamy",
+      "projekt web",
+      "nasi klienci",
+      "realizacje",
+      "case study",
+      "rozwiązania cyfrowe",
+      "partner",
+      "pomagamy firmom",
+      "portfolio",
+      "projekty"
+    ],
+    "negative_keywords": [
+      "dodaj do koszyka",
+      "kup teraz",
+      "darmowa dostawa",
+      "do kasy",
+      "koszyk",
+      "dostępny",
+      "z vat",
+      "bez vat",
+      "zamów teraz",
+      "katalog produktów",
+      "numer produktu",
+      "magazyn",
+      "self storage",
+      "fryzjer",
+      "restauracja",
+      "kawiarnia",
+      "hydraulik",
+      "elektryk",
+      "dentysta",
+      "lekarz",
+      "agencja nieruchomości",
+      "warsztat",
+      "żłobek",
+      "supermarket",
+      "apteka",
+      "ubezpieczenie",
+      "bank ",
+      "księgowość",
+      "biuro rachunkowe"
+    ]
+  },
+  "HU": {
+    "name": "Hungary",
+    "tlds": [
+      ".hu"
+    ],
+    "phone_region": "HU",
+    "accept_language": "hu,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "webügynökség",
+        "webdesign",
+        "webfejlesztés",
+        "weboldal",
+        "digitális ügynökség",
+        "web design",
+        "honlap készítés"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "keresőoptimalizálás",
+        "google hirdetés",
+        "láthatóság",
+        "search engine optimization"
+      ],
+      "communication": [
+        "kommunikációs ügynökség",
+        "kommunikáció",
+        "tartalom",
+        "content",
+        "pr ügynökség",
+        "public relations"
+      ],
+      "public_sector": [
+        "önkormányzat",
+        "közigazgatás",
+        "megye",
+        "állami",
+        "egyetem",
+        "egészségügy"
+      ],
+      "ai_interest": [
+        "mesterséges intelligencia",
+        "ai",
+        "chatgpt",
+        "automatizálás"
+      ]
+    },
+    "service_words": [
+      "szolgáltatásaink",
+      "szolgáltatások",
+      "ügyfeleink",
+      "referenciák",
+      "portfólió",
+      "case study"
+    ],
+    "support_words": [
+      "karbantartás",
+      "támogatás",
+      "hosting",
+      "üzemeltetés"
+    ],
+    "contact_words": [
+      "kapcsolat",
+      "rólunk",
+      "about",
+      "szolgáltatások",
+      "referenciák",
+      "portfólió"
+    ],
+    "agency_words": [
+      "weboldalakat készítünk",
+      "fejlesztünk",
+      "webprojekt",
+      "ügyfeleink",
+      "referenciák",
+      "digitális megoldások",
+      "partner",
+      "segítünk vállalkozásoknak",
+      "portfólió"
+    ],
+    "negative_keywords": [
+      "kosárba",
+      "vásárolj most",
+      "ingyenes szállítás",
+      "pénztár",
+      "kosár",
+      "raktáron",
+      "áfa-val",
+      "áfa nélkül",
+      "rendelés",
+      "termék katalógus",
+      "cikkszám",
+      "raktárkészlet",
+      "fodrász",
+      "étterem",
+      "kávézó",
+      "vízvezeték-szerelő",
+      "villanyszerelő",
+      "fogorvos",
+      "orvos",
+      "ingatlanügynök",
+      "autószerelő",
+      "bölcsőde",
+      "szupermarket",
+      "gyógyszertár",
+      "biztosítás",
+      "bank ",
+      "könyvelés",
+      "könyvelőiroda"
+    ]
+  },
+  "EE": {
+    "name": "Estonia",
+    "tlds": [
+      ".ee"
+    ],
+    "phone_region": "EE",
+    "accept_language": "et,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "veebibüroo",
+        "veebidisain",
+        "veebiarendus",
+        "veebileht",
+        "digitaalbüroo",
+        "web design",
+        "website"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "otsingumootorite optimeerimine",
+        "google ads",
+        "nähtavus",
+        "search engine optimization"
+      ],
+      "communication": [
+        "kommunikatsioonibüroo",
+        "kommunikatsioon",
+        "sisu",
+        "content",
+        "pr-büroo",
+        "public relations"
+      ],
+      "public_sector": [
+        "omavalitsus",
+        "riik",
+        "maakond",
+        "avalik sektor",
+        "ülikool",
+        "tervishoid"
+      ],
+      "ai_interest": [
+        "tehisintellekt",
+        "ai",
+        "chatgpt",
+        "automatiseerimine"
+      ]
+    },
+    "service_words": [
+      "meie teenused",
+      "teenused",
+      "kliendid",
+      "referentsid",
+      "portfoolio",
+      "case study"
+    ],
+    "support_words": [
+      "hooldus",
+      "tugi",
+      "hosting",
+      "administreerimine"
+    ],
+    "contact_words": [
+      "kontakt",
+      "meist",
+      "about",
+      "teenused",
+      "referentsid",
+      "portfoolio"
+    ],
+    "agency_words": [
+      "ehitame veebilehti",
+      "arendame",
+      "veebiprojekt",
+      "meie kliendid",
+      "referentsid",
+      "digitaalsed lahendused",
+      "partner",
+      "aitame ettevõtteid",
+      "portfoolio"
+    ],
+    "negative_keywords": [
+      "lisa ostukorvi",
+      "osta kohe",
+      "tasuta tarne",
+      "kassasse",
+      "ostukorv",
+      "laos",
+      "käibemaksuga",
+      "käibemaksuta",
+      "telli nyt",
+      "tootekatalooog",
+      "tootenumber",
+      "laoseis",
+      "juuksur",
+      "restoran",
+      "kohvik",
+      "torulukksepp",
+      "elektrik",
+      "hambaarst",
+      "arst",
+      "kinnisvaramaakler",
+      "autoremontöör",
+      "lasteaed",
+      "supermarket",
+      "apteek",
+      "kindlustus",
+      "pank ",
+      "raamatupidamine"
+    ]
+  },
+  "LV": {
+    "name": "Latvia",
+    "tlds": [
+      ".lv"
+    ],
+    "phone_region": "LV",
+    "accept_language": "lv,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "tīmekļa aģentūra",
+        "web dizains",
+        "tīmekļa izstrāde",
+        "mājaslapa",
+        "digitālā aģentūra",
+        "web design",
+        "website"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "meklētājoptimizācija",
+        "google reklāma",
+        "redzamība",
+        "search engine optimization"
+      ],
+      "communication": [
+        "komunikācijas aģentūra",
+        "komunikācija",
+        "saturs",
+        "content",
+        "pr aģentūra",
+        "public relations"
+      ],
+      "public_sector": [
+        "pašvaldība",
+        "valsts",
+        "novads",
+        "publiskais sektors",
+        "universitāte",
+        "veselības aprūpe"
+      ],
+      "ai_interest": [
+        "mākslīgais intelekts",
+        "ai",
+        "chatgpt",
+        "automatizācija"
+      ]
+    },
+    "service_words": [
+      "mūsu pakalpojumi",
+      "pakalpojumi",
+      "klienti",
+      "atsauksmes",
+      "portfolio",
+      "case study"
+    ],
+    "support_words": [
+      "uzturēšana",
+      "atbalsts",
+      "hosting",
+      "administrēšana"
+    ],
+    "contact_words": [
+      "kontakti",
+      "par mums",
+      "about",
+      "pakalpojumi",
+      "atsauksmes",
+      "portfolio"
+    ],
+    "agency_words": [
+      "veidojam mājas lapas",
+      "izstrādājam",
+      "web projekts",
+      "mūsu klienti",
+      "atsauksmes",
+      "digitāli risinājumi",
+      "partneris",
+      "palīdzam uzņēmumiem",
+      "portfolio"
+    ],
+    "negative_keywords": [
+      "pievienot grozam",
+      "pirkt tagad",
+      "bezmaksas piegāde",
+      "kase",
+      "grozs",
+      "noliktavā",
+      "ar pvn",
+      "bez pvn",
+      "pasūtīt",
+      "produktu katalogs",
+      "artikuls",
+      "noliktavas atlikums",
+      "frizieris",
+      "restorāns",
+      "kafejnīca",
+      "santehniķis",
+      "elektriķis",
+      "zobārsts",
+      "ārsts",
+      "nekustamo īpašumu aģents",
+      "autoserviss",
+      "bērnudārzs",
+      "veikals",
+      "aptieka",
+      "apdrošināšana",
+      "banka ",
+      "grāmatvedība"
+    ]
+  },
+  "LT": {
+    "name": "Lithuania",
+    "tlds": [
+      ".lt"
+    ],
+    "phone_region": "LT",
+    "accept_language": "lt,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "žiniatinklio agentūra",
+        "web dizainas",
+        "interneto svetainė",
+        "svetainė",
+        "skaitmeninė agentūra",
+        "web design",
+        "website kūrimas"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "paieškos sistemų optimizavimas",
+        "google reklama",
+        "matomumas",
+        "search engine optimization"
+      ],
+      "communication": [
+        "komunikacijos agentūra",
+        "komunikacija",
+        "turinys",
+        "content",
+        "viešieji ryšiai",
+        "pr agentūra"
+      ],
+      "public_sector": [
+        "savivaldybė",
+        "valstybė",
+        "apskritis",
+        "viešasis sektorius",
+        "universitetas",
+        "sveikatos apsauga"
+      ],
+      "ai_interest": [
+        "dirbtinis intelektas",
+        "ai",
+        "chatgpt",
+        "automatizavimas"
+      ]
+    },
+    "service_words": [
+      "mūsų paslaugos",
+      "paslaugos",
+      "klientai",
+      "atsiliepimai",
+      "portfolio",
+      "case study"
+    ],
+    "support_words": [
+      "priežiūra",
+      "palaikymas",
+      "hosting",
+      "administravimas"
+    ],
+    "contact_words": [
+      "kontaktai",
+      "apie mus",
+      "about",
+      "paslaugos",
+      "atsiliepimai",
+      "portfolio"
+    ],
+    "agency_words": [
+      "kuriame svetaines",
+      "plėtojame",
+      "web projektas",
+      "mūsų klientai",
+      "atsiliepimai",
+      "skaitmeniniai sprendimai",
+      "partneris",
+      "padedame įmonėms",
+      "portfolio"
+    ],
+    "negative_keywords": [
+      "į krepšelį",
+      "pirkti dabar",
+      "nemokamas pristatymas",
+      "kasa",
+      "krepšelis",
+      "sandėlyje",
+      "su pvm",
+      "be pvm",
+      "užsakyti",
+      "produktų katalogas",
+      "prekės numeris",
+      "sandėlio likutis",
+      "kirpėjas",
+      "restoranas",
+      "kavinė",
+      "santechnikas",
+      "elektrikas",
+      "odontologas",
+      "gydytojas",
+      "nekilnojamojo turto agentūra",
+      "autoservisas",
+      "darželis",
+      "prekybos centras",
+      "vaistinė",
+      "draudimas",
+      "bankas ",
+      "buhalterija"
+    ]
+  },
+  "IN": {
+    "name": "India",
+    "tlds": [
+      ".in",
+      ".co.in"
+    ],
+    "phone_region": "IN",
+    "accept_language": "en-IN,en;q=0.9",
+    "keywords": {
+      "web_agency": [
+        "web agency",
+        "web design",
+        "web development",
+        "website design",
+        "digital agency",
+        "website development company",
+        "it company"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "search engine optimization",
+        "google ads",
+        "digital visibility",
+        "search engine optimisation"
+      ],
+      "communication": [
+        "communications agency",
+        "communication",
+        "content",
+        "public relations",
+        "pr agency",
+        "brand agency"
+      ],
+      "public_sector": [
+        "government",
+        "municipal",
+        "public sector",
+        "university",
+        "hospital",
+        "ngo"
+      ],
+      "ai_interest": [
+        "ai",
+        "artificial intelligence",
+        "chatgpt",
+        "automation",
+        "machine learning"
+      ]
+    },
+    "service_words": [
+      "our services",
+      "services",
+      "clients",
+      "case studies",
+      "portfolio",
+      "work",
+      "projects"
+    ],
+    "support_words": [
+      "maintenance",
+      "support",
+      "hosting",
+      "amc",
+      "annual maintenance"
+    ],
+    "contact_words": [
+      "contact",
+      "about",
+      "about-us",
+      "services",
+      "case-studies",
+      "portfolio",
+      "work"
+    ],
+    "agency_words": [
+      "we build websites",
+      "we develop",
+      "web project",
+      "our clients",
+      "case studies",
+      "digital solutions for",
+      "partner",
+      "we help businesses",
+      "portfolio",
+      "projects",
+      "offshore development"
+    ],
+    "negative_keywords": [
+      "add to cart",
+      "buy now",
+      "free shipping",
+      "checkout",
+      "in stock",
+      "incl. gst",
+      "excl. gst",
+      "order now",
+      "product catalogue",
+      "sku",
+      "stock",
+      "self storage",
+      "salon",
+      "restaurant",
+      "café",
+      "plumber",
+      "electrician",
+      "dentist",
+      "clinic",
+      "real estate",
+      "car repair",
+      "crèche",
+      "supermarket",
+      "pharmacy",
+      "insurance",
+      "bank ",
+      "ca firm",
+      "chartered accountant"
+    ]
+  },
+  "TN": {
+    "name": "Tunisia",
+    "tlds": [
+      ".tn"
+    ],
+    "phone_region": "TN",
+    "accept_language": "fr,ar;q=0.9,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "agence web",
+        "web design",
+        "développement web",
+        "site web",
+        "agence digitale",
+        "création site",
+        "web agency"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "référencement",
+        "google ads",
+        "visibilité",
+        "optimisation",
+        "search engine optimization"
+      ],
+      "communication": [
+        "agence de communication",
+        "communication",
+        "contenu",
+        "content",
+        "relations publiques",
+        "agence 360"
+      ],
+      "public_sector": [
+        "commune",
+        "collectivité",
+        "ministère",
+        "gouvernement",
+        "université",
+        "santé publique"
+      ],
+      "ai_interest": [
+        "intelligence artificielle",
+        "ia",
+        "ai",
+        "chatgpt",
+        "automatisation"
+      ]
+    },
+    "service_words": [
+      "nos services",
+      "services",
+      "clients",
+      "références",
+      "réalisations",
+      "projets",
+      "portfolio"
+    ],
+    "support_words": [
+      "maintenance",
+      "support",
+      "hébergement",
+      "infogérance"
+    ],
+    "contact_words": [
+      "contact",
+      "à propos",
+      "about",
+      "services",
+      "réalisations",
+      "références",
+      "projets"
+    ],
+    "agency_words": [
+      "nous créons des sites",
+      "nous développons",
+      "projet web",
+      "nos clients",
+      "références",
+      "solutions digitales",
+      "partenaire",
+      "nous aidons les entreprises",
+      "portfolio",
+      "missions"
+    ],
+    "negative_keywords": [
+      "ajouter au panier",
+      "acheter",
+      "livraison gratuite",
+      "panier",
+      "en stock",
+      "ttc",
+      "ht ",
+      "commander",
+      "catalogue produits",
+      "coiffeur",
+      "restaurant",
+      "café",
+      "plombier",
+      "électricien",
+      "dentiste",
+      "cabinet médical",
+      "agence immobilière",
+      "supermarché",
+      "pharmacie",
+      "assurance",
+      "banque ",
+      "comptabilité"
+    ]
   }
 }

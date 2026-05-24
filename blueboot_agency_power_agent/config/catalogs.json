@@ -1,9 +1,11 @@
 {
   "_notes": [
     "Sortlist: JS infinite-scroll — URL pagination does not work. pages=1 only (scrapes ~20 top agencies). Requires minimal headers (no Sec-Fetch-*) to avoid bot detection.",
+    "Sortlist URL prefix: Nordic countries (NO/SE/DK/FI) use no prefix. UK/FR/DE use /s/ prefix. ES uses /i/ prefix for web-design, /s/ for web-development.",
     "Clutch: Cloudflare WAF blocks all requests with 403. Removed from all countries.",
     "GoodFirms: WAF drops connection after ~20s timeout. Removed from all countries.",
-    "DesignRush: supports ?page=N pagination. 404 = no more pages — set pages high, scraper stops on 404."
+    "DesignRush: supports ?page=N pagination. 404 = no more pages — set pages high, scraper stops on 404.",
+    "FR extra directories checked: agences.io, lannuaire.digital, pagesjaunes.fr, jesuisnumerique.fr — all JS-rendered or list individuals, not agency sites. DesignRush is the only viable 2nd source."
   ],
   "NO": [
     {
@@ -77,23 +79,107 @@
       "pages": 50
     }
   ],
+  "FI": [
+    {
+      "name": "Sortlist FI – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/finland-fi",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist FI – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/finland-fi",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist FI – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/finland-fi",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush FI",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/fi?page={page}",
+      "pages": 50
+    }
+  ],
+  "NL": [
+    {
+      "name": "Sortlist NL – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/netherlands-nl",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist NL – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/netherlands-nl",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist NL – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/netherlands-nl",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush NL – web design",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/nl?page={page}",
+      "pages": 50
+    },
+    {
+      "name": "DesignRush NL – web dev",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/web-development-companies/nl?page={page}",
+      "pages": 50
+    }
+  ],
+  "BE": [
+    {
+      "name": "Sortlist BE – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-design/belgium-be",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist BE – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/belgium-be",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist BE – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/belgium-be",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush BE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/be?page={page}",
+      "pages": 50
+    }
+  ],
   "DE": [
     {
       "name": "Sortlist DE – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/germany-de",
+      "url": "https://www.sortlist.com/s/web-design/germany-de",
       "pages": 1
     },
     {
       "name": "Sortlist DE – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/germany-de",
+      "url": "https://www.sortlist.com/s/web-development/germany-de",
       "pages": 1
     },
     {
       "name": "Sortlist DE – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/germany-de",
+      "url": "https://www.sortlist.com/i/digital-marketing/germany-de",
       "pages": 1
     },
     {
@@ -109,23 +195,49 @@
       "pages": 50
     }
   ],
+  "AT": [
+    {
+      "name": "Sortlist AT – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/austria-at",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist AT – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/website-development/austria-at",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist AT – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/austria-at",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush AT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/at?page={page}",
+      "pages": 50
+    }
+  ],
   "UK": [
     {
       "name": "Sortlist UK – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/united-kingdom-gb",
+      "url": "https://www.sortlist.com/s/web-design/united-kingdom-gb",
       "pages": 1
     },
     {
       "name": "Sortlist UK – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/united-kingdom-gb",
+      "url": "https://www.sortlist.com/s/web-development/united-kingdom-gb",
       "pages": 1
     },
     {
       "name": "Sortlist UK – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/united-kingdom-gb",
+      "url": "https://www.sortlist.com/s/digital-marketing/united-kingdom-gb",
       "pages": 1
     },
     {
@@ -141,29 +253,67 @@
       "pages": 50
     }
   ],
+  "IE": [
+    {
+      "name": "Sortlist IE – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/ireland-ie",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist IE – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/ireland-ie",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist IE – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/ireland-ie",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush IE – web design",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/ie?page={page}",
+      "pages": 50
+    },
+    {
+      "name": "DesignRush IE – web dev",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/web-development-companies/ie?page={page}",
+      "pages": 50
+    }
+  ],
   "FR": [
     {
       "name": "Sortlist FR – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/france-fr",
+      "url": "https://www.sortlist.com/s/web-design/france-fr",
       "pages": 1
     },
     {
       "name": "Sortlist FR – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/france-fr",
+      "url": "https://www.sortlist.com/s/web-development/france-fr",
       "pages": 1
     },
     {
       "name": "Sortlist FR – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/france-fr",
+      "url": "https://www.sortlist.com/i/digital-marketing/france-fr",
       "pages": 1
     },
     {
-      "name": "DesignRush FR",
+      "name": "DesignRush FR – web design",
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/fr?page={page}",
+      "pages": 50
+    },
+    {
+      "name": "DesignRush FR – web development",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/web-development-companies/fr?page={page}",
       "pages": 50
     }
   ],
@@ -171,25 +321,281 @@
     {
       "name": "Sortlist ES – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/spain-es",
+      "url": "https://www.sortlist.com/i/web-design/spain-es",
       "pages": 1
     },
     {
       "name": "Sortlist ES – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/spain-es",
+      "url": "https://www.sortlist.com/s/web-development/spain-es",
       "pages": 1
     },
     {
       "name": "Sortlist ES – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/spain-es",
+      "url": "https://www.sortlist.com/i/digital-marketing/spain-es",
       "pages": 1
     },
     {
       "name": "DesignRush ES",
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/es?page={page}",
+      "pages": 50
+    }
+  ],
+  "IT": [
+    {
+      "name": "Sortlist IT – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-design/italy-it",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist IT – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/italy-it",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist IT – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/italy-it",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush IT – web design",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/it?page={page}",
+      "pages": 50
+    },
+    {
+      "name": "DesignRush IT – web dev",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/web-development-companies/it?page={page}",
+      "pages": 50
+    }
+  ],
+  "PL": [
+    {
+      "name": "Sortlist PL – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/poland-pl",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist PL – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/poland-pl",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist PL – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/poland-pl",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush PL – web design",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/pl?page={page}",
+      "pages": 50
+    },
+    {
+      "name": "DesignRush PL – web dev",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/web-development-companies/pl?page={page}",
+      "pages": 50
+    }
+  ],
+  "HU": [
+    {
+      "name": "Sortlist HU – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/hungary-hu",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist HU – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/hungary-hu",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist HU – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/hungary-hu",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush HU",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/hu?page={page}",
+      "pages": 50
+    }
+  ],
+  "EE": [
+    {
+      "name": "Sortlist EE – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/estonia-ee",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist EE – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/estonia-ee",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist EE – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/estonia-ee",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush EE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/ee?page={page}",
+      "pages": 50
+    }
+  ],
+  "LV": [
+    {
+      "name": "Sortlist LV – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/latvia-lv",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist LV – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/latvia-lv",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist LV – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/latvia-lv",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush LV",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/lv?page={page}",
+      "pages": 50
+    }
+  ],
+  "LT": [
+    {
+      "name": "Sortlist LT – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/lithuania-lt",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist LT – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/lithuania-lt",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist LT – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/lithuania-lt",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush LT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/lt?page={page}",
+      "pages": 50
+    }
+  ],
+  "IN": [
+    {
+      "name": "Sortlist IN – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/india-in",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist IN – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/india-in",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist IN – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/india-in",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist Pune – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/pune-in",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist Pune – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/pune-in",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist Pune – digital",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/pune-in",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush IN – web design",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/in?page={page}",
+      "pages": 50
+    },
+    {
+      "name": "DesignRush IN – web dev",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/web-development-companies/in?page={page}",
+      "pages": 50
+    }
+  ],
+  "TN": [
+    {
+      "name": "Sortlist TN – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/tunisia-tn",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist TN – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/tunisia-tn",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist TN – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/tunisia-tn",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist Tunis – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/tunis-tn",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist Tunis – web dev",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/tunis-tn",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush TN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/tn?page={page}",
       "pages": 50
     }
   ]
