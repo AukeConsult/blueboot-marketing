@@ -21,18 +21,11 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from rapidfuzz import fuzz
 
-USER_AGENT = "BlueBootLeadAgent/1.0 (+https://blueboot.ai)"
+USER_AGENT = "BlueBootLeadAgent/1.1 (+https://blueboot.ai)"
 EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+")
-NORWAY_PHONE_RE = re.compile(r"(?:(?:\+47|0047)\s*)?(?:\d[\s.-]?){8,}")
-
-AGENCY_KEYWORDS = {
-    "web_agency": ["webdesign", "nettside", "nettsider", "webutvikling", "hjemmeside", "website", "web design"],
-    "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
-    "seo": ["seo", "søkemotoroptimalisering", "search engine optimization", "google ads", "visibility"],
-    "communication": ["kommunikasjonsbyrå", "kommunikasjon", "innhold", "content", "public relations", "pr-byrå"],
-    "public_sector": ["kommune", "offentlig", "stat", "fylkeskommune", "helse", "universitet"],
-    "ai_interest": ["ai", "ki", "kunstig intelligens", "chatgpt", "automatisering"]
-}
+GENERIC_PHONE_RE = re.compile(r"(?:(?:\+|00)\d{1,3}\s*)?(?:\d[\s().-]?){7,15}")
+DEFAULT_COUNTRIES = ["NO"]
+COUNTRY_CONFIG_PATH = Path("config/countries.json")
 
 TECH_SIGNATURES = {
     "WordPress": ["wp-content", "wp-includes", "wordpress"],
@@ -67,6 +60,8 @@ class Lead:
     outreach_subject: str = ""
     outreach_email: str = ""
     status: str = "New"
+    country: str = ""
+    country_name: str = ""
     notes: str = ""
     crawled_at: str = ""
 
@@ -95,8 +90,21 @@ def load_lines(path: Path) -> list[str]:
     return [x.strip() for x in path.read_text(encoding="utf-8").splitlines() if x.strip() and not x.strip().startswith("#")]
 
 
-def fetch(url: str, timeout=15) -> str:
-    headers = {"User-Agent": USER_AGENT, "Accept-Language": "no,en;q=0.8"}
+def load_country_configs(path: Path = COUNTRY_CONFIG_PATH) -> dict:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def selected_countries(value: str, configs: dict) -> list[str]:
+    if value.upper() == "ALL":
+        return list(configs.keys())
+    result = [x.strip().upper() for x in value.split(",") if x.strip()]
+    return [x for x in result if x in configs]
+
+
+def fetch(url: str, timeout=15, accept_language="en;q=0.8") -> str:
+    headers = {"User-Agent": USER_AGENT, "Accept-Language": accept_language}
     r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
     r.raise_for_status()
     if "text" not in r.headers.get("content-type", "") and "html" not in r.headers.get("content-type", ""):
@@ -152,12 +160,23 @@ def clean_search_url(url: str) -> str:
     return url
 
 
-def allowed_domain(domain: str, blocklist: set[str]) -> bool:
+def allowed_domain(domain: str, blocklist: set[str], countries: list[str], configs: dict) -> bool:
     if not domain or domain in blocklist:
         return False
     if any(domain.endswith("." + b) or domain == b for b in blocklist):
         return False
-    return domain.endswith(".no") or domain in {"blueboot.ai"}
+    if domain in {"blueboot.ai"}:
+        return True
+    return country_for_domain(domain, countries, configs) is not None
+
+
+def country_for_domain(domain: str, countries: list[str], configs: dict) -> str | None:
+    domain_l = domain.lower()
+    for code in countries:
+        for tld in configs.get(code, {}).get("tlds", []):
+            if domain_l.endswith(tld):
+                return code
+    return None
 
 
 def extract_meta(soup: BeautifulSoup) -> tuple[str, str]:
@@ -187,7 +206,7 @@ def extract_emails(html: str, text: str) -> set[str]:
 
 def extract_phones(text: str, country="NO") -> set[str]:
     phones = set()
-    for m in NORWAY_PHONE_RE.findall(text):
+    for m in GENERIC_PHONE_RE.findall(text):
         raw = re.sub(r"[^+0-9]", "", m)
         try:
             num = phonenumbers.parse(raw, country)
@@ -223,22 +242,22 @@ def detect_tech(html: str, soup: BeautifulSoup) -> set[str]:
     return tech
 
 
-def categorize(text: str, html: str) -> tuple[set[str], list[str], int]:
+def categorize(text: str, html: str, country_cfg: dict) -> tuple[set[str], list[str], int]:
     hay = (text + " " + html[:250000]).lower()
     cats, reasons = set(), []
     score = 0
     weights = {"web_agency": 25, "wordpress": 25, "seo": 18, "communication": 18, "public_sector": 10, "ai_interest": 8}
-    for cat, kws in AGENCY_KEYWORDS.items():
+    for cat, kws in country_cfg.get("keywords", {}).items():
         hits = [kw for kw in kws if kw.lower() in hay]
         if hits:
             cats.add(cat)
             score += weights[cat]
             reasons.append(f"{cat}: " + ", ".join(hits[:4]))
     # Boost likely agencies with services language
-    if any(x in hay for x in ["våre tjenester", "services", "kunder", "case", "referanser"]):
+    if any(x in hay for x in country_cfg.get("service_words", ["services", "customers", "clients", "case"])): 
         score += 8
         reasons.append("has services/customers/cases language")
-    if any(x in hay for x in ["drift", "vedlikehold", "support", "hosting"]):
+    if any(x in hay for x in country_cfg.get("support_words", ["support", "hosting", "maintenance"])):
         score += 6
         reasons.append("offers maintenance/support")
     return cats, reasons, min(score, 100)
@@ -261,11 +280,11 @@ def angle(cats: set[str], tech: set[str]) -> str:
     return "General reseller angle: add AI-powered search to existing customer websites without rebuilding them."
 
 
-def make_outreach(company: str, domain: str, cats: set[str], lead_angle: str) -> tuple[str, str]:
+def make_outreach(company: str, domain: str, cats: set[str], lead_angle: str, country_name: str) -> tuple[str, str]:
     subject = f"AI search add-on for {company}'s website customers"
     email = f"""Hi {company},
 
-I noticed you work with websites and digital customer communication. We build BlueSearch, an AI-powered search layer that can be added to existing websites so visitors can ask questions and get answers with source links.
+I noticed you work with websites and digital customer communication in {country_name}. We build BlueSearch, an AI-powered search layer that can be added to existing websites so visitors can ask questions and get answers with source links.
 
 Why this may fit your customers:
 - easy add-on for existing sites
@@ -284,7 +303,7 @@ https://blueboot.ai
     return subject, email
 
 
-def crawl_site(url: str, source_query: str, max_pages: int, delay: float) -> Lead | None:
+def crawl_site(url: str, source_query: str, max_pages: int, delay: float, country_code: str, country_cfg: dict) -> Lead | None:
     website = normalize_url(url)
     dom = domain_of(website)
     seen, queue = set(), [website]
@@ -298,7 +317,7 @@ def crawl_site(url: str, source_query: str, max_pages: int, delay: float) -> Lea
             continue
         seen.add(page)
         try:
-            html = fetch(page)
+            html = fetch(page, accept_language=country_cfg.get("accept_language", "en;q=0.8"))
         except Exception:
             continue
         if not html:
@@ -310,31 +329,32 @@ def crawl_site(url: str, source_query: str, max_pages: int, delay: float) -> Lea
         all_text += " " + text
         all_html += " " + html[:300000]
         emails |= extract_emails(html, text)
-        phones |= extract_phones(text)
+        phones |= extract_phones(text, country_cfg.get("phone_region", country_code))
         tech |= detect_tech(html, soup)
         links, cp, li = extract_links(page, soup)
         contact_page = contact_page or cp
         linkedin = linkedin or li
         for l in links:
             low = l.lower().split("#")[0]
-            if domain_of(low) == dom and any(x in low for x in ["kontakt", "contact", "om-oss", "about", "tjenester", "services", "case", "referanser"]):
+            if domain_of(low) == dom and any(x in low for x in country_cfg.get("contact_words", ["contact", "about", "services", "case"])):
                 if low not in seen and low not in queue:
                     queue.append(low)
         time.sleep(delay)
 
     if not all_text and not all_html:
         return None
-    cats, reasons, score = categorize(all_text, all_html)
+    cats, reasons, score = categorize(all_text, all_html, country_cfg)
     if score < 20 and fuzz.partial_ratio("digitalbyrå webdesign wordpress seo", all_text[:5000].lower()) < 35:
         return None
     lead_angle = angle(cats, tech)
-    subject, email_body = make_outreach(company_from_domain(dom), dom, cats, lead_angle)
+    subject, email_body = make_outreach(company_from_domain(dom), dom, cats, lead_angle, country_cfg.get("name", country_code))
     return Lead(
         company=company_from_domain(dom), domain=dom, website=website, source_query=source_query,
         title=title, description=desc, emails=", ".join(sorted(emails)), phones=", ".join(sorted(phones)),
         contact_page=contact_page, linkedin=linkedin, detected_tech=", ".join(sorted(tech)),
         categories=", ".join(sorted(cats)), reseller_score=score, priority=priority(score), reasons="; ".join(reasons),
         suggested_angle=lead_angle, outreach_subject=subject, outreach_email=email_body,
+        country=country_code, country_name=country_cfg.get("name", country_code),
         crawled_at=datetime.now(timezone.utc).isoformat(timespec="seconds")
     )
 
@@ -366,7 +386,7 @@ def export(leads: list[Lead], outdir: Path) -> None:
             {"metric": "Generated at", "value": datetime.now().isoformat(timespec="seconds")},
         ])
         summary.to_excel(writer, sheet_name="Dashboard", index=False)
-        qdf = pd.DataFrame({"query": load_lines(Path("config/queries.txt"))})
+        qdf = pd.DataFrame({"query": load_lines(Path("config/queries_all.txt"))})
         qdf.to_excel(writer, sheet_name="Queries", index=False)
         ws = writer.book["Leads"]
         ws.freeze_panes = "A2"
@@ -376,37 +396,55 @@ def export(leads: list[Lead], outdir: Path) -> None:
     (outdir / "agency_leads.json").write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def load_queries_for_countries(countries: list[str], explicit_queries: str | None = None) -> list[tuple[str, str]]:
+    pairs: list[tuple[str, str]] = []
+    if explicit_queries:
+        for q in load_lines(Path(explicit_queries)):
+            pairs.append((q, "AUTO"))
+        return pairs
+    for code in countries:
+        path = Path(f"config/queries_{code}.txt")
+        for q in load_lines(path):
+            pairs.append((q, code))
+    return pairs
+
+
 def run() -> None:
     load_dotenv()
     parser = argparse.ArgumentParser(description="BlueBoot agency lead finder")
-    parser.add_argument("--queries", default="config/queries.txt")
+    parser.add_argument("--countries", default=os.getenv("COUNTRIES", "NO"), help="Comma separated country codes: NO,SE,DK,DE,UK or ALL")
+    parser.add_argument("--queries", default=os.getenv("QUERIES_FILE", ""), help="Optional custom query file. If empty, loads config/queries_<COUNTRY>.txt")
     parser.add_argument("--output", default="output")
     parser.add_argument("--max-results", type=int, default=int(os.getenv("MAX_RESULTS_PER_QUERY", "20")))
     parser.add_argument("--max-pages", type=int, default=int(os.getenv("MAX_PAGES_PER_SITE", "6")))
     parser.add_argument("--delay", type=float, default=float(os.getenv("REQUEST_DELAY_SECONDS", "1.0")))
     args = parser.parse_args()
 
-    queries = load_lines(Path(args.queries))
+    configs = load_country_configs()
+    countries = selected_countries(args.countries, configs) or DEFAULT_COUNTRIES
+    query_pairs = load_queries_for_countries(countries, args.queries or None)
     blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
     candidates: list[tuple[str, str]] = []
     seen_domains = set()
 
-    print(f"Running {len(queries)} search queries...")
-    for query in queries:
+    print(f"Countries: {', '.join(countries)}")
+    print(f"Running {len(query_pairs)} search queries...")
+    for query, query_country in query_pairs:
         urls = google_cse_search(query, args.max_results) or bing_search(query, args.max_results)
         for raw in urls:
             url = clean_search_url(raw)
             dom = domain_of(url)
-            if allowed_domain(dom, blocklist) and dom not in seen_domains:
-                candidates.append((url, query))
+            detected_country = country_for_domain(dom, countries, configs) or (query_country if query_country != "AUTO" else None)
+            if allowed_domain(dom, blocklist, countries, configs) and dom not in seen_domains and detected_country:
+                candidates.append((url, query, detected_country))
                 seen_domains.add(dom)
         time.sleep(args.delay)
 
     print(f"Crawling {len(candidates)} candidate domains...")
     leads: list[Lead] = []
-    for i, (url, query) in enumerate(candidates, 1):
-        print(f"[{i}/{len(candidates)}] {url}")
-        lead = crawl_site(url, query, args.max_pages, args.delay)
+    for i, (url, query, country_code) in enumerate(candidates, 1):
+        print(f"[{i}/{len(candidates)}] {country_code} {url}")
+        lead = crawl_site(url, query, args.max_pages, args.delay, country_code, configs.get(country_code, {}))
         if lead:
             print(f"  -> {lead.priority} score={lead.reseller_score} email={'yes' if lead.emails else 'no'}")
             leads.append(lead)

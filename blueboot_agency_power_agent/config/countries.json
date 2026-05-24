@@ -1,0 +1,87 @@
+{
+  "NO": {
+    "name": "Norway",
+    "tlds": [".no"],
+    "phone_region": "NO",
+    "accept_language": "no,en;q=0.8",
+    "keywords": {
+      "web_agency": ["webdesign", "nettside", "nettsider", "webutvikling", "hjemmeside", "digitalbyrå", "web design", "website"],
+      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
+      "seo": ["seo", "søkemotoroptimalisering", "google ads", "synlighet", "search engine optimization"],
+      "communication": ["kommunikasjonsbyrå", "kommunikasjon", "innhold", "content", "public relations", "pr-byrå"],
+      "public_sector": ["kommune", "offentlig", "stat", "fylkeskommune", "helse", "universitet"],
+      "ai_interest": ["ai", "ki", "kunstig intelligens", "chatgpt", "automatisering"]
+    },
+    "service_words": ["våre tjenester", "tjenester", "kunder", "case", "referanser", "services"],
+    "support_words": ["drift", "vedlikehold", "support", "hosting"],
+    "contact_words": ["kontakt", "contact", "om-oss", "about", "tjenester", "services", "case", "referanser"]
+  },
+  "SE": {
+    "name": "Sweden",
+    "tlds": [".se"],
+    "phone_region": "SE",
+    "accept_language": "sv,en;q=0.8",
+    "keywords": {
+      "web_agency": ["webbyrå", "webbdesign", "webbutveckling", "hemsida", "hemsidor", "digitalbyrå", "web design", "website"],
+      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
+      "seo": ["seo", "sökmotoroptimering", "google ads", "synlighet", "search engine optimization"],
+      "communication": ["kommunikationsbyrå", "kommunikation", "innehåll", "content", "public relations", "pr-byrå"],
+      "public_sector": ["kommun", "offentlig", "region", "myndighet", "universitet", "vård"],
+      "ai_interest": ["ai", "artificiell intelligens", "chatgpt", "automatisering"]
+    },
+    "service_words": ["våra tjänster", "tjänster", "kunder", "case", "referenser", "services"],
+    "support_words": ["drift", "underhåll", "support", "hosting"],
+    "contact_words": ["kontakt", "contact", "om-oss", "om oss", "about", "tjänster", "services", "case", "referenser"]
+  },
+  "DK": {
+    "name": "Denmark",
+    "tlds": [".dk"],
+    "phone_region": "DK",
+    "accept_language": "da,en;q=0.8",
+    "keywords": {
+      "web_agency": ["webbureau", "webdesign", "webudvikling", "hjemmeside", "hjemmesider", "digitalbureau", "web design", "website"],
+      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
+      "seo": ["seo", "søgemaskineoptimering", "google ads", "synlighed", "search engine optimization"],
+      "communication": ["kommunikationsbureau", "kommunikation", "indhold", "content", "public relations", "pr-bureau"],
+      "public_sector": ["kommune", "offentlig", "region", "myndighed", "universitet", "sundhed"],
+      "ai_interest": ["ai", "kunstig intelligens", "chatgpt", "automatisering"]
+    },
+    "service_words": ["vores ydelser", "ydelser", "services", "kunder", "cases", "referencer"],
+    "support_words": ["drift", "vedligeholdelse", "support", "hosting"],
+    "contact_words": ["kontakt", "contact", "om-os", "om os", "about", "ydelser", "services", "cases", "referencer"]
+  },
+  "DE": {
+    "name": "Germany",
+    "tlds": [".de"],
+    "phone_region": "DE",
+    "accept_language": "de,en;q=0.8",
+    "keywords": {
+      "web_agency": ["webagentur", "webdesign", "webentwicklung", "website erstellen", "homepage", "internetagentur", "digitalagentur", "web design"],
+      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
+      "seo": ["seo", "suchmaschinenoptimierung", "google ads", "sichtbarkeit", "search engine optimization"],
+      "communication": ["kommunikationsagentur", "kommunikation", "content", "inhalte", "public relations", "pr-agentur"],
+      "public_sector": ["kommune", "öffentlich", "behörde", "stadt", "universität", "gesundheit"],
+      "ai_interest": ["ki", "künstliche intelligenz", "ai", "chatgpt", "automatisierung"]
+    },
+    "service_words": ["leistungen", "services", "kunden", "referenzen", "case studies", "projekte"],
+    "support_words": ["wartung", "support", "hosting", "betreuung", "pflege"],
+    "contact_words": ["kontakt", "contact", "über-uns", "ueber-uns", "about", "leistungen", "services", "referenzen", "projekte"]
+  },
+  "UK": {
+    "name": "United Kingdom",
+    "tlds": [".co.uk", ".uk"],
+    "phone_region": "GB",
+    "accept_language": "en-GB,en;q=0.9",
+    "keywords": {
+      "web_agency": ["web agency", "web design", "web development", "website design", "digital agency", "website build"],
+      "wordpress": ["wordpress", "wp-content", "woocommerce", "elementor", "divi"],
+      "seo": ["seo", "search engine optimisation", "search engine optimization", "google ads", "visibility"],
+      "communication": ["communications agency", "communication", "content", "public relations", "pr agency"],
+      "public_sector": ["council", "public sector", "government", "nhs", "university", "charity"],
+      "ai_interest": ["ai", "artificial intelligence", "chatgpt", "automation"]
+    },
+    "service_words": ["our services", "services", "clients", "case studies", "portfolio", "work"],
+    "support_words": ["maintenance", "support", "hosting", "care plan"],
+    "contact_words": ["contact", "about", "about-us", "services", "case-studies", "portfolio", "work"]
+  }
+}
