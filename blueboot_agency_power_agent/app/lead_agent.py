@@ -14,6 +14,9 @@ from pathlib import Path
 from typing import Iterable
 from urllib.parse import urljoin, urlparse, parse_qs, unquote
 
+import asyncio
+
+import aiohttp
 import pandas as pd
 import phonenumbers
 import requests
@@ -22,7 +25,6 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from rapidfuzz import fuzz
 
-from send_mail import make_outreach
 
 USER_AGENT = "BlueBootLeadAgent/1.1 (+https://blueboot.ai)"
 BING_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -97,8 +99,6 @@ class Lead:
     priority: str = ""
     reasons: str = ""
     suggested_angle: str = ""
-    outreach_subject: str = ""
-    outreach_email: str = ""
     status: str = "New"
     country: str = ""
     country_name: str = ""
@@ -143,8 +143,23 @@ def selected_countries(value: str, configs: dict) -> list[str]:
     return [x for x in result if x in configs]
 
 
-def fetch(url: str, timeout=15, accept_language="en;q=0.8") -> str:
-    headers = {"User-Agent": USER_AGENT, "Accept-Language": accept_language}
+def fetch(url: str, timeout=15, accept_language="en;q=0.8", browser_ua: bool = False) -> str:
+    if browser_ua:
+        headers = {
+            "User-Agent": BING_USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": accept_language if accept_language != "en;q=0.8" else "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Cache-Control": "max-age=0",
+        }
+    else:
+        headers = {"User-Agent": USER_AGENT, "Accept-Language": accept_language}
     r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
     r.raise_for_status()
     if "text" not in r.headers.get("content-type", "") and "html" not in r.headers.get("content-type", ""):
@@ -319,22 +334,36 @@ def extract_contacts(html: str, text: str) -> dict[str, str]:
     combined = html + " " + text
     raw_emails = EMAIL_RE.findall(combined)
     contacts: dict[str, str] = {}
+    _strip_tags = re.compile(r"<[^>]+>")
     for e in raw_emails:
         e = e.strip(".,;:()[]<>").lower()
+        # Strip any residual HTML tags (defensive — e.g. from obfuscated mailto links)
+        e = _strip_tags.sub("", e).strip()
+        if not e or "@" not in e:
+            continue
         if any(e.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]):
+            continue
+        # Reject package version strings like react-dom@18.3.1 — domain part is all digits/dots
+        domain_part = e.split("@", 1)[-1]
+        if all(seg.isdigit() for seg in domain_part.split(".")):
+            continue
+        # Reject if TLD is purely numeric (e.g. @1.2.3 → tld "3")
+        tld = domain_part.rsplit(".", 1)[-1]
+        if tld.isdigit():
             continue
         if e in contacts:
             continue
-        # Search ±300 chars around the email for a job title
+        # Search ±300 chars around the email for a job title — strip tags from result
         title = ""
         idx = combined.lower().find(e)
         if idx != -1:
             window = combined[max(0, idx - 300): idx + 300]
             m = TITLE_KEYWORDS.search(window)
             if m:
-                # Grab up to 60 chars starting from the match for context
-                title = window[m.start(): m.start() + 60].strip()
-                title = re.sub(r"\s+", " ", title)[:60]
+                raw_title = window[m.start(): m.start() + 120]
+                # Strip HTML tags, collapse whitespace, trim to 60 chars
+                title = _strip_tags.sub(" ", raw_title)
+                title = re.sub(r"\s+", " ", title).strip()[:60]
         contacts[e] = title
     return contacts
 
@@ -493,18 +522,104 @@ def crawl_site(url: str, source_query: str, max_pages: int, delay: float, countr
     if score < 20 and fuzz.partial_ratio("digitalbyrå webdesign wordpress seo", all_text[:5000].lower()) < 35:
         return None
     lead_angle = angle(cats, tech)
-    subject, email_body = make_outreach(company_from_domain(dom), dom, cats, lead_angle, country_cfg.get("name", country_code))
     return Lead(
         company=company_from_domain(dom), domain=dom, website=website, source_query=source_query,
         title=title, description=desc,
         emails=", ".join(sorted(contacts.keys())),
         email_titles=", ".join(contacts.get(e, "") for e in sorted(contacts.keys())),
         phones=", ".join(sorted(phones)),
-        contact_page=contact_page, linkedin=linkedin, detected_tech=", ".join(sorted(tech)),
+        contact_page=contact_page, linkedin=linkedin or _linkedin_hints.get(website, ""), detected_tech=", ".join(sorted(tech)),
         categories=", ".join(sorted(cats)), reseller_score=score, priority=priority(score), reasons="; ".join(reasons),
-        suggested_angle=lead_angle, outreach_subject=subject, outreach_email=email_body,
+        suggested_angle=lead_angle,
         country=country_code, country_name=country_cfg.get("name", country_code),
         crawled_at=datetime.now(timezone.utc).isoformat(timespec="seconds")
+    )
+
+
+async def async_fetch(
+    session: aiohttp.ClientSession,
+    url: str,
+    accept_language: str = "en;q=0.8",
+) -> str:
+    headers = {"User-Agent": USER_AGENT, "Accept-Language": accept_language}
+    async with session.get(url, headers=headers, allow_redirects=True) as resp:
+        resp.raise_for_status()
+        ct = resp.headers.get("content-type", "")
+        if "text" not in ct and "html" not in ct:
+            return ""
+        text = await resp.text(errors="replace")
+        return text[:2_000_000]
+
+
+async def async_crawl_site(
+    session: aiohttp.ClientSession,
+    url: str,
+    source_query: str,
+    max_pages: int,
+    delay: float,
+    country_code: str,
+    country_cfg: dict,
+) -> Lead | None:
+    website = normalize_url(url)
+    dom = domain_of(website)
+    seen, queue = set(), [website]
+    all_text, all_html = "", ""
+    contacts: dict[str, str] = {}
+    phones, tech = set(), set()
+    title = desc = contact_page = linkedin = ""
+
+    while queue and len(seen) < max_pages:
+        page = queue.pop(0)
+        if page in seen or domain_of(page) != dom:
+            continue
+        seen.add(page)
+        try:
+            html = await async_fetch(session, page, country_cfg.get("accept_language", "en;q=0.8"))
+        except Exception:
+            continue
+        if not html:
+            continue
+        soup = BeautifulSoup(html, "lxml")
+        if not title:
+            title, desc = extract_meta(soup)
+        text = visible_text(soup)
+        all_text += " " + text
+        all_html += " " + html[:300000]
+        contacts.update(extract_contacts(html, text))
+        phones |= extract_phones(text, country_cfg.get("phone_region", country_code))
+        tech |= detect_tech(html, soup)
+        links, cp, li = extract_links(page, soup)
+        contact_page = contact_page or cp
+        linkedin = linkedin or li
+        for lnk in links:
+            low = lnk.lower().split("#")[0]
+            if domain_of(low) == dom and any(
+                x in low for x in country_cfg.get("contact_words", ["contact", "about", "services", "case"])
+            ):
+                if low not in seen and low not in queue:
+                    queue.append(low)
+        await asyncio.sleep(delay)
+
+    if not all_text and not all_html:
+        return None
+    cats, reasons, score = categorize(all_text, all_html, country_cfg)
+    if score < 20 and fuzz.partial_ratio("digitalbyrå webdesign wordpress seo", all_text[:5000].lower()) < 35:
+        return None
+    lead_angle = angle(cats, tech)
+    return Lead(
+        company=company_from_domain(dom), domain=dom, website=website, source_query=source_query,
+        title=title, description=desc,
+        emails=", ".join(sorted(contacts.keys())),
+        email_titles=", ".join(contacts.get(e, "") for e in sorted(contacts.keys())),
+        phones=", ".join(sorted(phones)),
+        contact_page=contact_page,
+        linkedin=linkedin or _linkedin_hints.get(website, ""),
+        detected_tech=", ".join(sorted(tech)),
+        categories=", ".join(sorted(cats)),
+        reseller_score=score, priority=priority(score), reasons="; ".join(reasons),
+        suggested_angle=lead_angle,
+        country=country_code, country_name=country_cfg.get("name", country_code),
+        crawled_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
     )
 
 
@@ -538,8 +653,6 @@ def build_contacts_df(leads: list[Lead]) -> pd.DataFrame:
                 "phones": lead.phones,
                 "linkedin": lead.linkedin,
                 "contact_page": lead.contact_page,
-                "outreach_subject": lead.outreach_subject,
-                "outreach_email": lead.outreach_email,
             })
         for i, email in enumerate(emails):
             contact_rows.append({
@@ -555,8 +668,6 @@ def build_contacts_df(leads: list[Lead]) -> pd.DataFrame:
                 "phones": lead.phones,
                 "linkedin": lead.linkedin,
                 "contact_page": lead.contact_page,
-                "outreach_subject": lead.outreach_subject,
-                "outreach_email": lead.outreach_email,
             })
     return pd.DataFrame(contact_rows)
 
@@ -611,50 +722,106 @@ def load_queries_for_countries(countries: list[str], explicit_queries: str | Non
     return pairs
 
 
-def load_existing_domains(output_path: Path) -> set[str]:
-    """Read the Leads sheet from an existing Excel export and return all domains already crawled."""
-    xlsx = output_path / "agency_leads.xlsx"
-    if not xlsx.exists():
-        return set()
+def load_existing_leads(output_path: Path) -> list[Lead]:
+    """Load all leads from a previous run's CSV so we never lose them on re-run."""
+    csv_path = output_path / "agency_leads.csv"
+    if not csv_path.exists():
+        return []
     try:
-        df = pd.read_excel(xlsx, sheet_name="Leads", usecols=["domain"], dtype=str)
-        domains = set(df["domain"].dropna().str.strip().str.lower())
-        print(f"Loaded {len(domains)} already-crawled domains from {xlsx}")
-        return domains
+        df = pd.read_csv(csv_path, dtype=str).fillna("")
+        # Drop the lead_id column that export() prepends — it's not a Lead field
+        df = df.drop(columns=["lead_id"], errors="ignore")
+        fields = {f.name for f in Lead.__dataclass_fields__.values()}
+        df = df[[c for c in df.columns if c in fields]]
+        leads = []
+        for row in df.to_dict(orient="records"):
+            # Coerce numeric fields back from str
+            for int_field in ("reseller_score",):
+                if int_field in row:
+                    try:
+                        row[int_field] = int(float(row[int_field]))
+                    except (ValueError, TypeError):
+                        row[int_field] = 0
+            leads.append(Lead(**{k: v for k, v in row.items() if k in fields}))
+        print(f"Loaded {len(leads)} existing leads from {csv_path}")
+        return leads
     except Exception as e:
-        print(f"Warning: could not read existing Excel ({e}) — starting fresh")
-        return set()
+        print(f"Warning: could not read existing CSV ({e}) — starting fresh")
+        return []
 
 
-def run() -> None:
-    import sys
-    sys.stdout.reconfigure(line_buffering=True)
-    print("BlueBoot Lead Agent starting...", flush=True)
-    load_dotenv()
-    parser = argparse.ArgumentParser(description="BlueBoot agency lead finder")
-    parser.add_argument("--countries", default=os.getenv("COUNTRIES", "NO"),
-                        help="Comma separated country codes: NO,SE,DK,DE,UK,FR,ES or ALL")
-    parser.add_argument("--queries", default=os.getenv("QUERIES_FILE", ""),
-                        help="Optional custom query file. If empty, loads config/queries_<COUNTRY>.txt")
-    parser.add_argument("--output", default="output")
-    parser.add_argument("--max-results", type=int, default=int(os.getenv("MAX_RESULTS_PER_QUERY", "1000")))
-    parser.add_argument("--max-pages", type=int, default=int(os.getenv("MAX_PAGES_PER_SITE", "6")))
-    parser.add_argument("--max-country", type=int, default=int(os.getenv("MAX_LEADS_PER_COUNTRY", "500")),
-                        help="Max new leads to crawl per country (0 = unlimited). "
-                             "Keeps running queries until the cap is reached or 3 consecutive queries yield nothing new.")
-    parser.add_argument("--give-up-after", type=int, default=3,
-                        help="Give up on a country after this many consecutive queries with zero new candidates (default 3)")
-    parser.add_argument("--delay", type=float, default=float(os.getenv("REQUEST_DELAY_SECONDS", "1.0")))
-    args = parser.parse_args()
+def load_existing_domains(output_path: Path) -> set[str]:
+    """Return domains already crawled (derived from load_existing_leads)."""
+    leads = load_existing_leads(output_path)
+    domains = {l.domain.strip().lower() for l in leads if l.domain}
+    if domains:
+        print(f"  ({len(domains)} already-crawled domains loaded)")
+    return domains
 
+
+async def _run_batch(
+    batch: list[tuple[str, str]],
+    args,
+    code: str,
+    configs: dict,
+    all_leads: list[Lead],
+    export_path: Path,
+    country_leads: dict,
+) -> int:
+    """Async: create one Task per site, run all concurrently, save each lead as it arrives."""
+    n = len(batch)
+    print(f"\n  >>> Crawling {n} site{'s' if n > 1 else ''} in parallel <<<")
+    timeout = aiohttp.ClientTimeout(total=60, connect=10)
+    connector = aiohttp.TCPConnector(limit=n, ssl=False)
+    new_count = 0
+
+    async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+        tasks = [
+            asyncio.create_task(
+                async_crawl_site(session, url, query, args.max_pages, args.delay, code, configs.get(code, {}))
+            )
+            for url, query in batch
+        ]
+        for coro in asyncio.as_completed(tasks):
+            try:
+                lead = await coro
+            except Exception as exc:
+                print(f"    [crawl error]: {exc}")
+                continue
+            if lead:
+                has_email = "yes" if lead.emails else "no"
+                print(f"    -> {lead.priority} score={lead.reseller_score} email={has_email}  {lead.website}")
+                all_leads.append(lead)
+                country_leads[code] = country_leads.get(code, 0) + 1
+                new_count += 1
+                export(dedupe_leads(all_leads), export_path)  # sync write — fine in single-threaded event loop
+    return new_count
+
+
+def _crawl_batch(
+    batch: list[tuple[str, str]],
+    args,
+    code: str,
+    configs: dict,
+    all_leads: list[Lead],
+    export_path: Path,
+    country_leads: dict,
+) -> int:
+    """Sync entry point — runs the async batch in a fresh event loop."""
+    if not batch:
+        return 0
+    return asyncio.run(_run_batch(batch, args, code, configs, all_leads, export_path, country_leads))
+
+
+def run(args=None) -> None:
     configs = load_country_configs()
     countries = selected_countries(args.countries, configs) or DEFAULT_COUNTRIES
     query_pairs = load_queries_for_countries(countries, args.queries or None)
     blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
 
-    # --- Skip domains already present in a previous run's Excel ---
-    existing_domains = load_existing_domains(Path(args.output))
-    seen_domains: set[str] = set(existing_domains)
+    # --- Load previous run so we never lose existing data ---
+    all_leads: list[Lead] = load_existing_leads(Path(args.output))
+    seen_domains: set[str] = {l.domain.strip().lower() for l in all_leads if l.domain}
 
     # --- Build per-country query queues ---
     from collections import defaultdict
@@ -667,14 +834,27 @@ def run() -> None:
     country_streak: dict[str, int] = {c: 0 for c in countries}  # consecutive queries with 0 new candidates
     country_done: set[str] = set()
 
-    all_leads: list[Lead] = []
     total_queries_run = 0
+    batch_size: int = args.workers   # collect this many sites then crawl them all at once
+
+    # Per-country pending queue (accumulates across queries until we have a full batch)
+    pending: dict[str, list[tuple[str, str]]] = {c: [] for c in countries}
 
     print(f"Countries: {', '.join(countries)}")
+    print(f"Batch size (parallel crawlers): {batch_size}")
     if args.max_country:
         print(f"Target: {args.max_country} leads per country  |  Give up after {args.give_up_after} empty queries in a row")
     else:
         print(f"No per-country cap  |  Give up after {args.give_up_after} empty queries in a row")
+
+    def _flush_pending(code: str, label: str = "") -> None:
+        if not pending[code]:
+            return
+        batch = pending[code]
+        pending[code] = []
+        if label:
+            print(f"  [{code}] {label}")
+        _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads)
 
     # Round-robin across countries until all are done
     while len(country_done) < len(countries):
@@ -683,21 +863,21 @@ def run() -> None:
             if code in country_done:
                 continue
 
-            # Check cap
+            # Check cap — flush remainder first
             if args.max_country and country_leads[code] >= args.max_country:
                 print(f"\n[{code}] Target of {args.max_country} leads reached.")
                 country_done.add(code)
                 continue
 
-            # Check query queue
+            # Check query queue — flush remainder when exhausted
             if not queues[code]:
+                _flush_pending(code, f"Final batch of {len(pending[code])} sites")
                 print(f"\n[{code}] No more queries to run — giving up.")
                 country_done.add(code)
                 continue
 
             query = queues[code].pop(0)
             total_queries_run += 1
-            leads_before = country_leads[code]
             print(f"\n[{code} | leads={country_leads[code]} | streak={country_streak[code]}] Query: {query}")
 
             # Search — pass seen_domains so Bing excludes already-known sites
@@ -705,53 +885,43 @@ def run() -> None:
             if google_urls:
                 print(f"  Google: {len(google_urls)} results")
                 urls = google_urls
-   
             else:
                 bing_urls = bing_search(query, args.max_results, exclude_domains=seen_domains)
                 print(f"  Bing fallback: {len(bing_urls)} results")
                 urls = bing_urls
 
-            # Filter candidates
-            new_candidates: list[tuple[str, str]] = []
+            # Filter candidates and accumulate into pending
+            added = 0
             for raw in urls:
                 url = clean_search_url(raw)
                 dom = domain_of(url)
                 detected_country = country_for_domain(dom, countries, configs) or code
-                is_product = is_product_or_content_url(url)
-                if is_product:
+                if is_product_or_content_url(url):
                     parsed = urlparse(url)
                     url = f"{parsed.scheme}://{parsed.netloc}/"
-                already_done = dom in existing_domains
-                dup = dom in seen_domains
-                if allowed_domain(dom, blocklist, countries, configs) and not dup and detected_country == code:
-                    new_candidates.append((url, query))
+                if allowed_domain(dom, blocklist, countries, configs) and dom not in seen_domains and detected_country == code:
+                    if args.max_country and len(pending[code]) + country_leads[code] >= args.max_country:
+                        break
+                    pending[code].append((url, query))
                     seen_domains.add(dom)
+                    added += 1
 
-            print(f"  -> {len(new_candidates)} new candidates to crawl")
+            print(f"  -> {added} new candidates  (pending={len(pending[code])})")
 
-            # Crawl immediately
-            for url, q in new_candidates:
-                if args.max_country and country_leads[code] >= args.max_country:
-                    print(f"  Cap reached mid-batch — stopping {code}")
-                    break
-                print(f"  Crawling {url}")
-                lead = crawl_site(url, q, args.max_pages, args.delay, code, configs.get(code, {}))
-                if lead:
-                    has_email = "yes" if lead.emails else "no"
-                    print(f"    -> {lead.priority} score={lead.reseller_score} email={has_email}")
-                    all_leads.append(lead)
-                    country_leads[code] += 1
-                    # Save after every lead so progress survives crashes
-                    export(dedupe_leads(all_leads), Path(args.output))
-                time.sleep(args.delay)
+            # When we have a full batch, crawl them all in parallel
+            if len(pending[code]) >= batch_size:
+                batch = pending[code][:batch_size]
+                pending[code] = pending[code][batch_size:]
+                _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads)
 
             # Update streak: reset if we found new URLs, else increment
-            if new_candidates:
+            if added:
                 country_streak[code] = 0
             else:
                 country_streak[code] += 1
                 print(f"  [{code}] Nothing new — streak {country_streak[code]}/{args.give_up_after}")
                 if country_streak[code] >= args.give_up_after:
+                    _flush_pending(code, f"Final batch of {len(pending[code])} sites")
                     print(f"  [{code}] Giving up after {args.give_up_after} empty queries in a row.")
                     country_done.add(code)
 
@@ -771,10 +941,599 @@ def run() -> None:
     print(f"Exported {len(all_leads)} leads to {args.output}/agency_leads.xlsx")
 
 
-if __name__ == "__main__":
+# ---------------------------------------------------------------------------
+# Catalog scraping — per-directory link extractors
+# ---------------------------------------------------------------------------
+
+CATALOG_CONFIG_PATH = Path("config/catalogs.json")
+
+
+def load_catalogs(path: Path = CATALOG_CONFIG_PATH) -> dict:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def catalog_links_generic(url: str, blocklist: set[str]) -> list[str]:
+    """Extract all outbound homepage-like hrefs from a listing page."""
     try:
-        run()
-    except Exception as exc:
-        import traceback, sys
-        traceback.print_exc()
-        sys.exit(1)
+        html = fetch(url, timeout=20, browser_ua=True)
+    except Exception as e:
+        print(f"    [catalog] fetch error: {e}")
+        return None
+    soup = BeautifulSoup(html, "html.parser")
+    found: list[str] = []
+    seen: set[str] = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href.startswith("http"):
+            href = urljoin(url, href)
+        parsed = urlparse(href)
+        # Only external links (different domain from the catalog page)
+        catalog_dom = domain_of(url)
+        link_dom = domain_of(href)
+        if link_dom and link_dom != catalog_dom and not is_blocked(link_dom, blocklist):
+            # Normalise to homepage
+            home = f"{parsed.scheme}://{parsed.netloc}/"
+            if home not in seen:
+                seen.add(home)
+                found.append(home)
+    return found
+
+
+def catalog_links_clutch(url: str, blocklist: set[str]) -> list[str]:
+    """Clutch profile pages link to agency websites via a rel=nofollow external link."""
+    try:
+        html = fetch(url, timeout=20, accept_language="en-US,en;q=0.9", browser_ua=True)
+    except Exception as e:
+        print(f"    [catalog/clutch] fetch error: {e}")
+        return None
+    soup = BeautifulSoup(html, "html.parser")
+    found: list[str] = []
+    seen: set[str] = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href.startswith("http"):
+            continue
+        link_dom = domain_of(href)
+        catalog_dom = domain_of(url)
+        if link_dom and link_dom != catalog_dom and not is_blocked(link_dom, blocklist):
+            parsed = urlparse(href)
+            home = f"{parsed.scheme}://{parsed.netloc}/"
+            if home not in seen:
+                seen.add(home)
+                found.append(home)
+    return found
+
+
+# Module-level cache: website home URL → LinkedIn URL, populated by Sortlist extractor
+_linkedin_hints: dict[str, str] = {}
+
+
+def _sortlist_urls_from_json(obj, blocklist: set[str]) -> list[str]:
+    """Recursively walk a Sortlist Next.js / Apollo cache JSON, collect agency website URLs.
+
+    Also populates the module-level _linkedin_hints dict when website + linkedin keys
+    appear together in the same agency object.
+    """
+    # All keys lowercased so k.lower() comparison works correctly
+    URL_KEYS = {
+        "website", "websiteurl", "websiteuri", "web", "siteurl",
+        "externalurl", "external_url", "homepage", "homepagelinks",
+        "link", "links",
+    }
+    # 'domain' key holds bare domain names — we'll construct https:// URLs from them
+    DOMAIN_KEYS = {"domain"}
+    # Social keys we look for alongside 'website' in the same dict
+    SOCIAL_KEYS = {"linkedin", "facebook", "instagram", "twitter", "x"}
+
+    found: list[str] = []
+    seen: set[str] = set()
+
+    def _add(home: str) -> None:
+        if home not in seen:
+            seen.add(home)
+            found.append(home)
+
+    def _collect_url(v: str) -> None:
+        v = v.strip()
+        if not v.startswith("http"):
+            return
+        dom = domain_of(v)
+        if not dom or "sortlist" in dom or is_blocked(dom, blocklist):
+            return
+        parsed = urlparse(v)
+        _add(f"{parsed.scheme}://{parsed.netloc}/")
+
+    def _collect_domain(v: str) -> None:
+        """Handle bare domain values like 'myagency.com' or 'www.myagency.com'."""
+        v = v.strip().rstrip("/")
+        if not v or " " in v or "." not in v:
+            return
+        if "/" in v or "sortlist" in v:
+            return
+        dom = domain_of("https://" + v)
+        if not dom or is_blocked(dom, blocklist):
+            return
+        _add(f"https://{v}/")
+
+    def _walk(node) -> None:
+        if isinstance(node, dict):
+            # Build a lowercase-key → value map for this dict
+            lc = {k.lower(): v for k, v in node.items()}
+
+            # If this dict has a 'website' key, try to capture LinkedIn from same dict
+            if "website" in lc and isinstance(lc["website"], str):
+                raw = lc["website"].strip()
+                if raw.startswith("http"):
+                    parsed = urlparse(raw)
+                    home = f"{parsed.scheme}://{parsed.netloc}/"
+                    dom = domain_of(raw)
+                    if dom and "sortlist" not in dom and not is_blocked(dom, blocklist):
+                        # Check for linkedin directly in this dict or one level down
+                        li_url = ""
+                        if "linkedin" in lc and isinstance(lc["linkedin"], str) and "linkedin.com" in lc["linkedin"]:
+                            li_url = lc["linkedin"]
+                        elif "socialprofiles" in lc and isinstance(lc["socialprofiles"], dict):
+                            sp = {k.lower(): v for k, v in lc["socialprofiles"].items()}
+                            if "linkedin" in sp and isinstance(sp["linkedin"], str):
+                                li_url = sp["linkedin"]
+                        if li_url and home not in _linkedin_hints:
+                            _linkedin_hints[home] = li_url
+
+            for k, v in node.items():
+                kl = k.lower()
+                if kl in URL_KEYS:
+                    if isinstance(v, str):
+                        _collect_url(v)
+                    else:
+                        _walk(v)
+                elif kl in DOMAIN_KEYS:
+                    if isinstance(v, str):
+                        _collect_domain(v)
+                else:
+                    _walk(v)
+        elif isinstance(node, list):
+            for item in node:
+                _walk(item)
+
+    _walk(obj)
+    return found
+
+
+def catalog_links_sortlist(url: str, blocklist: set[str]) -> list[str] | None:
+    """Sortlist is a Next.js SPA — agency data lives in <script id='__NEXT_DATA__'> JSON.
+    Uses minimal headers (no Sec-Fetch-*) to avoid Sortlist's bot detection.
+    Parse that first; fall back to <a> scanning if not found."""
+    # Minimal headers only — Sec-Fetch-* headers trigger Sortlist bot detection
+    _ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    try:
+        r = requests.get(url, headers={"User-Agent": _ua, "Accept-Language": "en;q=0.8"}, timeout=20, allow_redirects=True)
+        r.raise_for_status()
+        html = r.text
+    except Exception as e:
+        print(f"    [catalog/sortlist] fetch error: {e}")
+        return None
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Primary: parse Next.js embedded JSON
+    script = soup.find("script", id="__NEXT_DATA__")
+    if script and script.string:
+        try:
+            data = json.loads(script.string)
+        except json.JSONDecodeError as e:
+            print(f"    [catalog/sortlist] __NEXT_DATA__ JSON parse error: {e}")
+            data = None
+
+        if data is not None:
+            try:
+                found = _sortlist_urls_from_json(data, blocklist)
+            except Exception as e:
+                import traceback
+                print(f"    [catalog/sortlist] walker error: {e}")
+                traceback.print_exc()
+                found = []
+            if found:
+                return found
+            print(f"    [catalog/sortlist] __NEXT_DATA__ parsed OK but 0 URLs extracted")
+
+    # Fallback: scan <a> links (works if Sortlist ever serves static HTML)
+    catalog_dom = domain_of(url)
+    found, seen = [], set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href.startswith("http"):
+            href = urljoin(url, href)
+        dom = domain_of(href)
+        if dom and dom != catalog_dom and not is_blocked(dom, blocklist):
+            home = f"{urlparse(href).scheme}://{urlparse(href).netloc}/"
+            if home not in seen:
+                seen.add(home)
+                found.append(home)
+    return found  # [] means client-side rendered with no data at all
+
+
+def catalog_links_designrush(url: str, blocklist: set[str]) -> list[str]:
+    """DesignRush agency listing page — extract agency website URLs.
+    Uses minimal headers (no Sec-Fetch-*) to avoid WAF, tries __NEXT_DATA__ first."""
+    _ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    try:
+        r = requests.get(url, headers={"User-Agent": _ua, "Accept-Language": "en;q=0.8"}, timeout=20, allow_redirects=True)
+        r.raise_for_status()
+        html = r.text
+    except Exception as e:
+        print(f"    [catalog/designrush] fetch error: {e}")
+        return None
+
+    print(f"    [catalog/designrush] fetched {len(html):,} chars", end="")
+
+    found: list[str] = []
+    seen: set[str] = set()
+    catalog_dom = "designrush.com"
+
+    def _collect(raw: str) -> None:
+        raw = raw.strip()
+        if not raw.startswith("http"):
+            return
+        dom = domain_of(raw)
+        if dom and dom != catalog_dom and not is_blocked(dom, blocklist):
+            parsed = urlparse(raw)
+            home = f"{parsed.scheme}://{parsed.netloc}/"
+            if home not in seen:
+                seen.add(home)
+                found.append(home)
+
+    # --- Try __NEXT_DATA__ first ---
+    soup = BeautifulSoup(html, "html.parser")
+    script = soup.find("script", id="__NEXT_DATA__")
+    if script and script.string:
+        print(" | __NEXT_DATA__: FOUND", end="")
+        try:
+            data = json.loads(script.string)
+            # Walk entire JSON looking for website/url fields pointing off-site
+            WEBSITE_KEYS = {"website", "websiteurl", "websiteuri", "web", "siteurl",
+                            "externalurl", "external_url", "homepage", "url", "profile_url",
+                            "company_url", "companyurl"}
+            def _walk(node) -> None:
+                if isinstance(node, dict):
+                    lc = {k.lower(): v for k, v in node.items()}
+                    for key in WEBSITE_KEYS:
+                        if key in lc and isinstance(lc[key], str):
+                            _collect(lc[key])
+                    for v in node.values():
+                        _walk(v)
+                elif isinstance(node, list):
+                    for item in node:
+                        _walk(item)
+            _walk(data)
+        except Exception as e:
+            print(f" | JSON parse error: {e}", end="")
+
+    # --- Fallback: scan <a> tags for external links ---
+    if not found:
+        print(" | falling back to <a> scan", end="")
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            if not href.startswith("http"):
+                href = urljoin(url, href)
+            _collect(href)
+
+    print(f" → {len(found)} URLs")
+    return found
+
+
+def catalog_links_goodfirms(url: str, blocklist: set[str]) -> list[str] | None:
+    """GoodFirms listing page → follow internal /company/ profile links → extract agency websites.
+    GoodFirms listing pages don't link directly to external sites; only profile pages do."""
+    _ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    _headers = {"User-Agent": _ua, "Accept-Language": "en;q=0.8"}
+    try:
+        r = requests.get(url, headers=_headers, timeout=20, allow_redirects=True)
+        r.raise_for_status()
+        html = r.text
+    except Exception as e:
+        print(f"    [catalog/goodfirms] fetch error: {e}")
+        return None
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Collect unique /company/ profile paths from the listing page
+    profile_urls: list[str] = []
+    seen_profiles: set[str] = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if "/company/" in href:
+            if href.startswith("/"):
+                href = "https://www.goodfirms.co" + href
+            href = href.split("?")[0].split("#")[0]
+            if href not in seen_profiles:
+                seen_profiles.add(href)
+                profile_urls.append(href)
+
+    if not profile_urls:
+        return []  # listing page has no company links → catalog exhausted
+
+    # Fetch each profile page and grab the first external link (the agency website)
+    found: list[str] = []
+    seen_doms: set[str] = set()
+    catalog_dom = "goodfirms.co"
+    for profile_url in profile_urls:
+        try:
+            pr = requests.get(profile_url, headers=_headers, timeout=12, allow_redirects=True)
+            pr.raise_for_status()
+            phtml = pr.text
+        except Exception:
+            continue
+        psoup = BeautifulSoup(phtml, "html.parser")
+        for a in psoup.find_all("a", href=True):
+            href = a["href"].strip()
+            if not href.startswith("http"):
+                continue
+            dom = domain_of(href)
+            if dom and dom != catalog_dom and not is_blocked(dom, blocklist) and dom not in seen_doms:
+                parsed = urlparse(href)
+                home = f"{parsed.scheme}://{parsed.netloc}/"
+                seen_doms.add(dom)
+                found.append(home)
+                break  # one website per agency profile
+        time.sleep(0.5)
+
+    return found
+
+
+def catalog_links_gulesider(url: str, blocklist: set[str]) -> list[str]:
+    """Gule Sider / De Gule Sider -- extract business website links."""
+    try:
+        html = fetch(url, timeout=20, browser_ua=True)
+    except Exception as e:
+        print(f"    [catalog/gulesider] fetch error: {e}")
+        return None
+    soup = BeautifulSoup(html, "html.parser")
+    found: list[str] = []
+    seen: set[str] = set()
+    catalog_dom = domain_of(url)
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href.startswith("http"):
+            href = urljoin(url, href)
+        link_dom = domain_of(href)
+        if link_dom and link_dom != catalog_dom and not is_blocked(link_dom, blocklist):
+            parsed = urlparse(href)
+            home = f"{parsed.scheme}://{parsed.netloc}/"
+            if home not in seen:
+                seen.add(home)
+                found.append(home)
+    return found
+
+
+def catalog_links_proff(url: str, blocklist: set[str]) -> list[str]:
+    """Proff.no business registry -- extract company website links."""
+    try:
+        html = fetch(url, timeout=20, browser_ua=True)
+    except Exception as e:
+        print(f"    [catalog/proff] fetch error: {e}")
+        return None
+    soup = BeautifulSoup(html, "html.parser")
+    found: list[str] = []
+    seen: set[str] = set()
+    catalog_dom = domain_of(url)
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href.startswith("http"):
+            href = urljoin(url, href)
+        link_dom = domain_of(href)
+        if link_dom and link_dom != catalog_dom and not is_blocked(link_dom, blocklist):
+            parsed = urlparse(href)
+            home = f"{parsed.scheme}://{parsed.netloc}/"
+            if home not in seen:
+                seen.add(home)
+                found.append(home)
+    return found
+
+
+def catalog_links_yelp(url: str, blocklist: set[str]) -> list[str]:
+    """Yelp business listings -- extract external website links."""
+    return catalog_links_generic(url, blocklist)
+
+
+def catalog_links_pagesjaunes(url: str, blocklist: set[str]) -> list[str]:
+    """Pages Jaunes (France) -- extract business website links."""
+    return catalog_links_generic(url, blocklist)
+
+
+def catalog_links_paginasamarillas(url: str, blocklist: set[str]) -> list[str]:
+    """Paginas Amarillas (Spain) -- extract business website links."""
+    return catalog_links_generic(url, blocklist)
+
+
+CATALOG_EXTRACTORS = {
+    "clutch":             catalog_links_clutch,
+    "sortlist":           catalog_links_sortlist,
+    "designrush":         catalog_links_designrush,
+    "goodfirms":          catalog_links_goodfirms,
+    "gulesider":          catalog_links_gulesider,
+    "proff":              catalog_links_proff,
+    "yelp":               catalog_links_yelp,
+    "pagesjaunes":        catalog_links_pagesjaunes,
+    "paginasamarillas":   catalog_links_paginasamarillas,
+    "generic":            catalog_links_generic,
+}
+
+
+def scrape_catalog_page(entry: dict, page: int, blocklist: set[str]) -> list[str] | None:
+    """Fetch one page of a catalog and return outbound agency URLs.
+    Returns None on fetch error (caller should skip page and continue).
+    Returns [] when page genuinely has no outbound links (catalog exhausted).
+    """
+    offset = (page - 1) * 10
+    url = entry["url"].format(page=page, offset=offset)
+    extractor = CATALOG_EXTRACTORS.get(entry.get("type", "generic"), catalog_links_generic)
+    return extractor(url, blocklist)
+
+
+def catalog_run(args) -> None:
+    """Mode: read from directory catalogs, crawl extracted agency sites, export leads."""
+    configs = load_country_configs()
+    countries = selected_countries(args.countries, configs) or DEFAULT_COUNTRIES
+    blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
+
+    # Load catalogs for selected countries
+    all_catalogs = load_catalogs()
+    # Filter to selected countries
+    catalogs: dict[str, list[dict]] = {c: all_catalogs[c] for c in countries if c in all_catalogs}
+
+    if not catalogs:
+        print(f"No catalog entries found for: {', '.join(countries)}")
+        return
+
+    # Load previous run so we never lose existing data
+    all_leads: list[Lead] = load_existing_leads(Path(args.output))
+    seen_domains: set[str] = {l.domain.strip().lower() for l in all_leads if l.domain}
+
+    country_leads: dict[str, int] = {}
+    batch_size: int = args.workers
+
+    max_pages = getattr(args, "max_catalog_pages", None)
+
+    print(f"Countries: {', '.join(countries)}")
+    print(f"Batch size (parallel crawlers): {batch_size}")
+
+    for code, sources in catalogs.items():
+        print(f"\n{'='*60}")
+        print(f"[{code}] {len(sources)} catalog source(s)")
+        pending: list[tuple[str, str]] = []
+
+        for entry in sources:
+            name = entry.get("name", entry.get("url", "?"))
+            total_pages = entry.get("pages", 1)
+            if max_pages:
+                total_pages = min(total_pages, max_pages)
+            print(f"\n  Source: {name} (up to {total_pages} pages)")
+
+            for page in range(1, total_pages + 1):
+                print(f"  Page {page}/{total_pages}", end=" ... ", flush=True)
+                links = scrape_catalog_page(entry, page, blocklist)
+
+                if links is None:
+                    print("fetch error — skipping page, continuing...")
+                    continue
+
+                if not links:
+                    print("0 links found — catalog exhausted, stopping this source.")
+                    break
+
+                # Filter out already-seen domains
+                new_links = []
+                for url in links:
+                    dom = domain_of(url)
+                    if dom and dom not in seen_domains:
+                        seen_domains.add(dom)
+                        new_links.append((url, name))
+
+                print(f"{len(new_links)} new candidates (of {len(links)} found)")
+                pending.extend(new_links)
+
+                # Dispatch a full batch whenever we've accumulated enough
+                while len(pending) >= batch_size:
+                    batch = pending[:batch_size]
+                    pending = pending[batch_size:]
+                    _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads)
+
+                time.sleep(args.delay)
+
+        # Flush remaining sites for this country
+        if pending:
+            print(f"\n  [{code}] Flushing final batch of {len(pending)} sites")
+            _crawl_batch(pending, args, code, configs, all_leads, Path(args.output), country_leads)
+            pending = []
+
+        print(f"\n[{code}] Done \u2014 {country_leads.get(code, 0)} new leads from catalogs")
+
+    print(f"\n{'='*60}")
+    print(f"Catalog run complete.")
+    all_leads = dedupe_leads(all_leads)
+    export(all_leads, Path(args.output))
+    print(f"Exported {len(all_leads)} leads to {args.output}/agency_leads.xlsx")
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="BlueBoot Lead Agent \u2014 find & score web-design agencies",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--mode", choices=["search", "catalog"], default="search",
+        help="search = Bing/Google keyword search; catalog = scrape directory listings",
+    )
+    parser.add_argument(
+        "--countries", default=None,
+        help="Comma-separated ISO codes to process, e.g. NO,SE,DK. Default: all configured.",
+    )
+    parser.add_argument(
+        "--queries", default=None,
+        help="Comma-separated search queries (overrides per-country query files).",
+    )
+    parser.add_argument(
+        "--output", default="output",
+        help="Output directory for the Excel file.",
+    )
+    parser.add_argument(
+        "--max-results", type=int, default=int(os.getenv("MAX_RESULTS", "10")),
+        help="Max search results per query.",
+    )
+    parser.add_argument(
+        "--max-pages", type=int, default=int(os.getenv("MAX_PAGES", "3")),
+        help="Max pages to crawl per agency website.",
+    )
+    parser.add_argument(
+        "--max-country", type=int, default=int(os.getenv("MAX_COUNTRY", "0")) or None,
+        help="Stop a country after this many leads (0 = unlimited).",
+    )
+    parser.add_argument(
+        "--give-up-after", type=int, default=int(os.getenv("GIVE_UP_AFTER", "10")),
+        help="Give up a country after this many consecutive empty queries.",
+    )
+    parser.add_argument(
+        "--delay", type=float, default=float(os.getenv("CRAWL_DELAY", "1.0")),
+        help="Seconds to wait between page fetches within one site.",
+    )
+    parser.add_argument(
+        "--workers", type=int, default=int(os.getenv("CRAWL_WORKERS", "20")),
+        help="Parallel site-crawl workers / batch size (default 20).",
+    )
+    parser.add_argument(
+        "--max-catalog-pages", type=int, default=None,
+        help="Limit pages per catalog source (for testing).",
+    )
+    return parser
+
+
+def main() -> None:
+    load_dotenv()
+    parser = _build_parser()
+    args = parser.parse_args()
+    if args.mode == "catalog":
+        catalog_run(args)
+    else:
+        run(args)
+
+
+if __name__ == "__main__":
+    main()
+atalog source (for testing).",
+    )
+    return parser
+
+
+def main() -> None:
+    load_dotenv()
+    parser = _build_parser()
+    args = parser.parse_args()
+    if args.mode == "catalog":
+        catalog_run(args)
+    else:
+        run(args)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,196 @@
+{
+  "_notes": [
+    "Sortlist: JS infinite-scroll — URL pagination does not work. pages=1 only (scrapes ~20 top agencies). Requires minimal headers (no Sec-Fetch-*) to avoid bot detection.",
+    "Clutch: Cloudflare WAF blocks all requests with 403. Removed from all countries.",
+    "GoodFirms: WAF drops connection after ~20s timeout. Removed from all countries.",
+    "DesignRush: supports ?page=N pagination."
+  ],
+  "NO": [
+    {
+      "name": "Sortlist NO – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/norway-no",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist NO – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/norway-no",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist NO – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/norway-no",
+      "pages": 1
+    }
+  ],
+  "SE": [
+    {
+      "name": "Sortlist SE – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/sweden-se",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist SE – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/sweden-se",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist SE – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/sweden-se",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush SE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/se?page={page}",
+      "pages": 8
+    }
+  ],
+  "DK": [
+    {
+      "name": "Sortlist DK – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/denmark-dk",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist DK – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/denmark-dk",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist DK – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/denmark-dk",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush DK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/dk?page={page}",
+      "pages": 8
+    }
+  ],
+  "DE": [
+    {
+      "name": "Sortlist DE – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/germany-de",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist DE – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/germany-de",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist DE – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/germany-de",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush DE – web design",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "DesignRush DE – web development",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/web-development-companies/de?page={page}",
+      "pages": 10
+    }
+  ],
+  "UK": [
+    {
+      "name": "Sortlist UK – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/united-kingdom-gb",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist UK – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/united-kingdom-gb",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist UK – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/united-kingdom-gb",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush UK – web development",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/web-development-companies/uk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "DesignRush UK – web design",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/uk?page={page}",
+      "pages": 10
+    }
+  ],
+  "FR": [
+    {
+      "name": "Sortlist FR – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/france-fr",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist FR – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/france-fr",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist FR – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/france-fr",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush FR",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/fr?page={page}",
+      "pages": 10
+    }
+  ],
+  "ES": [
+    {
+      "name": "Sortlist ES – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/spain-es",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist ES – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/spain-es",
+      "pages": 1
+    },
+    {
+      "name": "Sortlist ES – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/spain-es",
+      "pages": 1
+    },
+    {
+      "name": "DesignRush ES",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/website-design-development/es?page={page}",
+      "pages": 10
+    }
+  ]
+}

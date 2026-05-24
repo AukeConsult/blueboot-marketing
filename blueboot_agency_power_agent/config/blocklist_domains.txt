@@ -194,3 +194,9 @@ netonnet.*
 pornhub.*
 crypto.com
 hotels.*
+
+# === MANUALLY BLOCKED ===
+*.sparkasse-emden.*
+sparkasse-emden.*
+moviepilot.de
+kagels-trading.de
