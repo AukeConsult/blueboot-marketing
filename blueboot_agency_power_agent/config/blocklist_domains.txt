@@ -1,28 +1,207 @@
+# === SOCIAL MEDIA ===
 facebook.com
-linkedin.com
 instagram.com
+linkedin.com
+twitter.com
+x.com
+tiktok.com
+pinterest.com
+snapchat.com
 youtube.com
+vimeo.com
+twitch.tv
+discord.com
+whatsapp.com
+telegram.org
+
+# === SEARCH ENGINES ===
+google.com
+bing.com
+yahoo.com
+duckduckgo.com
+yandex.com
+baidu.com
+ask.com
+
+# === TECH GIANTS / PLATFORMS ===
+microsoft.com
+apple.com
+amazon.com
+meta.com
+netflix.com
+adobe.com
+oracle.com
+sap.com
+ibm.com
+hp.com
+dell.com
+intel.com
+nvidia.com
+samsung.com
+
+# === CMS / WEBSITE BUILDER VENDORS (the platforms themselves, not agencies) ===
+wordpress.com
+wordpress.org
+wix.com
+squarespace.com
+shopify.com
+webflow.com
+framer.com
+ghost.io
+weebly.com
+jimdo.com
+strikingly.com
+cargo.site
+
+# === E-COMMERCE PLATFORMS ===
+ebay.com
+etsy.com
+zalando.no
+zalando.se
+zalando.de
+zalando.co.uk
+asos.com
+aliexpress.com
+wish.com
+amazon.co.uk
+amazon.de
+amazon.fr
+amazon.es
+
+# === DEVELOPER / TECH PLATFORMS ===
+github.com
+gitlab.com
+bitbucket.org
+stackoverflow.com
+npm.js.org
+npmjs.com
+pypi.org
+docker.com
+digitalocean.com
+heroku.com
+vercel.com
+netlify.com
+cloudflare.com
+aws.amazon.com
+
+# === NEWS & MEDIA ===
+forbes.com
+reuters.com
+bbc.com
+bbc.co.uk
+cnn.com
+techcrunch.com
+theverge.com
+wired.com
+mashable.com
+zdnet.com
+computerworld.com
+medium.com
+substack.com
+# Norwegian media
+vg.no
+dagbladet.no
+aftenposten.no
+nrk.no
+tv2.no
+digi.no
+dn.no
+e24.no
+nettavisen.no
+tu.no
+# Swedish media
+svd.se
+dn.se
+aftonbladet.se
+expressen.se
+# Danish media
+dr.dk
+bt.dk
+politiken.dk
+# German media
+spiegel.de
+zeit.de
+faz.net
+bild.de
+# UK media
+guardian.com
+theguardian.com
+telegraph.co.uk
+# French media
+lemonde.fr
+lefigaro.fr
+# Spanish media
+elpais.com
+elmundo.es
+
+# === REFERENCE / KNOWLEDGE ===
 wikipedia.org
+wikimedia.org
+wikihow.com
+quora.com
+reddit.com
+
+# === MARKETING / CRM VENDORS (the platforms, not agencies using them) ===
+hubspot.com
+salesforce.com
+mailchimp.com
+klaviyo.com
+activecampaign.com
+marketo.com
+constantcontact.com
+sendinblue.com
+brevo.com
+
+# === ANALYTICS / TRACKING VENDORS ===
+google-analytics.com
+hotjar.com
+mixpanel.com
+segment.com
+
+# === CLOUD / HOSTING VENDORS ===
+azure.microsoft.com
+cloud.google.com
+
+# === REVIEW / DIRECTORY SITES ===
+trustpilot.com
+g2.com
+clutch.co
+capterra.com
+goodfirms.co
+sortlist.com
+designrush.com
+awwwards.com
+# Norwegian directories
 proff.no
 brreg.no
 gulesider.no
 1881.no
 finn.no
 kart.gulesider.no
-# Norwegian hardware / retail (Umbraco is a screwdriver brand)
+gule-sider.no
+
+# === JOB BOARDS ===
+indeed.com
+glassdoor.com
+monster.com
+linkedin.com/jobs
+jobindex.dk
+finn.no/jobb
+nav.no
+
+# === HARDWARE / RETAIL (Umbraco is a screwdriver brand in Scandinavia) ===
 jernia.no
 skruvat.no
 clas-ohlson.no
 clasohlson.no
-# Large retailers / platforms not relevant as leads
-komplett.no
+clasohlson.se
+clasohlson.de
+biltema.no
+biltema.se
+biltema.dk
 elkjop.no
 power.no
-amazon.com
-ebay.com
-# News / media
-vg.no
-dagbladet.no
-aftenposten.no
-nrk.no
-tv2.no
+komplett.no
+komplett.se
+netonnet.no
+netonnet.se
