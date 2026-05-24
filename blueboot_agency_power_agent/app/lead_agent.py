@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from dotenv import load_dotenv
 
 from catalog_scrapers import catalog_run
+from models import lead_id_from_url
 from search_runner import run
 
 if TYPE_CHECKING:
@@ -131,8 +132,8 @@ def push_to_firebase(leads: list["Lead"], collection: str | None = None) -> None
     col = db.collection(col_name)
 
     # --- helpers ---
-    def _lead_id(domain: str) -> str:
-        return hashlib.sha1(domain.encode()).hexdigest()[:10]
+    def _lead_id(website: str) -> str:
+        return lead_id_from_url(website)
 
     def _contact_id(email: str) -> str:
         return hashlib.sha1(email.lower().encode()).hexdigest()[:10]
@@ -144,7 +145,7 @@ def push_to_firebase(leads: list["Lead"], collection: str | None = None) -> None
             {
                 "email":    email,
                 "title":    titles[i] if i < len(titles) else "",
-                "lead_id":  _lead_id(lead.domain),
+                "lead_id":  _lead_id(lead.website),
                 "company":  lead.company,
                 "domain":   lead.domain,
                 "website":  lead.website,
@@ -172,11 +173,12 @@ def push_to_firebase(leads: list["Lead"], collection: str | None = None) -> None
     for lead in leads:
         if not lead.domain:
             continue
-        lid      = _lead_id(lead.domain)
+        lid      = _lead_id(lead.website)
         lead_doc = asdict(lead)
         lead_doc["lead_id"] = lid
         lead_doc.pop("emails",       None)
         lead_doc.pop("email_titles", None)
+        lead_doc.pop("email_names",  None)
 
         batch.set(col.document(lid), lead_doc, merge=True)
         ops        += 1
@@ -285,9 +287,13 @@ def main() -> None:
     else:
         leads = run(args)
 
+    # Each lead is already upserted to Firebase immediately after scraping.
+    # The end-of-run bulk push is a safety net for any missed leads (e.g. runs
+    # that were interrupted and resumed from the CSV).
     if args.no_firebase:
         print("  [firebase] skipped (--no-firebase).")
     elif leads:
+        print("  [firebase] running end-of-run sync to catch any missed leads...")
         push_to_firebase(leads, collection=args.firebase_collection)
     else:
         print("  [firebase] no leads to upload.")

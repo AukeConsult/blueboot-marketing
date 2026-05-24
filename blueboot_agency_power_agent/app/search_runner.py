@@ -19,10 +19,11 @@ from utils import (
     normalize_url, domain_of, company_from_domain,
     is_product_or_content_url, is_blocked, allowed_domain, country_for_domain,
     fetch, extract_meta, visible_text, extract_contacts, extract_phones,
-    extract_links, detect_tech, categorize, priority, angle,
+    pair_phones_to_contacts, pair_names_to_contacts, extract_links, detect_tech, categorize, priority, angle,
     load_lines, load_country_configs, selected_countries, DEFAULT_COUNTRIES,
     linkedin_hints,
 )
+from firebase_sync import upsert_lead
 from models import Lead, dedupe_leads, export, load_existing_leads
 
 
@@ -166,11 +167,18 @@ def crawl_site(url: str, source_query: str, max_pages: int, delay: float,
     ) < 35:
         return None
     lead_angle = angle(cats, tech)
+    sorted_emails  = sorted(contacts.keys())
+    phone_region   = country_cfg.get("phone_region", country_code)
+    combined       = all_html + " " + all_text
+    contact_phones = pair_phones_to_contacts(contacts, combined, phone_region)
+    contact_names  = pair_names_to_contacts(contacts, combined, all_html)
     return Lead(
         company=company_from_domain(dom), domain=dom, website=website,
         source_query=source_query, title=title, description=desc,
-        emails=", ".join(sorted(contacts.keys())),
-        email_titles=", ".join(contacts.get(e, "") for e in sorted(contacts.keys())),
+        emails=", ".join(sorted_emails),
+        email_titles=", ".join(contacts.get(e, "") for e in sorted_emails),
+        email_phones=", ".join(contact_phones.get(e, "") for e in sorted_emails),
+        email_names=", ".join(contact_names.get(e, "") for e in sorted_emails),
         phones=", ".join(sorted(phones)), contact_page=contact_page,
         linkedin=linkedin or linkedin_hints.get(website, ""),
         detected_tech=", ".join(sorted(tech)),
@@ -246,11 +254,18 @@ async def _async_crawl_site(
     ) < 35:
         return None
     lead_angle = angle(cats, tech)
+    sorted_emails  = sorted(contacts.keys())
+    phone_region   = country_cfg.get("phone_region", country_code)
+    combined       = all_html + " " + all_text
+    contact_phones = pair_phones_to_contacts(contacts, combined, phone_region)
+    contact_names  = pair_names_to_contacts(contacts, combined, all_html)
     return Lead(
         company=company_from_domain(dom), domain=dom, website=website,
         source_query=source_query, title=title, description=desc,
-        emails=", ".join(sorted(contacts.keys())),
-        email_titles=", ".join(contacts.get(e, "") for e in sorted(contacts.keys())),
+        emails=", ".join(sorted_emails),
+        email_titles=", ".join(contacts.get(e, "") for e in sorted_emails),
+        email_phones=", ".join(contact_phones.get(e, "") for e in sorted_emails),
+        email_names=", ".join(contact_names.get(e, "") for e in sorted_emails),
         phones=", ".join(sorted(phones)), contact_page=contact_page,
         linkedin=linkedin or linkedin_hints.get(website, ""),
         detected_tech=", ".join(sorted(tech)),
@@ -295,6 +310,8 @@ async def _run_batch_async(
                 all_leads.append(lead)
                 country_leads[code] = country_leads.get(code, 0) + 1
                 new_count += 1
+                if not getattr(args, "no_firebase", False):
+                    upsert_lead(lead, collection=getattr(args, "firebase_collection", None))
                 if not getattr(args, "no_output", False):
                     export(dedupe_leads(all_leads), export_path)
     return new_count

@@ -2,15 +2,41 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
+import re
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pandas as pd
 
 from utils import load_lines
+
+
+def lead_id_from_url(url: str) -> str:
+    """Human-readable Firestore/Excel ID from a site URL.
+
+    https://www.sol.no/  ->  www_sol_no
+    vg.no                ->  vg_no
+    """
+    host = urlparse(url).hostname or url
+    # strip trailing dot, replace dots and hyphens with underscores
+    slug = re.sub(r"[.\-]+", "_", host.rstrip(".").lower())
+    # collapse repeated underscores
+    return re.sub(r"_+", "_", slug).strip("_")
+
+# openpyxl rejects control characters (U+0000–U+001F) except tab (09), LF (0A), CR (0D)
+_ILLEGAL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def _sanitize_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Strip illegal Excel characters from every string column in-place."""
+    for col in df.select_dtypes(include="object").columns:
+        df[col] = df[col].apply(
+            lambda v: _ILLEGAL_CHARS.sub("", v) if isinstance(v, str) else v
+        )
+    return df
 
 
 @dataclass
@@ -23,6 +49,8 @@ class Lead:
     description: str = ""
     emails: str = ""
     email_titles: str = ""
+    email_phones: str = ""
+    email_names: str = ""
     phones: str = ""
     contact_page: str = ""
     linkedin: str = ""
@@ -49,23 +77,33 @@ def dedupe_leads(leads: list[Lead]) -> list[Lead]:
 
 
 def build_contacts_df(leads: list[Lead]) -> pd.DataFrame:
-    """One row per email address per lead."""
+    """One row per email address per lead.
+
+    Phone is included only when it was paired to that specific contact during
+    crawling (email_phones field).  Page-level phones that couldn't be tied to
+    a person are intentionally omitted so the contact row stays accurate.
+    """
     rows = []
     for lead in leads:
-        lead_id = hashlib.sha1(lead.domain.encode()).hexdigest()[:10]
-        emails  = [e.strip() for e in lead.emails.split(",") if e.strip()] if lead.emails else []
-        titles  = [t.strip() for t in lead.email_titles.split(",")] if lead.email_titles else []
+        lead_id     = lead_id_from_url(lead.website)
+        emails      = [e.strip() for e in lead.emails.split(",")       if e.strip()] if lead.emails       else []
+        titles      = [t.strip() for t in lead.email_titles.split(",") if True]      if lead.email_titles else []
+        per_phones  = [p.strip() for p in lead.email_phones.split(",") if True]      if lead.email_phones else []
+        per_names   = [n.strip() for n in lead.email_names.split(",")  if True]      if lead.email_names  else []
         base = {
             "lead_id": lead_id, "company": lead.company, "domain": lead.domain,
             "website": lead.website, "country": lead.country_name,
             "priority": lead.priority, "reseller_score": lead.reseller_score,
-            "phones": lead.phones, "linkedin": lead.linkedin,
-            "contact_page": lead.contact_page,
+            "linkedin": lead.linkedin, "contact_page": lead.contact_page,
         }
         if not emails:
-            rows.append({**base, "email": "", "title": ""})
+            rows.append({**base, "name": "", "email": "", "title": "", "phone": ""})
         for i, email in enumerate(emails):
-            rows.append({**base, "email": email, "title": titles[i] if i < len(titles) else ""})
+            phone = per_phones[i] if i < len(per_phones) else ""
+            name  = per_names[i]  if i < len(per_names)  else ""
+            rows.append({**base, "name": name, "email": email,
+                         "title": titles[i] if i < len(titles) else "",
+                         "phone": phone})
     return pd.DataFrame(rows)
 
 
@@ -78,18 +116,21 @@ def autofit_sheet(ws) -> None:
 
 def export(leads: list[Lead], outdir: Path) -> None:
     outdir.mkdir(parents=True, exist_ok=True)
-    rows = [asdict(l) for l in leads]
-    df = pd.DataFrame(rows)
-    if not df.empty:
-        df.insert(0, "lead_id", [hashlib.sha1(r["domain"].encode()).hexdigest()[:10] for r in rows])
-    else:
-        df = pd.DataFrame(columns=["lead_id"] + list(Lead.__dataclass_fields__.keys()))
+
+    # Enrich every row with the same slug-based lead_id used everywhere
+    rows = [{"lead_id": lead_id_from_url(l.website), **asdict(l)} for l in leads]
+
+    df = pd.DataFrame(rows) if rows else pd.DataFrame(
+        columns=["lead_id"] + list(Lead.__dataclass_fields__.keys())
+    )
     df.to_csv(outdir / "agency_leads.csv", index=False, quoting=csv.QUOTE_MINIMAL)
 
     contacts_df = build_contacts_df(leads)
+    contacts_df.to_csv(outdir / "agency_contacts.csv", index=False, quoting=csv.QUOTE_MINIMAL)
+
     with pd.ExcelWriter(outdir / "agency_leads.xlsx", engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name="Leads", index=False)
-        contacts_df.to_excel(writer, sheet_name="Contacts", index=False)
+        _sanitize_df(df).to_excel(writer, sheet_name="Leads", index=False)
+        _sanitize_df(contacts_df).to_excel(writer, sheet_name="Contacts", index=False)
         summary = pd.DataFrame([
             {"metric": "Total leads",    "value": len(df)},
             {"metric": "A priority",     "value": int((df.get("priority", pd.Series(dtype=str)).astype(str).str.startswith("A")).sum()) if not df.empty else 0},
@@ -102,8 +143,14 @@ def export(leads: list[Lead], outdir: Path) -> None:
         qdf.to_excel(writer, sheet_name="Queries", index=False)
         autofit_sheet(writer.book["Leads"])
         autofit_sheet(writer.book["Contacts"])
+
+    # JSON: leads with lead_id, plus a separate contacts list
     (outdir / "agency_leads.json").write_text(
         json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (outdir / "agency_contacts.json").write_text(
+        json.dumps(contacts_df.to_dict(orient="records"), ensure_ascii=False, indent=2),
+        encoding="utf-8",
     )
 
 
@@ -117,7 +164,7 @@ def load_existing_leads(output_path: Path) -> list[Lead]:
         df = df.drop(columns=["lead_id"], errors="ignore")
         fields = set(Lead.__dataclass_fields__)
         df = df[[c for c in df.columns if c in fields]]
-        leads = []
+        leads: list[Lead] = []
         for row in df.to_dict(orient="records"):
             try:
                 row["reseller_score"] = int(float(row.get("reseller_score", 0)))
@@ -127,5 +174,5 @@ def load_existing_leads(output_path: Path) -> list[Lead]:
         print(f"Loaded {len(leads)} existing leads from {csv_path}")
         return leads
     except Exception as e:
-        print(f"Warning: could not read existing CSV ({e}) — starting fresh")
+        print(f"Warning: could not read existing CSV ({e}) -- starting fresh")
         return []

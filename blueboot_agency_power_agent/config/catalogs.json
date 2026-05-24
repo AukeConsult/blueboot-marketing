@@ -25,6 +25,111 @@
       "type": "sortlist",
       "url": "https://www.sortlist.com/digital-marketing/norway-no",
       "pages": 1
+    },
+    {
+      "name": "Sortlist NO – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/norway-no",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NO – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/norway-no",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NO – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/norway-no",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NO – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/norway-no",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NO – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/norway-no",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NO – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/norway-no",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NO – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/norway-no",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NO – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/norway-no",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NO – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/norway-no",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress NO",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/no?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce NO",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/no?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify NO",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/no?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce NO",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/no?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev NO",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/no?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal NO",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/no?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "SE": [
@@ -51,6 +156,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/se?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist SE – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/sweden-se",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist SE – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/sweden-se",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist SE – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/sweden-se",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist SE – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/sweden-se",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist SE – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/sweden-se",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist SE – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/sweden-se",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist SE – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/sweden-se",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist SE – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/sweden-se",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist SE – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/sweden-se",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress SE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/se?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce SE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/se?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify SE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/se?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce SE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/se?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev SE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/se?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal SE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/se?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "DK": [
@@ -77,6 +287,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/dk?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist DK – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/denmark-dk",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DK – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/denmark-dk",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DK – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/denmark-dk",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DK – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/denmark-dk",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DK – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/denmark-dk",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DK – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/denmark-dk",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DK – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/denmark-dk",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DK – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/denmark-dk",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DK – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/denmark-dk",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress DK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/dk?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce DK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/dk?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify DK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/dk?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce DK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/dk?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev DK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/dk?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal DK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/dk?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "FI": [
@@ -103,6 +418,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/fi?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist FI – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/finland-fi",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FI – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/finland-fi",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FI – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/finland-fi",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FI – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/finland-fi",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FI – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/finland-fi",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FI – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/finland-fi",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FI – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/finland-fi",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FI – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/finland-fi",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FI – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/finland-fi",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress FI",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/fi?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce FI",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/fi?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify FI",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/fi?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce FI",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/fi?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev FI",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/fi?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal FI",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/fi?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "NL": [
@@ -135,6 +555,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/web-development-companies/nl?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist NL – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/wordpress-development/netherlands-nl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NL – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/shopify-development/netherlands-nl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NL – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/woocommerce-development/netherlands-nl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NL – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/netherlands-nl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NL – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/webflow/netherlands-nl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NL – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/magento-development/netherlands-nl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NL – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/drupal-development/netherlands-nl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NL – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/typo3/netherlands-nl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist NL – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/umbraco/netherlands-nl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress NL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/nl?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce NL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/nl?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify NL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/nl?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce NL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/nl?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev NL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/nl?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal NL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/nl?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "BE": [
@@ -161,6 +686,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/be?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist BE – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/wordpress-development/belgium-be",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist BE – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/shopify-development/belgium-be",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist BE – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/woocommerce-development/belgium-be",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist BE – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/belgium-be",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist BE – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/webflow/belgium-be",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist BE – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/magento-development/belgium-be",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist BE – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/drupal-development/belgium-be",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist BE – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/typo3/belgium-be",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist BE – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/umbraco/belgium-be",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress BE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/be?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce BE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/be?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify BE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/be?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce BE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/be?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev BE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/be?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal BE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/be?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "DE": [
@@ -193,6 +823,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/web-development-companies/de?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist DE – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/wordpress-development/germany-de",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DE – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/shopify-development/germany-de",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DE – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/woocommerce-development/germany-de",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DE – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/germany-de",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DE – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/webflow/germany-de",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DE – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/magento-development/germany-de",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DE – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/drupal-development/germany-de",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DE – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/typo3/germany-de",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist DE – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/umbraco/germany-de",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress DE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/de?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce DE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/de?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify DE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/de?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce DE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/de?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev DE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/de?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal DE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/de?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "AT": [
@@ -219,6 +954,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/at?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist AT – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/wordpress-development/austria-at",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist AT – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/shopify-development/austria-at",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist AT – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/woocommerce-development/austria-at",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist AT – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/austria-at",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist AT – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/webflow/austria-at",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist AT – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/magento-development/austria-at",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist AT – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/drupal-development/austria-at",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist AT – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/typo3/austria-at",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist AT – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/umbraco/austria-at",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress AT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/at?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce AT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/at?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify AT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/at?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce AT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/at?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev AT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/at?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal AT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/at?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "UK": [
@@ -251,6 +1091,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/uk?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist UK – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/wordpress-development/united-kingdom-gb",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist UK – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/shopify-development/united-kingdom-gb",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist UK – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/woocommerce-development/united-kingdom-gb",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist UK – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/united-kingdom-gb",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist UK – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/webflow/united-kingdom-gb",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist UK – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/magento-development/united-kingdom-gb",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist UK – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/drupal-development/united-kingdom-gb",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist UK – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/typo3/united-kingdom-gb",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist UK – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/umbraco/united-kingdom-gb",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress UK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/gb?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce UK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/gb?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify UK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/gb?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce UK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/gb?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev UK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/gb?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal UK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/gb?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "IE": [
@@ -283,6 +1228,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/web-development-companies/ie?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist IE – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/ireland-ie",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IE – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/ireland-ie",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IE – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/ireland-ie",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IE – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/ireland-ie",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IE – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/ireland-ie",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IE – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/ireland-ie",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IE – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/ireland-ie",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IE – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/ireland-ie",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IE – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/ireland-ie",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress IE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/ie?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce IE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/ie?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify IE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/ie?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce IE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/ie?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev IE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/ie?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal IE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/ie?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "FR": [
@@ -315,6 +1365,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/web-development-companies/fr?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist FR – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/wordpress-development/france-fr",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FR – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/shopify-development/france-fr",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FR – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/woocommerce-development/france-fr",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FR – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/france-fr",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FR – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/webflow/france-fr",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FR – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/magento-development/france-fr",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FR – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/drupal-development/france-fr",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FR – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/typo3/france-fr",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist FR – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/umbraco/france-fr",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress FR",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/fr?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce FR",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/fr?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify FR",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/fr?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce FR",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/fr?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev FR",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/fr?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal FR",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/fr?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "ES": [
@@ -341,6 +1496,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/es?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist ES – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/wordpress-development/spain-es",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist ES – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/shopify-development/spain-es",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist ES – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/woocommerce-development/spain-es",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist ES – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/ecommerce/spain-es",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist ES – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/webflow/spain-es",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist ES – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/magento-development/spain-es",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist ES – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/drupal-development/spain-es",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist ES – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/typo3/spain-es",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist ES – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/umbraco/spain-es",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress ES",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/es?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce ES",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/es?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify ES",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/es?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce ES",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/es?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev ES",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/es?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal ES",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/es?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "IT": [
@@ -373,6 +1633,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/web-development-companies/it?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist IT – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/wordpress-development/italy-it",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IT – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/shopify-development/italy-it",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IT – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/woocommerce-development/italy-it",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IT – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/ecommerce/italy-it",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IT – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/webflow/italy-it",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IT – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/magento-development/italy-it",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IT – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/drupal-development/italy-it",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IT – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/typo3/italy-it",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IT – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/umbraco/italy-it",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress IT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/it?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce IT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/it?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify IT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/it?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce IT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/it?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev IT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/it?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal IT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/it?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "PL": [
@@ -405,6 +1770,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/web-development-companies/pl?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist PL – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/poland-pl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist PL – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/poland-pl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist PL – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/poland-pl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist PL – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/poland-pl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist PL – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/poland-pl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist PL – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/poland-pl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist PL – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/poland-pl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist PL – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/poland-pl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist PL – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/poland-pl",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress PL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/pl?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce PL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/pl?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify PL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/pl?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce PL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/pl?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev PL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/pl?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal PL",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/pl?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "HU": [
@@ -431,6 +1901,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/hu?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist HU – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/hungary-hu",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist HU – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/hungary-hu",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist HU – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/hungary-hu",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist HU – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/hungary-hu",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist HU – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/hungary-hu",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist HU – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/hungary-hu",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist HU – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/hungary-hu",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist HU – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/hungary-hu",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist HU – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/hungary-hu",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress HU",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/hu?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce HU",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/hu?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify HU",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/hu?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce HU",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/hu?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev HU",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/hu?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal HU",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/hu?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "EE": [
@@ -457,6 +2032,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/ee?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist EE – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/estonia-ee",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist EE – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/estonia-ee",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist EE – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/estonia-ee",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist EE – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/estonia-ee",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist EE – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/estonia-ee",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist EE – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/estonia-ee",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist EE – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/estonia-ee",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist EE – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/estonia-ee",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist EE – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/estonia-ee",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress EE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/ee?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce EE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/ee?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify EE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/ee?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce EE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/ee?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev EE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/ee?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal EE",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/ee?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "LV": [
@@ -483,6 +2163,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/lv?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist LV – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/latvia-lv",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LV – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/latvia-lv",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LV – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/latvia-lv",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LV – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/latvia-lv",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LV – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/latvia-lv",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LV – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/latvia-lv",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LV – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/latvia-lv",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LV – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/latvia-lv",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LV – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/latvia-lv",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress LV",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/lv?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce LV",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/lv?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify LV",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/lv?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce LV",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/lv?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev LV",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/lv?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal LV",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/lv?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "LT": [
@@ -509,6 +2294,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/lt?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist LT – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/lithuania-lt",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LT – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/lithuania-lt",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LT – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/lithuania-lt",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LT – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/lithuania-lt",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LT – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/lithuania-lt",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LT – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/lithuania-lt",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LT – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/lithuania-lt",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LT – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/lithuania-lt",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist LT – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/lithuania-lt",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress LT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/lt?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce LT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/lt?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify LT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/lt?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce LT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/lt?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev LT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/lt?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal LT",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/lt?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "IN": [
@@ -559,6 +2449,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/web-development-companies/in?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist IN – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/india-in",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IN – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/india-in",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IN – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/india-in",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IN – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/india-in",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IN – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/india-in",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IN – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/india-in",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IN – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/india-in",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IN – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/india-in",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist IN – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/india-in",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress IN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/in?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce IN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/in?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify IN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/in?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce IN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/in?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev IN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/in?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal IN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/in?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ],
   "TN": [
@@ -597,6 +2592,111 @@
       "type": "designrush",
       "url": "https://www.designrush.com/agency/website-design-development/tn?page={page}",
       "pages": 50
+    },
+    {
+      "name": "Sortlist TN – WordPress development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/wordpress-development/tunisia-tn",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist TN – Shopify development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/shopify-development/tunisia-tn",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist TN – WooCommerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/woocommerce-development/tunisia-tn",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist TN – E-commerce development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/tunisia-tn",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist TN – Webflow",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/webflow/tunisia-tn",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist TN – Magento development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/magento-development/tunisia-tn",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist TN – Drupal development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/drupal-development/tunisia-tn",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist TN – TYPO3",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/typo3/tunisia-tn",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "Sortlist TN – Umbraco",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/umbraco/tunisia-tn",
+      "pages": 1,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WordPress TN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/wordpress-website-design/tn?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush WooCommerce TN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/woocommerce/tn?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Shopify TN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/shopify/tn?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush E-commerce TN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ecommerce/tn?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush CMS dev TN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/cms-development/tn?page={page}",
+      "pages": 50,
+      "__platform_added": true
+    },
+    {
+      "name": "DesignRush Drupal TN",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/drupal/tn?page={page}",
+      "pages": 50,
+      "__platform_added": true
     }
   ]
 }

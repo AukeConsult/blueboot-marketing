@@ -34,6 +34,26 @@ PRODUCT_PAGE_PATTERNS = [
     "/article/", "/artikkel/",
 ]
 
+# Two or three consecutive capitalised words — person name candidate
+# Supports most Western-European accented characters
+_NAME_RE = re.compile(
+    r'\b([A-ZÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÅÆØČŠŽĆĐŃŁŻŹ][a-záéíóúàèìòùäëïöüåæøčšžćđńłżź]{1,25}'
+    r'(?:[ \-][A-ZÁÉÍÓÚÀÈÌÒÙÄËÏÖÜÅÆØČŠŽĆĐŃŁŻŹ][a-záéíóúàèìòùäëïöüåæøčšžćđńłżź]{1,25}){1,2})\b'
+)
+
+# Generic words that pattern-match as names but aren't people
+_NAME_BLACKLIST = re.compile(
+    r'^(?:Contact|About|Our|Get|Send|Read|Learn|View|Click|More|Info|Home|'
+    r'Page|Site|Blog|News|Team|Staff|Work|Project|Service|Solution|Design|'
+    r'Media|Content|Online|Mobile|Search|Data|Tech|Powered|Built|Made|'
+    r'Created|Copyright|All|Rights|Reserved|Web|Digital|Social|Email|Phone|'
+    r'Address|Welcome|Hello|Thanks|Please|Follow|Subscribe|Login|Register|'
+    r'Privacy|Policy|Terms|Cookie|Norway|Sverige|Danmark|Finland|Germany|'
+    r'France|Spain|Italy|Poland|Hungary|Estonia|Latvia|Lithuania|India|Tunisia|'
+    r'Netherlands|Belgium|Austria|Ireland|United|Kingdom)$',
+    re.IGNORECASE,
+)
+
 TITLE_KEYWORDS = re.compile(
     r"\b(ceo|cto|coo|cmo|cfo|vp|partner|founder|co-founder|owner|president|"
     r"director|head of|lead|manager|chief|principal|consultant|advisor|"
@@ -262,6 +282,133 @@ def extract_phones(text: str, country: str = "NO") -> set[str]:
     return phones
 
 
+def _parse_phone(raw: str, country: str) -> str | None:
+    """Parse and format a single phone string; return None if invalid."""
+    clean = re.sub(r"[^+0-9]", "", raw)
+    try:
+        num = phonenumbers.parse(clean, country)
+        if phonenumbers.is_valid_number(num):
+            return phonenumbers.format_number(num, phonenumbers.PhoneNumberFormat.INTERNATIONAL)
+    except Exception:
+        pass
+    return None
+
+
+def pair_phones_to_contacts(
+    contacts: dict[str, str],
+    combined: str,
+    country: str = "NO",
+) -> dict[str, str]:
+    """Return {email: phone_or_empty}.
+
+    Searches the line containing the email plus the two adjacent lines for a
+    valid phone number.  If found it is attached to that contact; if not the
+    contact gets an empty string so the caller can omit the field rather than
+    writing a page-level phone that belongs to nobody.
+    """
+    lines = combined.splitlines()
+    result: dict[str, str] = {}
+    for email in contacts:
+        email_l = email.lower()
+        phone = ""
+        for i, line in enumerate(lines):
+            if email_l in line.lower():
+                # 1st pass: same line (avoids bleed from adjacent contacts)
+                for m in GENERIC_PHONE_RE.findall(line):
+                    parsed = _parse_phone(m, country)
+                    if parsed:
+                        phone = parsed
+                        break
+                # 2nd pass: next line only, but skip if it contains another email
+                if not phone and i + 1 < len(lines):
+                    next_line = lines[i + 1]
+                    if not EMAIL_RE.search(next_line):
+                        for m in GENERIC_PHONE_RE.findall(next_line):
+                            parsed = _parse_phone(m, country)
+                            if parsed:
+                                phone = parsed
+                                break
+                break  # stop at first occurrence of the email
+        result[email] = phone
+    return result
+
+
+def pair_names_to_contacts(
+    contacts: dict[str, str],
+    combined: str,
+    html: str = "",
+) -> dict[str, str]:
+    """Return {email: person_name_or_empty}.
+
+    Three strategies in descending reliability:
+    1. <a href="mailto:EMAIL">Name Text</a> anchor text — most reliable.
+    2. _NAME_RE match on the same line as the email (email token stripped first).
+    3. _NAME_RE match on up to 3 lines *above* the email line (stop if another
+       email address appears on an above line, to avoid cross-contact bleed).
+    """
+    result: dict[str, str] = {}
+
+    # Strategy 1: parse mailto anchors from raw HTML
+    mailto_names: dict[str, str] = {}
+    if html:
+        _anchor_re = re.compile(
+            r'<a[^>]+href=["\']mailto:([^"\'>\s]+)["\'][^>]*>([^<]{1,80})</a>',
+            re.IGNORECASE,
+        )
+        for m in _anchor_re.finditer(html):
+            addr = m.group(1).strip().lower()
+            text = re.sub(r'\s+', ' ', m.group(2)).strip()
+            nm   = _NAME_RE.search(text)
+            if nm and not _NAME_BLACKLIST.match(nm.group(1).split()[0]):
+                mailto_names[addr] = nm.group(1)
+
+    def _pick_name(candidates: list[str]) -> str:
+        for c in candidates:
+            c = c.strip()
+            if not c:
+                continue
+            first = c.split()[0]
+            if _NAME_BLACKLIST.match(first):
+                continue
+            return c
+        return ""
+
+    lines = combined.splitlines()
+
+    for email in contacts:
+        email_l = email.lower()
+
+        # Strategy 1
+        if email_l in mailto_names:
+            result[email] = mailto_names[email_l]
+            continue
+
+        name = ""
+        for i, line in enumerate(lines):
+            if email_l not in line.lower():
+                continue
+
+            # Strategy 2: same line, with email token removed to avoid false hits
+            stripped = re.sub(re.escape(email_l), "", line, flags=re.IGNORECASE)
+            name = _pick_name(_NAME_RE.findall(stripped))
+
+            # Strategy 3: up to 3 lines above, stop if a different email appears
+            if not name:
+                for j in range(i - 1, max(i - 4, -1), -1):
+                    above = lines[j]
+                    if EMAIL_RE.search(above) and email_l not in above.lower():
+                        break
+                    name = _pick_name(_NAME_RE.findall(above))
+                    if name:
+                        break
+
+            break  # only use the first occurrence of this email in the text
+
+        result[email] = name
+
+    return result
+
+
 def extract_links(base_url: str, soup: BeautifulSoup) -> tuple[list[str], str, str]:
     links, contact_page, linkedin = [], "", ""
     for a in soup.find_all("a", href=True):
@@ -333,19 +480,18 @@ def angle(cats: set[str], tech: set[str]) -> str:
     if "Umbraco" in tech:
         return "Offer BlueSearch as a plug-in AI search add-on for their Umbraco customer base."
     if "Sitecore" in tech:
-        return "Sitecore agencies can offer BlueSearch as an AI search upgrade."
-    if any(t in tech for t in ("TYPO3", "Kentico", "DotNetNuke")):
-        name = next(t for t in tech if t in ("TYPO3", "Kentico", "DotNetNuke"))
-        return f"BlueSearch adds modern AI search to {name} sites — a recurring managed service."
-    if any(t in tech for t in ("Shopify", "Magento", "WooCommerce", "PrestaShop", "Shopware")):
-        platform = next(t for t in tech if t in ("Shopify", "Magento", "WooCommerce", "PrestaShop", "Shopware"))
-        return f"Offer BlueSearch as an AI product-search add-on for {platform} stores."
-    if any(t in tech for t in ("Contentful", "Sanity", "Storyblok", "Prismic")):
-        return "BlueSearch integrates via API with headless CMS setups — pitch as the missing AI search layer."
-    if "WordPress" in tech or "wordpress" in cats:
-        return "Offer BlueSearch as a WordPress/WooCommerce AI-search add-on for their customer base."
-    if "seo" in cats:
-        return "Position BlueSearch as AI visibility + better on-site discovery for SEO clients."
+        return "Offer BlueSearch as a native search replacement inside their Sitecore projects."
+    if "Kentico" in tech:
+        return "Integrate BlueSearch into their Kentico builds as an AI-powered site search."
+    if "TYPO3" in tech:
+        return "Add BlueSearch as a TYPO3 extension for AI search on client sites."
+    if "Webflow" in tech or "Framer" in tech:
+        return "BlueSearch embeds in Webflow/Framer sites with a single script tag — easy win for clients."
+    if "HubSpot" in tech:
+        return "Replace HubSpot's basic search with BlueSearch for smarter lead-capture on client portals."
+    cats = set(cats) if cats else set()
+    if "ecommerce" in cats:
+        return "Upgrade their e-commerce clients' on-site search to AI-powered product discovery."
     if "communication" in cats or "public_sector" in cats:
         return "Focus on public-information sites: help visitors find answers across pages, PDFs and articles."
     return "General reseller angle: add AI-powered search to existing customer websites without rebuilding them."
