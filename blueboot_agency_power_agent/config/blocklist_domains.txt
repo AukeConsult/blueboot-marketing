@@ -1,11 +1,11 @@
 # === SOCIAL MEDIA ===
-facebook.com
+facebook.*
 instagram.com
-linkedin.com
-twitter.com
+linkedin.*
+twitter.*
 x.com
-tiktok.com
-pinterest.com
+tiktok.*
+pinterest.*
 snapchat.com
 youtube.com
 vimeo.com
@@ -15,18 +15,18 @@ whatsapp.com
 telegram.org
 
 # === SEARCH ENGINES ===
-google.com
+google.*
 bing.com
-yahoo.com
+yahoo.*
 duckduckgo.com
-yandex.com
+yandex.*
 baidu.com
 ask.com
 
 # === TECH GIANTS / PLATFORMS ===
-microsoft.com
-apple.com
-amazon.com
+microsoft.*
+apple.*
+amazon.*
 meta.com
 netflix.com
 adobe.com
@@ -37,14 +37,13 @@ hp.com
 dell.com
 intel.com
 nvidia.com
-samsung.com
+samsung.*
 
 # === CMS / WEBSITE BUILDER VENDORS (the platforms themselves, not agencies) ===
-wordpress.com
-wordpress.org
-wix.com
+wordpress.*
+wix.*
 squarespace.com
-shopify.com
+shopify.*
 webflow.com
 framer.com
 ghost.io
@@ -54,19 +53,12 @@ strikingly.com
 cargo.site
 
 # === E-COMMERCE PLATFORMS ===
-ebay.com
+ebay.*
 etsy.com
-zalando.no
-zalando.se
-zalando.de
-zalando.co.uk
+zalando.*
 asos.com
 aliexpress.com
 wish.com
-amazon.co.uk
-amazon.de
-amazon.fr
-amazon.es
 
 # === DEVELOPER / TECH PLATFORMS ===
 github.com
@@ -82,13 +74,11 @@ heroku.com
 vercel.com
 netlify.com
 cloudflare.com
-aws.amazon.com
 
 # === NEWS & MEDIA ===
 forbes.com
 reuters.com
-bbc.com
-bbc.co.uk
+bbc.*
 cnn.com
 techcrunch.com
 theverge.com
@@ -126,7 +116,7 @@ bild.de
 # UK media
 guardian.com
 theguardian.com
-telegraph.co.uk
+telegraph.*
 # French media
 lemonde.fr
 lefigaro.fr
@@ -135,7 +125,7 @@ elpais.com
 elmundo.es
 
 # === REFERENCE / KNOWLEDGE ===
-wikipedia.org
+wikipedia.*
 wikimedia.org
 wikihow.com
 quora.com
@@ -159,11 +149,13 @@ mixpanel.com
 segment.com
 
 # === CLOUD / HOSTING VENDORS ===
-azure.microsoft.com
-cloud.google.com
+*.microsoft.com
+*.google.com
+*.amazon.com
+*.amazonaws.com
 
 # === REVIEW / DIRECTORY SITES ===
-trustpilot.com
+trustpilot.*
 g2.com
 clutch.co
 capterra.com
@@ -181,27 +173,24 @@ kart.gulesider.no
 gule-sider.no
 
 # === JOB BOARDS ===
-indeed.com
-glassdoor.com
+indeed.*
+glassdoor.*
 monster.com
-linkedin.com/jobs
 jobindex.dk
-finn.no/jobb
 nav.no
 
 # === HARDWARE / RETAIL (Umbraco is a screwdriver brand in Scandinavia) ===
 jernia.no
 skruvat.no
-clas-ohlson.no
-clasohlson.no
-clasohlson.se
-clasohlson.de
-biltema.no
-biltema.se
-biltema.dk
+clasohlson.*
+clas-ohlson.*
+biltema.*
 elkjop.no
 power.no
-komplett.no
-komplett.se
-netonnet.no
-netonnet.se
+komplett.*
+netonnet.*
+
+# === ADULT / UNRELATED ===
+pornhub.*
+crypto.com
+hotels.*

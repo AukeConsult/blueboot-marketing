@@ -25,6 +25,7 @@ from rapidfuzz import fuzz
 from send_mail import make_outreach
 
 USER_AGENT = "BlueBootLeadAgent/1.1 (+https://blueboot.ai)"
+BING_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 EMAIL_RE = re.compile(r"[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+")
 GENERIC_PHONE_RE = re.compile(r"(?:(?:\+|00)\d{1,3}\s*)?(?:\d[\s().-]?){7,15}")
 DEFAULT_COUNTRIES = ["NO"]
@@ -151,21 +152,58 @@ def fetch(url: str, timeout=15, accept_language="en;q=0.8") -> str:
     return r.text[:2_000_000]
 
 
-def bing_search(query: str, max_results: int) -> list[str]:
-    url = "https://www.bing.com/search"
-    params = {"q": query, "count": min(max_results, 50)}
-    try:
-        html = requests.get(url, params=params, headers={"User-Agent": USER_AGENT}, timeout=20).text
-    except Exception:
-        return []
-    soup = BeautifulSoup(html, "lxml")
-    urls: list[str] = []
-    for a in soup.select("li.b_algo h2 a, h2 a"):
-        href = a.get("href", "")
-        if href.startswith("http"):
-            urls.append(href)
-    return urls[:max_results]
+def bing_search(query: str, max_results: int, exclude_domains: set[str] | None = None) -> list[str]:
+    """Search Bing via RSS feed — returns clean XML with actual result URLs."""
+    import xml.etree.ElementTree as ET
 
+    MAX_EXCLUSIONS = 20
+    q = query
+    if exclude_domains:
+        exclusions = list(exclude_domains)[:MAX_EXCLUSIONS]
+        q = query + " " + " ".join(f"-site:{d}" for d in exclusions)
+
+    urls: list[str] = []
+    seen: set[str] = set()
+    page = 1
+    PAGE_SIZE = 100  # ask for 100; Bing will return as many as it has (typically 50)
+
+    while len(urls) < max_results:
+        first = (page - 1) * PAGE_SIZE + 1
+        params = {"q": q, "format": "rss", "count": PAGE_SIZE, "first": first}
+        try:
+            resp = requests.get(
+                "https://www.bing.com/search",
+                params=params,
+                headers={
+                    "User-Agent": BING_USER_AGENT,
+                    "Accept": "application/rss+xml, text/xml, */*",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+                timeout=20,
+            )
+            root = ET.fromstring(resp.text)
+        except Exception as e:
+            print(f"  [Bing] RSS parse error: {e}")
+            break
+
+        items = root.findall(".//item")
+        if not items:
+            break
+
+        added = 0
+        for item in items:
+            link = item.find("link")
+            if link is not None and link.text and link.text.startswith("http"):
+                url = link.text.strip()
+                if url not in seen:
+                    urls.append(url)
+                    seen.add(url)
+                    added += 1
+        if added == 0:
+            break
+        page += 1
+
+    return urls[:max_results]
 
 def google_cse_search(query: str, max_results: int) -> list[str]:
     key = os.getenv("GOOGLE_API_KEY")
@@ -218,10 +256,22 @@ def is_product_or_content_url(url: str) -> bool:
     return any(pat in path for pat in PRODUCT_PAGE_PATTERNS)
 
 
+def is_blocked(domain: str, blocklist: set[str]) -> bool:
+    """Return True if domain matches any blocklist entry (exact, subdomain, or wildcard)."""
+    from fnmatch import fnmatch
+    domain = domain.lower()
+    for entry in blocklist:
+        if "*" in entry:
+            if fnmatch(domain, entry):
+                return True
+        else:
+            if domain == entry or domain.endswith("." + entry):
+                return True
+    return False
+
+
 def allowed_domain(domain: str, blocklist: set[str], countries: list[str], configs: dict) -> bool:
-    if not domain or domain in blocklist:
-        return False
-    if any(domain.endswith("." + b) or domain == b for b in blocklist):
+    if not domain or is_blocked(domain, blocklist):
         return False
     if domain in {"blueboot.ai"}:
         return True
@@ -561,14 +611,39 @@ def load_queries_for_countries(countries: list[str], explicit_queries: str | Non
     return pairs
 
 
+def load_existing_domains(output_path: Path) -> set[str]:
+    """Read the Leads sheet from an existing Excel export and return all domains already crawled."""
+    xlsx = output_path / "agency_leads.xlsx"
+    if not xlsx.exists():
+        return set()
+    try:
+        df = pd.read_excel(xlsx, sheet_name="Leads", usecols=["domain"], dtype=str)
+        domains = set(df["domain"].dropna().str.strip().str.lower())
+        print(f"Loaded {len(domains)} already-crawled domains from {xlsx}")
+        return domains
+    except Exception as e:
+        print(f"Warning: could not read existing Excel ({e}) — starting fresh")
+        return set()
+
+
 def run() -> None:
+    import sys
+    sys.stdout.reconfigure(line_buffering=True)
+    print("BlueBoot Lead Agent starting...", flush=True)
     load_dotenv()
     parser = argparse.ArgumentParser(description="BlueBoot agency lead finder")
-    parser.add_argument("--countries", default=os.getenv("COUNTRIES", "NO"), help="Comma separated country codes: NO,SE,DK,DE,UK or ALL")
-    parser.add_argument("--queries", default=os.getenv("QUERIES_FILE", ""), help="Optional custom query file. If empty, loads config/queries_<COUNTRY>.txt")
+    parser.add_argument("--countries", default=os.getenv("COUNTRIES", "NO"),
+                        help="Comma separated country codes: NO,SE,DK,DE,UK,FR,ES or ALL")
+    parser.add_argument("--queries", default=os.getenv("QUERIES_FILE", ""),
+                        help="Optional custom query file. If empty, loads config/queries_<COUNTRY>.txt")
     parser.add_argument("--output", default="output")
-    parser.add_argument("--max-results", type=int, default=int(os.getenv("MAX_RESULTS_PER_QUERY", "20")))
+    parser.add_argument("--max-results", type=int, default=int(os.getenv("MAX_RESULTS_PER_QUERY", "1000")))
     parser.add_argument("--max-pages", type=int, default=int(os.getenv("MAX_PAGES_PER_SITE", "6")))
+    parser.add_argument("--max-country", type=int, default=int(os.getenv("MAX_LEADS_PER_COUNTRY", "500")),
+                        help="Max new leads to crawl per country (0 = unlimited). "
+                             "Keeps running queries until the cap is reached or 3 consecutive queries yield nothing new.")
+    parser.add_argument("--give-up-after", type=int, default=3,
+                        help="Give up on a country after this many consecutive queries with zero new candidates (default 3)")
     parser.add_argument("--delay", type=float, default=float(os.getenv("REQUEST_DELAY_SECONDS", "1.0")))
     args = parser.parse_args()
 
@@ -576,53 +651,130 @@ def run() -> None:
     countries = selected_countries(args.countries, configs) or DEFAULT_COUNTRIES
     query_pairs = load_queries_for_countries(countries, args.queries or None)
     blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
-    candidates: list[tuple[str, str]] = []
-    seen_domains = set()
+
+    # --- Skip domains already present in a previous run's Excel ---
+    existing_domains = load_existing_domains(Path(args.output))
+    seen_domains: set[str] = set(existing_domains)
+
+    # --- Build per-country query queues ---
+    from collections import defaultdict
+    queues: dict[str, list[str]] = defaultdict(list)
+    for q, c in query_pairs:
+        queues[c].append(q)
+
+    # Per-country state
+    country_leads: dict[str, int] = {c: 0 for c in countries}   # leads found this run
+    country_streak: dict[str, int] = {c: 0 for c in countries}  # consecutive queries with 0 new candidates
+    country_done: set[str] = set()
+
+    all_leads: list[Lead] = []
+    total_queries_run = 0
 
     print(f"Countries: {', '.join(countries)}")
-    print(f"Running {len(query_pairs)} search queries...")
-    for qi, (query, query_country) in enumerate(query_pairs, 1):
-        print(f"[Query {qi}/{len(query_pairs)}] {query_country}: {query}")
-        google_urls = google_cse_search(query, args.max_results)
-        if google_urls:
-            print(f"  Google: {len(google_urls)} results")
-            urls = google_urls
-        else:
-            bing_urls = bing_search(query, args.max_results)
-            print(f"  Bing fallback: {len(bing_urls)} results")
-            urls = bing_urls
-        added = 0
-        for raw in urls:
-            url = clean_search_url(raw)
-            dom = domain_of(url)
-            detected_country = country_for_domain(dom, countries, configs) or (query_country if query_country != "AUTO" else None)
-            in_blocklist = dom in blocklist or any(dom.endswith("." + b) or dom == b for b in blocklist)
-            is_product = is_product_or_content_url(url)
-            if is_product:
-                # Strip to root domain so we still crawl the agency homepage
-                parsed = urlparse(url)
-                url = f"{parsed.scheme}://{parsed.netloc}/"
-            print(f"    url={dom} country={detected_country} blocklist={in_blocklist} product_page={is_product} duplicate={dom in seen_domains}")
-            if allowed_domain(dom, blocklist, countries, configs) and dom not in seen_domains and detected_country:
-                candidates.append((url, query, detected_country))
-                seen_domains.add(dom)
-                added += 1
-        print(f"  -> {added} new candidates (total so far: {len(candidates)})")
-        time.sleep(args.delay)
+    if args.max_country:
+        print(f"Target: {args.max_country} leads per country  |  Give up after {args.give_up_after} empty queries in a row")
+    else:
+        print(f"No per-country cap  |  Give up after {args.give_up_after} empty queries in a row")
 
-    print(f"Crawling {len(candidates)} candidate domains...")
-    leads: list[Lead] = []
-    for i, (url, query, country_code) in enumerate(candidates, 1):
-        print(f"[{i}/{len(candidates)}] {country_code} {url}")
-        lead = crawl_site(url, query, args.max_pages, args.delay, country_code, configs.get(country_code, {}))
-        if lead:
-            print(f"  -> {lead.priority} score={lead.reseller_score} email={'yes' if lead.emails else 'no'}")
-            leads.append(lead)
+    # Round-robin across countries until all are done
+    while len(country_done) < len(countries):
+        made_progress = False
+        for code in countries:
+            if code in country_done:
+                continue
 
-    leads = dedupe_leads(leads)
-    export(leads, Path(args.output))
-    print(f"Done. Exported {len(leads)} leads to {args.output}/agency_leads.xlsx")
+            # Check cap
+            if args.max_country and country_leads[code] >= args.max_country:
+                print(f"\n[{code}] Target of {args.max_country} leads reached.")
+                country_done.add(code)
+                continue
+
+            # Check query queue
+            if not queues[code]:
+                print(f"\n[{code}] No more queries to run — giving up.")
+                country_done.add(code)
+                continue
+
+            query = queues[code].pop(0)
+            total_queries_run += 1
+            leads_before = country_leads[code]
+            print(f"\n[{code} | leads={country_leads[code]} | streak={country_streak[code]}] Query: {query}")
+
+            # Search — pass seen_domains so Bing excludes already-known sites
+            google_urls = google_cse_search(query, args.max_results)
+            if google_urls:
+                print(f"  Google: {len(google_urls)} results")
+                urls = google_urls
+   
+            else:
+                bing_urls = bing_search(query, args.max_results, exclude_domains=seen_domains)
+                print(f"  Bing fallback: {len(bing_urls)} results")
+                urls = bing_urls
+
+            # Filter candidates
+            new_candidates: list[tuple[str, str]] = []
+            for raw in urls:
+                url = clean_search_url(raw)
+                dom = domain_of(url)
+                detected_country = country_for_domain(dom, countries, configs) or code
+                is_product = is_product_or_content_url(url)
+                if is_product:
+                    parsed = urlparse(url)
+                    url = f"{parsed.scheme}://{parsed.netloc}/"
+                already_done = dom in existing_domains
+                dup = dom in seen_domains
+                if allowed_domain(dom, blocklist, countries, configs) and not dup and detected_country == code:
+                    new_candidates.append((url, query))
+                    seen_domains.add(dom)
+
+            print(f"  -> {len(new_candidates)} new candidates to crawl")
+
+            # Crawl immediately
+            for url, q in new_candidates:
+                if args.max_country and country_leads[code] >= args.max_country:
+                    print(f"  Cap reached mid-batch — stopping {code}")
+                    break
+                print(f"  Crawling {url}")
+                lead = crawl_site(url, q, args.max_pages, args.delay, code, configs.get(code, {}))
+                if lead:
+                    has_email = "yes" if lead.emails else "no"
+                    print(f"    -> {lead.priority} score={lead.reseller_score} email={has_email}")
+                    all_leads.append(lead)
+                    country_leads[code] += 1
+                    # Save after every lead so progress survives crashes
+                    export(dedupe_leads(all_leads), Path(args.output))
+                time.sleep(args.delay)
+
+            # Update streak: reset if we found new URLs, else increment
+            if new_candidates:
+                country_streak[code] = 0
+            else:
+                country_streak[code] += 1
+                print(f"  [{code}] Nothing new — streak {country_streak[code]}/{args.give_up_after}")
+                if country_streak[code] >= args.give_up_after:
+                    print(f"  [{code}] Giving up after {args.give_up_after} empty queries in a row.")
+                    country_done.add(code)
+
+            made_progress = True
+
+        if not made_progress:
+            break  # all countries done in this pass
+
+    print(f"\n{'='*60}")
+    print(f"Finished. Ran {total_queries_run} queries total.")
+    for code in countries:
+        status = "done" if code in country_done else "running"
+        print(f"  {code}: {country_leads[code]} new leads  ({status})")
+
+    all_leads = dedupe_leads(all_leads)
+    export(all_leads, Path(args.output))
+    print(f"Exported {len(all_leads)} leads to {args.output}/agency_leads.xlsx")
 
 
 if __name__ == "__main__":
-    run()
+    try:
+        run()
+    except Exception as exc:
+        import traceback, sys
+        traceback.print_exc()
+        sys.exit(1)

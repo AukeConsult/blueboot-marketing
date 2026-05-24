@@ -1,23 +1,47 @@
 # --- Generelle bureauer ---
-digitalbureau hjemmesider danmark
+digitalt bureau websites danmark
 webdesign bureau danmark
 webudvikling danmark
-bygger hjemmesider virksomheder danmark
-hjemmesider til virksomheder danmark
-ux design hjemmesider danmark
-reklamebureau hjemmesider danmark
-kommunikationsbureau hjemmeside danmark
-indholdsstrategi hjemmesider danmark
-publicering hjemmesider kommune danmark
+bygger websites virksomheder danmark
+websites til virksomheder danmark
+ux design websites danmark
+reklamebureauer websites danmark
+kommunikationsbureau website danmark
+indholdsstrategi websites danmark
+websites kommuner danmark
 seo bureau danmark
+webbureau danmark
+hjemmeside bureau danmark
+responsivt design bureau danmark
+digital kommunikation bureau danmark
+kreativt bureau webudvikling danmark
+frontend udvikling bureau danmark
+webproduktion bureau danmark
+
+# --- Byspecifikke søgninger ---
+webbureau københavn
+webbureau aarhus
+webbureau odense
+webbureau aalborg
+webbureau esbjerg
+webbureau randers
+webbureau kolding
+webbureau horsens
+digitalt bureau københavn
+digitalt bureau aarhus
+digitalt bureau odense
+hjemmeside udvikling københavn
+hjemmeside udvikling aarhus
 
 # --- WordPress-økosystem ---
 wordpress bureau danmark
 woocommerce udvikler danmark
 wordpress webudvikling danmark
 elementor bureau danmark
+wordpress partner danmark
+wordpress vedligeholdelse danmark
 
-# --- Enterprise CMS (Episerver/Optimizely, Umbraco, TYPO3) ---
+# --- Enterprise CMS ---
 episerver bureau danmark
 optimizely cms bureau danmark
 umbraco cms bureau danmark
@@ -32,21 +56,39 @@ magento bureau danmark
 magento webudvikling danmark
 prestashop bureau danmark
 shopware bureau danmark
-netbutik webudvikling bureau danmark
+webshop webudvikling bureau danmark
+woocommerce webshop danmark
+e-handel løsning bureau danmark
 
 # --- Website builders ---
 wix bureau danmark
-wix webudvikling danmark
 squarespace bureau danmark
+webflow bureau danmark
 
 # --- Headless / moderne CMS ---
-webflow bureau danmark
 contentful bureau danmark
 sanity cms bureau danmark
 headless cms bureau danmark
 jamstack bureau danmark
+storyblok bureau danmark
+next.js bureau danmark
+strapi bureau danmark
 
 # --- Markedsføring / marketing tech ---
 hubspot bureau danmark
 hubspot partner danmark
+hubspot certificeret partner danmark
 digital markedsføring bureau danmark
+marketing automation bureau danmark
+google ads bureau danmark
+inbound markedsføring danmark
+
+# --- Brancher og nicher ---
+hjemmeside til restaurant danmark
+hjemmeside til advokatfirma danmark
+hjemmeside til ejendomsmægler danmark
+hjemmeside til offentlig sektor danmark
+b2b hjemmeside bureau danmark
+hjemmeside redesign bureau danmark
+hjemmeside tilgængelighed bureau danmark
+hjemmeside optimering bureau danmark
