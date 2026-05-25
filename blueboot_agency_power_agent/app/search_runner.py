@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import base64
 import os
 from collections import defaultdict
@@ -35,7 +36,19 @@ def bing_search(query: str, max_results: int,
                 exclude_domains: set[str] | None = None) -> list[str]:
     """Search Bing via RSS feed."""
     import xml.etree.ElementTree as ET
-    q = query
+    # Prefix every term with + so Bing requires ALL words to appear in each result.
+    # e.g. "webbyrå ålesund" → "+webbyrå +ålesund"
+    # Quoted phrases and existing +/- operators are left untouched.
+    def _require_all(raw: str) -> str:
+        tokens = []
+        for word in raw.split():
+            if word.startswith(("+", "-", '"')):
+                tokens.append(word)   # already has an operator — leave it
+            else:
+                tokens.append("+" + word)
+        return " ".join(tokens)
+
+    q = _require_all(query)
     if exclude_domains:
         q += " " + " ".join(f"-site:{d}" for d in list(exclude_domains)[:20])
     # Bing RSS returns ~10 results per page; paginate with first=1,11,21,...
@@ -415,7 +428,12 @@ async def _run_batch_async(
 
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
         min_score = getattr(args, "min_score", 50)
-        _blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
+        # Blocklist filtering is search-mode only — catalog sources are curated
+        # agency directories that already list web companies.
+        if source == "catalog":
+            _blocklist: set[str] = set()
+        else:
+            _blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
         tasks = [
             asyncio.create_task(_crawl_with_dom(session, url, query))
             for url, query in batch
@@ -581,6 +599,9 @@ def run(args) -> None:
                 # e.g. accept https://agency.com/ but reject https://agency.com/blog/post
                 _parsed = urlparse(url)
                 if _parsed.path not in ("", "/"):
+                    continue
+                # Skip bare IP-address hosts — e.g. https://185.169.252.47/
+                if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", _parsed.hostname or ""):
                     continue
                 dom = domain_of(url)
                 # country_for_domain returns None for generic TLDs (.com/.net/.eu).

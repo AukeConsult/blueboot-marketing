@@ -195,6 +195,29 @@ pornhub.*
 crypto.com
 hotels.*
 
+# --- Adult / Porn (domain glob patterns) ---
+*porn*
+*xxx*
+*sex*
+*nude*
+*naked*
+*adult*
+*erotic*
+*escort*
+*fetish*
+*hentai*
+*milf*
+*naughty*
+*nsfw*
+*onlyfans*
+*cam4*
+*chaturbate*
+*xvideos*
+*xhamster*
+*redtube*
+*youporn*
+*brazzers*
+
 # =============================================================================
 # === OBVIOUSLY-NOT-WEB-COMPANY KEYWORD BLOCKS ================================
 # *word* matches any domain containing that word (fnmatch glob).
@@ -422,6 +445,91 @@ hotels.*
 *sportverein*
 *turnverein*
 *idrettslag*
+
+# --- Lodging, Cabins & Vacation Rentals (EN) ---
+*lodging*
+*lodge*
+*cabin*
+*cabins*
+*cottage*
+*cottages*
+*chalet*
+*chalets*
+*bungalow*
+*glamping*
+*campsite*
+*camping*
+*inn*
+*guesthouse*
+*guest-house*
+*bed-and-breakfast*
+*bedandbreakfast*
+*vacationrental*
+*vacation-rental*
+*holidayrental*
+*holiday-rental*
+*holidayhome*
+*holiday-home*
+
+# --- Lodging, Cabins & Vacation Rentals (NO) ---
+*hytte*
+*hytta*
+*hytter*
+*hytteutleie*
+*hytteferie*
+*hytteplass*
+*pensjonat*
+*gjestgiveri*
+*gjestgård*
+*fritidshus*
+*leilighetutleie*
+
+# --- Lodging, Cabins & Vacation Rentals (SE) ---
+*stuga*
+*stugor*
+*fjällstuga*
+*fjallstuga*
+*pensionat*
+*gästgiveri*
+*gastgiveri*
+*semesterhus*
+*semesterboende*
+*fritidshus*
+
+# --- Lodging, Cabins & Vacation Rentals (DK) ---
+*sommerhus*
+*sommerhuse*
+*feriehus*
+*ferielejlighed*
+*bondegård*
+*bondegard*
+*pensionat*
+
+# --- Lodging, Cabins & Vacation Rentals (DE) ---
+*hütte*
+*huette*
+*almhütte*
+*almhuette*
+*blockhütte*
+*blockhaus*
+*landhaus*
+*bauernhof*
+*campingplatz*
+*ferienhütte*
+
+# --- Lodging, Cabins & Vacation Rentals (FR) ---
+*gîte*
+*gite*
+*chambredhotes*
+*chambres-dhotes*
+*auberge*
+*camping*
+
+# --- Lodging, Cabins & Vacation Rentals (NL) ---
+*vakantiewoning*
+*vakantiehuis*
+*bungalowpark*
+*campingpark*
 
 # =============================================================================
 # === CONTENT NEGATIVE KEYWORDS ===============================================

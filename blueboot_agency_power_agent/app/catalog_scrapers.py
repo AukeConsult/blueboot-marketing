@@ -395,7 +395,9 @@ def catalog_run(args) -> None:
 
     configs  = load_country_configs()
     countries = selected_countries(args.countries, configs) or DEFAULT_COUNTRIES
-    blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
+    # Catalog sources are curated agency directories — skip domain blocklist entirely.
+    # Blocklist filtering applies to search mode only.
+    blocklist: set[str] = set()
 
     all_catalogs = load_catalogs()
     catalogs = {c: all_catalogs[c] for c in countries if c in all_catalogs}
@@ -440,7 +442,7 @@ def catalog_run(args) -> None:
                 new_links = []
                 for url in links:
                     dom = domain_of(url)
-                    if dom and dom not in seen_domains and not is_blocked(dom, blocklist):
+                    if dom and dom not in seen_domains:
                         seen_domains.add(dom)
                         new_links.append((url, name))
                 print(f"{len(new_links)} new candidates (of {len(links)} found)")

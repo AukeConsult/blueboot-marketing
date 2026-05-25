@@ -489,7 +489,12 @@ def categorize(text: str, html: str, country_cfg: dict) -> tuple[set[str], list[
     if agency_hits:
         score += min(len(agency_hits) * 10, 20)
         reasons.append("agency language: " + ", ".join(agency_hits[:3]))
-    neg_hits = [kw for kw in _CONTENT_NEG_KWS if kw in hay]
+    # Check negative keywords against VISIBLE TEXT only (not raw html) and
+    # require >=2 occurrences. A single mention is typically a client reference
+    # (e.g. 'Lucky Sushi' or 'Sjakk-Matt frisør' on a web agency portfolio).
+    # A site that IS a restaurant/hairdresser/etc. uses the word many times.
+    _text_low = text.lower()
+    neg_hits = [kw for kw in _CONTENT_NEG_KWS if _text_low.count(kw) >= 2]
     if neg_hits:
         penalty = min(len(neg_hits) * 30, 90)
         score -= penalty
