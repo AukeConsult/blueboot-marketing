@@ -110,7 +110,7 @@ def _firestore_client(collection: str | None = None):
 # ---------------------------------------------------------------------------
 
 def extract_leads(
-    output_dir: str | Path = "../output",
+    output_dir: str | Path | None = None,
     min_score: int = 0,
     max_score: int = 100,
     countries: list[str] | None = None,
@@ -145,6 +145,9 @@ def extract_leads(
     -------
     Path to the written Excel file.
     """
+    # Default: <project_root>/output  (always relative to this file, not CWD)
+    if output_dir is None:
+        output_dir = Path(__file__).parent.parent / "output"
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -219,6 +222,7 @@ def extract_leads(
 
     # ------------------------------------------------------------------
     # Load contacts sub-collections for matched leads
+    # Only contacts that carry a real email address are kept.
     # ------------------------------------------------------------------
     contact_rows: list[dict] = []
     leads_with_email: set[str] = set()
@@ -231,9 +235,14 @@ def extract_leads(
             c = cdoc.to_dict()
             if not c:
                 continue
+            # Only include contacts that have a non-empty email address
+            if not (c.get("email") or "").strip():
+                continue
             contact_rows.append(c)
-            if c.get("email", "").strip():
-                leads_with_email.add(lid)
+            leads_with_email.add(lid)
+
+    print(f"[extract_leads] {len(contact_rows)} contacts with email loaded "
+          f"across {len(leads_with_email)} leads")
 
     # ------------------------------------------------------------------
     # Apply with_email filter (post contact-load)
@@ -244,39 +253,99 @@ def extract_leads(
             r for r in lead_rows
             if (r.get("lead_id") or r.get("domain", "")) in leads_with_email
         ]
-        contact_rows = [
-            c for c in contact_rows
-            if (c.get("lead_id") or "") in {
-                r.get("lead_id") or r.get("domain", "") for r in lead_rows
-            }
-        ]
+        # contacts are already email-only; re-filter to matched leads
+        kept_lids = {r.get("lead_id") or r.get("domain", "") for r in lead_rows}
+        contact_rows = [c for c in contact_rows if (c.get("lead_id") or "") in kept_lids]
         print(f"[extract_leads] --with-email: {before - len(lead_rows)} leads removed, "
               f"{len(lead_rows)} remain")
 
     # ------------------------------------------------------------------
     # Build DataFrames
     # ------------------------------------------------------------------
-    leads_df    = pd.DataFrame(lead_rows)    if lead_rows    else pd.DataFrame()
-    contacts_df = pd.DataFrame(contact_rows) if contact_rows else pd.DataFrame()
+    leads_df = pd.DataFrame(lead_rows) if lead_rows else pd.DataFrame()
 
-    # Sort by score descending
+    # Normalise reseller_score to int
     if not leads_df.empty and "reseller_score" in leads_df.columns:
         leads_df["reseller_score"] = pd.to_numeric(
             leads_df["reseller_score"], errors="coerce"
         ).fillna(0).astype(int)
-        leads_df = leads_df.sort_values("reseller_score", ascending=False)
+
+    # ------------------------------------------------------------------
+    # Flat "one row per email" sheet
+    # Each contact row gets all lead fields merged in.
+    # Column order: contact fields first, then lead-only fields.
+    # Leads without any email contact appear at the bottom with empty
+    # contact fields so no lead data is lost.
+    # ------------------------------------------------------------------
+    CONTACT_COLS = ["email", "name", "title", "phone"]
+    # Fields the contact doc already carries (no need to pull from lead)
+    CONTACT_SHARED = {"lead_id", "company", "domain", "website", "country", "linkedin"}
+
+    # Build a lookup: lead_id -> lead dict
+    lead_by_id: dict[str, dict] = {}
+    for r in lead_rows:
+        lid = r.get("lead_id") or r.get("domain", "")
+        if lid:
+            lead_by_id[lid] = r
+
+    flat_rows: list[dict] = []
+
+    # 1. One row per contact-with-email
+    for c in contact_rows:
+        lid  = c.get("lead_id") or ""
+        lead = lead_by_id.get(lid, {})
+        row  = {}
+        # Contact-specific columns first
+        for col_name_c in CONTACT_COLS:
+            row[col_name_c] = c.get(col_name_c, "")
+        # Shared fields (prefer contact value, fall back to lead)
+        for k in CONTACT_SHARED:
+            row[k] = c.get(k) or lead.get(k, "")
+        # All remaining lead fields that aren't already in the row
+        for k, v in lead.items():
+            if k not in row:
+                row[k] = v
+        flat_rows.append(row)
+
+    # 2. Leads with no email contact — one row each, contact cols empty
+    lids_with_contact = {c.get("lead_id") or "" for c in contact_rows}
+    for r in lead_rows:
+        lid = r.get("lead_id") or r.get("domain", "")
+        if lid not in lids_with_contact:
+            row = {col_name_c: "" for col_name_c in CONTACT_COLS}
+            row.update(r)
+            flat_rows.append(row)
+
+    flat_df = pd.DataFrame(flat_rows) if flat_rows else pd.DataFrame()
+
+    # Put contact columns first, then sort remaining columns alphabetically
+    if not flat_df.empty:
+        front = [c for c in CONTACT_COLS if c in flat_df.columns]
+        rest  = sorted(c for c in flat_df.columns if c not in front)
+        flat_df = flat_df[front + rest]
+        # Sort by score desc, then email asc
+        sort_cols = []
+        if "reseller_score" in flat_df.columns:
+            flat_df["reseller_score"] = pd.to_numeric(
+                flat_df["reseller_score"], errors="coerce"
+            ).fillna(0).astype(int)
+            sort_cols.append(("reseller_score", False))
+        if "email" in flat_df.columns:
+            sort_cols.append(("email", True))
+        if sort_cols:
+            flat_df = flat_df.sort_values(
+                [s[0] for s in sort_cols],
+                ascending=[s[1] for s in sort_cols],
+            )
 
     # ------------------------------------------------------------------
     # Summary sheet
     # ------------------------------------------------------------------
-    n_contacts_with_email = int(
-        (contacts_df.get("email", pd.Series(dtype=str)) != "").sum()
-    ) if not contacts_df.empty else 0
-
     summary_rows = [
-        {"metric": "Leads matched",     "value": len(leads_df)},
-        {"metric": "With email",        "value": len(leads_with_email)},
-        {"metric": "Contact rows",      "value": n_contacts_with_email},
+        {"metric": "Leads matched",     "value": len(lead_rows)},
+        {"metric": "Leads with email",  "value": len(leads_with_email)},
+        {"metric": "Contact rows",      "value": len(contact_rows)},
+        {"metric": "Total rows (flat)", "value": len(flat_rows)},
         {"metric": "Score range",       "value": f"{min_score}–{max_score}"},
         {"metric": "Countries filter",  "value": ", ".join(countries) if countries else "all"},
         {"metric": "Source filter",     "value": source or "all"},
@@ -296,13 +365,14 @@ def extract_leads(
     out_path = output_dir / out_file
 
     with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
-        _write_sheet(writer, "Leads",    leads_df)
-        _write_sheet(writer, "Contacts", contacts_df)
+        _write_sheet(writer, "Extract",  flat_df)    # primary: one row per email
+        _write_sheet(writer, "Leads",    leads_df)   # one row per lead (raw)
         pd.DataFrame(summary_rows).to_excel(writer, sheet_name="Summary", index=False)
-        for sheet_name in ("Leads", "Contacts", "Summary"):
+        for sheet_name in ("Extract", "Leads", "Summary"):
             _autofit(writer.book[sheet_name])
 
-    print(f"[extract_leads] Saved → {out_path}")
+    print(f"[extract_leads] {len(flat_rows)} rows ({len(contact_rows)} with email, "
+          f"{len(flat_rows) - len(contact_rows)} without) → {out_path}")
     return out_path
 
 
@@ -310,14 +380,15 @@ def extract_leads(
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _write_sheet(writer: pd.ExcelWriter, name: str, df: pd.DataFrame) -> None:
+def _write_sheet(writer, name, df):
+    import pandas as pd
     if df.empty:
         pd.DataFrame().to_excel(writer, sheet_name=name, index=False)
     else:
         df.to_excel(writer, sheet_name=name, index=False)
 
 
-def _autofit(ws) -> None:
+def _autofit(ws):
     ws.freeze_panes = "A2"
     for col in ws.columns:
         max_len = min(max(len(str(c.value or "")) for c in col) + 2, 60)
@@ -329,13 +400,14 @@ def _autofit(ws) -> None:
 # ---------------------------------------------------------------------------
 
 def _parse_args(argv=None):
+    import argparse
     p = argparse.ArgumentParser(
         description="Extract and filter leads from Firestore into a new Excel file."
     )
     p.add_argument("--collection", metavar="NAME",
                    help="Firestore collection name (default: leads / FIRESTORE_COLLECTION env var)")
-    p.add_argument("--output",    default="../output",
-                   help="Directory to write the Excel file (default: ../output)")
+    p.add_argument("--output",    default=None,
+                   help="Directory to write the Excel file (default: <project_root>/output)")
     p.add_argument("--min-score", type=int, default=0,
                    help="Minimum reseller_score (default: 0)")
     p.add_argument("--max-score", type=int, default=100,
@@ -356,6 +428,7 @@ def _parse_args(argv=None):
 
 
 def main(argv=None):
+    import sys
     args = _parse_args(argv)
     try:
         path = extract_leads(
@@ -371,7 +444,7 @@ def main(argv=None):
             collection=args.collection,
         )
         print(f"Saved: {path}")
-    except (RuntimeError, Exception) as e:
+    except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 

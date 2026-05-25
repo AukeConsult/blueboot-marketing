@@ -223,8 +223,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to a queries file (overrides per-country query files).",
     )
     parser.add_argument(
-        "--output", default="output",
-        help="Output directory for the Excel file.",
+        "--output",
+        default=str(Path(__file__).parent.parent / "output"),
+        help="Output directory for the Excel file (default: <project_root>/output).",
     )
     parser.add_argument(
         "--max-results", type=int, default=int(os.getenv("MAX_RESULTS", "200")),

@@ -1,9 +1,0 @@
-services:
-  blueboot-agency-agent:
-    build: .
-    env_file:
-      - .env
-    volumes:
-      - ./output:/app/output
-      - ./config:/app/config
-    command: ["python", "app/lead_agent.py", "--countries", "${COUNTRIES:-NO}"]
