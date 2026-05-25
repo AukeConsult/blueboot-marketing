@@ -262,7 +262,12 @@ def visible_text(soup: BeautifulSoup) -> str:
 
 def extract_contacts(html: str, text: str) -> dict[str, str]:
     """Return {email: title} — title is best-effort from surrounding text."""
-    combined = html + " " + text
+    # Decode \uXXXX escapes (e.g. \u003e → >) before email extraction.
+    # These appear when Next.js JSON-escapes angle brackets for XSS safety.
+    def _decode_unicode_escapes(s: str) -> str:
+        return re.sub(r'\\u([0-9a-fA-F]{4})',
+                      lambda m: chr(int(m.group(1), 16)), s)
+    combined = _decode_unicode_escapes(html) + " " + _decode_unicode_escapes(text)
     raw_emails = EMAIL_RE.findall(combined)
     contacts: dict[str, str] = {}
     _strip_tags = re.compile(r"<[^>]+>")
@@ -283,6 +288,10 @@ def extract_contacts(html: str, text: str) -> dict[str, str]:
         # bfb679c754744c58a7374ee6e25cfc13@sentry.wixpress.com
         local_part = e.split("@", 1)[0]
         if len(local_part) >= 16 and re.fullmatch(r"[0-9a-f\-]+", local_part):
+            continue
+        # Reject unicode-escape artifacts: "u003e", "u003c", "u0026" etc.
+        # These leak in when \uXXXX sequences lose their backslash.
+        if re.search(r'u00[0-9a-f]{2}', local_part, re.IGNORECASE):
             continue
         if e in contacts:
             continue
@@ -403,12 +412,18 @@ def pair_names_to_contacts(
             return c
         return ""
 
-    lines = combined.splitlines()
+    # Prefer the visible-text section for line-based search — it has cleaner
+    # line structure (one person per paragraph) compared to raw HTML which
+    # buries emails inside tags with unrelated surrounding lines.
+    # combined = html + " " + text, so split on the html boundary.
+    text_only = combined[len(html):].lstrip() if html else combined
+    search_text = text_only if text_only.strip() else combined
+    lines = search_text.splitlines()
 
     for email in contacts:
         email_l = email.lower()
 
-        # Strategy 1
+        # Strategy 1: mailto anchor text (most reliable)
         if email_l in mailto_names:
             result[email] = mailto_names[email_l]
             continue
@@ -418,13 +433,13 @@ def pair_names_to_contacts(
             if email_l not in line.lower():
                 continue
 
-            # Strategy 2: same line, with email token removed to avoid false hits
+            # Strategy 2: same line, with email token removed
             stripped = re.sub(re.escape(email_l), "", line, flags=re.IGNORECASE)
             name = _pick_name(_NAME_RE.findall(stripped))
 
-            # Strategy 3: up to 3 lines above, stop if a different email appears
+            # Strategy 3: up to 6 lines above, stop at a different email
             if not name:
-                for j in range(i - 1, max(i - 4, -1), -1):
+                for j in range(i - 1, max(i - 7, -1), -1):
                     above = lines[j]
                     if EMAIL_RE.search(above) and email_l not in above.lower():
                         break
@@ -432,12 +447,137 @@ def pair_names_to_contacts(
                     if name:
                         break
 
-            break  # only use the first occurrence of this email in the text
+            # Strategy 4: up to 3 lines below (some layouts: email then name)
+            if not name:
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    below = lines[j]
+                    if EMAIL_RE.search(below) and email_l not in below.lower():
+                        break
+                    name = _pick_name(_NAME_RE.findall(below))
+                    if name:
+                        break
 
-        result[email] = name
+            break  # only use the first occurrence of this email
+
+        result[email] = clean_contact_name(name, email)
+
+    # -----------------------------------------------------------------------
+    # Deduplication pass: if the same name was assigned to multiple emails,
+    # keep it only for the email whose local part best matches the name.
+    # For all other emails that got the same name, clear it to "".
+    # (Prevents one person's name bleeding onto unrelated contacts — e.g.
+    # grid.no/kontakt where all emails got "Henning Gustavsen".)
+    # -----------------------------------------------------------------------
+    from collections import defaultdict
+    name_to_emails: dict[str, list[str]] = defaultdict(list)
+    for email, name in result.items():
+        if name:
+            name_to_emails[name].append(email)
+
+    for name, emails in name_to_emails.items():
+        if len(emails) < 2:
+            continue
+        # Score each email: how many name tokens appear in its local part?
+        def _score(email: str) -> int:
+            local = email.split("@", 1)[0].lower()
+            tokens = [t.lower() for t in re.split(r"[\s.\-_]+", name) if len(t) >= 3]
+            return sum(1 for t in tokens if t in local or local in t)
+        scored = sorted(emails, key=_score, reverse=True)
+        best_score = _score(scored[0])
+        # Clear the name for all emails that don't match as well as the best
+        for email in scored[1:]:
+            if _score(email) < best_score:
+                result[email] = ""
 
     return result
 
+
+
+
+# ---------------------------------------------------------------------------
+# Contact name validation
+# ---------------------------------------------------------------------------
+
+# Generic email local parts that carry no personal-name information.
+_GENERIC_LOCALS = re.compile(
+    r'^(info|post|kontakt|contact|hei|hello|support|sales|hjelp|help|'
+    r'noreply|no-reply|webmaster|admin|office|firma|company|mail|epost|'
+    r'e-post|booking|post|redaksjon|redaction|service|team|web|digital)$',
+    re.IGNORECASE,
+)
+
+
+def clean_contact_name(name: str, email: str) -> str:
+    """Return a sanitised contact name, or "" if the name looks wrong.
+
+    Rules (applied in order):
+    1. Empty / too-short names → ""
+    2. Name contains "@" → it is an email address, not a name → ""
+    3. Name IS the email address → ""
+    4. Name contains a URL → ""
+    5. Name contains HTML/Unicode-escape artefacts (u003e etc.) → ""
+    6. Name is implausibly long (> 80 chars) → ""
+    7. For personal-looking email local parts (not a generic keyword):
+       check that at least one name token (≥3 chars) appears as a
+       substring of the local part or vice-versa.  If no overlap → ""
+    """
+    name = name.strip()
+    if not name or len(name) < 2:
+        return ""
+    if "@" in name:
+        return ""
+    if name.lower() == email.lower():
+        return ""
+    if re.search(r'https?://', name, re.IGNORECASE):
+        return ""
+    if re.search(r'u00[0-9a-fA-F]{2}', name):
+        return ""
+    if len(name) > 80:
+        return ""
+
+    # Personal-email check: only applies when local part looks like a name
+    local = email.split("@", 1)[0].lower()
+    if not _GENERIC_LOCALS.match(local):
+        # Tokenise both sides; require at least one ≥3-char overlap
+        name_tokens = [t.lower() for t in re.split(r'[\s.\-_]+', name) if len(t) >= 3]
+        local_tokens = re.split(r'[.\-_]+', local)
+        if name_tokens and not any(
+            nt in lt or lt in nt
+            for nt in name_tokens
+            for lt in local_tokens
+        ):
+            return ""
+
+    return name
+
+
+
+def normalize_phone_list(phones_str: str) -> str:
+    """Clean a comma-separated phone string (email_phones or phones field).
+
+    - Strips whitespace from each entry.
+    - Removes entries that are empty or pure punctuation.
+    - Deduplicates: if the same number appears more than once (across any
+      position) the later occurrence is cleared to "" so the parallel
+      alignment with the email list is preserved.
+    - Strips trailing empty slots (keeps internal ones for alignment).
+    """
+    if not phones_str:
+        return ""
+    parts = [p.strip() for p in phones_str.split(",")]
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for p in parts:
+        if p and p in seen:
+            deduped.append("")        # duplicate — keep slot, clear value
+        else:
+            deduped.append(p)
+            if p:
+                seen.add(p)
+    # Strip trailing empty slots
+    while deduped and not deduped[-1]:
+        deduped.pop()
+    return ", ".join(deduped)
 
 def extract_links(base_url: str, soup: BeautifulSoup) -> tuple[list[str], str, str]:
     links, contact_page, linkedin = [], "", ""

@@ -22,7 +22,7 @@ from utils import (
     fetch, extract_meta, visible_text, extract_contacts, extract_phones,
     pair_phones_to_contacts, pair_names_to_contacts, extract_links, detect_tech, categorize, priority, angle,
     load_lines, load_country_configs, selected_countries, DEFAULT_COUNTRIES,
-    linkedin_hints,
+    linkedin_hints, normalize_phone_list,
 )
 from firebase_sync import upsert_lead
 from models import Lead, dedupe_leads, export
@@ -287,9 +287,9 @@ def crawl_site(url: str, source_query: str, max_pages: int, delay: float,
         source_query=source_query, title=title, description=desc,
         emails=", ".join(sorted_emails),
         email_titles=", ".join(contacts.get(e, "") for e in sorted_emails),
-        email_phones=", ".join(contact_phones.get(e, "") for e in sorted_emails),
+        email_phones=normalize_phone_list(", ".join(contact_phones.get(e, "") for e in sorted_emails)),
         email_names=", ".join(contact_names.get(e, "") for e in sorted_emails),
-        phones=", ".join(sorted(phones)), contact_page=contact_page,
+        phones=normalize_phone_list(", ".join(sorted(phones))), contact_page=contact_page,
         linkedin=linkedin or linkedin_hints.get(website, ""),
         detected_tech=", ".join(sorted(tech)),
         categories=", ".join(sorted(cats)),
@@ -384,9 +384,9 @@ async def _async_crawl_site(
         source_query=source_query, title=title, description=desc,
         emails=", ".join(sorted_emails),
         email_titles=", ".join(contacts.get(e, "") for e in sorted_emails),
-        email_phones=", ".join(contact_phones.get(e, "") for e in sorted_emails),
+        email_phones=normalize_phone_list(", ".join(contact_phones.get(e, "") for e in sorted_emails)),
         email_names=", ".join(contact_names.get(e, "") for e in sorted_emails),
-        phones=", ".join(sorted(phones)), contact_page=contact_page,
+        phones=normalize_phone_list(", ".join(sorted(phones))), contact_page=contact_page,
         linkedin=linkedin or linkedin_hints.get(website, ""),
         detected_tech=", ".join(sorted(tech)),
         categories=", ".join(sorted(cats)),
@@ -452,8 +452,8 @@ async def _run_batch_async(
                 continue
             has_email = "yes" if lead.emails else "no"
             print(f"    -> {lead.priority} score={lead.reseller_score} email={has_email}  {lead.website}")
-            if lead.reseller_score <= min_score:
-                print(f"       [skip] score {lead.reseller_score} <= {min_score} threshold")
+            if lead.reseller_score < min_score:
+                print(f"       [skip] score {lead.reseller_score} < {min_score} threshold")
                 if rejected_domains is not None:
                     rejected_domains.add(dom)
                 continue

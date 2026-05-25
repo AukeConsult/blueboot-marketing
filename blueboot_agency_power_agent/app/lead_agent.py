@@ -236,15 +236,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Minimum reseller score to store a lead (default: 50).",
     )
     parser.add_argument(
-        "--max-pages", type=int, default=int(os.getenv("MAX_PAGES", "3")),
+        "--max-pages", type=int, default=int(os.getenv("MAX_PAGES", "6")),
         help="Max pages to crawl per agency website.",
     )
     parser.add_argument(
-        "--max-country", type=int, default=int(os.getenv("MAX_COUNTRY", "5000")) or None,
+        "--max-country", type=int, default=int(os.getenv("MAX_COUNTRY", "1000")) or None,
         help="Stop a country after this many leads (0 = unlimited).",
     )
     parser.add_argument(
-        "--give-up-after", type=int, default=int(os.getenv("GIVE_UP_AFTER", "10")),
+        "--give-up-after", type=int, default=int(os.getenv("GIVE_UP_AFTER", "5")),
         help="Give up a country after this many consecutive empty queries.",
     )
     parser.add_argument(

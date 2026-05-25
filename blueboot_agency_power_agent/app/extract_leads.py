@@ -41,6 +41,7 @@ Function API:
 from __future__ import annotations
 
 import argparse
+import re
 import importlib.util
 import os
 import sys
@@ -48,6 +49,12 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+
+# Import name-validation helper from utils (same package)
+import sys as _sys
+import os as _os
+_sys.path.insert(0, _os.path.dirname(__file__))
+from utils import clean_contact_name as _clean_contact_name
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +173,7 @@ def extract_leads(
 
     lead_rows: list[dict] = []
     skipped = 0
+    _country_sample: list[str] = []   # for diagnostics
 
     for doc in col.stream():
         d = doc.to_dict()
@@ -183,8 +191,11 @@ def extract_leads(
             continue
 
         # --- country ---
+        raw_country = (d.get("country") or "").upper()
+        if len(_country_sample) < 10 and raw_country:
+            _country_sample.append(raw_country)
         if country_upper:
-            if (d.get("country") or "").upper() not in country_upper:
+            if raw_country not in country_upper:
                 skipped += 1
                 continue
 
@@ -218,6 +229,8 @@ def extract_leads(
 
         lead_rows.append(d)
 
+    if country_upper and _country_sample:
+        print(f"[extract_leads] Sample 'country' values in Firestore: {sorted(set(_country_sample))}")
     print(f"[extract_leads] {len(lead_rows)} leads matched, {skipped} filtered out")
 
     # ------------------------------------------------------------------
@@ -235,9 +248,21 @@ def extract_leads(
             c = cdoc.to_dict()
             if not c:
                 continue
-            # Only include contacts that have a non-empty email address
-            if not (c.get("email") or "").strip():
+            # Only include contacts that have a non-empty, well-formed email address.
+            # Reject unicode-escape artifacts such as "u003ehector@..." that
+            # occur when \uXXXX sequences lose their backslash during scraping.
+            email_val = (c.get("email") or "").strip()
+            if not email_val:
                 continue
+            local = email_val.split("@", 1)[0]
+            if re.search(r'u00[0-9a-f]{2}', local, re.IGNORECASE):
+                continue
+            if not re.fullmatch(r'[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+',
+                                email_val):
+                continue
+            # Validate name against email — clear it if it looks wrong
+            c = dict(c)  # don't mutate the Firestore object
+            c["name"] = _clean_contact_name(c.get("name", ""), email_val)
             contact_rows.append(c)
             leads_with_email.add(lid)
 
@@ -430,15 +455,39 @@ def _parse_args(argv=None):
 def main(argv=None):
     import sys
     args = _parse_args(argv)
+
+    # Expand comma-separated country codes so both styles work:
+    #   --country NO,SE      →  ["NO", "SE"]
+    #   --country NO --country SE  →  ["NO", "SE"]
+    countries = None
+    if args.countries:
+        expanded = []
+        for c in args.countries:
+            expanded.extend(x.strip().upper() for x in c.split(",") if x.strip())
+        countries = expanded or None
+
+    # Same for priorities
+    priorities = None
+    if args.priorities:
+        expanded = []
+        for p in args.priorities:
+            expanded.extend(x.strip().upper() for x in p.split(",") if x.strip())
+        priorities = expanded or None
+
+    if countries:
+        print(f"[extract_leads] Country filter: {countries}")
+    if priorities:
+        print(f"[extract_leads] Priority filter: {priorities}")
+
     try:
         path = extract_leads(
             output_dir=args.output,
             min_score=args.min_score,
             max_score=args.max_score,
-            countries=args.countries,
+            countries=countries,
             source=args.source,
             query=args.query,
-            priorities=args.priorities,
+            priorities=priorities,
             with_email=args.with_email,
             out_file=args.out,
             collection=args.collection,

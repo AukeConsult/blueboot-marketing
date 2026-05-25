@@ -11,20 +11,20 @@
     {
       "name": "Sortlist NO – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/norway-no",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/norway-no?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist NO – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/norway-no",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/norway-no?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist NO – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/norway-no",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/norway-no?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush WordPress NO",
@@ -71,15 +71,15 @@
     {
       "name": "Sortlist NO – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/norway-no",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/norway-no?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist NO – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/norway-no",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/norway-no?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -88,26 +88,188 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist NO – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/norway-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NO – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/norway-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NO – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/norway-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NO – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/norway-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NO – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/norway-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NO – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/norway-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NO – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/norway-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NO – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/norway-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NO – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/norway-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NO – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/norway-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Oslo – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/oslo-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Oslo – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/oslo-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Oslo – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/oslo-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bergen – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/bergen-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bergen – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/bergen-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bergen – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/bergen-no?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers NO – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/norway?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers NO – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/norway?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers NO – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/norway?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers NO – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/norway?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers NO – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/norway?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – NO",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/norway/",
+      "pages": 1
+    },
+    {
+      "name": "Proff NO – reklame/PR",
+      "type": "proff",
+      "url": "https://www.proff.no/bransje/reklame-og-pr/norge/-/{page}/",
+      "pages": 20
+    },
+    {
+      "name": "Proff NO – IT/internett",
+      "type": "proff",
+      "url": "https://www.proff.no/bransje/databehandling-internett/norge/-/{page}/",
+      "pages": 20
+    },
+    {
+      "name": "Gulesider NO – webdesign",
+      "type": "gulesider",
+      "url": "https://www.gulesider.no/webdesign/bedrifter/{page}",
+      "pages": 20
+    },
+    {
+      "name": "Gulesider NO – digitalbyrå",
+      "type": "gulesider",
+      "url": "https://www.gulesider.no/digitalbyraa/bedrifter/{page}",
+      "pages": 20
+    },
+    {
+      "name": "Gulesider NO – webutvikling",
+      "type": "gulesider",
+      "url": "https://www.gulesider.no/webutvikling/bedrifter/{page}",
+      "pages": 20
     }
   ],
   "SE": [
     {
       "name": "Sortlist SE – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/sweden-se",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/sweden-se?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist SE – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/sweden-se",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/sweden-se?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist SE – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/sweden-se",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/sweden-se?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush SE",
@@ -160,15 +322,15 @@
     {
       "name": "Sortlist SE – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/sweden-se",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/sweden-se?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist SE – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/sweden-se",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/sweden-se?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -177,26 +339,188 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist SE – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/sweden-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist SE – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/sweden-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist SE – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/sweden-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist SE – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/sweden-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist SE – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/sweden-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist SE – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/sweden-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist SE – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/sweden-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist SE – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/sweden-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist SE – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/sweden-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist SE – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/sweden-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Stockholm – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/stockholm-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Stockholm – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/stockholm-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Stockholm – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/stockholm-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Gothenburg – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/gothenburg-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Gothenburg – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/gothenburg-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Gothenburg – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/gothenburg-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Malmo – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/malmo-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Malmo – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/malmo-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Malmo – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/malmo-se?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers SE – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/sweden?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers SE – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/sweden?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers SE – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/sweden?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers SE – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/sweden?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers SE – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/sweden?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – SE",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/sweden/",
+      "pages": 1
+    },
+    {
+      "name": "Proff SE – reklam/PR",
+      "type": "proff",
+      "url": "https://www.proff.se/foretag/reklam-pr/sverige/-/{page}/",
+      "pages": 20
+    },
+    {
+      "name": "Proff SE – IT/internet",
+      "type": "proff",
+      "url": "https://www.proff.se/foretag/it-internet/sverige/-/{page}/",
+      "pages": 20
     }
   ],
   "DK": [
     {
       "name": "Sortlist DK – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/denmark-dk",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/denmark-dk?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist DK – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/denmark-dk",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/denmark-dk?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist DK – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/denmark-dk",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/denmark-dk?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush DK",
@@ -249,15 +573,15 @@
     {
       "name": "Sortlist DK – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/denmark-dk",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/denmark-dk?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist DK – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/denmark-dk",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/denmark-dk?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -266,26 +590,170 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist DK – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/denmark-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DK – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/denmark-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DK – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/denmark-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DK – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/denmark-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DK – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/denmark-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DK – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/denmark-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DK – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/denmark-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DK – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/denmark-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DK – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/denmark-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DK – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/denmark-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Copenhagen – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/copenhagen-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Copenhagen – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/copenhagen-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Copenhagen – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/copenhagen-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Aarhus – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/aarhus-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Aarhus – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/aarhus-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Aarhus – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/aarhus-dk?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers DK – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/denmark?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers DK – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/denmark?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers DK – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/denmark?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers DK – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/denmark?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers DK – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/denmark?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – DK",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/denmark/",
+      "pages": 1
+    },
+    {
+      "name": "Proff DK – reklame/PR",
+      "type": "proff",
+      "url": "https://www.proff.dk/virksomheder/reklame-pr/danmark/-/{page}/",
+      "pages": 20
+    },
+    {
+      "name": "Proff DK – IT/internet",
+      "type": "proff",
+      "url": "https://www.proff.dk/virksomheder/it-internet/danmark/-/{page}/",
+      "pages": 20
     }
   ],
   "FI": [
     {
       "name": "Sortlist FI – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/finland-fi",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/finland-fi?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist FI – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/finland-fi",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/finland-fi?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist FI – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/finland-fi",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/finland-fi?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush FI",
@@ -338,15 +806,15 @@
     {
       "name": "Sortlist FI – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/finland-fi",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/finland-fi?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist FI – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/finland-fi",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/finland-fi?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -355,26 +823,158 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist FI – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/finland-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FI – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/finland-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FI – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/finland-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FI – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/finland-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FI – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/finland-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FI – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/finland-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FI – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/finland-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FI – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/finland-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FI – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/finland-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FI – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/finland-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Helsinki – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/helsinki-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Helsinki – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/helsinki-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Helsinki – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/helsinki-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Tampere – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/tampere-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Tampere – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/tampere-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Tampere – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/tampere-fi?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers FI – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/finland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers FI – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/finland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers FI – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/finland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers FI – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/finland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers FI – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/finland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – FI",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/finland/",
+      "pages": 1
     }
   ],
   "NL": [
     {
       "name": "Sortlist NL – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/web-design/netherlands-nl",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/web-design/netherlands-nl?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist NL – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/web-development/netherlands-nl",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/web-development/netherlands-nl?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist NL – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/digital-marketing/netherlands-nl",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/digital-marketing/netherlands-nl?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush NL – web design",
@@ -433,15 +1033,15 @@
     {
       "name": "Sortlist NL – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/seo/netherlands-nl",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/seo/netherlands-nl?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist NL – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/content-marketing/netherlands-nl",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/content-marketing/netherlands-nl?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -450,26 +1050,194 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist NL – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/netherlands-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NL – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/app-development/netherlands-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NL – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ux-design/netherlands-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NL – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/branding/netherlands-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NL – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/social-media-marketing/netherlands-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NL – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ppc/netherlands-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NL – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/graphic-design/netherlands-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NL – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/email-marketing/netherlands-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NL – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/video-production/netherlands-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist NL – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/mobile-app-development/netherlands-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Amsterdam – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/amsterdam-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Amsterdam – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/amsterdam-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Amsterdam – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/amsterdam-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rotterdam – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/rotterdam-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rotterdam – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/rotterdam-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rotterdam – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/rotterdam-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Utrecht – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/utrecht-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Utrecht – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/utrecht-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Utrecht – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/utrecht-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist The Hague – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/the-hague-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist The Hague – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/the-hague-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist The Hague – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/the-hague-nl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers NL – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/netherlands?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers NL – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/netherlands?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers NL – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/netherlands?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers NL – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/netherlands?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers NL – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/netherlands?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – NL",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/netherlands/",
+      "pages": 1
     }
   ],
   "BE": [
     {
       "name": "Sortlist BE – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/web-design/belgium-be",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/web-design/belgium-be?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist BE – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/web-development/belgium-be",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/web-development/belgium-be?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist BE – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/digital-marketing/belgium-be",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/digital-marketing/belgium-be?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush BE",
@@ -522,15 +1290,15 @@
     {
       "name": "Sortlist BE – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/seo/belgium-be",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/seo/belgium-be?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist BE – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/content-marketing/belgium-be",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/content-marketing/belgium-be?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -539,26 +1307,176 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist BE – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/ecommerce/belgium-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BE – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/app-development/belgium-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BE – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/ux-design/belgium-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BE – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/branding/belgium-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BE – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/social-media-marketing/belgium-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BE – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/ppc/belgium-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BE – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/graphic-design/belgium-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BE – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/email-marketing/belgium-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BE – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/video-production/belgium-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BE – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/mobile-app-development/belgium-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Brussels – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-design/brussels-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Brussels – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/brussels-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Brussels – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/brussels-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Antwerp – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-design/antwerp-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Antwerp – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/antwerp-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Antwerp – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/antwerp-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Ghent – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-design/ghent-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Ghent – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/ghent-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Ghent – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/ghent-be?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers BE – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/belgium?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers BE – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/belgium?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers BE – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/belgium?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers BE – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/belgium?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers BE – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/belgium?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – BE",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/belgium/",
+      "pages": 1
     }
   ],
   "DE": [
     {
       "name": "Sortlist DE – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/web-design/germany-de",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/web-design/germany-de?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist DE – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/web-development/germany-de",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/web-development/germany-de?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist DE – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/digital-marketing/germany-de",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/digital-marketing/germany-de?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush DE – web design",
@@ -617,15 +1535,15 @@
     {
       "name": "Sortlist DE – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/seo/germany-de",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/seo/germany-de?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist DE – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/content-marketing/germany-de",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/content-marketing/germany-de?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -634,26 +1552,266 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist DE – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/germany-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DE – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/app-development/germany-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DE – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ux-design/germany-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DE – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/branding/germany-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DE – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/social-media-marketing/germany-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DE – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ppc/germany-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DE – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/graphic-design/germany-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DE – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/email-marketing/germany-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DE – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/video-production/germany-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist DE – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/mobile-app-development/germany-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Berlin – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/berlin-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Berlin – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/berlin-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Berlin – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/berlin-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Hamburg – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/hamburg-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Hamburg – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/hamburg-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Hamburg – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/hamburg-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Munich – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/munich-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Munich – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/munich-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Munich – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/munich-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Frankfurt – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/frankfurt-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Frankfurt – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/frankfurt-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Frankfurt – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/frankfurt-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cologne – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/cologne-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cologne – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/cologne-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cologne – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/cologne-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Stuttgart – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/stuttgart-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Stuttgart – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/stuttgart-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Stuttgart – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/stuttgart-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Dusseldorf – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/dusseldorf-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Dusseldorf – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/dusseldorf-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Dusseldorf – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/dusseldorf-de?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers DE – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/germany?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers DE – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/germany?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers DE – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/germany?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers DE – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/germany?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers DE – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/germany?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – DE",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/germany/",
+      "pages": 1
+    },
+    {
+      "name": "Agenturranking DE – web",
+      "type": "generic",
+      "url": "https://www.agenturranking.de/agenturen/web/?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Agenturranking DE – digital",
+      "type": "generic",
+      "url": "https://www.agenturranking.de/agenturen/digital/?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Agenturranking DE – SEO",
+      "type": "generic",
+      "url": "https://www.agenturranking.de/agenturen/seo/?page={page}",
+      "pages": 10
     }
   ],
   "AT": [
     {
       "name": "Sortlist AT – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/web-design/austria-at",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/web-design/austria-at?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist AT – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/website-development/austria-at",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/website-development/austria-at?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist AT – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/digital-marketing/austria-at",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/digital-marketing/austria-at?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush AT",
@@ -706,15 +1864,15 @@
     {
       "name": "Sortlist AT – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/seo/austria-at",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/seo/austria-at?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist AT – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/content-marketing/austria-at",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/content-marketing/austria-at?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -723,26 +1881,176 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist AT – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/austria-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AT – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/app-development/austria-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AT – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ux-design/austria-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AT – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/branding/austria-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AT – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/social-media-marketing/austria-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AT – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ppc/austria-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AT – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/graphic-design/austria-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AT – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/email-marketing/austria-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AT – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/video-production/austria-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AT – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/mobile-app-development/austria-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Vienna – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/vienna-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Vienna – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/vienna-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Vienna – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/vienna-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Graz – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/graz-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Graz – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/graz-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Graz – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/graz-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Linz – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/linz-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Linz – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/linz-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Linz – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/linz-at?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers AT – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/austria?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers AT – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/austria?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers AT – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/austria?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers AT – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/austria?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers AT – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/austria?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – AT",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/austria/",
+      "pages": 1
     }
   ],
   "UK": [
     {
       "name": "Sortlist UK – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/web-design/united-kingdom-gb",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/web-design/united-kingdom-gb?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist UK – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/web-development/united-kingdom-gb",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/web-development/united-kingdom-gb?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist UK – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/digital-marketing/united-kingdom-gb",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/digital-marketing/united-kingdom-gb?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush UK – web development",
@@ -801,43 +2109,382 @@
     {
       "name": "Sortlist UK – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/seo/united-kingdom-gb",
-      "pages": 1,
-      "__new_dir": true
+      "url": "https://www.sortlist.com/s/seo/united-kingdom-gb?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist UK – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/content-marketing/united-kingdom-gb",
-      "pages": 1,
-      "__new_dir": true
+      "url": "https://www.sortlist.com/s/content-marketing/united-kingdom-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist UK – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/united-kingdom-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist UK – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/app-development/united-kingdom-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist UK – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ux-design/united-kingdom-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist UK – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/branding/united-kingdom-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist UK – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/social-media-marketing/united-kingdom-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "DesignRush Digital Marketing UK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/digital-marketing/united-kingdom?page={page}",
+      "pages": 50
+    },
+    {
+      "name": "DesignRush SEO UK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/seo-companies/united-kingdom?page={page}",
+      "pages": 50
+    },
+    {
+      "name": "DesignRush Mobile App UK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/mobile-app-development/united-kingdom?page={page}",
+      "pages": 50
+    },
+    {
+      "name": "DesignRush Social Media UK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/social-media-marketing/united-kingdom?page={page}",
+      "pages": 50
+    },
+    {
+      "name": "DesignRush UX Design UK",
+      "type": "designrush",
+      "url": "https://www.designrush.com/agency/ux-design/united-kingdom?page={page}",
+      "pages": 50
     },
     {
       "name": "Sitecore Partner Finder",
       "type": "generic",
       "url": "https://www.sitecore.com/partners",
-      "pages": 1,
-      "__new_dir": true
+      "pages": 1
+    },
+    {
+      "name": "Sortlist UK – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ppc/united-kingdom-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist UK – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/graphic-design/united-kingdom-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist UK – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/email-marketing/united-kingdom-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist UK – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/video-production/united-kingdom-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist UK – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/mobile-app-development/united-kingdom-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist London – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/london-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist London – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/london-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist London – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/london-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Manchester – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/manchester-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Manchester – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/manchester-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Manchester – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/manchester-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Birmingham – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/birmingham-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Birmingham – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/birmingham-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Birmingham – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/birmingham-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Edinburgh – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/edinburgh-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Edinburgh – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/edinburgh-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Edinburgh – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/edinburgh-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bristol – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/bristol-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bristol – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/bristol-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bristol – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/bristol-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Leeds – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/leeds-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Leeds – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/leeds-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Leeds – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/leeds-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Glasgow – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/glasgow-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Glasgow – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/glasgow-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Glasgow – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/glasgow-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Liverpool – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/liverpool-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Liverpool – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/liverpool-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Liverpool – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/liverpool-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Sheffield – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/sheffield-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Sheffield – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/sheffield-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Sheffield – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/sheffield-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Nottingham – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/nottingham-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Nottingham – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/nottingham-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Nottingham – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/nottingham-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cardiff – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/cardiff-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cardiff – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/cardiff-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cardiff – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/cardiff-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Brighton – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/brighton-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Brighton – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/brighton-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Brighton – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/brighton-gb?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers UK – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/united-kingdom?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers UK – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/united-kingdom?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers UK – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/united-kingdom?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers UK – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/united-kingdom?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers UK – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/united-kingdom?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – UK",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/united-kingdom/",
+      "pages": 1
     }
   ],
   "IE": [
     {
       "name": "Sortlist IE – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/ireland-ie",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/ireland-ie?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist IE – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/web-development/ireland-ie",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/web-development/ireland-ie?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist IE – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/ireland-ie",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/ireland-ie?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush IE – web design",
@@ -896,15 +2543,15 @@
     {
       "name": "Sortlist IE – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/ireland-ie",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/ireland-ie?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist IE – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/ireland-ie",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/ireland-ie?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -913,26 +2560,176 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist IE – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/ireland-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IE – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/ireland-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IE – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/ireland-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IE – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/ireland-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IE – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/ireland-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IE – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/ireland-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IE – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/ireland-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IE – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/ireland-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IE – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/ireland-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IE – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/ireland-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Dublin – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/dublin-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Dublin – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/dublin-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Dublin – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/dublin-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cork – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/cork-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cork – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/cork-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cork – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/cork-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Galway – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/galway-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Galway – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/galway-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Galway – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/galway-ie?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers IE – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/ireland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IE – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/ireland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IE – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/ireland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IE – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/ireland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IE – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/ireland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – IE",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/ireland/",
+      "pages": 1
     }
   ],
   "FR": [
     {
       "name": "Sortlist FR – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/web-design/france-fr",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/web-design/france-fr?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist FR – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/web-development/france-fr",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/web-development/france-fr?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist FR – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/digital-marketing/france-fr",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/digital-marketing/france-fr?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush FR – web design",
@@ -991,15 +2788,15 @@
     {
       "name": "Sortlist FR – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/seo/france-fr",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/seo/france-fr?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist FR – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/content-marketing/france-fr",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/content-marketing/france-fr?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -1008,26 +2805,284 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist FR – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/france-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FR – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/app-development/france-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FR – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ux-design/france-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FR – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/branding/france-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FR – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/social-media-marketing/france-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FR – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ppc/france-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FR – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/graphic-design/france-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FR – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/email-marketing/france-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FR – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/video-production/france-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist FR – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/mobile-app-development/france-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Paris – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/paris-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Paris – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/paris-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Paris – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/paris-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Lyon – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/lyon-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Lyon – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/lyon-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Lyon – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/lyon-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Marseille – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/marseille-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Marseille – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/marseille-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Marseille – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/marseille-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bordeaux – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/bordeaux-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bordeaux – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/bordeaux-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bordeaux – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/bordeaux-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Toulouse – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/toulouse-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Toulouse – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/toulouse-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Toulouse – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/toulouse-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Nantes – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/nantes-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Nantes – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/nantes-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Nantes – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/nantes-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Lille – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/lille-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Lille – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/lille-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Lille – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/lille-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Strasbourg – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/strasbourg-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Strasbourg – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/strasbourg-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Strasbourg – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/strasbourg-fr?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers FR – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/france?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers FR – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/france?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers FR – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/france?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers FR – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/france?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers FR – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/france?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – FR",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/france/",
+      "pages": 1
+    },
+    {
+      "name": "PagesJaunes FR – agence web",
+      "type": "pagesjaunes",
+      "url": "https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=agence+web&ou=France&page={page}",
+      "pages": 20
+    },
+    {
+      "name": "PagesJaunes FR – agence digitale",
+      "type": "pagesjaunes",
+      "url": "https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=agence+digitale&ou=France&page={page}",
+      "pages": 20
+    },
+    {
+      "name": "PagesJaunes FR – agence SEO",
+      "type": "pagesjaunes",
+      "url": "https://www.pagesjaunes.fr/annuaire/chercherlespros?quoiqui=agence+seo&ou=France&page={page}",
+      "pages": 20
     }
   ],
   "ES": [
     {
       "name": "Sortlist ES – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/web-design/spain-es",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/web-design/spain-es?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist ES – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/web-development/spain-es",
-      "pages": 1
+      "url": "https://www.sortlist.com/s/web-development/spain-es?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist ES – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/digital-marketing/spain-es",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/digital-marketing/spain-es?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush ES",
@@ -1080,15 +3135,15 @@
     {
       "name": "Sortlist ES – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/seo/spain-es",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/seo/spain-es?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist ES – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/content-marketing/spain-es",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/content-marketing/spain-es?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -1097,26 +3152,242 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist ES – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ecommerce/spain-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist ES – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/app-development/spain-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist ES – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ux-design/spain-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist ES – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/branding/spain-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist ES – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/social-media-marketing/spain-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist ES – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/ppc/spain-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist ES – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/graphic-design/spain-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist ES – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/email-marketing/spain-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist ES – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/video-production/spain-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist ES – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/mobile-app-development/spain-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Madrid – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/madrid-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Madrid – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/madrid-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Madrid – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/madrid-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Barcelona – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/barcelona-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Barcelona – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/barcelona-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Barcelona – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/barcelona-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Valencia – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/valencia-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Valencia – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/valencia-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Valencia – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/valencia-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Seville – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/seville-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Seville – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/seville-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Seville – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/seville-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bilbao – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/bilbao-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bilbao – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/bilbao-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bilbao – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/bilbao-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Malaga – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-design/malaga-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Malaga – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/web-development/malaga-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Malaga – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/s/digital-marketing/malaga-es?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers ES – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/spain?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers ES – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/spain?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers ES – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/spain?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers ES – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/spain?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers ES – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/spain?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – ES",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/spain/",
+      "pages": 1
+    },
+    {
+      "name": "PaginasAmarillas ES – agencia digital",
+      "type": "paginasamarillas",
+      "url": "https://www.paginasamarillas.es/search/agencia-digital/all-ma/all-pr/all-is/all-ci/all-ba/all-pu/{page}/",
+      "pages": 20
+    },
+    {
+      "name": "PaginasAmarillas ES – diseño web",
+      "type": "paginasamarillas",
+      "url": "https://www.paginasamarillas.es/search/diseno-web/all-ma/all-pr/all-is/all-ci/all-ba/all-pu/{page}/",
+      "pages": 20
     }
   ],
   "IT": [
     {
       "name": "Sortlist IT – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/web-design/italy-it",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/web-design/italy-it?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist IT – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/web-development/italy-it",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/web-development/italy-it?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist IT – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/i/digital-marketing/italy-it",
-      "pages": 1
+      "url": "https://www.sortlist.com/i/digital-marketing/italy-it?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush IT – web design",
@@ -1175,15 +3446,15 @@
     {
       "name": "Sortlist IT – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/seo/italy-it",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/seo/italy-it?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist IT – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/s/content-marketing/italy-it",
-      "pages": 1,
+      "url": "https://www.sortlist.com/s/content-marketing/italy-it?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -1192,26 +3463,230 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist IT – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/ecommerce/italy-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IT – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/app-development/italy-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IT – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/ux-design/italy-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IT – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/branding/italy-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IT – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/social-media-marketing/italy-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IT – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/ppc/italy-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IT – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/graphic-design/italy-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IT – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/email-marketing/italy-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IT – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/video-production/italy-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IT – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/mobile-app-development/italy-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Milan – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-design/milan-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Milan – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/milan-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Milan – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/milan-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rome – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-design/rome-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rome – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/rome-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rome – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/rome-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Turin – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-design/turin-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Turin – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/turin-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Turin – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/turin-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Florence – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-design/florence-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Florence – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/florence-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Florence – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/florence-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bologna – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-design/bologna-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bologna – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/bologna-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bologna – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/bologna-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Naples – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-design/naples-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Naples – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/web-development/naples-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Naples – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/i/digital-marketing/naples-it?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers IT – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/italy?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IT – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/italy?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IT – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/italy?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IT – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/italy?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IT – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/italy?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – IT",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/italy/",
+      "pages": 1
     }
   ],
   "PL": [
     {
       "name": "Sortlist PL – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/poland-pl",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/poland-pl?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist PL – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/poland-pl",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/poland-pl?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist PL – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/poland-pl",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/poland-pl?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush PL – web design",
@@ -1270,15 +3745,15 @@
     {
       "name": "Sortlist PL – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/poland-pl",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/poland-pl?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist PL – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/poland-pl",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/poland-pl?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -1287,26 +3762,212 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist PL – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/poland-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist PL – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/poland-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist PL – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/poland-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist PL – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/poland-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist PL – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/poland-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist PL – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/poland-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist PL – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/poland-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist PL – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/poland-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist PL – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/poland-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist PL – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/poland-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Warsaw – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/warsaw-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Warsaw – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/warsaw-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Warsaw – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/warsaw-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Krakow – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/krakow-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Krakow – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/krakow-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Krakow – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/krakow-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Wroclaw – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/wroclaw-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Wroclaw – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/wroclaw-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Wroclaw – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/wroclaw-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Gdansk – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/gdansk-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Gdansk – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/gdansk-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Gdansk – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/gdansk-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Poznan – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/poznan-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Poznan – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/poznan-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Poznan – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/poznan-pl?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers PL – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/poland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers PL – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/poland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers PL – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/poland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers PL – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/poland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers PL – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/poland?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – PL",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/poland/",
+      "pages": 1
     }
   ],
   "HU": [
     {
       "name": "Sortlist HU – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/hungary-hu",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/hungary-hu?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist HU – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/hungary-hu",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/hungary-hu?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist HU – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/hungary-hu",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/hungary-hu?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush HU",
@@ -1359,15 +4020,15 @@
     {
       "name": "Sortlist HU – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/hungary-hu",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/hungary-hu?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist HU – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/hungary-hu",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/hungary-hu?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -1376,26 +4037,134 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist HU – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/hungary-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist HU – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/hungary-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist HU – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/hungary-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist HU – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/hungary-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist HU – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/hungary-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist HU – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/hungary-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist HU – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/hungary-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist HU – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/hungary-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist HU – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/hungary-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist HU – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/hungary-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Budapest – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/budapest-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Budapest – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/budapest-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Budapest – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/budapest-hu?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers HU – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/hungary?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers HU – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/hungary?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers HU – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/hungary?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers HU – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/hungary?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers HU – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/hungary?page={page}",
+      "pages": 20
     }
   ],
   "EE": [
     {
       "name": "Sortlist EE – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/estonia-ee",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/estonia-ee?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist EE – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/estonia-ee",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/estonia-ee?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist EE – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/estonia-ee",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/estonia-ee?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush EE",
@@ -1448,15 +4217,15 @@
     {
       "name": "Sortlist EE – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/estonia-ee",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/estonia-ee?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist EE – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/estonia-ee",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/estonia-ee?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -1465,26 +4234,104 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist EE – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/estonia-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist EE – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/estonia-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist EE – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/estonia-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist EE – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/estonia-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist EE – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/estonia-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist EE – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/estonia-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist EE – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/estonia-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist EE – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/estonia-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist EE – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/estonia-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist EE – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/estonia-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Tallinn – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/tallinn-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Tallinn – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/tallinn-ee?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Tallinn – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/tallinn-ee?page={page}",
+      "pages": 10
     }
   ],
   "LV": [
     {
       "name": "Sortlist LV – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/latvia-lv",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/latvia-lv?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist LV – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/latvia-lv",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/latvia-lv?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist LV – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/latvia-lv",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/latvia-lv?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush LV",
@@ -1537,15 +4384,15 @@
     {
       "name": "Sortlist LV – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/latvia-lv",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/latvia-lv?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist LV – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/latvia-lv",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/latvia-lv?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -1554,26 +4401,104 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist LV – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/latvia-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LV – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/latvia-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LV – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/latvia-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LV – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/latvia-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LV – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/latvia-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LV – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/latvia-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LV – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/latvia-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LV – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/latvia-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LV – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/latvia-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LV – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/latvia-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Riga – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/riga-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Riga – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/riga-lv?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Riga – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/riga-lv?page={page}",
+      "pages": 10
     }
   ],
   "LT": [
     {
       "name": "Sortlist LT – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/lithuania-lt",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/lithuania-lt?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist LT – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/lithuania-lt",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/lithuania-lt?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist LT – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/lithuania-lt",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/lithuania-lt?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush LT",
@@ -1626,15 +4551,15 @@
     {
       "name": "Sortlist LT – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/lithuania-lt",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/lithuania-lt?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist LT – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/lithuania-lt",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/lithuania-lt?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -1643,44 +4568,122 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist LT – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/lithuania-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LT – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/lithuania-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LT – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/lithuania-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LT – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/lithuania-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LT – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/lithuania-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LT – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/lithuania-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LT – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/lithuania-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LT – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/lithuania-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LT – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/lithuania-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist LT – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/lithuania-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Vilnius – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/vilnius-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Vilnius – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/vilnius-lt?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Vilnius – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/vilnius-lt?page={page}",
+      "pages": 10
     }
   ],
   "IN": [
     {
       "name": "Sortlist IN – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/india-in",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/india-in?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist IN – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/india-in",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/india-in?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist IN – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/india-in",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/india-in?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist Pune – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/pune-in",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/pune-in?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist Pune – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/pune-in",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/pune-in?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist Pune – digital",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/pune-in",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/pune-in?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush IN – web design",
@@ -1739,15 +4742,15 @@
     {
       "name": "Sortlist IN – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/india-in",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/india-in?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist IN – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/india-in",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/india-in?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -1756,38 +4759,260 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist IN – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/india-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IN – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/india-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IN – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/india-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IN – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/india-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IN – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/india-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IN – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/india-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IN – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/india-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IN – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/india-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IN – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/india-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist IN – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/india-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Mumbai – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/mumbai-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Mumbai – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/mumbai-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Mumbai – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/mumbai-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist New Delhi – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/new-delhi-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist New Delhi – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/new-delhi-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist New Delhi – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/new-delhi-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bangalore – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/bangalore-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bangalore – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/bangalore-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Bangalore – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/bangalore-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Chennai – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/chennai-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Chennai – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/chennai-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Chennai – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/chennai-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Hyderabad – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/hyderabad-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Hyderabad – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/hyderabad-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Hyderabad – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/hyderabad-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Ahmedabad – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/ahmedabad-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Ahmedabad – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/ahmedabad-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Ahmedabad – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/ahmedabad-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Kolkata – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/kolkata-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Kolkata – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/kolkata-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Kolkata – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/kolkata-in?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers IN – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/india?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IN – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/india?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IN – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/india?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IN – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/india?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers IN – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/india?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – IN",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/india/",
+      "pages": 1
     }
   ],
   "TN": [
     {
       "name": "Sortlist TN – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/tunisia-tn",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/tunisia-tn?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist TN – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/tunisia-tn",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/tunisia-tn?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist TN – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/tunisia-tn",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/tunisia-tn?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist Tunis – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/tunis-tn",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/tunis-tn?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist Tunis – web dev",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/tunis-tn",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/tunis-tn?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush TN",
@@ -1840,15 +5065,15 @@
     {
       "name": "Sortlist TN – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/tunisia-tn",
-      "pages": 1,
+      "url": "https://www.sortlist.com/seo/tunisia-tn?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
       "name": "Sortlist TN – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/tunisia-tn",
-      "pages": 1,
+      "url": "https://www.sortlist.com/content-marketing/tunisia-tn?page={page}",
+      "pages": 10,
       "__new_dir": true
     },
     {
@@ -1857,6 +5082,72 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist TN – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/tunisia-tn?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist TN – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/tunisia-tn?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist TN – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/tunisia-tn?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist TN – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/tunisia-tn?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist TN – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/tunisia-tn?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist TN – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/tunisia-tn?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist TN – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/tunisia-tn?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist TN – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/tunisia-tn?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist TN – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/tunisia-tn?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist TN – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/tunisia-tn?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Tunis – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/tunis-tn?page={page}",
+      "pages": 10
     }
   ],
   "TH": [
@@ -1920,32 +5211,32 @@
     {
       "name": "Sortlist BR – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/brazil-br",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/brazil-br?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist BR – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/brazil-br",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/brazil-br?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist BR – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/brazil-br",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/brazil-br?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist BR – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/brazil-br",
-      "pages": 1
+      "url": "https://www.sortlist.com/seo/brazil-br?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist BR – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/brazil-br",
-      "pages": 1
+      "url": "https://www.sortlist.com/content-marketing/brazil-br?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush Website BR",
@@ -2001,38 +5292,206 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist BR – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/brazil-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BR – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/brazil-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BR – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/brazil-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BR – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/brazil-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BR – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/brazil-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BR – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/brazil-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BR – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/brazil-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BR – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/brazil-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BR – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/brazil-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist BR – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/brazil-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Sao Paulo – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/sao-paulo-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Sao Paulo – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/sao-paulo-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Sao Paulo – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/sao-paulo-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rio De Janeiro – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/rio-de-janeiro-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rio De Janeiro – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/rio-de-janeiro-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rio De Janeiro – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/rio-de-janeiro-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Belo Horizonte – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/belo-horizonte-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Belo Horizonte – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/belo-horizonte-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Belo Horizonte – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/belo-horizonte-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Curitiba – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/curitiba-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Curitiba – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/curitiba-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Curitiba – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/curitiba-br?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers BR – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/brazil?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers BR – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/brazil?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers BR – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/brazil?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers BR – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/brazil?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers BR – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/brazil?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "Digital Agency Network – BR",
+      "type": "dan",
+      "url": "https://digitalagencynetwork.com/agencies/brazil/",
+      "pages": 1
     }
   ],
   "AR": [
     {
       "name": "Sortlist AR – web design",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-design/argentina-ar",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-design/argentina-ar?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist AR – web development",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/web-development/argentina-ar",
-      "pages": 1
+      "url": "https://www.sortlist.com/web-development/argentina-ar?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist AR – digital agencies",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/digital-marketing/argentina-ar",
-      "pages": 1
+      "url": "https://www.sortlist.com/digital-marketing/argentina-ar?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist AR – SEO",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/seo/argentina-ar",
-      "pages": 1
+      "url": "https://www.sortlist.com/seo/argentina-ar?page={page}",
+      "pages": 10
     },
     {
       "name": "Sortlist AR – content marketing",
       "type": "sortlist",
-      "url": "https://www.sortlist.com/content-marketing/argentina-ar",
-      "pages": 1
+      "url": "https://www.sortlist.com/content-marketing/argentina-ar?page={page}",
+      "pages": 10
     },
     {
       "name": "DesignRush Website AR",
@@ -2082,6 +5541,150 @@
       "url": "https://www.sitecore.com/partners",
       "pages": 1,
       "__new_dir": true
+    },
+    {
+      "name": "Sortlist AR – ecommerce",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ecommerce/argentina-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AR – app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/app-development/argentina-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AR – UX design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ux-design/argentina-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AR – branding",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/branding/argentina-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AR – social media",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/social-media-marketing/argentina-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AR – PPC / Google Ads",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/ppc/argentina-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AR – graphic design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/graphic-design/argentina-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AR – email marketing",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/email-marketing/argentina-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AR – video production",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/video-production/argentina-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist AR – mobile app development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/mobile-app-development/argentina-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Buenos Aires – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/buenos-aires-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Buenos Aires – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/buenos-aires-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Buenos Aires – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/buenos-aires-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cordoba – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/cordoba-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cordoba – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/cordoba-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Cordoba – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/cordoba-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rosario – web design",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-design/rosario-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rosario – web development",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/web-development/rosario-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "Sortlist Rosario – digital agencies",
+      "type": "sortlist",
+      "url": "https://www.sortlist.com/digital-marketing/rosario-ar?page={page}",
+      "pages": 10
+    },
+    {
+      "name": "TopDevelopers AR – web design",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-designers/argentina?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers AR – web development",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/web-developers/argentina?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers AR – ecommerce",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/ecommerce-developers/argentina?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers AR – WordPress",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/wordpress-developers/argentina?page={page}",
+      "pages": 20
+    },
+    {
+      "name": "TopDevelopers AR – SEO",
+      "type": "topdevelopers",
+      "url": "https://www.topdevelopers.co/directory/seo-companies/argentina?page={page}",
+      "pages": 20
     }
   ]
 }
