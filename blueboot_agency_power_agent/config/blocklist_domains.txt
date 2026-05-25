@@ -195,7 +195,526 @@ pornhub.*
 crypto.com
 hotels.*
 
-# === MANUALLY BLOCKED ===
+# =============================================================================
+# === OBVIOUSLY-NOT-WEB-COMPANY KEYWORD BLOCKS ================================
+# *word* matches any domain containing that word (fnmatch glob).
+# Covers EN + NO / SE / DK / DE / NL / FR.
+# =============================================================================
+
+# --- Food & Dining (EN) ---
+*pizza*
+*pizzeria*
+*restaurant*
+*burger*
+*sushi*
+*kebab*
+*steakhouse*
+*bistro*
+*diner*
+*tavern*
+*taverna*
+*trattoria*
+*osteria*
+*gastropub*
+*tapas*
+*ramen*
+*noodle*
+*takeaway*
+*takeout*
+*catering*
+*bakery*
+*patisserie*
+*confectionery*
+*butcher*
+*fishmonger*
+*grocery*
+*supermarket*
+*fooddelivery*
+
+# --- Food & Dining (NO) ---
+*kafeteria*
+*bakeri*
+*konditori*
+*slakter*
+*fiskehandler*
+*dagligvare*
+*matbutikk*
+*kantina*
+
+# --- Food & Dining (SE) ---
+*restaurang*
+*bageri*
+*matbutik*
+*livsmedel*
+*gatukök*
+*kantine*
+
+# --- Food & Dining (DK) ---
+*slagter*
+*fiskehandel*
+*smorrebrod*
+
+# --- Food & Dining (DE) ---
+*gaststätte*
+*gaststaette*
+*gasthaus*
+*gasthof*
+*imbiss*
+*bäckerei*
+*baeckerei*
+*konditorei*
+*metzger*
+*fleischer*
+*kantine*
+*mensa*
+*kneipe*
+*wirtschaft*
+*brauerei*
+*biergarten*
+
+# --- Food & Dining (NL) ---
+*eetcafe*
+*bakkerij*
+*slagerij*
+
+# --- Food & Dining (FR) ---
+*boulangerie*
+*brasserie*
+*creperie*
+*charcuterie*
+*fromagerie*
+*epicerie*
+*bistrot*
+
+# --- Hotels & Accommodation ---
+*hotel*
+*hostel*
+*motel*
+*resort*
+*herberge*
+*overnatting*
+*vandrarhem*
+*vandrerhjem*
+*feriepark*
+*feriesenter*
+*feriehus*
+*ferienhaus*
+*ferienwohnung*
+*appartement*
+
+# --- Healthcare & Medical (EN) ---
+*pharmacy*
+*chemist*
+*dentist*
+*dental*
+*veterinary*
+*optician*
+*optometrist*
+*physiotherapy*
+*chiropractor*
+*osteopath*
+
+# --- Healthcare & Medical (NO) ---
+*apotek*
+*tannlege*
+*tannklinikk*
+*legekontor*
+*legepraksis*
+*kiropraktor*
+*fysioterapi*
+*optiker*
+*veterinær*
+*veterinar*
+
+# --- Healthcare & Medical (SE) ---
+*tandläkare*
+*tandlakare*
+*tandklinik*
+*sjukhus*
+*läkarhus*
+*lakarhus*
+*kiropraktor*
+*fysioterapi*
+
+# --- Healthcare & Medical (DK) ---
+*tandlæge*
+*tandlaege*
+*tandklinik*
+*lægehus*
+*laegehus*
+*dyrlæge*
+*dylaege*
+
+# --- Healthcare & Medical (DE) ---
+*apotheke*
+*zahnarzt*
+*zahnklinik*
+*krankenhaus*
+*arztpraxis*
+*tierarzt*
+*augenarzt*
+*physiotherapie*
+*chiropraktik*
+*psychologe*
+
+# --- Automotive (EN) ---
+*cardealer*
+*usedcars*
+*autorepair*
+*taxiservice*
+
+# --- Automotive (NO) ---
+*bilforhandler*
+*bilverksted*
+*bilsalg*
+*bilutleie*
+
+# --- Automotive (SE) ---
+*bilhandlare*
+*bilverkstad*
+*bilförsäljning*
+*biluthrning*
+
+# --- Automotive (DK) ---
+*bilværksted*
+*bilvaerksted*
+*biludlejning*
+
+# --- Automotive (DE) ---
+*autohaus*
+*autowerkstatt*
+*kfz-werkstatt*
+*autovermietung*
+*gebrauchtwagen*
+*fahrzeughandel*
+
+# --- Finance / Banking (specific institutions, not fintech agencies) ---
+*sparkasse*
+*volksbank*
+*raiffeisenbank*
+*sparebank*
+*sparekasse*
+*hypothekenbank*
+*bausparkasse*
+
+# --- Real Estate Agencies (not digital agencies) ---
+*eiendomsmegler*
+*boligmegler*
+*fastighetsmäklare*
+*fastighetsmaklare*
+*ejendomsmægler*
+*ejendomsmaeglerj*
+*immobilienmakler*
+*hausverwaltung*
+*wohnungsverwaltung*
+
+# --- Churches & Religious ---
+*kirche*
+*moschee*
+*synagoge*
+*paroisse*
+
+# --- Sports Clubs (not sports tech) ---
+*fotballklubb*
+*fotbollsklubb*
+*fodboldklub*
+*fussballverein*
+*sportverein*
+*turnverein*
+*idrettslag*
+
+# =============================================================================
+# === CONTENT NEGATIVE KEYWORDS ===============================================
+# Plain substrings checked against page TEXT during scoring.
+# A match penalises the site's reseller score — NOT a domain filter.
+# No wildcards: matched as lowercase substrings anywhere in the page.
+# Covers all configured languages. E-commerce/cart signals kept in countries.json.
+# =============================================================================
+
+# --- NO ---
+frisør
+restaurant
+kafé
+rørlegger
+elektriker
+tannlege
+legesenter
+eiendomsmegler
+bilverksted
+barnehage
+treningssenter
+dagligvare
+supermarked
+apotek
+forsikring
+bank 
+revisjon
+regnskap
+
+# --- SE ---
+frisör
+restaurang
+rörmokare
+tandläkare
+fastighetsförmedling
+bilverkstad
+förskola
+dagligvaror
+försäkring
+redovisning
+
+# --- DK ---
+ekskl. moms
+café
+VVS
+tandlæge
+ejendomsmægler
+bilværksted
+børnehave
+dagligvarer
+revision
+bogføring
+
+# --- FI ---
+kampaamo
+ravintola
+kahvila
+putkimies
+sähköasentaja
+hammaslääkäri
+lääkärikeskus
+kiinteistönvälitys
+autokorjaamo
+päiväkoti
+päivittäistavarat
+apteekki
+vakuutus
+pankki 
+kirjanpito
+tilitoimisto
+
+# --- NL ---
+kapper
+loodgieter
+elektricien
+tandarts
+huisarts
+makelaar
+autogarage
+kinderopvang
+supermarkt
+apotheek
+verzekering
+accountant
+boekhouding
+
+# --- BE ---
+coiffeur
+plombier
+dentiste
+agent immobilier
+supermarché
+pharmacie
+assurance
+banque 
+comptabilité
+
+# --- DE ---
+friseur
+klempner
+zahnarzt
+arztpraxis
+immobilienmakler
+autowerkstatt
+kindergarten
+apotheke
+versicherung
+steuerberatung
+buchhaltung
+
+# --- UK ---
+hairdresser
+plumber
+electrician
+dentist
+gp surgery
+estate agent
+car repair
+nursery
+supermarket
+pharmacy
+insurance broker
+accountancy
+bookkeeping
+
+# --- IE ---
+crèche
+
+# --- FR ---
+électricien
+cabinet médical
+agence immobilière
+garage auto
+école
+salle de sport
+cabinet comptable
+
+# --- ES ---
+peluquería
+restaurante
+cafetería
+fontanero
+electricista
+dentista
+consulta médica
+agencia inmobiliaria
+taller mecánico
+guardería
+colegio
+gimnasio
+supermercado
+farmacia
+seguro
+banco 
+contabilidad
+asesoría fiscal
+
+# --- IT ---
+parrucchiere
+ristorante
+bar
+idraulico
+elettricista
+medico
+agenzia immobiliare
+officina
+asilo nido
+supermercato
+assicurazione
+banca 
+contabilità
+studio commercialista
+
+# --- PL ---
+magazyn
+fryzjer
+restauracja
+kawiarnia
+hydraulik
+elektryk
+dentysta
+lekarz
+agencja nieruchomości
+warsztat
+żłobek
+apteka
+ubezpieczenie
+księgowość
+biuro rachunkowe
+
+# --- HU ---
+fodrász
+étterem
+kávézó
+vízvezeték-szerelő
+villanyszerelő
+fogorvos
+orvos
+ingatlanügynök
+autószerelő
+bölcsőde
+szupermarket
+gyógyszertár
+biztosítás
+könyvelés
+könyvelőiroda
+
+# --- EE ---
+juuksur
+restoran
+kohvik
+torulukksepp
+elektrik
+hambaarst
+arst
+kinnisvaramaakler
+autoremontöör
+lasteaed
+apteek
+kindlustus
+pank 
+raamatupidamine
+
+# --- LV ---
+frizieris
+restorāns
+kafejnīca
+santehniķis
+elektriķis
+zobārsts
+ārsts
+nekustamo īpašumu aģents
+autoserviss
+bērnudārzs
+veikals
+aptieka
+apdrošināšana
+banka 
+grāmatvedība
+
+# --- LT ---
+kirpėjas
+restoranas
+kavinė
+santechnikas
+elektrikas
+odontologas
+gydytojas
+nekilnojamojo turto agentūra
+autoservisas
+darželis
+prekybos centras
+vaistinė
+draudimas
+bankas 
+buhalterija
+
+# --- IN ---
+incl. gst
+excl. gst
+stock
+salon
+clinic
+real estate
+insurance
+ca firm
+chartered accountant
+
+# --- TH ---
+ร้านอาหาร
+สปา
+ขายสินค้า
+ราคา
+
+# --- BR ---
+salão
+clínica
+imobiliária
+oficina
+creche
+farmácia
+contador
+contabilidade
+
+# --- AR ---
+inmobiliaria
+jardín de infantes
+contaduría
+
+
+# =============================================================================
+# === MANUALLY BLOCKED ========================================================
+# =============================================================================
 *.sparkasse-emden.*
 sparkasse-emden.*
 moviepilot.de

@@ -11,7 +11,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from utils import domain_of, is_blocked, fetch, linkedin_hints, load_lines, load_country_configs, selected_countries, DEFAULT_COUNTRIES
-from models import Lead, dedupe_leads, export, load_existing_leads
+from models import Lead, dedupe_leads, export
 
 CATALOG_CONFIG_PATH = Path("config/catalogs.json")
 
@@ -403,14 +403,11 @@ def catalog_run(args) -> None:
         print(f"No catalog entries found for: {', '.join(countries)}")
         return
 
-    all_leads: list[Lead] = load_existing_leads(Path(args.output))
-    seen_domains: set[str] = {l.domain.strip().lower() for l in all_leads if l.domain}
-
-    preloaded = getattr(args, "preloaded_domains", set())
-    if preloaded:
-        before = len(seen_domains)
-        seen_domains |= preloaded
-        print(f"  [firebase] added {len(seen_domains) - before} new domains from Firestore preload to skip list")
+    all_leads: list[Lead] = []
+    # seen_domains is seeded exclusively from Firestore — no local CSV read.
+    seen_domains: set[str] = getattr(args, "preloaded_domains", set()).copy()
+    if seen_domains:
+        print(f"  [firebase] {len(seen_domains)} already-handled domains loaded from Firestore — will skip")
 
     country_leads: dict[str, int] = {}
     batch_size: int = args.workers

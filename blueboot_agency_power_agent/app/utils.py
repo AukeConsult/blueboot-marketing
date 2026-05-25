@@ -103,6 +103,36 @@ TECH_SIGNATURES = {
 linkedin_hints: dict[str, str] = {}
 
 # ---------------------------------------------------------------------------
+# Content negative keywords — loaded once from config/blocklist_domains.txt
+# ---------------------------------------------------------------------------
+
+def _load_content_negative_keywords() -> list[str]:
+    """Read the CONTENT NEGATIVE KEYWORDS section from blocklist_domains.txt."""
+    bl = Path(__file__).parent.parent / "config" / "blocklist_domains.txt"
+    if not bl.exists():
+        return []
+    in_section = False
+    kws: list[str] = []
+    # A real section header looks like:  # === NAME === or # === NAME ====
+    # Pure divider lines (# ===...===) have no words between the === markers.
+    _section_re = re.compile(r"^#\s*===\s*\w")
+    for raw in bl.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if "CONTENT NEGATIVE KEYWORDS" in line:
+            in_section = True
+            continue
+        if in_section:
+            # Stop only on a real named section header, not a pure ===== divider
+            if _section_re.match(line) and "CONTENT NEGATIVE KEYWORDS" not in line:
+                break
+            if line and not line.startswith("#"):
+                kws.append(line.lower())
+    return kws
+
+_CONTENT_NEG_KWS: list[str] = _load_content_negative_keywords()
+
+
+# ---------------------------------------------------------------------------
 # URL / domain helpers
 # ---------------------------------------------------------------------------
 
@@ -459,7 +489,7 @@ def categorize(text: str, html: str, country_cfg: dict) -> tuple[set[str], list[
     if agency_hits:
         score += min(len(agency_hits) * 10, 20)
         reasons.append("agency language: " + ", ".join(agency_hits[:3]))
-    neg_hits = [kw for kw in country_cfg.get("negative_keywords", []) if kw.lower() in hay]
+    neg_hits = [kw for kw in _CONTENT_NEG_KWS if kw in hay]
     if neg_hits:
         penalty = min(len(neg_hits) * 30, 90)
         score -= penalty
@@ -551,118 +581,3 @@ def detect_tech(html: str, soup: BeautifulSoup) -> set[str]:
         found.add("craftcms")
     return found
 
-
-# ---------------------------------------------------------------------------
-# Scoring / categorisation
-# ---------------------------------------------------------------------------
-
-def categorize(text: str, html: str, country_cfg: dict) -> tuple[list[str], list[str], int]:
-    combined = (text + " " + html).lower()
-    kw       = country_cfg.get("keywords", {})
-    cats: list[str]    = []
-    reasons: list[str] = []
-    score = 0
-
-    # --- Negative signals (retail, services that are NOT agencies) ---
-    neg_hits = sum(1 for k in kw.get("negative_keywords", []) if k in combined)
-    if neg_hits >= 2:
-        penalty = min(neg_hits * 5, 30)
-        score  -= penalty
-        reasons.append(f"negative x{neg_hits}")
-
-    # --- Web agency keywords ---
-    agency_hits = sum(1 for k in kw.get("web_agency", []) if k in combined)
-    if agency_hits:
-        pts = min(agency_hits * 10, 30)
-        score += pts
-        cats.append("web_agency")
-        reasons.append(f"agency kw x{agency_hits} (+{pts})")
-
-    # --- Agency descriptive phrases ---
-    phrase_hits = sum(1 for k in country_cfg.get("agency_words", []) if k in combined)
-    if phrase_hits:
-        pts = min(phrase_hits * 8, 24)
-        score += pts
-        reasons.append(f"agency phrases x{phrase_hits} (+{pts})")
-
-    # --- WordPress / CMS (core BlueBoot target) ---
-    wp_hits = sum(1 for k in kw.get("wordpress", []) if k in combined)
-    if wp_hits:
-        pts = min(wp_hits * 8, 24)
-        score += pts
-        cats.append("wordpress")
-        reasons.append(f"wordpress x{wp_hits} (+{pts})")
-
-    # --- SEO services ---
-    seo_hits = sum(1 for k in kw.get("seo", []) if k in combined)
-    if seo_hits:
-        pts = min(seo_hits * 5, 15)
-        score += pts
-        cats.append("seo")
-        reasons.append(f"seo x{seo_hits} (+{pts})")
-
-    # --- Communication / content agency ---
-    comm_hits = sum(1 for k in kw.get("communication", []) if k in combined)
-    if comm_hits:
-        pts = min(comm_hits * 4, 12)
-        score += pts
-        cats.append("communication")
-
-    # --- AI interest (great BlueBoot signal) ---
-    ai_hits = sum(1 for k in kw.get("ai_interest", []) if k in combined)
-    if ai_hits:
-        pts = min(ai_hits * 7, 21)
-        score += pts
-        cats.append("ai_interest")
-        reasons.append(f"ai interest x{ai_hits} (+{pts})")
-
-    # --- Support / maintenance offering ---
-    support_hits = sum(1 for k in country_cfg.get("support_words", []) if k in combined)
-    if support_hits:
-        pts = min(support_hits * 3, 9)
-        score += pts
-        cats.append("support")
-
-    # --- Public sector focus (less likely reseller) ---
-    pub_hits = sum(1 for k in kw.get("public_sector", []) if k in combined)
-    if pub_hits >= 3:
-        penalty = min(pub_hits * 4, 20)
-        score  -= penalty
-        cats.append("public_sector")
-        reasons.append(f"public sector x{pub_hits} (-{penalty})")
-
-    score = max(0, score)
-    return cats, reasons, score
-
-
-def priority(score: int) -> str:
-    if score >= 70:
-        return "A"
-    if score >= 45:
-        return "B"
-    if score >= 25:
-        return "C"
-    return "D"
-
-
-def angle(cats: list[str], tech: set[str]) -> str:
-    has_wp = "wordpress" in cats or "wordpress" in tech or "woocommerce" in tech
-    has_seo = "seo" in cats
-    has_ai  = "ai_interest" in cats
-    if has_wp and has_seo:
-        return "AI search as SEO + WordPress differentiator"
-    if has_wp:
-        return "AI-powered search for WordPress/WooCommerce client sites"
-    if has_seo:
-        return "AI search as SEO upsell for existing clients"
-    if has_ai:
-        return "AI-ready agency — BlueBoot as first AI product"
-    if "communication" in cats:
-        return "AI content discovery for communication agency clients"
-    return "AI search feature resold to their web clients"
-
-
-# ---------------------------------------------------------------------------
-# Manual LinkedIn overrides  { website_url: linkedin_url }
-# ---------------------------------------------------------------------------
-linkedin_hints: dict[str, str] = {}

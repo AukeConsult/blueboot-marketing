@@ -24,7 +24,7 @@ from utils import (
     linkedin_hints,
 )
 from firebase_sync import upsert_lead
-from models import Lead, dedupe_leads, export, load_existing_leads
+from models import Lead, dedupe_leads, export
 
 
 # ---------------------------------------------------------------------------
@@ -486,15 +486,12 @@ def run(args) -> None:
     query_pairs = load_queries_for_countries(countries, args.queries or None)
     blocklist   = set(load_lines(Path("config/blocklist_domains.txt")))
 
-    all_leads: list[Lead] = load_existing_leads(Path(args.output))
-    seen_domains: set[str] = {l.domain.strip().lower() for l in all_leads if l.domain}
+    all_leads: list[Lead] = []
+    # seen_domains is seeded exclusively from Firestore — no local CSV read.
+    seen_domains: set[str] = getattr(args, "preloaded_domains", set()).copy()
     rejected_domains: set[str] = set()  # crawled-and-rejected this run — never re-queue
-
-    preloaded = getattr(args, "preloaded_domains", set())
-    if preloaded:
-        before = len(seen_domains)
-        seen_domains |= preloaded
-        print(f"  [firebase] added {len(seen_domains) - before} new domains from Firestore preload to skip list")
+    if seen_domains:
+        print(f"  [firebase] {len(seen_domains)} already-handled domains loaded from Firestore — will skip")
 
     queues: dict[str, list[str]] = defaultdict(list)
     for q, c in query_pairs:
@@ -580,14 +577,16 @@ def run(args) -> None:
             added = 0
             for raw in urls:
                 url = clean_search_url(raw)
+                # Only accept root-level URLs — skip any URL with a path beyond "/"
+                # e.g. accept https://agency.com/ but reject https://agency.com/blog/post
+                _parsed = urlparse(url)
+                if _parsed.path not in ("", "/"):
+                    continue
                 dom = domain_of(url)
                 # country_for_domain returns None for generic TLDs (.com/.net/.eu).
                 # A None result means the domain doesn't belong to any *other* country,
                 # so we accept it as a candidate for the current country query.
                 detected_country = country_for_domain(dom, countries, configs)
-                if is_product_or_content_url(url):
-                    p = urlparse(url)
-                    url = f"{p.scheme}://{p.netloc}/"
                 if (not is_blocked(dom, blocklist) and dom
                         and dom not in seen_domains
                         and dom not in rejected_domains

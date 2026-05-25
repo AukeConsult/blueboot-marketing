@@ -227,7 +227,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output directory for the Excel file.",
     )
     parser.add_argument(
-        "--max-results", type=int, default=int(os.getenv("MAX_RESULTS", "500")),
+        "--max-results", type=int, default=int(os.getenv("MAX_RESULTS", "200")),
         help="Max search results per query.",
     )
     parser.add_argument(
@@ -285,10 +285,9 @@ def main() -> None:
     load_dotenv()
     args = _build_parser().parse_args()
 
-    if args.firebase_preload:
-        args.preloaded_domains = load_leads_from_firebase(collection=args.firebase_collection)
-    else:
-        args.preloaded_domains = set()
+    # Always load already-handled domains from Firestore — never read the local CSV for this.
+    # Returns an empty set if credentials are missing (run continues from scratch).
+    args.preloaded_domains = load_leads_from_firebase(collection=args.firebase_collection)
 
     if args.mode == "catalog":
         leads = catalog_run(args)
@@ -304,4 +303,20 @@ def main() -> None:
         print("="*60)
         search_leads = run(args) or []
         # Merge: run() already loaded existing leads internally, so dedupe both lists
-        from models import dedu
+        from models import dedupe_leads as _dd
+        leads = _dd(leads + search_leads)
+
+    # Each lead is already upserted to Firebase immediately after scraping.
+    # The end-of-run bulk push is a safety net for any missed leads (e.g. runs
+    # that were interrupted and resumed from the CSV).
+    if args.no_firebase:
+        print("  [firebase] skipped (--no-firebase).")
+    elif leads:
+        print("  [firebase] running end-of-run sync to catch any missed leads...")
+        push_to_firebase(leads, collection=args.firebase_collection)
+    else:
+        print("  [firebase] no leads to upload.")
+
+
+if __name__ == "__main__":
+    main()
