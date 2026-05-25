@@ -65,14 +65,25 @@ class Lead:
     country_name: str = ""
     notes: str = ""
     crawled_at: str = ""
+    found_by_search: str = ""   # "yes" when discovered via keyword search / GitHub pre-pass
+    found_by_catalog: str = ""  # "yes" when discovered via directory catalog scrape
 
 
 def dedupe_leads(leads: list[Lead]) -> list[Lead]:
+    """Keep the highest-scoring lead per domain; merge source-discovery flags."""
     best: dict[str, Lead] = {}
     for lead in leads:
         old = best.get(lead.domain)
-        if old is None or lead.reseller_score > old.reseller_score:
+        if old is None:
             best[lead.domain] = lead
+        else:
+            # Accumulate discovery flags regardless of which score wins
+            merged_search  = old.found_by_search  or lead.found_by_search
+            merged_catalog = old.found_by_catalog or lead.found_by_catalog
+            if lead.reseller_score > old.reseller_score:
+                best[lead.domain] = lead
+            best[lead.domain].found_by_search  = merged_search
+            best[lead.domain].found_by_catalog = merged_catalog
     return sorted(best.values(), key=lambda x: x.reseller_score, reverse=True)
 
 

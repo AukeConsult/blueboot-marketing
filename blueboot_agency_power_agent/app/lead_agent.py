@@ -294,7 +294,7 @@ def main() -> None:
         leads = catalog_run(args)
     elif args.mode == "search":
         leads = run(args)
-    else:  # "both" — catalog first (known good sources), then keyword search
+    else:  # "both" — catalog ALWAYS runs first (known good directory sources), then keyword search
         print("\n" + "="*60)
         print("PHASE 1 — Catalog scrape")
         print("="*60)
@@ -304,20 +304,4 @@ def main() -> None:
         print("="*60)
         search_leads = run(args) or []
         # Merge: run() already loaded existing leads internally, so dedupe both lists
-        from models import dedupe_leads as _dd
-        leads = _dd(leads + search_leads)
-
-    # Each lead is already upserted to Firebase immediately after scraping.
-    # The end-of-run bulk push is a safety net for any missed leads (e.g. runs
-    # that were interrupted and resumed from the CSV).
-    if args.no_firebase:
-        print("  [firebase] skipped (--no-firebase).")
-    elif leads:
-        print("  [firebase] running end-of-run sync to catch any missed leads...")
-        push_to_firebase(leads, collection=args.firebase_collection)
-    else:
-        print("  [firebase] no leads to upload.")
-
-
-if __name__ == "__main__":
-    main()
+        from models import dedu

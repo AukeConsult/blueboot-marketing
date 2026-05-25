@@ -303,6 +303,7 @@ async def _async_crawl_site(
     url: str, source_query: str, max_pages: int, delay: float,
     country_code: str, country_cfg: dict,
     min_score: int = 50,
+    source: str = "search",     # "search" or "catalog" — recorded on the Lead
 ) -> Lead | None:
     website = normalize_url(url)
     dom = domain_of(website)
@@ -380,6 +381,8 @@ async def _async_crawl_site(
         suggested_angle=lead_angle,
         country=country_code, country_name=country_cfg.get("name", country_code),
         crawled_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        found_by_search  = "yes" if source == "search"  else "",
+        found_by_catalog = "yes" if source == "catalog" else "",
     )
 
 
@@ -390,54 +393,74 @@ async def _async_crawl_site(
 async def _run_batch_async(
     batch: list[tuple[str, str]], args, code: str, configs: dict,
     all_leads: list[Lead], export_path: Path, country_leads: dict,
+    rejected_domains: set[str] | None = None,
+    source: str = "search",     # propagated to each crawled Lead
 ) -> int:
     n = len(batch)
     print(f"\n  >>> Crawling {n} site{'s' if n > 1 else ''} in parallel <<<")
     timeout   = aiohttp.ClientTimeout(total=60, connect=10)
     connector = aiohttp.TCPConnector(limit=n, ssl=False)
     new_count = 0
+
+    async def _crawl_with_dom(s, url, query):
+        """Wrapper that returns (domain, lead) so rejected sites can be tracked."""
+        dom = domain_of(url)
+        result = await _async_crawl_site(
+            s, url, query, args.max_pages, args.delay,
+            code, configs.get(code, {}),
+            min_score=getattr(args, "min_score", 50),
+            source=source,
+        )
+        return dom, result
+
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
         min_score = getattr(args, "min_score", 50)
         _blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
         tasks = [
-            asyncio.create_task(
-                _async_crawl_site(session, url, query, args.max_pages,
-                                  args.delay, code, configs.get(code, {}),
-                                  min_score=min_score))
+            asyncio.create_task(_crawl_with_dom(session, url, query))
             for url, query in batch
             if not is_blocked(domain_of(url), _blocklist)
         ]
         for coro in asyncio.as_completed(tasks):
             try:
-                lead = await coro
+                dom, lead = await coro
             except Exception as exc:
                 print(f"    [crawl error]: {exc}")
                 continue
-            if lead:
-                has_email = "yes" if lead.emails else "no"
-                min_score = getattr(args, "min_score", 50)
-                print(f"    -> {lead.priority} score={lead.reseller_score} email={has_email}  {lead.website}")
-                if lead.reseller_score <= min_score:
-                    print(f"       [skip] score {lead.reseller_score} <= {min_score} threshold")
-                    continue
-                all_leads.append(lead)
-                country_leads[code] = country_leads.get(code, 0) + 1
-                new_count += 1
-                if not getattr(args, "no_firebase", False):
-                    upsert_lead(lead, collection=getattr(args, "firebase_collection", None))
-                if not getattr(args, "no_output", False):
-                    export(dedupe_leads(all_leads), export_path)
+            if not lead:
+                # Crawl returned nothing (score==0 or fetch failed) — remember domain
+                if rejected_domains is not None:
+                    rejected_domains.add(dom)
+                continue
+            has_email = "yes" if lead.emails else "no"
+            print(f"    -> {lead.priority} score={lead.reseller_score} email={has_email}  {lead.website}")
+            if lead.reseller_score <= min_score:
+                print(f"       [skip] score {lead.reseller_score} <= {min_score} threshold")
+                if rejected_domains is not None:
+                    rejected_domains.add(dom)
+                continue
+            all_leads.append(lead)
+            country_leads[code] = country_leads.get(code, 0) + 1
+            new_count += 1
+            if not getattr(args, "no_firebase", False):
+                upsert_lead(lead, collection=getattr(args, "firebase_collection", None))
+            if not getattr(args, "no_output", False):
+                export(dedupe_leads(all_leads), export_path)
     return new_count
 
 
 def _crawl_batch(
     batch: list[tuple[str, str]], args, code: str, configs: dict,
     all_leads: list[Lead], export_path: Path, country_leads: dict,
+    rejected_domains: set[str] | None = None,
+    source: str = "search",
 ) -> int:
     if not batch:
         return 0
     return asyncio.run(_run_batch_async(batch, args, code, configs,
-                                        all_leads, export_path, country_leads))
+                                        all_leads, export_path, country_leads,
+                                        rejected_domains=rejected_domains,
+                                        source=source))
 
 
 # ---------------------------------------------------------------------------
@@ -465,6 +488,7 @@ def run(args) -> None:
 
     all_leads: list[Lead] = load_existing_leads(Path(args.output))
     seen_domains: set[str] = {l.domain.strip().lower() for l in all_leads if l.domain}
+    rejected_domains: set[str] = set()  # crawled-and-rejected this run — never re-queue
 
     preloaded = getattr(args, "preloaded_domains", set())
     if preloaded:
@@ -510,7 +534,8 @@ def run(args) -> None:
                 print(f"  [{code}] {inserted} GitHub orgs queued for crawling")
                 if len(pending[code]) >= batch_size:
                     batch, pending[code] = pending[code][:batch_size], pending[code][batch_size:]
-                    _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads)
+                    _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads,
+                             rejected_domains=rejected_domains)
 
     def _flush(code: str, label: str = "") -> None:
         if not pending[code]:
@@ -518,7 +543,8 @@ def run(args) -> None:
         batch, pending[code] = pending[code], []
         if label:
             print(f"  [{code}] {label}")
-        _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads)
+        _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads,
+                     rejected_domains=rejected_domains)
 
     while len(country_done) < len(countries):
         made_progress = False
@@ -564,6 +590,7 @@ def run(args) -> None:
                     url = f"{p.scheme}://{p.netloc}/"
                 if (not is_blocked(dom, blocklist) and dom
                         and dom not in seen_domains
+                        and dom not in rejected_domains
                         and (detected_country is None or detected_country == code)):
                     if args.max_country and len(pending[code]) + country_leads[code] >= args.max_country:
                         break
@@ -575,7 +602,8 @@ def run(args) -> None:
 
             if len(pending[code]) >= batch_size:
                 batch, pending[code] = pending[code][:batch_size], pending[code][batch_size:]
-                _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads)
+                _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads,
+                         rejected_domains=rejected_domains)
 
             if added:
                 country_streak[code] = 0
@@ -589,7 +617,8 @@ def run(args) -> None:
                         pending[code] = pending[code][batch_size:]
                         print(f"  [{code}] Draining {len(batch_now)} remaining sites...")
                         _crawl_batch(batch_now, args, code, configs,
-                                     all_leads, Path(args.output), country_leads)
+                                     all_leads, Path(args.output), country_leads,
+                                     rejected_domains=rejected_domains)
                     print(f"  [{code}] Giving up after {args.give_up_after} empty queries.")
                     country_done.add(code)
 

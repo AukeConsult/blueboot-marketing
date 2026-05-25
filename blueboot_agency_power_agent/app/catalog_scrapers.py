@@ -451,14 +451,14 @@ def catalog_run(args) -> None:
 
                 while len(pending) >= batch_size:
                     batch, pending = pending[:batch_size], pending[batch_size:]
-                    _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads)
+                    _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads, source="catalog")
 
                 import time as _time
                 _time.sleep(args.delay)
 
         if pending:
             print(f"\n  [{code}] Flushing final batch of {len(pending)} sites")
-            _crawl_batch(pending, args, code, configs, all_leads, Path(args.output), country_leads)
+            _crawl_batch(pending, args, code, configs, all_leads, Path(args.output), country_leads, source="catalog")
 
         print(f"\n[{code}] Done — {country_leads.get(code, 0)} new leads from catalogs")
 
