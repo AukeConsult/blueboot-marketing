@@ -211,8 +211,8 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--mode", choices=["search", "catalog"], default="search",
-        help="search = Bing/Google keyword search; catalog = scrape directory listings",
+        "--mode", choices=["search", "catalog", "both"], default="both",
+        help="search = Bing/Google keyword search; catalog = scrape directory listings; both = run catalog first, then search (default)",
     )
     parser.add_argument(
         "--countries", default=None,
@@ -227,15 +227,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output directory for the Excel file.",
     )
     parser.add_argument(
-        "--max-results", type=int, default=int(os.getenv("MAX_RESULTS", "10")),
+        "--max-results", type=int, default=int(os.getenv("MAX_RESULTS", "500")),
         help="Max search results per query.",
+    )
+    parser.add_argument(
+        "--min-score", type=int, default=int(os.getenv("MIN_SCORE", "50")),
+        help="Minimum reseller score to store a lead (default: 50).",
     )
     parser.add_argument(
         "--max-pages", type=int, default=int(os.getenv("MAX_PAGES", "3")),
         help="Max pages to crawl per agency website.",
     )
     parser.add_argument(
-        "--max-country", type=int, default=int(os.getenv("MAX_COUNTRY", "0")) or None,
+        "--max-country", type=int, default=int(os.getenv("MAX_COUNTRY", "5000")) or None,
         help="Stop a country after this many leads (0 = unlimited).",
     )
     parser.add_argument(
@@ -263,6 +267,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Skip uploading results to Firestore after the run.",
     )
     parser.add_argument(
+        "--no-github", action="store_true", default=False,
+        help="Skip the GitHub org pre-pass (useful if GITHUB_TOKEN is not set).",
+    )
+    parser.add_argument(
         "--firebase-preload", action="store_true", default=False,
         help="Read existing domains from Firestore before scraping to skip already-crawled agencies.",
     )
@@ -284,8 +292,20 @@ def main() -> None:
 
     if args.mode == "catalog":
         leads = catalog_run(args)
-    else:
+    elif args.mode == "search":
         leads = run(args)
+    else:  # "both" — catalog first (known good sources), then keyword search
+        print("\n" + "="*60)
+        print("PHASE 1 — Catalog scrape")
+        print("="*60)
+        leads = catalog_run(args) or []
+        print("\n" + "="*60)
+        print("PHASE 2 — Keyword search (Bing / Google)")
+        print("="*60)
+        search_leads = run(args) or []
+        # Merge: run() already loaded existing leads internally, so dedupe both lists
+        from models import dedupe_leads as _dd
+        leads = _dd(leads + search_leads)
 
     # Each lead is already upserted to Firebase immediately after scraping.
     # The end-of-run bulk push is a safety net for any missed leads (e.g. runs

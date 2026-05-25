@@ -262,3 +262,62 @@ prismic developer agency deutschland
 prismic developer developer deutschland
 hubspot cms developer agency deutschland
 hubspot cms developer developer deutschland
+
+# --- Additional city-specific queries ---
+digitalagentur frankfurt
+digitalagentur köln
+digitalagentur stuttgart
+digitalagentur düsseldorf
+digitalagentur dresden
+digitalagentur leipzig
+digitalagentur nürnberg
+webentwicklung frankfurt
+webentwicklung köln
+webentwicklung stuttgart
+webentwicklung düsseldorf
+webentwicklung dresden
+webentwicklung nürnberg
+seo agentur berlin
+seo agentur hamburg
+seo agentur münchen
+seo agentur frankfurt
+seo agentur köln
+seo agentur düsseldorf
+seo agentur stuttgart
+wordpress agentur berlin
+wordpress agentur hamburg
+wordpress agentur münchen
+wordpress agentur frankfurt
+wordpress agentur köln
+wordpress agentur düsseldorf
+online marketing agentur berlin
+online marketing agentur hamburg
+online marketing agentur münchen
+online marketing agentur frankfurt
+online marketing agentur köln
+webdesign agentur berlin
+webdesign agentur hamburg
+webdesign agentur münchen
+webdesign agentur frankfurt
+webdesign agentur köln
+webdesign agentur düsseldorf
+webdesign agentur stuttgart
+webdesign agentur nürnberg
+agentur für webdesign berlin
+agentur für webdesign münchen
+agentur für webdesign frankfurt
+shopify agentur berlin
+shopify agentur münchen
+shopify agentur hamburg
+shopify agentur frankfurt
+shopify plus agentur deutschland
+webflow agentur berlin
+webflow agentur münchen
+webflow agentur hamburg
+typo3 agentur deutschland
+typo3 agentur berlin
+typo3 agentur münchen
+shopware agentur berlin
+shopware agentur münchen
+shopware agentur hamburg
+shopware agentur frankfurt

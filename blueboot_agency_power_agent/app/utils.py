@@ -495,3 +495,174 @@ def angle(cats: set[str], tech: set[str]) -> str:
     if "communication" in cats or "public_sector" in cats:
         return "Focus on public-information sites: help visitors find answers across pages, PDFs and articles."
     return "General reseller angle: add AI-powered search to existing customer websites without rebuilding them."
+
+# ---------------------------------------------------------------------------
+# Tech detection
+# ---------------------------------------------------------------------------
+
+def detect_tech(html: str, soup: BeautifulSoup) -> set[str]:
+    found: set[str] = set()
+    h = html.lower()
+    if "wp-content" in h or "wp-includes" in h:
+        found.add("wordpress")
+    if "woocommerce" in h:
+        found.add("woocommerce")
+    if "cdn.shopify.com" in h or "shopify.com/s/files" in h:
+        found.add("shopify")
+    if "webflow.io" in h or "framerusercontent.com" in h or 'data-wf-' in h:
+        found.add("webflow")
+    if "wix.com" in h or "wixsite.com" in h or "static.wixstatic" in h:
+        found.add("wix")
+    if "squarespace.com" in h:
+        found.add("squarespace")
+    if "framer.com" in h or "framerusercontent.com" in h:
+        found.add("framer")
+    if "elementor" in h:
+        found.add("elementor")
+    if "et-pb-" in h:
+        found.add("divi")
+    if "_next/static" in h or "next.js" in h:
+        found.add("nextjs")
+    if "gatsby" in h:
+        found.add("gatsby")
+    if "sites/default/files" in h and "drupal" in h:
+        found.add("drupal")
+    if "joomla" in h and ("/media/jui/" in h or "joomla!" in h):
+        found.add("joomla")
+    if "umbraco" in h:
+        found.add("umbraco")
+    if "typo3" in h:
+        found.add("typo3")
+    if "magento" in h or "mage/cookies" in h:
+        found.add("magento")
+    if "prestashop" in h:
+        found.add("prestashop")
+    if "shopware" in h:
+        found.add("shopware")
+    if "hs-scripts.com" in h or "hubspot.com" in h:
+        found.add("hubspot")
+    if "contentful" in h:
+        found.add("contentful")
+    if "storyblok" in h:
+        found.add("storyblok")
+    if "sanity.io" in h:
+        found.add("sanity")
+    if "craft" in h and "craftcms" in h:
+        found.add("craftcms")
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Scoring / categorisation
+# ---------------------------------------------------------------------------
+
+def categorize(text: str, html: str, country_cfg: dict) -> tuple[list[str], list[str], int]:
+    combined = (text + " " + html).lower()
+    kw       = country_cfg.get("keywords", {})
+    cats: list[str]    = []
+    reasons: list[str] = []
+    score = 0
+
+    # --- Negative signals (retail, services that are NOT agencies) ---
+    neg_hits = sum(1 for k in kw.get("negative_keywords", []) if k in combined)
+    if neg_hits >= 2:
+        penalty = min(neg_hits * 5, 30)
+        score  -= penalty
+        reasons.append(f"negative x{neg_hits}")
+
+    # --- Web agency keywords ---
+    agency_hits = sum(1 for k in kw.get("web_agency", []) if k in combined)
+    if agency_hits:
+        pts = min(agency_hits * 10, 30)
+        score += pts
+        cats.append("web_agency")
+        reasons.append(f"agency kw x{agency_hits} (+{pts})")
+
+    # --- Agency descriptive phrases ---
+    phrase_hits = sum(1 for k in country_cfg.get("agency_words", []) if k in combined)
+    if phrase_hits:
+        pts = min(phrase_hits * 8, 24)
+        score += pts
+        reasons.append(f"agency phrases x{phrase_hits} (+{pts})")
+
+    # --- WordPress / CMS (core BlueBoot target) ---
+    wp_hits = sum(1 for k in kw.get("wordpress", []) if k in combined)
+    if wp_hits:
+        pts = min(wp_hits * 8, 24)
+        score += pts
+        cats.append("wordpress")
+        reasons.append(f"wordpress x{wp_hits} (+{pts})")
+
+    # --- SEO services ---
+    seo_hits = sum(1 for k in kw.get("seo", []) if k in combined)
+    if seo_hits:
+        pts = min(seo_hits * 5, 15)
+        score += pts
+        cats.append("seo")
+        reasons.append(f"seo x{seo_hits} (+{pts})")
+
+    # --- Communication / content agency ---
+    comm_hits = sum(1 for k in kw.get("communication", []) if k in combined)
+    if comm_hits:
+        pts = min(comm_hits * 4, 12)
+        score += pts
+        cats.append("communication")
+
+    # --- AI interest (great BlueBoot signal) ---
+    ai_hits = sum(1 for k in kw.get("ai_interest", []) if k in combined)
+    if ai_hits:
+        pts = min(ai_hits * 7, 21)
+        score += pts
+        cats.append("ai_interest")
+        reasons.append(f"ai interest x{ai_hits} (+{pts})")
+
+    # --- Support / maintenance offering ---
+    support_hits = sum(1 for k in country_cfg.get("support_words", []) if k in combined)
+    if support_hits:
+        pts = min(support_hits * 3, 9)
+        score += pts
+        cats.append("support")
+
+    # --- Public sector focus (less likely reseller) ---
+    pub_hits = sum(1 for k in kw.get("public_sector", []) if k in combined)
+    if pub_hits >= 3:
+        penalty = min(pub_hits * 4, 20)
+        score  -= penalty
+        cats.append("public_sector")
+        reasons.append(f"public sector x{pub_hits} (-{penalty})")
+
+    score = max(0, score)
+    return cats, reasons, score
+
+
+def priority(score: int) -> str:
+    if score >= 70:
+        return "A"
+    if score >= 45:
+        return "B"
+    if score >= 25:
+        return "C"
+    return "D"
+
+
+def angle(cats: list[str], tech: set[str]) -> str:
+    has_wp = "wordpress" in cats or "wordpress" in tech or "woocommerce" in tech
+    has_seo = "seo" in cats
+    has_ai  = "ai_interest" in cats
+    if has_wp and has_seo:
+        return "AI search as SEO + WordPress differentiator"
+    if has_wp:
+        return "AI-powered search for WordPress/WooCommerce client sites"
+    if has_seo:
+        return "AI search as SEO upsell for existing clients"
+    if has_ai:
+        return "AI-ready agency — BlueBoot as first AI product"
+    if "communication" in cats:
+        return "AI content discovery for communication agency clients"
+    return "AI search feature resold to their web clients"
+
+
+# ---------------------------------------------------------------------------
+# Manual LinkedIn overrides  { website_url: linkedin_url }
+# ---------------------------------------------------------------------------
+linkedin_hints: dict[str, str] = {}

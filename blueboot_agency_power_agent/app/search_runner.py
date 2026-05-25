@@ -38,13 +38,15 @@ def bing_search(query: str, max_results: int,
     q = query
     if exclude_domains:
         q += " " + " ".join(f"-site:{d}" for d in list(exclude_domains)[:20])
+    # Bing RSS returns ~10 results per page; paginate with first=1,11,21,...
+    PAGE_SIZE = 10
     urls, seen, page = [], set(), 1
     while len(urls) < max_results:
-        first = (page - 1) * 100 + 1
+        first = (page - 1) * PAGE_SIZE + 1
         try:
             resp = requests.get(
                 "https://www.bing.com/search",
-                params={"q": q, "format": "rss", "count": 100, "first": first},
+                params={"q": q, "format": "rss", "count": PAGE_SIZE, "first": first},
                 headers={"User-Agent": BROWSER_UA, "Accept": "application/rss+xml,*/*",
                          "Accept-Language": "en-US,en;q=0.9"},
                 timeout=20,
@@ -109,6 +111,101 @@ def clean_search_url(url: str) -> str:
                         pass
                 return unquote(val)
     return url
+
+
+# ---------------------------------------------------------------------------
+# GitHub organisation search
+# ---------------------------------------------------------------------------
+
+def github_org_search(country_cfg: dict, country_code: str,
+                      max_orgs: int = 200) -> list[str]:
+    """Search GitHub for web-agency organisations in a country.
+
+    Returns a list of website URLs extracted from the org's GitHub profile.
+    Requires GITHUB_TOKEN env var for higher rate limits (recommended).
+    Without a token the API allows only 10 req/min — it will still work but
+    will be slow and may hit limits for large runs.
+    """
+    import time
+
+    token   = os.getenv("GITHUB_TOKEN", "")
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    country_name = country_cfg.get("name", country_code)
+    # GitHub location search works best with English terms — always include
+    # "web agency" as anchor, then add one native keyword if available.
+    agency_kw   = country_cfg.get("keywords", {}).get("web_agency", [])
+    native_term = agency_kw[0] if agency_kw else ""
+    terms = f"web agency {native_term}".strip()
+    query = f"type:org location:{country_name} {terms}"
+
+    websites: list[str] = []
+    page = 1
+    per_page = 100
+    seen_logins: set[str] = set()
+
+    print(f"  [GitHub] Searching orgs: {query!r}")
+
+    while len(websites) < max_orgs:
+        try:
+            r = requests.get(
+                "https://api.github.com/search/users",
+                params={"q": query, "per_page": per_page, "page": page},
+                headers=headers,
+                timeout=20,
+            )
+            if r.status_code == 403:
+                reset = int(r.headers.get("X-RateLimit-Reset", 0))
+                wait  = max(reset - int(time.time()), 1)
+                print(f"  [GitHub] rate-limited — waiting {wait}s")
+                time.sleep(min(wait, 60))
+                continue
+            if r.status_code == 422:
+                # Unprocessable — query too complex or no results
+                break
+            r.raise_for_status()
+            data  = r.json()
+            items = data.get("items", [])
+            if not items:
+                break
+        except Exception as exc:
+            print(f"  [GitHub] search error: {exc}")
+            break
+
+        logins = [it["login"] for it in items if it["login"] not in seen_logins]
+        seen_logins.update(logins)
+
+        # Fetch each org profile to get their website
+        for login in logins:
+            if len(websites) >= max_orgs:
+                break
+            try:
+                pr = requests.get(
+                    f"https://api.github.com/users/{login}",
+                    headers=headers,
+                    timeout=10,
+                )
+                pr.raise_for_status()
+                blog = (pr.json().get("blog") or "").strip()
+                if blog and blog.startswith("http") and "github" not in blog.lower():
+                    websites.append(blog)
+                    print(f"  [GitHub] {login} -> {blog}")
+                # Be polite — GitHub allows 30 authenticated req/min
+                time.sleep(0.5 if token else 2.0)
+            except Exception:
+                pass
+
+        if len(items) < per_page:
+            break  # last page
+        page += 1
+
+    print(f"  [GitHub] found {len(websites)} org websites for {country_code}")
+    return websites
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +302,7 @@ async def _async_crawl_site(
     session: aiohttp.ClientSession,
     url: str, source_query: str, max_pages: int, delay: float,
     country_code: str, country_cfg: dict,
+    min_score: int = 50,
 ) -> Lead | None:
     website = normalize_url(url)
     dom = domain_of(website)
@@ -245,6 +343,14 @@ async def _async_crawl_site(
                 if low not in seen and low not in queue:
                     queue.append(low)
         await asyncio.sleep(delay)
+
+        # --- Early exit after page 1: only drop sites with zero agency signal ---
+        # We use 0 (not min_score/2) so sites that score low on the homepage
+        # but reveal their agency nature on services/contact pages are not missed.
+        if len(seen) == 1:
+            _, _, quick_score = categorize(all_text, all_html, country_cfg)
+            if quick_score == 0:
+                return None
 
     if not all_text and not all_html:
         return None
@@ -291,12 +397,15 @@ async def _run_batch_async(
     connector = aiohttp.TCPConnector(limit=n, ssl=False)
     new_count = 0
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+        min_score = getattr(args, "min_score", 50)
+        _blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
         tasks = [
             asyncio.create_task(
                 _async_crawl_site(session, url, query, args.max_pages,
-                                  args.delay, code, configs.get(code, {}))
-            )
+                                  args.delay, code, configs.get(code, {}),
+                                  min_score=min_score))
             for url, query in batch
+            if not is_blocked(domain_of(url), _blocklist)
         ]
         for coro in asyncio.as_completed(tasks):
             try:
@@ -306,7 +415,11 @@ async def _run_batch_async(
                 continue
             if lead:
                 has_email = "yes" if lead.emails else "no"
+                min_score = getattr(args, "min_score", 50)
                 print(f"    -> {lead.priority} score={lead.reseller_score} email={has_email}  {lead.website}")
+                if lead.reseller_score <= min_score:
+                    print(f"       [skip] score {lead.reseller_score} <= {min_score} threshold")
+                    continue
                 all_leads.append(lead)
                 country_leads[code] = country_leads.get(code, 0) + 1
                 new_count += 1
@@ -377,6 +490,28 @@ def run(args) -> None:
     else:
         print(f"No per-country cap  |  Give up after {args.give_up_after} empty queries")
 
+    # --- GitHub org pre-pass: one search per country, prepend results to queue ---
+    if not getattr(args, "no_github", False):
+        print("\n[GitHub] Pre-pass: searching for agency orgs on GitHub...")
+        for code in countries:
+            cfg      = configs.get(code, {})
+            gh_urls  = github_org_search(cfg, code, max_orgs=200)
+            inserted = 0
+            for raw in gh_urls:
+                dom = domain_of(normalize_url(raw))
+                detected = country_for_domain(dom, countries, configs)
+                if (not is_blocked(dom, blocklist) and dom
+                        and dom not in seen_domains
+                        and (detected is None or detected == code)):
+                    pending[code].append((normalize_url(raw), f"github:{code}"))
+                    seen_domains.add(dom)
+                    inserted += 1
+            if inserted:
+                print(f"  [{code}] {inserted} GitHub orgs queued for crawling")
+                if len(pending[code]) >= batch_size:
+                    batch, pending[code] = pending[code][:batch_size], pending[code][batch_size:]
+                    _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads)
+
     def _flush(code: str, label: str = "") -> None:
         if not pending[code]:
             return
@@ -391,6 +526,9 @@ def run(args) -> None:
             if code in country_done:
                 continue
             if args.max_country and country_leads[code] >= args.max_country:
+                # Drain any already-queued sites before stopping
+                if pending[code]:
+                    _flush(code, f"Draining {len(pending[code])} queued sites before exit")
                 print(f"\n[{code}] Target of {args.max_country} leads reached.")
                 country_done.add(code)
                 continue
@@ -417,13 +555,16 @@ def run(args) -> None:
             for raw in urls:
                 url = clean_search_url(raw)
                 dom = domain_of(url)
-                detected_country = country_for_domain(dom, countries, configs) or code
+                # country_for_domain returns None for generic TLDs (.com/.net/.eu).
+                # A None result means the domain doesn't belong to any *other* country,
+                # so we accept it as a candidate for the current country query.
+                detected_country = country_for_domain(dom, countries, configs)
                 if is_product_or_content_url(url):
                     p = urlparse(url)
                     url = f"{p.scheme}://{p.netloc}/"
-                if (allowed_domain(dom, blocklist, countries, configs)
+                if (not is_blocked(dom, blocklist) and dom
                         and dom not in seen_domains
-                        and detected_country == code):
+                        and (detected_country is None or detected_country == code)):
                     if args.max_country and len(pending[code]) + country_leads[code] >= args.max_country:
                         break
                     pending[code].append((url, query))
@@ -442,7 +583,13 @@ def run(args) -> None:
                 country_streak[code] += 1
                 print(f"  [{code}] Nothing new — streak {country_streak[code]}/{args.give_up_after}")
                 if country_streak[code] >= args.give_up_after:
-                    _flush(code, f"Final batch of {len(pending[code])} sites")
+                    # Drain ALL remaining pending sites before giving up
+                    while pending[code]:
+                        batch_now = pending[code][:batch_size]
+                        pending[code] = pending[code][batch_size:]
+                        print(f"  [{code}] Draining {len(batch_now)} remaining sites...")
+                        _crawl_batch(batch_now, args, code, configs,
+                                     all_leads, Path(args.output), country_leads)
                     print(f"  [{code}] Giving up after {args.give_up_after} empty queries.")
                     country_done.add(code)
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -122,11 +123,15 @@ def _sortlist_urls_from_json(obj, blocklist: set[str]) -> list[str]:
 
 def catalog_links_sortlist(url: str, blocklist: set[str]) -> list[str] | None:
     """Sortlist Next.js SPA — parse __NEXT_DATA__, fall back to <a> scan.
-    Uses minimal headers (no Sec-Fetch-*) to bypass bot detection."""
+    Uses minimal headers (no Sec-Fetch-*) to bypass bot detection.
+    Returns [] on 404 (category doesn't exist for this country — stop cleanly).
+    Returns None on connection/server errors (skip page, try next)."""
     _ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     try:
         r = requests.get(url, headers={"User-Agent": _ua, "Accept-Language": "en;q=0.8"},
                          timeout=20, allow_redirects=True)
+        if r.status_code == 404:
+            return []   # category not available for this country — stop source quietly
         r.raise_for_status()
         html = r.text
     except Exception as e:
@@ -166,14 +171,22 @@ def catalog_links_sortlist(url: str, blocklist: set[str]) -> list[str] | None:
 # ---------------------------------------------------------------------------
 
 def catalog_links_designrush(url: str, blocklist: set[str]) -> list[str] | None:
-    """DesignRush listing page — minimal headers (no Sec-Fetch-*), scan <a> tags for
-    external agency website links. Pages are server-rendered HTML; no JS needed."""
+    """DesignRush — 2-step scraper.
+
+    DesignRush listing pages contain agency *profile* links (/agency/profile/...)
+    but not the agencies' actual websites (those are only on the profile page).
+    Step 1: collect profile URLs from the listing page.
+    Step 2: visit each profile and extract the external website link.
+    Returns None on fetch error, [] when source is exhausted (404).
+    """
     _ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    _h  = {"User-Agent": _ua, "Accept-Language": "en;q=0.8"}
+
+    # Step 1 — fetch listing page
     try:
-        r = requests.get(url, headers={"User-Agent": _ua, "Accept-Language": "en;q=0.8"},
-                         timeout=20, allow_redirects=True)
+        r = requests.get(url, headers=_h, timeout=20, allow_redirects=True)
         if r.status_code == 404:
-            return []   # no more pages for this country — stop source cleanly
+            return []   # no more pages — signal exhaustion so the loop stops
         r.raise_for_status()
         html = r.text
     except Exception as e:
@@ -181,22 +194,51 @@ def catalog_links_designrush(url: str, blocklist: set[str]) -> list[str] | None:
         return None
 
     if len(html) < 10_000:
-        print(f"    [catalog/designrush] page too small ({len(html):,} bytes) — bot challenge, skipping")
+        print(f"    [catalog/designrush] page too small ({len(html):,}B) — bot challenge, skipping")
         return None
 
-    found, seen = [], set()
-    catalog_dom = "designrush.com"
     soup = BeautifulSoup(html, "html.parser")
+
+    # Collect agency profile links from the listing
+    profiles, seen_p = [], set()
     for a in soup.find_all("a", href=True):
         href = a["href"].strip()
         if not href.startswith("http"):
-            href = urljoin(url, href)
-        dom = domain_of(href)
-        if dom and dom != catalog_dom and not is_blocked(dom, blocklist):
-            home = f"{urlparse(href).scheme}://{urlparse(href).netloc}/"
-            if home not in seen:
-                seen.add(home)
-                found.append(home)
+            href = "https://www.designrush.com" + href
+        # Profile pages match /agency/profile/ or /agencies/... patterns
+        if "designrush.com" in href and (
+            "/agency/profile/" in href or
+            re.search(r"/agencies?/[^/]+/[^/]+$", href)
+        ):
+            href = href.split("?")[0]
+            if href not in seen_p:
+                seen_p.add(href)
+                profiles.append(href)
+
+    if not profiles:
+        print(f"    [catalog/designrush] 0 profile links found on listing page — page may be JS-rendered or empty")
+        return None   # treat as transient error, not exhaustion
+
+    # Step 2 — visit each profile page and pull the agency's external website link
+    found, seen_d = [], set()
+    for purl in profiles[:30]:          # cap: 30 profiles per listing page
+        try:
+            pr = requests.get(purl, headers=_h, timeout=12, allow_redirects=True)
+            if pr.status_code != 200:
+                continue
+        except Exception:
+            continue
+        for a in BeautifulSoup(pr.text, "html.parser").find_all("a", href=True):
+            href = a["href"].strip()
+            if not href.startswith("http"):
+                continue
+            dom = domain_of(href)
+            if dom and "designrush" not in dom and not is_blocked(dom, blocklist) and dom not in seen_d:
+                found.append(f"{urlparse(href).scheme}://{urlparse(href).netloc}/")
+                seen_d.add(dom)
+                break                   # one website per agency profile
+        time.sleep(0.4)
+
     return found
 
 
@@ -394,13 +436,14 @@ def catalog_run(args) -> None:
                     print("fetch error — skipping page, continuing...")
                     continue
                 if not links:
-                    print("0 links found — catalog exhausted, stopping this source.")
+                    msg = "no page for this country — skipping." if page == 1 else "catalog exhausted."
+                    print(f"0 links — {msg}")
                     break
 
                 new_links = []
                 for url in links:
                     dom = domain_of(url)
-                    if dom and dom not in seen_domains:
+                    if dom and dom not in seen_domains and not is_blocked(dom, blocklist):
                         seen_domains.add(dom)
                         new_links.append((url, name))
                 print(f"{len(new_links)} new candidates (of {len(links)} found)")
@@ -417,7 +460,7 @@ def catalog_run(args) -> None:
             print(f"\n  [{code}] Flushing final batch of {len(pending)} sites")
             _crawl_batch(pending, args, code, configs, all_leads, Path(args.output), country_leads)
 
-        print(f"\n[{code}] Done \u2014 {country_leads.get(code, 0)} new leads from catalogs")
+        print(f"\n[{code}] Done — {country_leads.get(code, 0)} new leads from catalogs")
 
     print(f"\n{'='*60}\nCatalog run complete.")
     final_leads = dedupe_leads(all_leads)

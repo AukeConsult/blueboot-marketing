@@ -2460,5 +2460,376 @@
       "banque ",
       "comptabilité"
     ]
+  },
+  "TH": {
+    "name": "Thailand",
+    "tlds": [
+      ".th",
+      ".co.th",
+      ".in.th"
+    ],
+    "phone_region": "TH",
+    "accept_language": "th,en;q=0.8",
+    "keywords": {
+      "web_agency": [
+        "web design",
+        "web development",
+        "digital agency",
+        "website development",
+        "รับทำเว็บไซต์",
+        "เว็บดีไซน์",
+        "พัฒนาเว็บ",
+        "ออกแบบเว็บ",
+        "บริษัทเว็บ"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "search engine optimization",
+        "google ads",
+        "การตลาดออนไลน์",
+        "โฆษณาออนไลน์"
+      ],
+      "communication": [
+        "digital marketing",
+        "content",
+        "social media agency",
+        "บริษัทการตลาดดิจิทัล",
+        "public relations"
+      ],
+      "public_sector": [
+        "government",
+        "municipal",
+        "university",
+        "hospital",
+        "รัฐบาล",
+        "มหาวิทยาลัย"
+      ],
+      "ai_interest": [
+        "ai",
+        "artificial intelligence",
+        "automation",
+        "chatgpt",
+        "machine learning"
+      ]
+    },
+    "service_words": [
+      "our services",
+      "services",
+      "clients",
+      "portfolio",
+      "case studies",
+      "work",
+      "projects",
+      "บริการ",
+      "ผลงาน"
+    ],
+    "support_words": [
+      "maintenance",
+      "support",
+      "hosting",
+      "บำรุงรักษา"
+    ],
+    "contact_words": [
+      "contact",
+      "about",
+      "about-us",
+      "services",
+      "portfolio",
+      "work",
+      "ติดต่อ",
+      "เกี่ยวกับ"
+    ],
+    "agency_words": [
+      "we build websites",
+      "we develop",
+      "web project",
+      "our clients",
+      "case studies",
+      "digital solutions",
+      "partner",
+      "portfolio",
+      "we help businesses",
+      "offshore development",
+      "รับพัฒนา",
+      "เราช่วย"
+    ],
+    "negative_keywords": [
+      "add to cart",
+      "buy now",
+      "free shipping",
+      "checkout",
+      "in stock",
+      "order now",
+      "sku",
+      "restaurant",
+      "salon",
+      "dentist",
+      "clinic",
+      "real estate",
+      "pharmacy",
+      "insurance",
+      "bank ",
+      "ร้านอาหาร",
+      "สปา",
+      "ขายสินค้า",
+      "ราคา"
+    ]
+  },
+  "BR": {
+    "name": "Brazil",
+    "tlds": [
+      ".br",
+      ".com.br",
+      ".net.br"
+    ],
+    "phone_region": "BR",
+    "accept_language": "pt-BR,pt;q=0.9,en;q=0.7",
+    "keywords": {
+      "web_agency": [
+        "agência web",
+        "agencia web",
+        "desenvolvimento web",
+        "criação de sites",
+        "design web",
+        "web design",
+        "desenvolvimento de sites",
+        "agência digital",
+        "agencia digital"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "otimização para motores de busca",
+        "google ads",
+        "marketing de busca",
+        "search engine optimization"
+      ],
+      "communication": [
+        "agência de comunicação",
+        "marketing de conteúdo",
+        "conteúdo digital",
+        "relações públicas",
+        "mídia social",
+        "social media"
+      ],
+      "public_sector": [
+        "governo",
+        "prefeitura",
+        "municipal",
+        "universidade",
+        "hospital",
+        "setor público",
+        "órgão público"
+      ],
+      "ai_interest": [
+        "inteligência artificial",
+        "ia",
+        "ai",
+        "automação",
+        "chatgpt",
+        "machine learning",
+        "artificial intelligence"
+      ]
+    },
+    "service_words": [
+      "nossos serviços",
+      "serviços",
+      "clientes",
+      "portfólio",
+      "casos de sucesso",
+      "projetos",
+      "trabalhos",
+      "parceiros"
+    ],
+    "support_words": [
+      "manutenção",
+      "suporte",
+      "hospedagem",
+      "sustentação"
+    ],
+    "contact_words": [
+      "contato",
+      "sobre",
+      "sobre-nos",
+      "servicos",
+      "servicos",
+      "portfolio",
+      "projetos",
+      "contact",
+      "about"
+    ],
+    "agency_words": [
+      "criamos sites",
+      "desenvolvemos",
+      "projeto web",
+      "nossos clientes",
+      "cases de sucesso",
+      "soluções digitais para",
+      "parceiro",
+      "ajudamos empresas",
+      "portfólio",
+      "projetos realizados",
+      "we build",
+      "we develop"
+    ],
+    "negative_keywords": [
+      "adicionar ao carrinho",
+      "comprar agora",
+      "frete grátis",
+      "finalizar compra",
+      "em estoque",
+      "peça já",
+      "sku",
+      "restaurante",
+      "salão",
+      "dentista",
+      "clínica",
+      "imobiliária",
+      "oficina",
+      "creche",
+      "supermercado",
+      "farmácia",
+      "seguro",
+      "banco ",
+      "contador",
+      "contabilidade"
+    ]
+  },
+  "AR": {
+    "name": "Argentina",
+    "tlds": [
+      ".ar",
+      ".com.ar",
+      ".net.ar"
+    ],
+    "phone_region": "AR",
+    "accept_language": "es-AR,es;q=0.9,en;q=0.7",
+    "keywords": {
+      "web_agency": [
+        "agencia web",
+        "desarrollo web",
+        "diseño web",
+        "creación de sitios web",
+        "agencia digital",
+        "web design",
+        "desarrollo de sitios web",
+        "empresa de desarrollo web"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "optimización en buscadores",
+        "google ads",
+        "marketing en buscadores",
+        "posicionamiento web"
+      ],
+      "communication": [
+        "agencia de comunicación",
+        "marketing de contenidos",
+        "relaciones públicas",
+        "redes sociales",
+        "social media",
+        "contenido digital"
+      ],
+      "public_sector": [
+        "gobierno",
+        "municipio",
+        "municipalidad",
+        "universidad",
+        "hospital",
+        "sector público",
+        "organismo público"
+      ],
+      "ai_interest": [
+        "inteligencia artificial",
+        "ia",
+        "ai",
+        "automatización",
+        "chatgpt",
+        "machine learning",
+        "artificial intelligence"
+      ]
+    },
+    "service_words": [
+      "nuestros servicios",
+      "servicios",
+      "clientes",
+      "portafolio",
+      "portfolio",
+      "casos de éxito",
+      "proyectos",
+      "trabajos"
+    ],
+    "support_words": [
+      "mantenimiento",
+      "soporte",
+      "hosting",
+      "alojamiento"
+    ],
+    "contact_words": [
+      "contacto",
+      "sobre",
+      "sobre-nosotros",
+      "servicios",
+      "portfolio",
+      "proyectos",
+      "contact",
+      "about"
+    ],
+    "agency_words": [
+      "creamos sitios web",
+      "desarrollamos",
+      "proyecto web",
+      "nuestros clientes",
+      "casos de éxito",
+      "soluciones digitales para",
+      "socio",
+      "ayudamos empresas",
+      "portafolio",
+      "proyectos realizados",
+      "we build",
+      "we develop"
+    ],
+    "negative_keywords": [
+      "agregar al carrito",
+      "comprar ahora",
+      "envío gratis",
+      "finalizar compra",
+      "en stock",
+      "pedir ya",
+      "sku",
+      "restaurante",
+      "peluquería",
+      "dentista",
+      "clínica",
+      "inmobiliaria",
+      "taller mecánico",
+      "jardín de infantes",
+      "supermercado",
+      "farmacia",
+      "seguro",
+      "banco ",
+      "contador",
+      "contaduría"
+    ]
   }
 }
