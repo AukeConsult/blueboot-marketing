@@ -277,3 +277,101 @@ GOOGLE_CSE_ID=your_cse_id
 - Use reasonable rate limits (`--delay`, `--workers`) and only collect public business contact information.
 - This agent is designed for B2B lead research, not aggressive scraping or spam.
 - `blueboot_secrets.py` is never committed to version control.
+
+---
+
+## `statistics.py` — lead statistics & Firestore aggregations
+
+Reads all leads and contacts from Firestore, computes aggregated statistics, writes results back to a `statistics` collection, and exports Excel reports to `output/`.
+
+```bash
+cd app
+python statistics.py [options]
+```
+
+Runs **both** aggregations by default. Use `--only` to target one.
+
+### Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--leads-collection` | `leads` | Firestore collection to read leads from |
+| `--stats-collection` | `statistics` | Firestore collection to write statistics into |
+| `--output` | `output/` | Directory for Excel output files |
+| `--only` | _(both)_ | `priority` or `reasons` — run only one aggregation |
+| `--no-excel` | off | Skip writing Excel files |
+| `--no-writeback` | off | Skip writing `reasons-list` back to each lead document |
+
+### Aggregation 1 — Priority × Country
+
+Counts leads and contacts per country, broken down by priority (A / B / C / unset).
+
+Firestore structure written:
+
+```
+statistics/priority-pr-country               ← head document (grand totals + by_priority summary)
+statistics/priority-pr-country/countries/NO  ← one sub-document per country
+statistics/priority-pr-country/countries/SE
+...
+```
+
+Head document fields: `generated_at`, `total_leads`, `total_contacts`, `country_codes`, `by_priority`.
+
+Each country sub-document fields: `country`, `country_name`, `total_leads`, `total_contacts`, `by_priority`.
+
+Excel output: `output/statistics.xlsx` — sheets **Summary**, **By Priority**, **By Country**, **Country x Prio**.
+
+### Aggregation 2 — Reasons Count
+
+Parses each lead's `reasons` field (`;`-separated signals, `:`-separated label/detail, `/`-separated compound labels) into individual reason tokens, counts occurrences per country, and optionally writes the parsed list back to each lead.
+
+Delimiters applied in order:
+- `;` — separates distinct reason groups
+- `:` — strips detail, keeps label (`"wordpress: site, plugins"` → `"wordpress"`)
+- `/` — expands compound labels (`"has services/customers/cases language"` → `"has services"`, `"customers"`, `"cases language"`)
+
+Firestore structure written:
+
+```
+statistics/reasons-count               ← head document (global reason counts)
+statistics/reasons-count/countries/NO  ← one sub-document per country
+statistics/reasons-count/countries/SE
+...
+```
+
+Reason counts are stored as a list of `{reason, count}` objects sorted by count descending.
+
+Each lead document is also updated with a `reasons-list` field (array of parsed reason strings) unless `--no-writeback` is passed.
+
+Excel output: `output/statistics_reasons.xlsx` — sheets **Global Reasons**, **By Country**.
+
+### Example runs
+
+```bash
+# Run both aggregations (default)
+python statistics.py
+
+# Priority stats only, no Excel
+python statistics.py --only priority --no-excel
+
+# Reasons count only, skip writing back to leads
+python statistics.py --only reasons --no-writeback
+
+# Write to a non-default stats collection
+python statistics.py --stats-collection statistics_test
+```
+
+### Function API
+
+```python
+from statistics import summarise_country_pr_priority, summarise_reasons_count
+from statistics import export_to_excel, export_reasons_to_excel
+
+# Priority aggregation
+results = summarise_country_pr_priority(leads_collection="leads")
+export_to_excel(results, outdir="output")
+
+# Reasons aggregation (writeback on by default)
+results = summarise_reasons_count(leads_collection="leads", writeback=True)
+export_reasons_to_excel(results, outdir="output")
+```
