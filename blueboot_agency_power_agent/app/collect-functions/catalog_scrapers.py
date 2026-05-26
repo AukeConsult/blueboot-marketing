@@ -10,8 +10,8 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 
-from utils import domain_of, is_blocked, fetch, linkedin_hints, load_lines, load_country_configs, selected_countries, DEFAULT_COUNTRIES
-from models import Lead, dedupe_leads, export
+from app.functions.utils import domain_of, is_blocked, fetch, linkedin_hints, load_country_configs, selected_countries, DEFAULT_COUNTRIES
+from app.functions.models import Lead, dedupe_leads, export
 
 CATALOG_CONFIG_PATH = Path("config/catalogs.json")
 

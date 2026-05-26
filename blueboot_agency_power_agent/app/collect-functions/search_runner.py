@@ -15,17 +15,17 @@ import requests
 from bs4 import BeautifulSoup
 from rapidfuzz import fuzz
 
-from utils import (
+from app.functions.utils import (
     USER_AGENT, BROWSER_UA,
     normalize_url, domain_of, company_from_domain,
-    is_product_or_content_url, is_blocked, allowed_domain, country_for_domain,
+    is_blocked, country_for_domain,
     fetch, extract_meta, visible_text, extract_contacts, extract_phones,
     pair_phones_to_contacts, pair_names_to_contacts, extract_links, detect_tech, categorize, priority, angle,
     load_lines, load_country_configs, selected_countries, DEFAULT_COUNTRIES,
     linkedin_hints, normalize_phone_list,
 )
-from firebase_sync import upsert_lead
-from models import Lead, dedupe_leads, export
+from app.functions.firebase_sync import upsert_lead
+from app.functions.models import Lead, dedupe_leads, export
 
 
 # ---------------------------------------------------------------------------

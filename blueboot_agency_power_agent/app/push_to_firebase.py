@@ -35,8 +35,8 @@ def main() -> None:
         print(f"No CSV found at {csv_path}")
         sys.exit(1)
 
-    from models import load_existing_leads
-    from firebase_sync import sync_leads
+    from app.functions.models import load_existing_leads
+    from app.functions.firebase_sync import sync_leads
 
     leads = load_existing_leads(Path(args.output))
     if not leads:

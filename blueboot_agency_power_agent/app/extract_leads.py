@@ -40,11 +40,9 @@ Function API:
 """
 from __future__ import annotations
 
-import argparse
 import re
 import importlib.util
 import os
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -54,7 +52,7 @@ import pandas as pd
 import sys as _sys
 import os as _os
 _sys.path.insert(0, _os.path.dirname(__file__))
-from utils import clean_contact_name as _clean_contact_name
+from app.functions.utils import clean_contact_name as _clean_contact_name
 
 
 # ---------------------------------------------------------------------------

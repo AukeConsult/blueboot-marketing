@@ -11,11 +11,11 @@ from typing import TYPE_CHECKING
 from dotenv import load_dotenv
 
 from catalog_scrapers import catalog_run
-from models import lead_id_from_url
+from app.functions.models import lead_id_from_url
 from search_runner import run
 
 if TYPE_CHECKING:
-    from models import Lead
+    from app.functions.models import Lead
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +304,7 @@ def main() -> None:
         print("="*60)
         search_leads = run(args) or []
         # Merge: run() already loaded existing leads internally, so dedupe both lists
-        from models import dedupe_leads as _dd
+        from app.functions.models import dedupe_leads as _dd
         leads = _dd(leads + search_leads)
 
     # Each lead is already upserted to Firebase immediately after scraping.

@@ -16,10 +16,10 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from models import lead_id_from_url
+from app.functions.models import lead_id_from_url
 
 if TYPE_CHECKING:
-    from models import Lead
+    from app.functions.models import Lead
 
 
 def _lead_id(website: str) -> str:
