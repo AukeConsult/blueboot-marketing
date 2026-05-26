@@ -164,11 +164,12 @@ def sync_leads(leads: list["Lead"]) -> None:
 
     db  = firestore.client()
     col = db.collection(collection)
-    MAX_BATCH = 400
-    batch      = db.batch()
-    ops        = 0
-    lead_count = 0
-    contact_count = 0
+    MAX_BATCH      = 400
+    PROGRESS_EVERY = 100
+    batch          = db.batch()
+    ops            = 0
+    lead_count     = 0
+    contact_count  = 0
 
     def _flush():
         nonlocal batch, ops
@@ -188,6 +189,10 @@ def sync_leads(leads: list["Lead"]) -> None:
         batch.set(col.document(lead_id), lead_doc, merge=True)
         ops += 1
         lead_count += 1
+
+        if lead_count % PROGRESS_EVERY == 0:
+            print(f"  [firebase] {lead_count} leads written so far…")
+
         for contact in _parse_contacts(lead):
             cid = _contact_id(contact["email"])
             batch.set(col.document(lead_id).collection("contacts").document(cid),
@@ -196,5 +201,6 @@ def sync_leads(leads: list["Lead"]) -> None:
             contact_count += 1
         if ops >= MAX_BATCH:
             _flush()
+
     _flush()
     print(f"  [firebase] synced {lead_count} leads + {contact_count} contacts -> {collection}")

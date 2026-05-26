@@ -71,7 +71,7 @@ python lead_agent.py [options]
 
 | Parameter | Default | Description |
 |---|---|---|
-| `--mode` | `both` | `search` = Bing/Google keyword search; `catalog` = scrape directory listings; `both` = catalog first, then search |
+| `--mode` | `both` | `search` = Bing/Google keyword search; `catalog` = scrape directory listings; `both` = catalog first, then search; `audit` = run database cleanup passes (see below) |
 | `--countries` | all configured | Comma-separated ISO codes, e.g. `NO,SE,DK` |
 | `--queries` | _(per-country files)_ | Path to a custom queries file (overrides per-country files) |
 | `--output` | `output` | Directory for Excel/CSV/JSON output files |
@@ -88,6 +88,21 @@ python lead_agent.py [options]
 | `--no-github` | off | Skip the GitHub org pre-pass |
 | `--firebase-preload` | off | _(legacy flag, now always active)_ Preload seen domains from Firestore |
 | `--firebase-collection` | `leads` | Override Firestore collection name |
+
+### Audit mode (`--mode audit`)
+
+Scans the entire `leads` collection and applies three cleanup passes. Always run with `--audit-dry-run` first.
+
+```bat
+python app\lead_agent.py --mode audit --audit-dry-run
+python app\lead_agent.py --mode audit
+```
+
+| Pass | What it does |
+|---|---|
+| **Pass 1 — TLD corrections** | Leads with a ccTLD belonging to a different known country are re-assigned (`country` + `country_name` updated, original saved to `country_original`). Leads with a global TLD (`.com` / `.org` / `.net`, configurable in `countries.json` → `global_tlds`) are set to `country="*"` / `country_name="global"`. Leads with an unrecognised TLD not in `accepted_tlds` are deleted. |
+| **Pass 2 — Contact audit** | Contacts with a blank or malformed email address are deleted. |
+| **Pass 3 — Blocklist re-check** | Leads whose domain, website URL, company name, title, or description match the blocklist or content-negative keywords are deleted. |
 
 ### Discovery modes (`--mode`)
 
@@ -115,12 +130,13 @@ python app/lead_agent.py --countries NO --no-output --no-firebase
 
 ## `extract_leads.py` — export a filtered extract from Firestore
 
-Reads lead documents and their contacts sub-collections directly from Firestore and writes a focused Excel file. No local CSV is required.
+Reads lead documents and their contacts sub-collections directly from Firestore and writes a focused Excel file. No local CSV is required. Global leads (`country="*"`) are excluded from all extracts.
 
-```bash
-cd app
-python extract_leads.py [options]
+```bat
+python app\extract_leads.py [options]
 ```
+
+### Filter parameters
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -128,36 +144,81 @@ python extract_leads.py [options]
 | `--output` | `<project_root>/output` | Directory to write the Excel file |
 | `--min-score` | `0` | Minimum reseller_score to include |
 | `--max-score` | `100` | Maximum reseller_score to include |
-| `--country CODE` | all | Country code to include (repeatable: `--country NO --country SE`) |
-| `--source` | all | `search` / `catalog` / `both` — filter by how the lead was discovered |
-| `--query TEXT` | _(none)_ | Substring match on source_query (case-insensitive) |
-| `--priority P` | all | Priority label to include (repeatable: `--priority A --priority B`) |
-| `--with-email` | off | Only include leads that have at least one contact email |
+| `--country CODE` | all | Country code(s), comma-separated or repeatable: `--country NO,SE` |
+| `--source` | all | `search` / `catalog` / `both` — filter by discovery mode |
+| `--query TEXT` | _(none)_ | Substring match on `source_query` (case-insensitive) |
+| `--priority P` | all | Priority label(s), repeatable: `--priority A --priority B` |
+| `--with-email` | off | Only include leads with at least one contact email |
+| `--keywords KW` | _(none)_ | Comma-separated keywords (OR logic). A lead matches if **any** keyword appears in `source_query`, `title`, `description`, `company`, `domain`, `website`, `keywords`, or `reasons`. E.g. `--keywords wordpress,woocommerce` |
+| `--limit N` | _(none)_ | Maximum number of leads to include. Applied after all other filters; stops the Firestore stream early once reached. |
 | `--out FILE` | auto-timestamped | Output filename |
 
-The output Excel contains three sheets:
+### Save-extract parameters
+
+Saving an extract persists the filtered leads to a dedicated `leads_extract` Firestore collection. A lead can only belong to **one** extract — any lead already in a previous extract is automatically skipped (detected via a `collectionGroup` query on `leads_extracted`, no fields are written back to the main `leads` collection).
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--save-extract NAME` | _(none)_ | Save extract to `leads_extract/<NAME>` in Firestore |
+| `--extract-dry-run` | off | Preview what `--save-extract` would write without touching Firestore |
+
+### Firestore structure written by `--save-extract`
+
+```
+leads_extract/
+  {extract_name}/
+    name, created_at, lead_count, contact_count, filters{…}
+    leads_extracted/
+      {lead_id}/
+        (all lead fields)
+        contacts_extracted/
+          {contact_id}/   (all contact fields)
+```
+
+### Output Excel sheets
 
 - **Extract** — one row per email contact with all lead fields merged in; leads without email appear at the bottom.
 - **Leads** — one row per lead (raw Firestore fields).
-- **Summary** — filter criteria and counts.
+- **Summary** — filter criteria, counts, and extract name.
 
-### Example extracts
+### Example runs
 
-```bash
-# A-priority Norwegian leads with email, score ≥ 70
-python extract_leads.py --min-score 70 --country NO --priority A --with-email
+```bat
+REM A-priority Norwegian leads with email, score ≥ 70
+python app\extract_leads.py --min-score 70 --country NO --priority A --with-email
 
-# Catalog-sourced leads across Norway and Sweden
-python extract_leads.py --source catalog --country NO --country SE
+REM Catalog-sourced leads across Norway and Sweden
+python app\extract_leads.py --source catalog --country NO,SE
 
-# All leads matching a specific query keyword
-python extract_leads.py --query "webbyrå"
+REM All leads matching a specific query keyword
+python app\extract_leads.py --query "webbyrå"
 
-# Score 60–80, save to a named file
-python extract_leads.py --min-score 60 --max-score 80 --out shortlist.xlsx
+REM Keyword search — WordPress or WooCommerce leads
+python app\extract_leads.py --keywords wordpress,woocommerce
+
+REM Dry-run: preview what would be saved to Firestore
+python app\extract_leads.py ^
+  --keywords wordpress ^
+  --country NO,SE ^
+  --min-score 60 ^
+  --save-extract "wordpress_nordic_may26" ^
+  --extract-dry-run
+
+REM Live save — writes to leads_extract/wordpress_nordic_may26
+python app\extract_leads.py ^
+  --keywords wordpress ^
+  --country NO,SE ^
+  --min-score 60 ^
+  --save-extract "wordpress_nordic_may26"
+
+REM Second extract — already-extracted leads are skipped automatically
+python app\extract_leads.py ^
+  --keywords shopify ^
+  --country NO,SE ^
+  --save-extract "shopify_nordic_jun01"
 ```
 
-Function API:
+### Function API
 
 ```python
 from extract_leads import extract_leads
@@ -168,6 +229,9 @@ path = extract_leads(
     source="search",
     priorities=["A", "B"],
     with_email=True,
+    keywords=["wordpress", "woocommerce"],
+    save_extract="wordpress_nordic_may26",
+    extract_dry_run=False,
     out_file="my_extract.xlsx",
 )
 ```
@@ -247,9 +311,16 @@ Blocklist filtering applies to **search mode only**. Catalog sources are pre-cur
 Results are written to Firestore in real time as each site is crawled. Structure:
 
 ```
-leads/{lead_id}                  — one document per agency
-leads/{lead_id}/contacts/{id}    — one document per email address
+leads/{lead_id}                                                  — one document per agency
+leads/{lead_id}/contacts/{id}                                    — one document per email address
+
+leads_extract/{extract_name}                                     — one document per named extract
+leads_extract/{extract_name}/leads_extracted/{lead_id}           — extracted lead snapshot
+leads_extract/{extract_name}/leads_extracted/{lead_id}/
+    contacts_extracted/{contact_id}                              — extracted contact snapshot
 ```
+
+The `leads_extract` collection is populated by `extract_leads.py --save-extract`. A lead can belong to at most one extract; duplicates are detected via a `collectionGroup` query on `leads_extracted` before each run.
 
 Credentials are loaded from (in order):
 

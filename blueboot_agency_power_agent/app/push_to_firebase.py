@@ -7,6 +7,7 @@ Usage:
 """
 from __future__ import annotations
 
+import _pathsetup  # noqa: F401 — adds project root, app/, app/functions/, app/collect-functions/ to sys.path
 import argparse
 import os
 import sys

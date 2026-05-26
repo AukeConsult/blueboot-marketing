@@ -76,6 +76,7 @@ netlify.com
 cloudflare.com
 
 # === NEWS & MEDIA ===
+thetimes.*
 forbes.com
 reuters.com
 bbc.*
@@ -132,6 +133,7 @@ quora.com
 reddit.com
 
 # === MARKETING / CRM VENDORS (the platforms, not agencies using them) ===
+*Visit*
 hubspot.com
 salesforce.com
 mailchimp.com
@@ -412,6 +414,55 @@ hotels.*
 *fahrzeughandel*
 
 # --- Finance / Banking (specific institutions, not fintech agencies) ---
+# --- Finance / Banking / Insurance (domain glob patterns) ---
+*Bankofamerica*
+*bank*
+*sparebank*
+*savings*bank*
+*credit*union*
+*insurance*
+*assurance*
+*forsikring*
+*verzekering*
+*versicherung*
+*assicurazione*
+*aseguradora*
+*ubezpieczenie*
+*biztosito*
+*kindlustus*
+*apdrošin*
+*draudimas*
+*mortgage*
+*hypothek*
+*boliglån*
+*boliglan*
+*bolån*
+*bolan*
+*finans*
+*finanz*
+*investering*
+*investeringer*
+*fondsforvaltning*
+*pensjonskasse*
+*pensionsfond*
+*pensionsfonds*
+*pensionskasse*
+*kapitalforvaltning*
+*formueforvaltning*
+*vermoegensverwaltung*
+*regnskap*
+*regnskaps*
+*revisor*
+*revisjon*
+*revisjons*
+*wirtschaftsprüfer*
+*steuerberater*
+*buchhalter*
+*buchhaltung*
+*skattekontor*
+*ligningskontor*
+*skattemyndigheten*
+
 *sparkasse*
 *volksbank*
 *raiffeisenbank*
@@ -539,6 +590,70 @@ hotels.*
 # Covers all configured languages. E-commerce/cart signals kept in countries.json.
 # =============================================================================
 
+
+# --- Adult / Explicit Content (content negative keywords — all languages) ---
+# Single occurrence in title/description is enough to disqualify
+porn
+pornhub
+pornography
+xvideos
+xhamster
+redtube
+youporn
+brazzers
+onlyfans
+chaturbate
+cam4
+livecam
+livejasmin
+webcam girls
+webcam sex
+camgirl
+camsite
+adult entertainment
+adult content
+adult film
+adult video
+erotic
+erotica
+erotik
+erotisch
+erotique
+erótico
+erotico
+erotyczny
+erotisk
+sexfilm
+sexvideo
+sex chat
+sexting
+escortservice
+escort service
+escort girl
+escort girls
+escorts
+incall
+outcall
+stripclub
+strip club
+lapdance
+peepshow
+striptease
+hentai
+anime porn
+milf
+fetish
+bdsm
+bondage
+dominatrix
+nudity
+nude
+naked
+naughty
+nsfw
+playboy
+penthouse
+hustler
 # --- NO ---
 frisør
 restaurant
@@ -555,7 +670,7 @@ dagligvare
 supermarked
 apotek
 forsikring
-bank 
+bank
 revisjon
 regnskap
 
@@ -597,7 +712,7 @@ päiväkoti
 päivittäistavarat
 apteekki
 vakuutus
-pankki 
+pankki
 kirjanpito
 tilitoimisto
 
@@ -624,7 +739,7 @@ agent immobilier
 supermarché
 pharmacie
 assurance
-banque 
+banque
 comptabilité
 
 # --- DE ---
@@ -767,7 +882,7 @@ bērnudārzs
 veikals
 aptieka
 apdrošināšana
-banka 
+banka
 grāmatvedība
 
 # --- LT ---
@@ -784,7 +899,7 @@ darželis
 prekybos centras
 vaistinė
 draudimas
-bankas 
+bankas
 buhalterija
 
 # --- IN ---
@@ -819,6 +934,54 @@ inmobiliaria
 jardín de infantes
 contaduría
 
+
+
+# --- Finance / Banking / Accounting (content — all languages) ---
+nettbank
+nettbank
+internetbank
+online banking
+mobile banking
+kontoinformasjon
+kontosaldo
+rentenivå
+innskudd
+spareprodukt
+lånekalkulator
+refinansiering
+kredittramme
+kredittkort
+kundekonto
+kontonummer
+årsregnskap
+regnskapstall
+skattemelding
+skattemeldingen
+mva-melding
+faktura
+bilagsføring
+lønnssystem
+lønnsutbetaling
+bokføring
+årsrapport
+halvårsrapport
+kvartalsrapport
+prospekt
+emisjon
+tegningsinnbydelse
+obligasjon
+aksjer
+fondskonto
+aksjesparekonto
+isk-konto
+innskuddsgaranti
+finanstilsynet
+basel
+solvens
+likviditetsreserve
+primærkapital
+ansvarlig kapital
+kapitaldekningsgrad
 
 # =============================================================================
 # === MANUALLY BLOCKED ========================================================

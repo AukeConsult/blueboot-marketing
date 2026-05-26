@@ -27,6 +27,7 @@ Head document includes a by_priority summary across ALL countries:
 """
 from __future__ import annotations
 
+import _pathsetup  # noqa: F401 — adds project root, app/, app/functions/, app/collect-functions/ to sys.path
 import os
 from collections import defaultdict
 from datetime import datetime
@@ -434,22 +435,28 @@ def summarise_reasons_count(
     # Write reasons-list back to each lead document (batch, optional)
     # ------------------------------------------------------------------
     if writeback:
-        print(f"  [reasons] writing reasons-list back to {len(lead_reasons_list)} lead docs ...")
-        MAX_BATCH = 400
+        total_wb = len(lead_reasons_list)
+        print(f"  [reasons] writing reasons-list back to {total_wb} lead docs ...")
+        MAX_BATCH      = 400
+        PROGRESS_EVERY = 100
         batch = db.batch()
         ops   = 0
+        done  = 0
 
         for doc_id, r_list in lead_reasons_list.items():
             batch.update(leads_col.document(doc_id), {"reasons-list": r_list})
-            ops += 1
+            ops  += 1
+            done += 1
             if ops >= MAX_BATCH:
                 batch.commit()
                 batch = db.batch()
                 ops   = 0
+            if done % PROGRESS_EVERY == 0:
+                print(f"  [reasons] {done}/{total_wb} docs updated…")
 
         if ops:
             batch.commit()
-        print(f"  [reasons] reasons-list written to all lead docs.")
+        print(f"  [reasons] reasons-list written to all {total_wb} lead docs.")
     else:
         print(f"  [reasons] writeback skipped (writeback=False).")
 

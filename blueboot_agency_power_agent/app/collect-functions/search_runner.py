@@ -18,7 +18,7 @@ from rapidfuzz import fuzz
 from app.functions.utils import (
     USER_AGENT, BROWSER_UA,
     normalize_url, domain_of, company_from_domain,
-    is_blocked, country_for_domain,
+    is_blocked, country_for_domain, tld_accepted_for,
     fetch, extract_meta, visible_text, extract_contacts, extract_phones,
     pair_phones_to_contacts, pair_names_to_contacts, extract_links, detect_tech, categorize, priority, angle,
     load_lines, load_country_configs, selected_countries, DEFAULT_COUNTRIES,
@@ -611,7 +611,8 @@ def run(args) -> None:
                 if (not is_blocked(dom, blocklist) and dom
                         and dom not in seen_domains
                         and dom not in rejected_domains
-                        and (detected_country is None or detected_country == code)):
+                        and (detected_country == code
+                     or (detected_country is None and tld_accepted_for(dom, code, configs)))):
                     if args.max_country and len(pending[code]) + country_leads[code] >= args.max_country:
                         break
                     pending[code].append((url, query))

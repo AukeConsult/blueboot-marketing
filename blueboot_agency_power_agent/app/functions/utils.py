@@ -108,7 +108,7 @@ linkedin_hints: dict[str, str] = {}
 
 def _load_content_negative_keywords() -> list[str]:
     """Read the CONTENT NEGATIVE KEYWORDS section from blocklist_domains.txt."""
-    bl = Path(__file__).parent.parent / "config" / "blocklist_domains.txt"
+    bl = Path(__file__).parent.parent.parent / "config" / "blocklist_domains.txt"
     if not bl.exists():
         return []
     in_section = False
@@ -180,12 +180,57 @@ def allowed_domain(domain: str, blocklist: set[str], countries: list[str], confi
 
 
 def country_for_domain(domain: str, countries: list[str], configs: dict) -> str | None:
+    """Return the country code whose country-specific TLD matches *domain*, or None."""
     domain_l = domain.lower()
     for code in countries:
         for tld in configs.get(code, {}).get("tlds", []):
             if domain_l.endswith(tld):
                 return code
     return None
+
+
+_UNIVERSAL_TLDS = {".com", ".org", ".net"}  # default fallback; overridden by load_global_tlds()
+
+
+def load_global_tlds(configs: dict | None = None) -> set[str]:
+    """Return the set of global/universal TLDs from config.
+
+    Reads the top-level ``global_tlds`` list from *countries.json*.
+    Falls back to the hard-coded ``_UNIVERSAL_TLDS`` set if the key is absent.
+    """
+    if configs is None:
+        try:
+            configs = load_country_configs()
+        except Exception:
+            configs = {}
+    raw = configs.get("global_tlds", [])
+    return set(raw) if raw else set(_UNIVERSAL_TLDS)
+
+
+def is_global_tld(domain: str, configs: dict | None = None) -> bool:
+    """Return True if *domain* ends with one of the configured global TLDs."""
+    gtlds = load_global_tlds(configs)
+    domain_l = domain.lower()
+    return any(domain_l.endswith(t) for t in gtlds)
+
+
+def tld_accepted_for(domain: str, country_code: str, configs: dict) -> bool:
+    """Return True if *domain*'s TLD is in the accepted_tlds list for *country_code*.
+
+    Global TLDs (.com / .org / .net by default, configurable via countries.json
+    ``global_tlds`` key) are always accepted for every country and are never
+    blocked regardless of what the per-country accepted_tlds list contains.
+
+    Falls back to True when accepted_tlds is not configured (backward-compatible).
+    """
+    domain_l = domain.lower()
+    # Global TLDs are always OK — no need to list them per country
+    if is_global_tld(domain_l, configs):
+        return True
+    accepted = configs.get(country_code, {}).get("accepted_tlds", [])
+    if not accepted:
+        return True  # no config → accept all (safe default)
+    return any(domain_l.endswith(tld) for tld in accepted)
 
 # ---------------------------------------------------------------------------
 # Config / file helpers
@@ -634,11 +679,47 @@ def categorize(text: str, html: str, country_cfg: dict) -> tuple[set[str], list[
     # (e.g. 'Lucky Sushi' or 'Sjakk-Matt frisør' on a web agency portfolio).
     # A site that IS a restaurant/hairdresser/etc. uses the word many times.
     _text_low = text.lower()
-    neg_hits = [kw for kw in _CONTENT_NEG_KWS if _text_low.count(kw) >= 2]
+    # Adult/explicit terms: one occurrence is enough — unambiguous
+    _ADULT_CONTENT_KWS = {
+        "porn", "pornhub", "pornography", "xvideos", "xhamster", "redtube",
+        "youporn", "brazzers", "onlyfans", "chaturbate", "cam4", "livecam",
+        "livejasmin", "webcam girls", "webcam sex", "camgirl", "camsite",
+        "adult entertainment", "adult content", "adult film", "adult video",
+        "erotic", "erotica", "erotik", "erotisch", "erotique",
+        "erotyczny", "erotisk", "sexfilm", "sexvideo", "sex chat",
+        "sexting", "escortservice", "escort service", "escort girl",
+        "escort girls", "escorts", "incall", "outcall", "stripclub",
+        "strip club", "lapdance", "peepshow", "striptease", "hentai",
+        "anime porn", "milf", "fetish", "bdsm", "bondage", "dominatrix",
+        "nudity", "nude", "naked", "naughty", "nsfw", "playboy",
+        "penthouse", "hustler",
+    }
+    adult_hits = [kw for kw in _ADULT_CONTENT_KWS if kw in _text_low]
+    if adult_hits:
+        score -= 90
+        reasons.append(f"ADULT-CONTENT penalty ({', '.join(adult_hits[:3])}): -90")
+
+    # All other negative keywords: require ≥2 occurrences (avoid false positives
+    # from single client-name mentions like "Sushi Bar" on an agency portfolio).
+    neg_hits = [kw for kw in _CONTENT_NEG_KWS if kw not in _ADULT_CONTENT_KWS and _text_low.count(kw) >= 2]
     if neg_hits:
         penalty = min(len(neg_hits) * 30, 90)
         score -= penalty
         reasons.append(f"NON-AGENCY penalty ({', '.join(neg_hits[:3])}): -{penalty}")
+
+    # --- Core-signal gate ---------------------------------------------------
+    # A site must have at least ONE web_agency keyword OR one agency_words hit
+    # to be considered a real agency candidate.  Without that gate, banks,
+    # telcos, etc. can score highly via seo + communication + ai + services.
+    has_agency_kw   = "web_agency" in cats
+    has_agency_lang = any(
+        x.lower() in hay for x in country_cfg.get("agency_words", [])
+    )
+    if not has_agency_kw and not has_agency_lang:
+        if score > 35:
+            reasons.append("core-signal cap applied (no web_agency keyword or agency language)")
+            score = 35
+
     return cats, reasons, max(min(score, 100), 0)
 
 
