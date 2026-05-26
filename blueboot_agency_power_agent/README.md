@@ -37,36 +37,6 @@ cp .env.example .env
 
 ---
 
-## Running
-
-### Windows
-
-```bat
-run.bat
-```
-
-Or with arguments:
-
-```bat
-run.bat --countries NO,SE --mode both --max-country 100
-```
-
-### Mac / Linux
-
-```bash
-chmod +x run.sh
-./run.sh --countries NO,SE --mode both --max-country 100
-```
-
-### Direct
-
-```bash
-cd app
-python lead_agent.py [options]
-```
-
----
-
 ## `lead_agent.py` — all parameters
 
 | Parameter | Default | Description |
