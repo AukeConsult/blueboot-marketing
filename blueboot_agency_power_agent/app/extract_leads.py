@@ -158,12 +158,13 @@ def extract_leads(
     keywords        : list of keywords (OR logic) — a lead matches if ANY keyword
                       appears in source_query, keywords, title, description,
                       company, domain, website, or reasons (case-insensitive)
-    save_extract    : if set, save this extract as a named document in the
-                      ``leads_extract`` Firestore collection.  The name becomes
-                      the document ID (spaces → underscores).  Each lead is
-                      written to a ``leads_extracted`` sub-collection and each
-                      contact to ``contacts_extracted`` under that lead.
-                      A lead already claimed by another extract is skipped.
+    save_extract    : if set to a name, save this extract as a named document in
+                      the ``leads_extract`` Firestore collection.  The name becomes
+                      the document ID (spaces → underscores).  Each lead is written
+                      to a ``leads_extracted`` sub-collection and each contact to
+                      ``contacts_extracted`` under that lead.  A lead already claimed
+                      by another extract is skipped.
+                      If None (no name given), the save is treated as a dry run.
     extract_dry_run : when True (and save_extract is set), print what would be
                       saved without writing anything to Firestore.
     limit           : maximum number of leads to include (applied after all
@@ -189,13 +190,22 @@ def extract_leads(
     # ------------------------------------------------------------------
     # Guard: abort if the named extract already exists in Firestore
     # ------------------------------------------------------------------
+    # Derive a clean extract filename early — used for the Excel name regardless
+    # of whether the Firestore write is skipped later.
+    _extract_file_stem: str | None = None
+    if save_extract:
+        _extract_file_stem = re.sub(r"[^a-zA-Z0-9_\-]", "_", save_extract).strip("_") or "extract"
+
     if save_extract and not extract_dry_run:
-        extract_id_check = re.sub(r"[^a-zA-Z0-9_\-]", "_", save_extract).strip("_") or "extract"
-        existing = db.collection("leads_extract").document(extract_id_check).get()
+        existing = db.collection("leads_extract").document(_extract_file_stem).get()
         if existing.exists:
-            print(f"[extract_leads] Extract '{extract_id_check}' already exists in Firestore — aborting.")
-            print(f"[extract_leads] Use a different --save-extract name, or delete the existing extract first.")
-            return None
+            print(f"[extract_leads] Extract '{_extract_file_stem}' already exists — reading from Firestore and writing Excel only.")
+            return _excel_from_existing_extract(
+                db=db,
+                extract_id=_extract_file_stem,
+                output_dir=output_dir,
+                out_file=out_file,
+            )
 
     # ------------------------------------------------------------------
     # Pre-load already-extracted lead IDs via collectionGroup
@@ -493,9 +503,8 @@ def extract_leads(
     # Write Excel
     # ------------------------------------------------------------------
     if not out_file:
-        if save_extract:
-            extract_id_for_file = re.sub(r"[^a-zA-Z0-9_\-]", "_", save_extract).strip("_") or "extract"
-            out_file = f"{extract_id_for_file}.xlsx"
+        if _extract_file_stem:
+            out_file = f"{_extract_file_stem}.xlsx"
         else:
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
             out_file = f"extract_leads_{ts}.xlsx"
@@ -534,6 +543,136 @@ def extract_leads(
             dry_run=extract_dry_run,
         )
 
+    return out_path
+
+
+# ---------------------------------------------------------------------------
+# Re-build Excel from an existing Firestore extract (already-exists path)
+# ---------------------------------------------------------------------------
+
+def _excel_from_existing_extract(
+    db,
+    extract_id: str,
+    output_dir: Path,
+    out_file: str | None,
+) -> Path | None:
+    """Read leads_extracted + contacts_extracted from an existing extract document
+    and write (or overwrite) its Excel file without touching any Firestore data.
+    """
+    ex_doc = db.collection("leads_extract").document(extract_id)
+    header = ex_doc.get().to_dict() or {}
+
+    print(f"[extract] Re-reading '{extract_id}' from Firestore…")
+
+    PROGRESS_EVERY = 100
+    lead_rows: list[dict] = []
+    contact_rows: list[dict] = []
+
+    for ldoc in ex_doc.collection("leads_extracted").stream():
+        lead_rows.append(ldoc.to_dict() or {})
+        if len(lead_rows) % PROGRESS_EVERY == 0:
+            print(f"[extract] {len(lead_rows)} leads read…")
+        for cdoc in ldoc.reference.collection("contacts_extracted").stream():
+            contact_rows.append(cdoc.to_dict() or {})
+
+    print(f"[extract] {len(lead_rows)} leads, {len(contact_rows)} contacts read from existing extract.")
+
+    # Reconstruct the same DataFrames the normal path produces
+    leads_df = pd.DataFrame(lead_rows) if lead_rows else pd.DataFrame()
+    _LEADS_DROP = {"email_phones", "email_names"}
+    if not leads_df.empty:
+        leads_df.drop(columns=[c for c in _LEADS_DROP if c in leads_df.columns], inplace=True)
+    if not leads_df.empty and "reseller_score" in leads_df.columns:
+        leads_df["reseller_score"] = pd.to_numeric(
+            leads_df["reseller_score"], errors="coerce"
+        ).fillna(0).astype(int)
+
+    CONTACT_COLS  = ["email", "name", "title", "phone"]
+    CONTACT_SHARED = {"lead_id", "company", "domain", "website", "country", "linkedin"}
+    lead_by_id: dict[str, dict] = {}
+    for r in lead_rows:
+        lid = r.get("lead_id") or r.get("domain", "")
+        if lid:
+            lead_by_id[lid] = r
+
+    flat_rows: list[dict] = []
+    for c in contact_rows:
+        lid  = c.get("lead_id") or ""
+        lead = lead_by_id.get(lid, {})
+        row  = {}
+        for col_name_c in CONTACT_COLS:
+            row[col_name_c] = c.get(col_name_c, "")
+        for k in CONTACT_SHARED:
+            row[k] = c.get(k) or lead.get(k, "")
+        for k, v in lead.items():
+            if k not in row:
+                row[k] = v
+        row["phone"] = _best_phone(
+            contact_phone=c.get("phone", ""),
+            lead_phones=lead.get("phones", ""),
+        )
+        flat_rows.append(row)
+
+    lids_with_contact = {c.get("lead_id") or "" for c in contact_rows}
+    for r in lead_rows:
+        lid = r.get("lead_id") or r.get("domain", "")
+        if lid not in lids_with_contact:
+            row = {col_name_c: "" for col_name_c in CONTACT_COLS}
+            row.update(r)
+            row["phone"] = _best_phone(
+                contact_phone="",
+                lead_phones=r.get("phones", ""),
+            )
+            flat_rows.append(row)
+
+    flat_df = pd.DataFrame(flat_rows) if flat_rows else pd.DataFrame()
+    DROP_COLS = {"phones", "email_phones", "email_names"}
+    if not flat_df.empty:
+        flat_df.drop(columns=[c for c in DROP_COLS if c in flat_df.columns], inplace=True)
+    if not flat_df.empty:
+        front = [c for c in CONTACT_COLS if c in flat_df.columns]
+        rest  = sorted(c for c in flat_df.columns if c not in front)
+        flat_df = flat_df[front + rest]
+        sort_cols = []
+        if "reseller_score" in flat_df.columns:
+            flat_df["reseller_score"] = pd.to_numeric(
+                flat_df["reseller_score"], errors="coerce"
+            ).fillna(0).astype(int)
+            sort_cols.append(("reseller_score", False))
+        if "email" in flat_df.columns:
+            sort_cols.append(("email", True))
+        if sort_cols:
+            flat_df = flat_df.sort_values(
+                [s[0] for s in sort_cols],
+                ascending=[s[1] for s in sort_cols],
+            )
+
+    filters = header.get("filters") or {}
+    summary_rows = [
+        {"metric": "Leads matched",     "value": len(lead_rows)},
+        {"metric": "Leads with email",  "value": len(lids_with_contact)},
+        {"metric": "Contact rows",      "value": len(contact_rows)},
+        {"metric": "Total rows (flat)", "value": len(flat_rows)},
+        {"metric": "Extract name",      "value": extract_id},
+        {"metric": "Original created",  "value": header.get("created_at", "")},
+        {"metric": "Re-exported at",    "value": datetime.now().isoformat(timespec="seconds")},
+        {"metric": "Score range",       "value": f"{filters.get('min_score', '')}–{filters.get('max_score', '')}"},
+        {"metric": "Countries filter",  "value": ", ".join(filters.get("countries") or []) or "all"},
+        {"metric": "Keywords filter",   "value": ", ".join(filters.get("keywords") or [])},
+    ]
+
+    if not out_file:
+        out_file = f"{extract_id}.xlsx"
+    out_path = output_dir / out_file
+
+    with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
+        _write_sheet(writer, "Extract",  flat_df)
+        _write_sheet(writer, "Leads",    leads_df)
+        pd.DataFrame(summary_rows).to_excel(writer, sheet_name="Summary", index=False)
+        for sheet_name in ("Extract", "Leads", "Summary"):
+            _autofit(writer.book[sheet_name])
+
+    print(f"[extract] Excel written → {out_path}  ({len(flat_rows)} rows)")
     return out_path
 
 
@@ -730,11 +869,11 @@ def _parse_args(argv=None):
                    help="Output filename (placed in --output dir; default: auto-generated)")
     p.add_argument("--limit",        type=int, default=None,
                    help="Maximum number of leads to include (applied after all filters)")
-    p.add_argument("--save-extract", metavar="NAME",
+    p.add_argument("--save-extract", metavar="NAME", nargs="?", const="__dry_run__",
                    help="Save this extract to Firestore as leads_extract/<NAME>. "
-                        "Leads already claimed by another extract are skipped. "
-                        "Also marks each extracted lead in the main leads collection "
-                        "with extract_id so it cannot be extracted again.")
+                        "If NAME is omitted the flag acts as a dry-run preview only — "
+                        "nothing is written to Firestore. "
+                        "Leads already claimed by another extract are skipped.")
     p.add_argument("--extract-dry-run", action="store_true",
                    help="Preview what --save-extract would write without touching Firestore.")
     return p.parse_args(argv)
@@ -788,8 +927,8 @@ def main(argv=None):
             out_file=args.out,
             collection=args.collection,
             keywords=keywords,
-            save_extract=args.save_extract,
-            extract_dry_run=args.extract_dry_run,
+            save_extract=None if args.save_extract == "__dry_run__" else args.save_extract,
+            extract_dry_run=args.extract_dry_run or (args.save_extract == "__dry_run__"),
             limit=args.limit,
         )
         if path:
