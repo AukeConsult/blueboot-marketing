@@ -473,4 +473,217 @@ def catalog_links_yelp(url: str, blocklist: set[str]) -> list[str] | None:
     return catalog_links_generic(url, blocklist)
 
 
-def catal
+def catalog_links_pagesjaunes(url: str, blocklist: set[str]) -> list[str] | None:
+    return catalog_links_generic(url, blocklist)
+
+
+def catalog_links_paginasamarillas(url: str, blocklist: set[str]) -> list[str] | None:
+    return catalog_links_generic(url, blocklist)
+
+
+def catalog_links_topdevelopers(url: str, blocklist: set[str]) -> list[str] | None:
+    """TopDevelopers.co — 2-step scraper similar to DesignRush."""
+    _ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    _h  = {"User-Agent": _ua, "Accept-Language": "en;q=0.8"}
+    try:
+        r = requests.get(url, headers=_h, timeout=20, allow_redirects=True)
+        if r.status_code == 404:
+            return []
+        r.raise_for_status()
+        html = r.text
+    except Exception as e:
+        print(f"    [catalog/topdevelopers] fetch error: {e}")
+        return None
+    if len(html) < 5_000:
+        print(f"    [catalog/topdevelopers] page too small ({len(html):,}B) — possible bot block")
+        return None
+    soup = BeautifulSoup(html, "html.parser")
+    profiles, seen_p = [], set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href.startswith("http"):
+            href = "https://www.topdevelopers.co" + href
+        if "topdevelopers.co" in href and "/profile/" in href:
+            href = href.split("?")[0]
+            if href not in seen_p:
+                seen_p.add(href)
+                profiles.append(href)
+    if not profiles:
+        return _simple_external_links(url, html, blocklist)
+    found, seen_d = [], set()
+    for purl in profiles[:25]:
+        try:
+            pr = requests.get(purl, headers=_h, timeout=12, allow_redirects=True)
+            if pr.status_code != 200:
+                continue
+        except Exception:
+            continue
+        for a in BeautifulSoup(pr.text, "html.parser").find_all("a", href=True):
+            href = a["href"].strip()
+            if not href.startswith("http"):
+                continue
+            dom = domain_of(href)
+            if dom and "topdevelopers" not in dom and not is_blocked(dom, blocklist) and dom not in seen_d:
+                found.append(f"{urlparse(href).scheme}://{urlparse(href).netloc}/")
+                seen_d.add(dom)
+                break
+        time.sleep(0.3)
+    return found
+
+
+def catalog_links_dan(url: str, blocklist: set[str]) -> list[str] | None:
+    """Digital Agency Network — server-rendered, direct external links."""
+    _ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    try:
+        r = requests.get(url, headers={"User-Agent": _ua, "Accept-Language": "en;q=0.8"},
+                         timeout=20, allow_redirects=True)
+        if r.status_code == 404:
+            return []
+        if r.status_code != 200:
+            print(f"    [catalog/dan] HTTP {r.status_code}")
+            return None
+    except Exception as e:
+        print(f"    [catalog/dan] fetch error: {e}")
+        return None
+    return _simple_external_links(url, r.text, blocklist)
+
+
+def _simple_external_links(url: str, html: str, blocklist: set[str]) -> list[str]:
+    soup = BeautifulSoup(html, "html.parser")
+    found, seen = [], set()
+    catalog_dom = domain_of(url)
+    for a in soup.find_all("a", href=True):
+        href = a["href"].strip()
+        if not href.startswith("http"):
+            href = urljoin(url, href)
+        dom = domain_of(href)
+        if dom and dom != catalog_dom and not is_blocked(dom, blocklist):
+            home = f"{urlparse(href).scheme}://{urlparse(href).netloc}/"
+            if home not in seen:
+                seen.add(home)
+                found.append(home)
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Dispatch table + page scraper
+# ---------------------------------------------------------------------------
+
+CATALOG_EXTRACTORS = {
+    "clutch":           catalog_links_clutch,
+    "sortlist":         catalog_links_sortlist,
+    "designrush":       catalog_links_designrush,
+    "goodfirms":        catalog_links_goodfirms,
+    "topdevelopers":    catalog_links_topdevelopers,
+    "dan":              catalog_links_dan,
+    "gulesider":        catalog_links_gulesider,
+    "proff":            catalog_links_proff,
+    "yelp":             catalog_links_yelp,
+    "pagesjaunes":      catalog_links_pagesjaunes,
+    "paginasamarillas": catalog_links_paginasamarillas,
+    "generic":          catalog_links_generic,
+}
+
+
+def scrape_catalog_page(entry: dict, page: int, blocklist: set[str]) -> list[str] | None:
+    """Fetch one page of a catalog source.
+    Returns None on fetch error (skip page), [] when exhausted (stop source)."""
+    offset = (page - 1) * 10
+    url = entry["url"].format(page=page, offset=offset)
+    extractor = CATALOG_EXTRACTORS.get(entry.get("type", "generic"), catalog_links_generic)
+    return extractor(url, blocklist)
+
+
+# ---------------------------------------------------------------------------
+# Catalog run orchestrator
+# ---------------------------------------------------------------------------
+
+def catalog_run(args) -> None:
+    """Scrape directory catalogs, crawl extracted agency sites, export leads."""
+    from search_runner import _crawl_batch
+
+    configs  = load_country_configs()
+    countries = selected_countries(args.countries, configs) or DEFAULT_COUNTRIES
+    blocklist: set[str] = set()
+
+    all_catalogs = load_catalogs()
+    catalogs = {c: all_catalogs[c] for c in countries if c in all_catalogs}
+    if not catalogs:
+        print(f"No catalog entries found for: {', '.join(countries)}")
+        return
+
+    all_leads: list[Lead] = []
+    seen_domains: set[str] = getattr(args, "preloaded_domains", set()).copy()
+    if seen_domains:
+        print(f"  [firebase] {len(seen_domains)} already-handled domains loaded from Firestore — will skip")
+
+    country_leads: dict[str, int] = {}
+    batch_size: int = args.workers
+    max_pages = getattr(args, "max_catalog_pages", None)
+
+    print(f"Countries: {', '.join(countries)}")
+    print(f"Batch size (parallel crawlers): {batch_size}")
+
+    for code, sources in catalogs.items():
+        print(f"\n{'='*60}\n[{code}] {len(sources)} catalog source(s)")
+        pending: list[tuple[str, str]] = []
+
+        for entry in sources:
+            name = entry.get("name", entry.get("url", "?"))
+            total_pages = min(entry.get("pages", 1), max_pages) if max_pages else entry.get("pages", 1)
+            print(f"\n  Source: {name} (up to {total_pages} pages)")
+
+            page1_urls: set[str] = set()
+
+            for page in range(1, total_pages + 1):
+                print(f"  Page {page}/{total_pages}", end=" ... ", flush=True)
+                links = scrape_catalog_page(entry, page, blocklist)
+
+                if links is None:
+                    print("fetch error — skipping page, continuing...")
+                    continue
+                if not links:
+                    msg = "no page for this country — skipping." if page == 1 else "catalog exhausted."
+                    print(f"0 links — {msg}")
+                    break
+
+                link_set = set(links)
+
+                if page == 1:
+                    page1_urls = link_set
+                elif page1_urls:
+                    overlap = len(link_set & page1_urls)
+                    if overlap >= len(page1_urls) * 0.7:
+                        print(f"0 new (page identical to page 1 — pagination not supported, stopping source)")
+                        break
+
+                new_links = []
+                for url in links:
+                    dom = domain_of(url)
+                    if dom and dom not in seen_domains:
+                        seen_domains.add(dom)
+                        new_links.append((url, name))
+                print(f"{len(new_links)} new candidates (of {len(links)} found)")
+                pending.extend(new_links)
+
+                while len(pending) >= batch_size:
+                    batch, pending = pending[:batch_size], pending[batch_size:]
+                    _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads, source="catalog")
+
+                import time as _time
+                _time.sleep(args.delay)
+
+        if pending:
+            print(f"\n  [{code}] Flushing final batch of {len(pending)} sites")
+            _crawl_batch(pending, args, code, configs, all_leads, Path(args.output), country_leads, source="catalog")
+
+        print(f"\n[{code}] Done — {country_leads.get(code, 0)} new leads from catalogs")
+
+    print(f"\n{'='*60}\nCatalog run complete.")
+    final_leads = dedupe_leads(all_leads)
+    if getattr(args, "no_output", False):
+        print(f"  [output] skipped (--no-output). {len(final_leads)} leads in memory.")
+    else:
+        export(final_leads, Path(args.output))
+        print(f"Exported {len(final_leads)} leads to {args.output}/agency_leads.xlsx")
+    return final_leads
