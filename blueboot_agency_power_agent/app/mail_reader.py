@@ -4,14 +4,13 @@ from email.header import decode_header
 from datetime import datetime, timezone
 
 from app.firestore_client import get_firestore
-from blueboot_secrets import imapConfig
+from mail_setup_secrets import IMAP, get_account
 
-
-IMAP_HOST = imapConfig["host"]
-IMAP_PORT = imapConfig["port"]
-
-IMAP_USERNAME = imapConfig["user"]
-IMAP_PASSWORD = imapConfig["pass"]
+_account      = get_account()          # uses DEFAULT_ACCOUNT ("sales")
+IMAP_HOST     = IMAP["host"]
+IMAP_PORT     = IMAP["port"]
+IMAP_USERNAME = _account["user"]
+IMAP_PASSWORD = _account["password"]
 
 def decode_mime(value):
     if not value:

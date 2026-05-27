@@ -302,7 +302,13 @@ def extract_meta(soup: BeautifulSoup) -> tuple[str, str]:
 def visible_text(soup: BeautifulSoup) -> str:
     for s in soup(["script", "style", "noscript"]):
         s.extract()
-    return re.sub(r"\s+", " ", soup.get_text(" ", strip=True))[:120_000]
+    # Use "\n" as separator so block elements produce line breaks that
+    # pair_phones_to_contacts / pair_names_to_contacts can split on.
+    # Collapse runs of spaces/tabs but KEEP newlines so line structure survives.
+    raw = soup.get_text("\n", strip=True)
+    raw = re.sub(r"[^\S\n]+", " ", raw)   # collapse spaces/tabs, preserve \n
+    raw = re.sub(r"\n{3,}", "\n\n", raw)  # max two consecutive blank lines
+    return raw[:120_000]
 
 
 def extract_contacts(html: str, text: str) -> dict[str, str]:
@@ -348,7 +354,13 @@ def extract_contacts(html: str, text: str) -> dict[str, str]:
             if m:
                 raw_title = window[m.start(): m.start() + 120]
                 title = _strip_tags.sub(" ", raw_title)
-                title = re.sub(r"\s+", " ", title).strip()[:60]
+                title = re.sub(r"\s+", " ", title).strip()
+                # Stop before any email address or digit-heavy phone string
+                # (the title window can spill into "name@domain +358 …")
+                at_pos = title.find("@")
+                if at_pos != -1:
+                    title = title[:at_pos].rstrip(" .,;")
+                title = title[:60]
         contacts[e] = title
     return contacts
 
@@ -385,34 +397,122 @@ def pair_phones_to_contacts(
 ) -> dict[str, str]:
     """Return {email: phone_or_empty}.
 
-    Searches the line containing the email plus the two adjacent lines for a
-    valid phone number.  If found it is attached to that contact; if not the
-    contact gets an empty string so the caller can omit the field rather than
-    writing a page-level phone that belongs to nobody.
+    Strategy A — character window (primary):
+      For every occurrence of the email in combined, scan ±400 chars for a phone
+      number.  Picks the candidate closest to the email (by character distance).
+      Stops early if another email sits between the candidate phone and this email.
+
+    Strategy B — line-based fallback:
+      Splits combined into lines and checks:
+        1. Same line as the email.
+        2. Up to 5 lines below — stops if a *different* email appears.
+        3. Up to 5 lines above — stops if a *different* email appears.
+
+    All occurrences of the email are tried (not just the first).
     """
-    lines = combined.splitlines()
+    combined_l = combined.lower()
+    lines      = combined.splitlines()
     result: dict[str, str] = {}
+
     for email in contacts:
         email_l = email.lower()
-        phone = ""
-        for i, line in enumerate(lines):
-            if email_l in line.lower():
-                # 1st pass: same line (avoids bleed from adjacent contacts)
+        phone   = ""
+
+        # ------------------------------------------------------------------
+        # Strategy A: character-window scan (works on minified HTML too)
+        # ------------------------------------------------------------------
+        pos = 0
+        while not phone:
+            idx = combined_l.find(email_l, pos)
+            if idx == -1:
+                break
+            pos = idx + 1
+
+            # Collect all phone candidates in window; keep the closest one
+            # that has no foreign email sitting between it and our email.
+            window_start = max(0, idx - 400)
+            window_end   = min(len(combined), idx + len(email_l) + 400)
+            window       = combined[window_start: window_end]
+            window_l     = window.lower()
+            email_pos_in_w = idx - window_start  # position of email in window
+
+            best_phone    = ""
+            best_dist     = 999999
+            for m in GENERIC_PHONE_RE.finditer(window):
+                parsed = _parse_phone(m.group(), country)
+                if not parsed:
+                    continue
+                phone_pos = m.start()
+                dist = abs(phone_pos - email_pos_in_w)
+                if dist >= best_dist:
+                    continue
+                # Make sure no *other* email sits between phone and this email
+                lo = min(phone_pos, email_pos_in_w)
+                hi = max(phone_pos, email_pos_in_w)
+                snippet = window_l[lo:hi]
+                other_emails = [e for e in EMAIL_RE.findall(snippet)
+                                if e.lower() != email_l]
+                if other_emails:
+                    continue
+                best_phone = parsed
+                best_dist  = dist
+
+            if best_phone:
+                phone = best_phone
+                break
+
+        # ------------------------------------------------------------------
+        # Strategy B: line-based fallback (cleaner text, longer range)
+        # ------------------------------------------------------------------
+        if not phone:
+            for i, line in enumerate(lines):
+                if email_l not in line.lower():
+                    continue
+
+                # Pass 1: same line
                 for m in GENERIC_PHONE_RE.findall(line):
                     parsed = _parse_phone(m, country)
                     if parsed:
                         phone = parsed
                         break
-                # 2nd pass: next line only, but skip if it contains another email
-                if not phone and i + 1 < len(lines):
-                    next_line = lines[i + 1]
-                    if not EMAIL_RE.search(next_line):
-                        for m in GENERIC_PHONE_RE.findall(next_line):
+
+                # Pass 2: up to 5 lines below
+                if not phone:
+                    for delta in range(1, 6):
+                        j = i + delta
+                        if j >= len(lines):
+                            break
+                        neighbour = lines[j]
+                        if EMAIL_RE.search(neighbour) and email_l not in neighbour.lower():
+                            break
+                        for m in GENERIC_PHONE_RE.findall(neighbour):
                             parsed = _parse_phone(m, country)
                             if parsed:
                                 phone = parsed
                                 break
-                break  # stop at first occurrence of the email
+                        if phone:
+                            break
+
+                # Pass 3: up to 5 lines above
+                if not phone:
+                    for delta in range(1, 6):
+                        j = i - delta
+                        if j < 0:
+                            break
+                        neighbour = lines[j]
+                        if EMAIL_RE.search(neighbour) and email_l not in neighbour.lower():
+                            break
+                        for m in GENERIC_PHONE_RE.findall(neighbour):
+                            parsed = _parse_phone(m, country)
+                            if parsed:
+                                phone = parsed
+                                break
+                        if phone:
+                            break
+
+                if phone:
+                    break
+
         result[email] = phone
     return result
 
@@ -424,15 +524,57 @@ def pair_names_to_contacts(
 ) -> dict[str, str]:
     """Return {email: person_name_or_empty}.
 
-    Three strategies in descending reliability:
-    1. <a href="mailto:EMAIL">Name Text</a> anchor text — most reliable.
-    2. _NAME_RE match on the same line as the email (email token stripped first).
-    3. _NAME_RE match on up to 3 lines *above* the email line (stop if another
-       email address appears on an above line, to avoid cross-contact bleed).
+    Strategies in descending reliability (tried in order; first match wins):
+    0. Heading tag (<h1>–<h4>) within 600 chars before the email in raw HTML —
+       handles structured person-card layouts (e.g. h3 → title → email → phone).
+    1. <a href="mailto:EMAIL">Name Text</a> anchor text.
+    2. Same line as the email (email token stripped).
+    3. Up to 6 lines above the email line (stops at a different email address).
+    4. Up to 3 lines below the email line.
+
+    All occurrences of the email in the text are tried (not just the first) so
+    that a person-card section further down the page wins over an introductory
+    mention that has no name nearby.
     """
     result: dict[str, str] = {}
 
-    # Strategy 1: parse mailto anchors from raw HTML
+    # ------------------------------------------------------------------
+    # Strategy 0: heading tag near the email in raw HTML
+    # Handles layouts like: <h3>Hanna Masalin</h3>…<p>hanna@…</p>
+    # ------------------------------------------------------------------
+    heading_names: dict[str, str] = {}
+    if html:
+        _heading_re = re.compile(
+            r'<h[1-4][^>]*>(.*?)</h[1-4]>', re.IGNORECASE | re.DOTALL
+        )
+        _strip_tags = re.compile(r'<[^>]+>')
+        for email in contacts:
+            email_l  = email.lower()
+            html_l   = html.lower()
+            pos      = 0
+            best     = ""
+            while True:
+                idx = html_l.find(email_l, pos)
+                if idx == -1:
+                    break
+                # Search for the last heading within 600 chars before this email
+                window = html[max(0, idx - 600): idx]
+                for hm in reversed(list(_heading_re.finditer(window))):
+                    raw_h = _strip_tags.sub("", hm.group(1))
+                    raw_h = re.sub(r'\s+', ' ', raw_h).strip()
+                    nm    = _NAME_RE.search(raw_h)
+                    if nm and not _NAME_BLACKLIST.match(nm.group(1).split()[0]):
+                        best = nm.group(1)
+                        break
+                if best:
+                    break
+                pos = idx + 1
+            if best:
+                heading_names[email.lower()] = best
+
+    # ------------------------------------------------------------------
+    # Strategy 1: mailto anchor text
+    # ------------------------------------------------------------------
     mailto_names: dict[str, str] = {}
     if html:
         _anchor_re = re.compile(
@@ -457,52 +599,59 @@ def pair_names_to_contacts(
             return c
         return ""
 
-    # Prefer the visible-text section for line-based search — it has cleaner
-    # line structure (one person per paragraph) compared to raw HTML which
-    # buries emails inside tags with unrelated surrounding lines.
-    # combined = html + " " + text, so split on the html boundary.
-    text_only = combined[len(html):].lstrip() if html else combined
+    # Prefer the visible-text section for line-based strategies — it has cleaner
+    # line structure than raw HTML which buries emails inside tags.
+    text_only   = combined[len(html):].lstrip() if html else combined
     search_text = text_only if text_only.strip() else combined
-    lines = search_text.splitlines()
+    lines       = search_text.splitlines()
 
     for email in contacts:
         email_l = email.lower()
 
-        # Strategy 1: mailto anchor text (most reliable)
+        # Strategy 0
+        if email_l in heading_names:
+            result[email] = heading_names[email_l]
+            continue
+
+        # Strategy 1
         if email_l in mailto_names:
             result[email] = mailto_names[email_l]
             continue
 
+        # Strategies 2–4: line-based, try ALL occurrences (not just first)
         name = ""
         for i, line in enumerate(lines):
             if email_l not in line.lower():
                 continue
 
-            # Strategy 2: same line, with email token removed
+            # Strategy 2: same line, email token removed
             stripped = re.sub(re.escape(email_l), "", line, flags=re.IGNORECASE)
-            name = _pick_name(_NAME_RE.findall(stripped))
+            candidate = _pick_name(_NAME_RE.findall(stripped))
 
-            # Strategy 3: up to 6 lines above, stop at a different email
-            if not name:
+            # Strategy 3: up to 6 lines above
+            if not candidate:
                 for j in range(i - 1, max(i - 7, -1), -1):
                     above = lines[j]
                     if EMAIL_RE.search(above) and email_l not in above.lower():
                         break
-                    name = _pick_name(_NAME_RE.findall(above))
-                    if name:
+                    candidate = _pick_name(_NAME_RE.findall(above))
+                    if candidate:
                         break
 
-            # Strategy 4: up to 3 lines below (some layouts: email then name)
-            if not name:
+            # Strategy 4: up to 3 lines below
+            if not candidate:
                 for j in range(i + 1, min(i + 4, len(lines))):
                     below = lines[j]
                     if EMAIL_RE.search(below) and email_l not in below.lower():
                         break
-                    name = _pick_name(_NAME_RE.findall(below))
-                    if name:
+                    candidate = _pick_name(_NAME_RE.findall(below))
+                    if candidate:
                         break
 
-            break  # only use the first occurrence of this email
+            if candidate:
+                name = candidate
+                break   # found a name — no need to check other occurrences
+            # else: this occurrence had no name nearby — try the next one
 
         result[email] = clean_contact_name(name, email)
 

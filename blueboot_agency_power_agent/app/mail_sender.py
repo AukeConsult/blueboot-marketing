@@ -5,22 +5,36 @@ from email.utils import make_msgid
 from datetime import datetime, timezone
 
 from app.firestore_client import get_firestore
-from blueboot_secrets import smtpConfig
+from mail_setup_secrets import get_account, SMTP
 
-SMTP_HOST = smtpConfig["host"]
-SMTP_PORT = smtpConfig["port"]
+_account  = get_account()          # uses DEFAULT_ACCOUNT ("sales")
+SMTP_HOST = SMTP["host"]
+SMTP_PORT = SMTP["port"]
 
-SMTP_USERNAME = smtpConfig["user"]
-SMTP_PASSWORD = smtpConfig["pass"]
+SMTP_USERNAME = _account["user"]
+SMTP_PASSWORD = _account["password"]
+SMTP_FROM     = f"{_account['from_name']} <{_account['from_addr']}>"
 
-SMTP_FROM = smtpConfig["from"]
+def send_email(to_email, subject, text_body, html_body=None, account: str | None = None):
+    """Send an email via SMTP.
 
+    Pass *account* (alias from mail_setup.MAIL_ACCOUNTS) to send from a
+    specific address; omit to use the default account.
+    """
+    if account:
+        acc      = get_account(account)
+        username = acc["user"]
+        password = acc["password"]
+        from_hdr = f"{acc['from_name']} <{acc['from_addr']}>"
+    else:
+        username = SMTP_USERNAME
+        password = SMTP_PASSWORD
+        from_hdr = SMTP_FROM
 
-def send_email(to_email, subject, text_body, html_body=None):
     msg = MIMEMultipart("alternative")
 
     msg["Subject"] = subject
-    msg["From"] = SMTP_FROM
+    msg["From"] = from_hdr
     msg["To"] = to_email
 
     message_id = make_msgid()
@@ -38,7 +52,7 @@ def send_email(to_email, subject, text_body, html_body=None):
 
     # Send email
     with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
-        server.login(SMTP_USERNAME, SMTP_PASSWORD)
+        server.login(username, password)
         server.send_message(msg)
 
     # Save to Firestore
