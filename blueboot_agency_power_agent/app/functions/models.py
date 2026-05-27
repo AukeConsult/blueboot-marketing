@@ -102,10 +102,16 @@ def build_contacts_df(leads: list[Lead]) -> pd.DataFrame:
         per_phones  = [p.strip() for p in lead.email_phones.split(",") if True]      if lead.email_phones else []
         per_names   = [n.strip() for n in lead.email_names.split(",")  if True]      if lead.email_names  else []
         base = {
-            "lead_id": lead_id, "company": lead.company, "domain": lead.domain,
-            "website": lead.website, "country": lead.country_name,
-            "priority": lead.priority, "reseller_score": lead.reseller_score,
-            "linkedin": lead.linkedin, "contact_page": lead.contact_page,
+            "lead_id":      lead_id,
+            "company":      lead.company,
+            "domain":       lead.domain,
+            "website":      lead.website,
+            "country":      lead.country,       # ISO code  e.g. "NO"
+            "country_name": lead.country_name,  # full name e.g. "Norway"
+            "priority":     lead.priority,
+            "reseller_score": lead.reseller_score,
+            "linkedin":     lead.linkedin,
+            "contact_page": lead.contact_page,
         }
         if not emails:
             rows.append({**base, "name": "", "email": "", "title": "", "phone": ""})

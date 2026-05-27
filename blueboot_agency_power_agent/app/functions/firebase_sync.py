@@ -37,15 +37,16 @@ def _parse_contacts(lead: "Lead") -> list[dict]:
     contacts = []
     for i, email in enumerate(emails):
         contacts.append({
-            "email":   email,
-            "title":   titles[i] if i < len(titles) else "",
-            "lead_id": _lead_id(lead.website),
-            "company": lead.company,
-            "domain":  lead.domain,
-            "website": lead.website,
-            "country": lead.country_name,
-            "phones":  lead.phones,
-            "linkedin": lead.linkedin,
+            "email":        email,
+            "title":        titles[i] if i < len(titles) else "",
+            "lead_id":      _lead_id(lead.website),
+            "company":      lead.company,
+            "domain":       lead.domain,
+            "website":      lead.website,
+            "country":      lead.country,       # ISO code  e.g. "NO"
+            "country_name": lead.country_name,  # full name e.g. "Norway"
+            "phones":       lead.phones,
+            "linkedin":     lead.linkedin,
         })
     return contacts
 
@@ -131,16 +132,17 @@ def upsert_lead(lead: "Lead", collection: str | None = None) -> None:
     for i, email in enumerate(emails):
         cid     = _contact_id(email)
         contact = {
-            "email":   email,
-            "name":    per_names[i]  if i < len(per_names)  else "",
-            "title":   titles[i]     if i < len(titles)     else "",
-            "phone":   per_phones[i] if i < len(per_phones) else "",
-            "lead_id": lid,
-            "company": lead.company,
-            "domain":  lead.domain,
-            "website": lead.website,
-            "country": lead.country_name,
-            "linkedin": lead.linkedin,
+            "email":        email,
+            "name":         per_names[i]  if i < len(per_names)  else "",
+            "title":        titles[i]     if i < len(titles)      else "",
+            "phone":        per_phones[i] if i < len(per_phones)  else "",
+            "lead_id":      lid,
+            "company":      lead.company,
+            "domain":       lead.domain,
+            "website":      lead.website,
+            "country":      lead.country,       # ISO code  e.g. "NO"
+            "country_name": lead.country_name,  # full name e.g. "Norway"
+            "linkedin":     lead.linkedin,
         }
         contacts_col.document(cid).set(contact, merge=True)
 

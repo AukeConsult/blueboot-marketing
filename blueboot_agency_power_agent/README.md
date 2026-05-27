@@ -321,6 +321,90 @@ GOOGLE_CSE_ID=your_cse_id
 
 ---
 
+## `enrich_contacts.py` — social media profile enrichment
+
+Reads contact documents from Firestore and adds personal social media profile links. Searches Bing in parallel for LinkedIn, Twitter/X, Facebook, Instagram and Telegram profiles; derives a WhatsApp deep-link from the contact's phone number without any search.
+
+New fields written to each `contacts/{id}` document:
+
+| Field | Source |
+|---|---|
+| `linkedin_personal` | Bing: `"Name" "Company" site:linkedin.com/in/` |
+| `twitter` | Bing: `"Name" "Company" site:twitter.com OR site:x.com` |
+| `facebook` | Bing: `"Name" "Company" site:facebook.com` |
+| `instagram` | Bing: `"Name" "Company" site:instagram.com` |
+| `telegram` | Bing: `"Name" "Company" site:t.me` |
+| `whatsapp` | Derived from `phone` → `https://wa.me/{e164}` |
+| `social_enriched_at` | ISO timestamp of enrichment run |
+
+Only contacts with a valid email address and at least a name or phone number are processed. Already-populated fields are never overwritten.
+
+```bat
+cd app
+python enrich_contacts.py [options]
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--collection NAME` | `leads` | Firestore leads collection |
+| `--country CODE` | all | Country code(s), comma-separated or repeatable: `--country NO,SE` |
+| `--limit N` | _(none)_ | Maximum number of contacts to process |
+| `--workers N` | `50` | Parallel async workers (Bing searches run concurrently) |
+| `--delay SECS` | `1.0` | Seconds to wait between Bing searches per worker |
+| `--skip-enriched` | off | Skip contacts that already have `social_enriched_at` set |
+| `--platforms LIST` | all | Comma-separated subset: `linkedin,twitter,facebook,instagram,telegram,whatsapp` |
+| `--dry-run` | off | Print what would be written without touching Firestore |
+
+### How parallelism works
+
+Contacts are first filtered synchronously from Firestore. All filtered contacts are then enriched concurrently using `asyncio.gather` capped by a semaphore of `--workers`. Results are batch-written to Firestore after all workers finish. With 20 workers and 5 platforms per contact, throughput is roughly 20× faster than a sequential run.
+
+### Example runs
+
+```bat
+REM Preview first — no writes
+python app\enrich_contacts.py --country NO --limit 50 --dry-run
+
+REM LinkedIn + WhatsApp only, Norway and Sweden, skip already enriched
+python app\enrich_contacts.py --country NO,SE --platforms linkedin,whatsapp --skip-enriched
+
+REM Full run, all platforms
+python app\enrich_contacts.py --country NO,SE,DK
+
+REM Reduce concurrency if Bing starts rate-limiting
+python app\enrich_contacts.py --workers 10 --delay 2.0
+```
+
+---
+
+## `fix_contact_country.py` — one-time country field migration
+
+Fixes an earlier data issue where contact documents stored the full country name (e.g. `"Norway"`) in the `country` field instead of the ISO code (`"NO"`). After this migration every contact document has:
+
+- `country` — ISO code, e.g. `"NO"`
+- `country_name` — full name, e.g. `"Norway"`
+
+The script loads all lead documents into memory first (to get the correct `country` / `country_name` values), then streams all contacts via a `collectionGroup` query and batch-writes the corrected fields. Contacts whose fields are already correct are skipped.
+
+```bat
+REM Preview — no writes
+python app\fix_contact_country.py --dry-run
+
+REM Live run
+python app\fix_contact_country.py
+```
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--collection NAME` | `leads` | Firestore leads collection |
+| `--dry-run` | off | Print what would be changed without writing |
+
+This script only needs to be run once on existing data. All new contacts written by the crawler and catalog scraper now include both fields correctly.
+
+---
+
 ## `statistics.py` — lead statistics & Firestore aggregations
 
 Reads all leads and contacts from Firestore, computes aggregated statistics, writes results back to a `statistics` collection, and exports Excel reports to `output/`.
