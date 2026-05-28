@@ -1,0 +1,392 @@
+# =============================================================================
+# SITE AGENT BLOCKLIST
+# Only the most abusive / clearly irrelevant domains.
+# Much leaner than blocklist_domains.txt — site_agent wants municipalities,
+# hospitals, universities, media, e-commerce etc. that the agency blocklist
+# would wrongly exclude.
+# =============================================================================
+
+# --- Social media platforms (can't add a search widget to these) ---
+facebook.*
+instagram.com
+linkedin.*
+twitter.*
+x.com
+tiktok.*
+pinterest.*
+snapchat.com
+youtube.com
+vimeo.com
+twitch.tv
+discord.com
+whatsapp.com
+telegram.org
+
+# --- Search engines (they already have search) ---
+google.*
+bing.com
+yahoo.*
+duckduckgo.com
+yandex.*
+baidu.com
+
+# --- Major platforms / CMS vendors (the vendor sites themselves) ---
+wordpress.com
+wix.com
+squarespace.com
+shopify.com
+webflow.com
+framer.com
+ghost.io
+weebly.com
+jimdo.com
+
+# --- E-commerce giants (no point selling them a search widget) ---
+amazon.*
+ebay.*
+etsy.com
+aliexpress.com
+zalando.*
+
+# --- Developer / code hosting ---
+github.com
+gitlab.com
+stackoverflow.com
+npmjs.com
+pypi.org
+
+# --- Cloud / hosting vendors ---
+*.amazonaws.com
+*.microsoft.com
+*.google.com
+cloudflare.com
+vercel.com
+netlify.com
+digitalocean.com
+heroku.com
+
+# --- Reference sites (already have search) ---
+wikipedia.*
+wikimedia.org
+reddit.com
+quora.com
+medium.com
+
+# --- Review / directory aggregators ---
+trustpilot.*
+g2.com
+clutch.co
+capterra.com
+
+# =============================================================================
+# COUNTRY-SPECIFIC EXCLUSIONS
+# Rule: exclude large commercial sites that already have good search or are
+# clearly not BlueSearch candidates. KEEP all governmental and public services.
+# =============================================================================
+
+# --- Norway (NO) ---
+# Classifieds / directories
+finn.no
+brreg.no
+proff.no
+1881.no
+gulesider.no
+torget.no
+# Job boards (nav.no is a government service — kept)
+jobzone.no
+stepstone.no
+webcruiter.no
+jobbsafari.no
+# Large national retailers
+elkjop.no
+power.no
+komplett.no
+cdon.no
+xxl.no
+coop.no
+rema1000.no
+kiwi.no
+meny.no
+spar.no
+biltema.no
+jernia.no
+clasohlson.no
+obs.no
+# Telecom operators
+telenor.no
+telia.no
+ice.no
+onecall.no
+# Real-estate portals
+eiendomsmegler1.no
+privatmegleren.no
+dnbeiendom.no
+remax.no
+# Streaming / entertainment
+netflix.com
+hbo.com
+viaplay.no
+# Dating / irrelevant
+sukker.no
+match.no
+
+# --- Sweden (SE) ---
+# Classifieds
+blocket.se
+tradera.se
+bytbil.com
+# Job boards (arbetsformedlingen.se is government — kept)
+monster.se
+stepstone.se
+jobbsafari.se
+# Large national retailers
+ica.se
+coop.se
+hemkop.se
+willys.se
+lidl.se
+mediamarkt.se
+elgiganten.se
+kjell.com
+biltema.se
+clasohlson.se
+xxl.se
+# Telecom
+telia.se
+tele2.se
+tre.se
+telenor.se
+comviq.se
+# Real-estate portals
+hemnet.se
+booli.se
+blocketbostad.se
+# Streaming
+viaplay.se
+svtplay.se
+
+# --- Denmark (DK) ---
+# Classifieds
+dba.dk
+bilbasen.dk
+boligsiden.dk
+# Job boards (jobnet.dk is government — kept)
+jobindex.dk
+stepstone.dk
+monster.dk
+# Large national retailers
+elgiganten.dk
+power.dk
+mediamarkt.dk
+coop.dk
+netto.dk
+lidl.dk
+bilka.dk
+foetex.dk
+xxl.dk
+# Telecom
+tdc.dk
+yousee.dk
+telenor.dk
+telia.dk
+3.dk
+# Real-estate portals
+nybolig.dk
+danbolig.dk
+edc.dk
+home.dk
+
+# --- Germany (DE) ---
+# Classifieds
+kleinanzeigen.de
+ebay-kleinanzeigen.de
+mobile.de
+autoscout24.de
+immobilienscout24.de
+immowelt.de
+# Job boards (bundesagentur-fuer-arbeit.de is government — kept)
+stepstone.de
+monster.de
+xing.com
+indeed.de
+# Price comparison / aggregators
+idealo.de
+check24.de
+geizhals.de
+billiger.de
+guenstiger.de
+# Large national retailers
+otto.de
+mediamarkt.de
+saturn.de
+rewe.de
+edeka.de
+aldi.de
+lidl.de
+kaufland.de
+real.de
+conrad.de
+cyberport.de
+notebooksbilliger.de
+# Telecom
+telekom.de
+vodafone.de
+o2online.de
+1und1.de
+# Streaming / entertainment
+sky.de
+dazn.com
+maxdome.de
+joyn.de
+
+# --- United Kingdom (UK) ---
+# Classifieds
+gumtree.com
+autotrader.co.uk
+exchangeandmart.co.uk
+# Job boards (gov.uk/jobsearch is government — kept)
+reed.co.uk
+totaljobs.com
+monster.co.uk
+cv-library.co.uk
+# Real-estate portals
+rightmove.co.uk
+zoopla.co.uk
+onthemarket.com
+# Price comparison / aggregators
+moneysupermarket.com
+comparethemarket.com
+confused.com
+gocompare.com
+uswitch.com
+# Large national retailers
+tesco.com
+sainsburys.co.uk
+asda.com
+morrisons.com
+aldi.co.uk
+lidl.co.uk
+argos.co.uk
+currys.co.uk
+johnlewis.com
+marksandspencer.com
+next.co.uk
+# Telecom
+bt.com
+sky.com
+vodafone.co.uk
+o2.co.uk
+ee.co.uk
+three.co.uk
+# Streaming
+itv.com
+channel4.com
+now.com
+
+# --- Finland (FI) ---
+# Classifieds
+tori.fi
+oikotie.fi
+nettiauto.com
+# Job boards (te-palvelut.fi is government — kept)
+monster.fi
+duunitori.fi
+# Large national retailers
+verkkokauppa.com
+gigantti.fi
+prisma.fi
+s-kaupat.fi
+k-ruoka.fi
+alepa.fi
+lidl.fi
+# Telecom
+elisa.fi
+telia.fi
+dna.fi
+moi.fi
+# Real-estate portals
+etuovi.com
+kiinteistomaailma.fi
+
+# --- Netherlands (NL) ---
+# Classifieds
+marktplaats.nl
+gaspedaal.nl
+autotrack.nl
+# Job boards (werk.nl is government — kept)
+indeed.nl
+monsterboard.nl
+nationalevacaturebank.nl
+# Real-estate portals
+funda.nl
+jaap.nl
+huislijn.nl
+# Large national retailers
+bol.com
+coolblue.nl
+mediamarkt.nl
+ah.nl
+jumbo.nl
+lidl.nl
+albert-heijn.nl
+# Telecom
+kpn.com
+vodafone.nl
+t-mobile.nl
+tele2.nl
+odido.nl
+# Price comparison
+kieskeurig.nl
+tweakers.net
+
+# --- France (FR) ---
+# Classifieds
+leboncoin.fr
+lacentrale.fr
+paruvendu.fr
+# Job boards (pole-emploi.fr is government — kept)
+monster.fr
+cadremploi.fr
+apec.fr
+# Real-estate portals
+seloger.com
+pap.fr
+logicimmo.com
+bienici.com
+# Large national retailers
+fnac.com
+darty.com
+leclerc.fr
+carrefour.fr
+auchan.fr
+lidl.fr
+intermarche.fr
+# Telecom
+orange.fr
+sfr.fr
+bouyguestelecom.fr
+free.fr
+# Streaming / entertainment
+canalplus.com
+salto.fr
+# Price comparison
+idealo.fr
+lesnumeriques.com
+
+# --- Adult / explicit ---
+*porn*
+*xxx*
+*sex*
+*nude*
+*naked*
+*adult*
+*erotic*
+*escort*
+*fetish*
+*hentai*
+*onlyfans*
+*chaturbate*
+*cam4*
+*xvideos*
+*xhamster*
+pornhub.*

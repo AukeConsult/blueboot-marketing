@@ -1,0 +1,193 @@
+
+{
+  "_comment": "Site Agent search config — per-country instructions for finding content-heavy websites that could benefit from BlueSearch AI search. Each query should target sites with lots of pages/content where visitors need to search and find information.",
+
+  "NO": {
+    "name": "Norway",
+    "language": "no",
+    "accept_language": "no,en;q=0.8",
+    "description": "Norwegian content-heavy sites — municipalities, public sector, universities, documentation, e-commerce, media and healthcare sites with large content libraries.",
+    "min_pages": 50,
+    "target_types": ["municipality", "university", "ecommerce", "media", "healthcare", "documentation", "association"],
+    "queries": [
+      "kommune.no innbyggerinformasjon tjenester",
+      "norsk kommune selvbetjening skjema søk",
+      "kommuneportal innbyggerservice søkefunksjon",
+      "kommunens nettsider tjenester innbyggere",
+      "kommune byggesak søknad informasjon",
+      "oslo kommune tjenester innbyggere",
+      "bergen kommune tjenester nettside",
+      "trondheim kommune informasjon nettside",
+      "stavanger kommune tjenester innbyggere",
+      "kristiansand kommune nettside tjenester",
+      "tromsø kommune informasjon nettside",
+      "fredrikstad kommune tjenester innbyggere",
+      "sandnes kommune nettside tjenester",
+      "drammen kommune informasjon innbyggere",
+      "asker kommune tjenester nettside",
+      "lillestrøm kommune informasjon innbyggere",
+      "bærum kommune tjenester selvbetjening",
+      "nordre follo kommune nettside",
+      "vestfold kommune innbyggere tjenester",
+      "agder fylkeskommune tjenester informasjon",
+      "viken fylkeskommune nettside tjenester",
+      "innlandet fylkeskommune informasjon",
+      "møre og romsdal fylkeskommune tjenester",
+      "trøndelag fylkeskommune nettside",
+      "norsk helseforetak pasientinformasjon nettside",
+      "sykehus pasientinformasjon norsk",
+      "nyhetsside norsk nettavis artikkelarkiv",
+      "norsk nettbutikk mange produkter søk",
+      "universitetsbibliotek norsk forskning dokumentasjon",
+      "offentlig etat dokumentasjon norsk",
+      "bransjeforening medlemsportal norsk",
+      "norsk kunnskapsbase FAQ dokumentasjon",
+      "museum samling norsk søkeside",
+      "norsk videregående skole informasjon søk",
+      "norsk høyskole studietilbud informasjon"
+    ]
+  },
+
+  "SE": {
+    "name": "Sweden",
+    "language": "sv",
+    "accept_language": "sv,en;q=0.8",
+    "description": "Swedish content-heavy sites — municipalities, public sector, universities, large e-commerce, media and healthcare.",
+    "min_pages": 50,
+    "target_types": ["municipality", "university", "ecommerce", "media", "healthcare", "documentation", "association"],
+    "queries": [
+      "svensk kommun invånare information",
+      "nyhetssite svensk tidning artikelarkiv",
+      "svensk nätbutik många produkter",
+      "universitetsbibliotek svensk forskning",
+      "sjukhus landsting patientinformation",
+      "myndighet dokumentation Sverige",
+      "branschorganisation medlemsportal svensk",
+      "reiseguide destination Sverige",
+      "kunskapsbas FAQ dokumentation svenska",
+      "gymnasieskola antagning information",
+      "museum samling söksida Sverige"
+    ]
+  },
+
+  "DK": {
+    "name": "Denmark",
+    "language": "da",
+    "accept_language": "da,en;q=0.8",
+    "description": "Danish content-heavy sites — municipalities, public sector, media, large e-commerce and healthcare.",
+    "min_pages": 50,
+    "target_types": ["municipality", "university", "ecommerce", "media", "healthcare", "documentation"],
+    "queries": [
+      "dansk kommune borger information",
+      "nyhedsside dansk avis artikelarkiv",
+      "dansk netbutik mange produkter",
+      "universitetsbibliotek dansk forskning",
+      "hospital region patientinformation dansk",
+      "offentlig myndighed dokumentation dansk",
+      "brancheforening medlemsportal dansk",
+      "rejseguide destination Danmark",
+      "vidensbase FAQ dokumentation dansk"
+    ]
+  },
+
+  "DE": {
+    "name": "Germany",
+    "language": "de",
+    "accept_language": "de,en;q=0.8",
+    "description": "German content-heavy sites — municipalities, federal agencies, universities, large e-commerce, media and healthcare.",
+    "min_pages": 100,
+    "target_types": ["municipality", "university", "ecommerce", "media", "healthcare", "documentation", "association"],
+    "queries": [
+      "Stadtverwaltung Bürger Information Portal",
+      "deutsche Nachrichtenwebsite Artikelarchiv",
+      "deutsches Online-Kauf viele Produkte",
+      "Universitätsbibliothek Forschung Deutschland",
+      "Krankenhaus Patienteninformation deutsch",
+      "Bundesbehörde Dokumentation Deutschland",
+      "Berufsverband Mitgliederportal deutsch",
+      "Reiseführer Destination Deutschland",
+      "Wissensdatenbank FAQ Dokumentation deutsch",
+      "Gymnasium Anmeldung Informationen Deutschland",
+      "Museum Sammlung Suchseite Deutschland"
+    ]
+  },
+
+  "UK": {
+    "name": "United Kingdom",
+    "language": "en",
+    "accept_language": "en-GB,en;q=0.9",
+    "description": "UK content-heavy sites — councils, NHS, universities, large e-commerce, media and public sector documentation portals.",
+    "min_pages": 100,
+    "target_types": ["council", "university", "ecommerce", "media", "healthcare", "documentation", "charity"],
+    "queries": [
+      "uk local council residents information portal",
+      "uk nhs patient information site",
+      "uk university library research portal",
+      "uk news site article archive search",
+      "uk online shop many products catalogue",
+      "uk government documentation knowledge base",
+      "uk charity membership portal resources",
+      "uk travel guide destination site",
+      "uk association member portal faq",
+      "uk museum collection search site",
+      "uk school academy information portal"
+    ]
+  },
+
+  "FI": {
+    "name": "Finland",
+    "language": "fi",
+    "accept_language": "fi,en;q=0.8",
+    "description": "Finnish content-heavy sites — municipalities, public sector, universities, e-commerce and media.",
+    "min_pages": 50,
+    "target_types": ["municipality", "university", "ecommerce", "media", "healthcare", "documentation"],
+    "queries": [
+      "suomalainen kunta asukkaat tietoa",
+      "uutissivusto suomalainen lehti artikkeliarkisto",
+      "suomalainen verkkokauppa paljon tuotteita",
+      "yliopistokirjasto tutkimus Suomi",
+      "sairaala potilastieto suomalainen",
+      "viranomainen dokumentaatio Suomi",
+      "yhdistys jäsenportaali suomalainen",
+      "matkailuopas kohde Suomi"
+    ]
+  },
+
+  "NL": {
+    "name": "Netherlands",
+    "language": "nl",
+    "accept_language": "nl,en;q=0.8",
+    "description": "Dutch content-heavy sites — municipalities, public sector, universities, large e-commerce and media.",
+    "min_pages": 50,
+    "target_types": ["municipality", "university", "ecommerce", "media", "healthcare", "documentation"],
+    "queries": [
+      "gemeente inwoners informatie portaal",
+      "nieuwssite nederlandse krant artikelarchief",
+      "nederlandse webwinkel veel producten",
+      "universiteitsbibliotheek onderzoek Nederland",
+      "ziekenhuis patiëntinformatie nederland",
+      "overheidsinstelling documentatie nederland",
+      "brancheorganisatie ledenportaal nederland",
+      "reisgids bestemming nederland"
+    ]
+  },
+
+  "FR": {
+    "name": "France",
+    "language": "fr",
+    "accept_language": "fr,en;q=0.8",
+    "description": "French content-heavy sites — municipalities, public sector, universities, large e-commerce and media.",
+    "min_pages": 100,
+    "target_types": ["municipality", "university", "ecommerce", "media", "healthcare", "documentation"],
+    "queries": [
+      "mairie commune information habitants portail",
+      "site actualités journal archives articles",
+      "boutique en ligne produits catalogue france",
+      "bibliothèque universitaire recherche france",
+      "hôpital information patients france",
+      "administration publique documentation france",
+      "association membres portail ressources",
+      "guide touristique destination france"
+    ]
+  }
+}
