@@ -85,6 +85,29 @@ def load_blocklist(path: Path = BLOCKLIST_PATH) -> set[str]:
     return patterns
 
 
+def _is_main_page(url: str) -> bool:
+    """Return True if the URL looks like a homepage (root or short locale root).
+
+    Accepted:
+      https://example.com          path = ""
+      https://example.com/         path = "/"
+      https://example.com/en       path = "/en"   (1 short segment)
+      https://example.com/nb-no    path = "/nb-no"
+
+    Rejected:
+      https://example.com/products/shoes
+      https://example.com/blog/2024/post-title
+    """
+    path = urlparse(url).path.rstrip("/")
+    if not path:
+        return True
+    parts = [p for p in path.split("/") if p]
+    # Allow exactly one segment that looks like a locale code (≤6 chars)
+    if len(parts) == 1 and len(parts[0]) <= 6:
+        return True
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
@@ -412,20 +435,21 @@ async def process_site_async(
     country_name: str,
     min_pages:    int,
     target_types: list[str] | None = None,
-) -> SiteLead | None:
+) -> tuple[SiteLead | None, str]:
+    """Return (lead, reason).  reason is "" on success, otherwise the exclusion cause."""
     try:
         website = normalize_url(url)
         domain  = domain_of(website)
         if not domain:
-            return None
+            return None, "url_error"
     except Exception:
-        return None
+        return None, "url_error"
 
     lead_id = lead_id_from_url(website)
     page_count, sitemap_url, sitemap_type = await read_sitemap_async(session, website)
     if min_pages > 0 and page_count < min_pages:
         print(f"    skip {domain}  pages={page_count} ({sitemap_type}) < min={min_pages}")
-        return None
+        return None, f"min_pages:{page_count}"
 
     homepage_html = await _async_get(session, website, timeout=15)
     title, description = _extract_meta(homepage_html) if homepage_html else ("", "")
@@ -447,7 +471,7 @@ async def process_site_async(
         source_query=source_query,
         crawled_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         target_types=ttypes, keywords=keywords, contacts=contacts,
-    )
+    ), ""
 
 
 # ---------------------------------------------------------------------------
@@ -492,6 +516,52 @@ def upsert_site_lead(lead: SiteLead, collection: str = COLLECTION_DEFAULT) -> No
         print(f"  [firebase] upsert error for {lead.domain}: {exc}")
 
 
+EXCLUDED_COLLECTION_DEFAULT = "sites_excluded"
+
+
+def preload_excluded_domains(collection: str = EXCLUDED_COLLECTION_DEFAULT) -> set[str]:
+    """Load all previously excluded domains so we skip them without refetching."""
+    try:
+        _, col = _get_db(collection)
+        domains: set[str] = set()
+        for doc in col.select(["domain"]).stream():
+            d = doc.to_dict().get("domain", "")
+            if d:
+                domains.add(d.strip().lower())
+        print(f"  [firebase] preloaded {len(domains)} excluded domains from '{collection}'")
+        return domains
+    except Exception as exc:
+        print(f"  [firebase] excluded preload failed ({exc}) -- continuing without")
+        return set()
+
+
+def upsert_site_excluded(
+    domain:       str,
+    website:      str,
+    lead_id:      str,
+    country:      str,
+    reason:       str,
+    page_count:   int   = 0,
+    source_query: str   = "",
+    collection:   str   = EXCLUDED_COLLECTION_DEFAULT,
+) -> None:
+    """Record a rejected site so it is skipped on future runs."""
+    try:
+        _, col = _get_db(collection)
+        col.document(lead_id).set({
+            "lead_id":      lead_id,
+            "domain":       domain,
+            "website":      website,
+            "country":      country,
+            "reason":       reason,
+            "page_count":   page_count,
+            "source_query": source_query,
+            "excluded_at":  datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }, merge=True)
+    except Exception as exc:
+        print(f"  [firebase] excluded upsert error for {domain}: {exc}")
+
+
 # ---------------------------------------------------------------------------
 # Async orchestrator
 # ---------------------------------------------------------------------------
@@ -501,26 +571,41 @@ _QUEUE_SENTINEL = None
 
 
 async def _bing_query_async(
-    semaphore:       asyncio.Semaphore,
-    query:           str,
-    max_results:     int,
-    delay:           float,
-    seen_domains:    set[str],
-    blocklist:       set[str],
-    counters:        dict,
-    queue:           asyncio.Queue,
-    country:         str,
-    country_configs: dict,
+    semaphore:        asyncio.Semaphore,
+    query:            str,
+    max_results:      int,
+    delay:            float,
+    seen_domains:     set[str],
+    excluded_domains: set[str],
+    blocklist:        set[str],
+    counters:         dict,
+    queue:            asyncio.Queue,
+    country:          str,
+    country_configs:  dict,
+    main_page_only:   bool = False,
 ) -> None:
     async with semaphore:
         loop = asyncio.get_running_loop()
-        urls = await loop.run_in_executor(None, lambda: _bing_search(query, max_results))
+        try:
+            urls = await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: _bing_search(query, max_results)),
+                timeout=45.0,
+            )
+        except asyncio.TimeoutError:
+            print(f"  [bing] timeout: {query!r}")
+            urls = []
         print(f"  [bing] {query!r}  -> {len(urls)} results")
     await asyncio.sleep(delay)
 
     for url in urls:
         d = domain_of(url)
         if not d:
+            continue
+        if main_page_only and not _is_main_page(url):
+            counters["deep_link"] += 1
+            continue
+        if d in excluded_domains:
+            counters["excl_skip"] += 1
             continue
         if d in seen_domains:
             counters["seen"] += 1
@@ -538,24 +623,29 @@ async def _bing_query_async(
 
 
 async def _run_country_full_async(
-    queries:         list[str],
-    max_results:     int,
-    delay:           float,
-    blocklist:       set[str],
-    seen_domains:    set[str],
-    country:         str,
-    country_name:    str,
-    min_pages:       int,
-    workers:         int,
-    no_firebase:     bool,
-    dry_run:         bool,
-    collection:      str,
-    country_configs: dict,
-    target_types:    list[str],
+    queries:          list[str],
+    max_results:      int,
+    delay:            float,
+    blocklist:        set[str],
+    seen_domains:     set[str],
+    excluded_domains: set[str],
+    country:          str,
+    country_name:     str,
+    min_pages:        int,
+    workers:          int,
+    no_firebase:      bool,
+    dry_run:          bool,
+    collection:       str,
+    excl_collection:  str,
+    country_configs:  dict,
+    target_types:     list[str],
+    main_page_only:   bool = False,
 ) -> list[SiteLead]:
+    loop     = asyncio.get_running_loop()
     bing_sem = asyncio.Semaphore(BING_WORKERS)
     queue    = asyncio.Queue()
-    counters = {"seen": 0, "blocked": 0, "tld_skip": 0, "queued": 0, "done": 0}
+    counters = {"seen": 0, "blocked": 0, "tld_skip": 0, "deep_link": 0,
+                "excl_skip": 0, "queued": 0, "done": 0, "excluded": 0}
     leads: list[SiteLead] = []
 
     connector = aiohttp.TCPConnector(limit=workers, limit_per_host=3, ssl=False)
@@ -566,37 +656,95 @@ async def _run_country_full_async(
         async def site_consumer() -> None:
             while True:
                 item = await queue.get()
-                if item is _QUEUE_SENTINEL:
-                    queue.task_done()
-                    break
-                url, source_query, eff_country = item
-                eff_country_name = "Global" if eff_country == "*" else country_name
                 try:
-                    lead = await process_site_async(
-                        session, url, source_query,
-                        eff_country, eff_country_name,
-                        min_pages, target_types,
-                    )
-                except Exception as exc:
+                    if item is _QUEUE_SENTINEL:
+                        break
+                    url, source_query, eff_country = item
+                    eff_country_name = "Global" if eff_country == "*" else country_name
+                    d = domain_of(url) or url
+
+                    # Fast-skip: domain was excluded in a previous run or this run
+                    if d in excluded_domains:
+                        counters["excl_skip"] += 1
+                        counters["done"] += 1
+                        print(f"  [excl] skip {d}  (previously excluded)")
+                        continue
+
+                    excl_reason = ""
+                    try:
+                        lead, excl_reason = await process_site_async(
+                            session, url, source_query,
+                            eff_country, eff_country_name,
+                            min_pages, target_types,
+                        )
+                    except Exception as exc:
+                        counters["done"] += 1
+                        n = counters["done"]
+                        excl_reason = "error"
+                        print(f"  [{n}] [consumer] error on {url}: {exc}")
+                        try:
+                            if not no_firebase and not dry_run:
+                                lead_id = lead_id_from_url(normalize_url(url))
+                                _args = (d, url, lead_id, eff_country,
+                                         excl_reason, 0, source_query, excl_collection)
+                                await asyncio.wait_for(
+                                    loop.run_in_executor(
+                                        None, lambda a=_args: upsert_site_excluded(*a)
+                                    ),
+                                    timeout=12.0,
+                                )
+                            excluded_domains.add(d)
+                            counters["excluded"] += 1
+                        except Exception:
+                            pass
+                        continue
+
                     counters["done"] += 1
                     n = counters["done"]
-                    print(f"  [{n}] [consumer] error on {url}: {exc}")
-                    queue.task_done()
-                    continue
-                counters["done"] += 1
-                n = counters["done"]
-                try:
                     if lead:
                         leads.append(lead)
                         c_info = f"  {len(lead.contacts)} contacts" if lead.contacts else ""
                         s_info = f"pages={lead.page_count} ({lead.sitemap_type})"
                         print(f"  [{n}] ok {lead.domain:<40} {s_info}{c_info}")
                         if not no_firebase and not dry_run:
-                            upsert_site_lead(lead, collection)
+                            try:
+                                await asyncio.wait_for(
+                                    loop.run_in_executor(
+                                        None,
+                                        lambda _l=lead, _c=collection: upsert_site_lead(_l, _c),
+                                    ),
+                                    timeout=12.0,
+                                )
+                            except (asyncio.TimeoutError, Exception) as exc:
+                                print(f"  [{n}] [lead-write] timeout/error: {exc}")
                     else:
-                        print(f"  [{n}] -- (filtered/failed)  {url}")
+                        # Parse out real page_count if encoded in the reason string
+                        stored_reason = excl_reason
+                        stored_pages  = 0
+                        if excl_reason.startswith("min_pages:"):
+                            stored_pages  = int(excl_reason.split(":", 1)[1] or 0)
+                            stored_reason = "min_pages"
+                        print(f"  [{n}] -- excluded ({stored_reason})  {url}")
+                        if excl_reason != "url_error":
+                            try:
+                                if not no_firebase and not dry_run:
+                                    lead_id = lead_id_from_url(normalize_url(url))
+                                    _args = (d, url, lead_id, eff_country,
+                                             stored_reason, stored_pages,
+                                             source_query, excl_collection)
+                                    await asyncio.wait_for(
+                                        loop.run_in_executor(
+                                            None, lambda a=_args: upsert_site_excluded(*a)
+                                        ),
+                                        timeout=12.0,
+                                    )
+                                excluded_domains.add(d)
+                                counters["excluded"] += 1
+                            except (asyncio.TimeoutError, Exception) as exc:
+                                print(f"  [{n}] [excl-upsert] timeout/error: {exc}")
+
                 except Exception as exc:
-                    print(f"  [{n}] [upsert] error on {url}: {exc}")
+                    print(f"  [consumer] unhandled error: {exc}")
                 finally:
                     queue.task_done()
 
@@ -605,17 +753,24 @@ async def _run_country_full_async(
         await asyncio.gather(*[
             _bing_query_async(
                 bing_sem, q, max_results, delay,
-                seen_domains, blocklist, counters, queue,
+                seen_domains, excluded_domains, blocklist, counters, queue,
                 country, country_configs,
+                main_page_only=main_page_only,
             )
             for q in queries
         ])
 
+        deep_msg  = f", {counters['deep_link']} deep-links" if main_page_only else ""
+        excl_msg  = f", {counters['excl_skip']} pre-excluded" if counters["excl_skip"] else ""
+        excld_msg = f", {counters['excluded']} newly excluded" if counters["excluded"] else ""
         print(
-            f"\n  [site_agent] skipped {counters['seen']} already-stored, "
-            f"{counters['blocked']} blocklisted, "
-            f"{counters['tld_skip']} wrong-TLD, "
-            f"{counters['queued']} sites queued"
+            f"\n  [site_agent] skipped {counters['seen']} already-stored"
+            f"{excl_msg}"
+            f", {counters['blocked']} blocklisted"
+            f", {counters['tld_skip']} wrong-TLD"
+            f"{deep_msg}"
+            f", {counters['queued']} queued"
+            f"{excld_msg}"
         )
         for _ in range(workers):
             await queue.put(_QUEUE_SENTINEL)
@@ -630,14 +785,17 @@ async def _run_country_full_async(
 # ---------------------------------------------------------------------------
 
 def run(
-    countries:   list[str],
-    max_results: int   = 50,
-    min_pages:   int   = 0,
-    workers:     int   = WORKERS_DEFAULT,
-    delay:       float = 1.5,
-    no_firebase: bool  = False,
-    collection:  str   = COLLECTION_DEFAULT,
-    dry_run:     bool  = False,
+    countries:        list[str],
+    max_results:      int   = 50,
+    min_pages:        int   = 0,
+    workers:          int   = WORKERS_DEFAULT,
+    delay:            float = 1.5,
+    no_firebase:      bool  = False,
+    collection:       str   = COLLECTION_DEFAULT,
+    excl_collection:  str   = "sites_excluded",
+    dry_run:          bool  = False,
+    category:         str | None = None,
+    main_page_only:   bool  = False,
 ) -> list[SiteLead]:
     config          = load_site_config()
     blocklist       = load_blocklist()
@@ -645,9 +803,11 @@ def run(
     print(f"  [blocklist]  {len(blocklist)} patterns loaded")
     print(f"  [tld-filter] {len(country_configs)} country configs loaded")
 
-    seen_domains: set[str] = set()
+    seen_domains:     set[str] = set()
+    excluded_domains: set[str] = set()
     if not no_firebase:
-        seen_domains = preload_seen_domains(collection)
+        seen_domains     = preload_seen_domains(collection)
+        excluded_domains = preload_excluded_domains(excl_collection)
 
     all_leads: list[SiteLead] = []
 
@@ -659,13 +819,32 @@ def run(
             continue
 
         country_name  = cfg.get("name", country_code)
-        queries       = cfg.get("queries", [])
         country_min   = cfg.get("min_pages", 0)
         effective_min = max(min_pages, country_min)
         target_types  = cfg.get("target_types", [])
 
+        # Support both flat `queries` list and categorised `query_categories` dict
+        query_cats = cfg.get("query_categories")
+        if query_cats:
+            if category:
+                cat_lower = category.lower()
+                if cat_lower not in query_cats:
+                    available = ", ".join(query_cats.keys())
+                    print(f"  [site_agent] Category '{cat_lower}' not found for {country_code}. "
+                          f"Available: {available}")
+                    continue
+                queries     = query_cats[cat_lower]
+                cat_display = cat_lower
+            else:
+                queries     = [q for qs in query_cats.values() for q in qs]
+                cat_display = "ALL (" + ", ".join(query_cats.keys()) + ")"
+        else:
+            queries     = cfg.get("queries", [])
+            cat_display = "—"
+
         print(f"\n{'='*60}")
         print(f"  Country      : {country_name} ({country_code})")
+        print(f"  Category     : {cat_display}")
         print(f"  Target types : {', '.join(target_types)}")
         print(f"  Queries      : {len(queries)} ({min(BING_WORKERS, len(queries))} parallel)")
         print(f"  Min pages    : {effective_min}")
@@ -674,20 +853,23 @@ def run(
 
         country_leads = asyncio.run(
             _run_country_full_async(
-                queries         = queries,
-                max_results     = max_results,
-                delay           = delay,
-                blocklist       = blocklist,
-                seen_domains    = seen_domains,
-                country         = country_code,
-                country_name    = country_name,
-                min_pages       = effective_min,
-                workers         = workers,
-                no_firebase     = no_firebase,
-                dry_run         = dry_run,
-                collection      = collection,
-                country_configs = country_configs,
-                target_types    = target_types,
+                queries          = queries,
+                max_results      = max_results,
+                delay            = delay,
+                blocklist        = blocklist,
+                seen_domains     = seen_domains,
+                excluded_domains = excluded_domains,
+                country          = country_code,
+                country_name     = country_name,
+                min_pages        = effective_min,
+                workers          = workers,
+                no_firebase      = no_firebase,
+                dry_run          = dry_run,
+                collection       = collection,
+                excl_collection  = excl_collection,
+                country_configs  = country_configs,
+                target_types     = target_types,
+                main_page_only   = main_page_only,
             )
         )
 
@@ -721,7 +903,7 @@ def main(argv=None) -> None:
     )
     p.add_argument("--countries",   default="NO",
                    help="Comma-separated ISO codes or ALL  (default: NO)")
-    p.add_argument("--max-results", type=int, default=50, metavar="N",
+    p.add_argument("--max-results", type=int, default=500, metavar="N",
                    help="Max Bing results per query  (default: 50)")
     p.add_argument("--min-pages",   type=int, default=0, metavar="N",
                    help="Minimum sitemap page count to keep a site  (default: 0)")
@@ -731,10 +913,16 @@ def main(argv=None) -> None:
                    help="Seconds between Bing queries  (default: 1.5)")
     p.add_argument("--no-firebase", action="store_true",
                    help="Skip writing to Firestore")
-    p.add_argument("--collection",  default=COLLECTION_DEFAULT, metavar="NAME",
+    p.add_argument("--collection",      default=COLLECTION_DEFAULT, metavar="NAME",
                    help="Firestore collection  (default: site_leads)")
+    p.add_argument("--excl-collection", default="sites_excluded", metavar="NAME",
+                   help="Firestore collection for excluded sites  (default: sites_excluded)")
     p.add_argument("--dry-run",     action="store_true",
                    help="Print results without writing to Firestore")
+    p.add_argument("--category",       default=None, metavar="NAME",
+                   help="Run only this query category  e.g. company, shop, municipality")
+    p.add_argument("--main-page-only", action="store_true",
+                   help="Discard Bing results that are not homepage/root URLs")
 
     args = p.parse_args(argv)
 
@@ -745,14 +933,17 @@ def main(argv=None) -> None:
         countries = [c.strip().upper() for c in args.countries.split(",") if c.strip()]
 
     run(
-        countries   = countries,
-        max_results = args.max_results,
-        min_pages   = args.min_pages,
-        workers     = args.workers,
-        delay       = args.delay,
-        no_firebase = args.no_firebase,
-        collection  = args.collection,
-        dry_run     = args.dry_run,
+        countries       = countries,
+        max_results     = args.max_results,
+        min_pages       = args.min_pages,
+        workers         = args.workers,
+        delay           = args.delay,
+        no_firebase     = args.no_firebase,
+        collection      = args.collection,
+        excl_collection = args.excl_collection,
+        dry_run         = args.dry_run,
+        category        = args.category,
+        main_page_only  = args.main_page_only,
     )
 
 

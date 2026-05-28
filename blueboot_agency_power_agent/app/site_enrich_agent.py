@@ -13,6 +13,7 @@ Pipeline:
 Fields written to each site_leads doc:
   ai_sector         -- e.g. "manufacturing", "technology", "public_sector"
   ai_company_type   -- e.g. "B2B", "government", "media"
+  ai_country        -- ISO 3166-1 alpha-2 code inferred from site content, e.g. "NO"
   ai_keywords       -- validated + enriched keyword list (max 25)
   ai_summary        -- one-sentence description of the site
   ai_confidence     -- 0.0-1.0 score
@@ -65,6 +66,11 @@ _SYSTEM_PROMPT = (
     '  "lead_id"      : same string as in the input — never change it\n'
     '  "sector"       : one of ' + json.dumps(SECTORS) + "\n"
     '  "company_type" : one of ' + json.dumps(COMPANY_TYPES) + "\n"
+    '  "country"      : ISO 3166-1 alpha-2 code (e.g. "NO", "SE", "DE") for the country '
+    "where the company or organisation is located. Infer from the URL TLD, language, "
+    "address mentions, phone prefixes, or other signals in the title/description/keywords. "
+    'Use the input "country" field as a strong hint but correct it if clearly wrong. '
+    'Return "" if genuinely impossible to determine.\n'
     '  "keywords"     : array of up to 25 lowercase English keywords relevant to '
     "this site (merge and clean the input keywords, add obvious missing ones, "
     "remove noise/stopwords)\n"
@@ -190,14 +196,17 @@ async def _classify_batch_async(
     batch_num:  int,
     batch_tot:  int,
 ) -> list[dict]:
-    """Acquire semaphore, call OpenAI, return parsed result list."""
-    async with semaphore:
-        print(f"  [enrich] batch {batch_num}/{batch_tot}  ({len(batch_data)} sites) → OpenAI…")
-        for attempt in range(1, RETRY_ATTEMPTS + 1):
+    """Call OpenAI for one batch with retry. Semaphore is acquired per-attempt
+    and released before any sleep, so rate-limit waits never block other batches."""
+    for attempt in range(1, RETRY_ATTEMPTS + 1):
+        sleep_secs = 0.0
+        result     = None
+
+        async with semaphore:
+            print(f"  [enrich] batch {batch_num}/{batch_tot}  ({len(batch_data)} sites) → OpenAI…")
             try:
                 response = await client.chat.completions.create(
                     model=OPENAI_MODEL,
-                    response_format={"type": "json_object"},
                     messages=[
                         {"role": "system", "content": _SYSTEM_PROMPT},
                         {"role": "user",   "content": _user_prompt(batch_data)},
@@ -205,7 +214,7 @@ async def _classify_batch_async(
                 )
                 raw    = response.choices[0].message.content or ""
                 parsed = json.loads(raw)
-                # Model may wrap array in a dict key
+                # Model may wrap the array in a dict key e.g. {"results": [...]}
                 if isinstance(parsed, dict):
                     parsed = next(
                         (v for v in parsed.values() if isinstance(v, list)), []
@@ -218,18 +227,22 @@ async def _classify_batch_async(
 
             except json.JSONDecodeError as e:
                 print(f"  [enrich] batch {batch_num} JSON error (attempt {attempt}): {e}")
+                sleep_secs = RETRY_DELAY
             except Exception as e:
                 err = str(e)
                 print(f"  [enrich] batch {batch_num} OpenAI error (attempt {attempt}): {err}")
                 if "rate_limit" in err.lower() or "429" in err:
-                    wait = RETRY_DELAY * attempt
-                    print(f"  [enrich] rate limit — sleeping {wait}s…")
-                    await asyncio.sleep(wait)
-                elif attempt < RETRY_ATTEMPTS:
-                    await asyncio.sleep(RETRY_DELAY)
+                    sleep_secs = RETRY_DELAY * attempt
+                    print(f"  [enrich] rate limit — sleeping {sleep_secs}s after semaphore release…")
+                else:
+                    sleep_secs = RETRY_DELAY
 
-        print(f"  [enrich] batch {batch_num} failed after {RETRY_ATTEMPTS} attempts")
-        return []
+        # Sleep OUTSIDE the semaphore so other batches can proceed
+        if sleep_secs and attempt < RETRY_ATTEMPTS:
+            await asyncio.sleep(sleep_secs)
+
+    print(f"  [enrich] batch {batch_num} failed after {RETRY_ATTEMPTS} attempts")
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -267,9 +280,12 @@ async def _process_batch_async(
         new_kw      = r.get("keywords") or []
         merged_kw   = list(dict.fromkeys(existing_kw + new_kw))[:25]
 
+        ai_country = (r.get("country") or "").strip().upper()[:2]
+
         updates = {
             "ai_sector":        r.get("sector", "other"),
             "ai_company_type":  r.get("company_type", ""),
+            "ai_country":       ai_country,
             "ai_keywords":      new_kw[:25],
             "ai_summary":       r.get("summary", ""),
             "ai_confidence":    float(r.get("confidence", 0.0)),
@@ -277,14 +293,15 @@ async def _process_batch_async(
             "keywords":         merged_kw,
         }
 
-        total  = counters["total"]
-        done   = counters["done"] + 1
-        domain = orig.get("domain", lid)
-        sector = updates["ai_sector"]
-        ctype  = updates["ai_company_type"]
-        conf   = updates["ai_confidence"]
-        smry   = (updates["ai_summary"] or "")[:65]
-        print(f"    [{done}/{total}] {domain:<42} {sector} / {ctype}  conf={conf:.2f}")
+        total   = counters["total"]
+        done    = counters["done"] + 1
+        domain  = orig.get("domain", lid)
+        sector  = updates["ai_sector"]
+        ctype   = updates["ai_company_type"]
+        country = updates["ai_country"] or "??"
+        conf    = updates["ai_confidence"]
+        smry    = (updates["ai_summary"] or "")[:65]
+        print(f"    [{done}/{total}] {domain:<42} {sector} / {ctype}  {country}  conf={conf:.2f}")
         if smry:
             print(f"           {smry}")
 
