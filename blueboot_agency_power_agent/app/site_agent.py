@@ -142,6 +142,7 @@ class SiteLead:
     sitemap_type:  str        # "index" | "urlset" | "none"
     source_query:  str
     crawled_at:    str
+    query_category: str           = ""
     target_types:  list[str] = field(default_factory=list)
     keywords:      list[str] = field(default_factory=list)
     contacts:      list[SiteContact] = field(default_factory=list, repr=False)
@@ -434,7 +435,8 @@ async def process_site_async(
     country:      str,
     country_name: str,
     min_pages:    int,
-    target_types: list[str] | None = None,
+    target_types:   list[str] | None = None,
+    query_category: str               = "",
 ) -> tuple[SiteLead | None, str]:
     """Return (lead, reason).  reason is "" on success, otherwise the exclusion cause."""
     try:
@@ -469,6 +471,7 @@ async def process_site_async(
         title=title, description=description, page_count=page_count,
         sitemap_url=sitemap_url, sitemap_type=sitemap_type,
         source_query=source_query,
+        query_category=query_category,
         crawled_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         target_types=ttypes, keywords=keywords, contacts=contacts,
     ), ""
@@ -536,27 +539,29 @@ def preload_excluded_domains(collection: str = EXCLUDED_COLLECTION_DEFAULT) -> s
 
 
 def upsert_site_excluded(
-    domain:       str,
-    website:      str,
-    lead_id:      str,
-    country:      str,
-    reason:       str,
-    page_count:   int   = 0,
-    source_query: str   = "",
-    collection:   str   = EXCLUDED_COLLECTION_DEFAULT,
+    domain:         str,
+    website:        str,
+    lead_id:        str,
+    country:        str,
+    reason:         str,
+    page_count:     int   = 0,
+    source_query:   str   = "",
+    collection:     str   = EXCLUDED_COLLECTION_DEFAULT,
+    query_category: str   = "",
 ) -> None:
     """Record a rejected site so it is skipped on future runs."""
     try:
         _, col = _get_db(collection)
         col.document(lead_id).set({
-            "lead_id":      lead_id,
-            "domain":       domain,
-            "website":      website,
-            "country":      country,
-            "reason":       reason,
-            "page_count":   page_count,
-            "source_query": source_query,
-            "excluded_at":  datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "lead_id":        lead_id,
+            "domain":         domain,
+            "website":        website,
+            "country":        country,
+            "reason":         reason,
+            "page_count":     page_count,
+            "source_query":   source_query,
+            "query_category": query_category,
+            "excluded_at":    datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }, merge=True)
     except Exception as exc:
         print(f"  [firebase] excluded upsert error for {domain}: {exc}")
@@ -583,6 +588,7 @@ async def _bing_query_async(
     country:          str,
     country_configs:  dict,
     main_page_only:   bool = False,
+    query_category:   str  = "",
 ) -> None:
     async with semaphore:
         loop = asyncio.get_running_loop()
@@ -619,11 +625,11 @@ async def _bing_query_async(
         effective_country = "*" if is_global_tld(d, country_configs) else country
         seen_domains.add(d)
         counters["queued"] += 1
-        await queue.put((url, query, effective_country))
+        await queue.put((url, query, effective_country, query_category))
 
 
 async def _run_country_full_async(
-    queries:          list[str],
+    queries:          list[tuple[str, str]],
     max_results:      int,
     delay:            float,
     blocklist:        set[str],
@@ -659,7 +665,7 @@ async def _run_country_full_async(
                 try:
                     if item is _QUEUE_SENTINEL:
                         break
-                    url, source_query, eff_country = item
+                    url, source_query, eff_country, query_category = item
                     eff_country_name = "Global" if eff_country == "*" else country_name
                     d = domain_of(url) or url
 
@@ -677,6 +683,7 @@ async def _run_country_full_async(
                                 session, url, source_query,
                                 eff_country, eff_country_name,
                                 min_pages, target_types,
+                                query_category=query_category,
                             ),
                             timeout=120.0,
                         )
@@ -689,7 +696,8 @@ async def _run_country_full_async(
                             if not no_firebase and not dry_run:
                                 lead_id = lead_id_from_url(normalize_url(url))
                                 _args = (d, url, lead_id, eff_country,
-                                         excl_reason, 0, source_query, excl_collection)
+                                         excl_reason, 0, source_query, excl_collection,
+                                         query_category)
                                 await asyncio.wait_for(
                                     loop.run_in_executor(
                                         None, lambda a=_args: upsert_site_excluded(*a)
@@ -734,7 +742,8 @@ async def _run_country_full_async(
                                     lead_id = lead_id_from_url(normalize_url(url))
                                     _args = (d, url, lead_id, eff_country,
                                              stored_reason, stored_pages,
-                                             source_query, excl_collection)
+                                             source_query, excl_collection,
+                                             query_category)
                                     await asyncio.wait_for(
                                         loop.run_in_executor(
                                             None, lambda a=_args: upsert_site_excluded(*a)
@@ -759,8 +768,9 @@ async def _run_country_full_async(
                 seen_domains, excluded_domains, blocklist, counters, queue,
                 country, country_configs,
                 main_page_only=main_page_only,
+                query_category=cat,
             )
-            for q in queries
+            for q, cat in queries
         ])
 
         deep_msg  = f", {counters['deep_link']} deep-links" if main_page_only else ""
@@ -827,6 +837,7 @@ def run(
         target_types  = cfg.get("target_types", [])
 
         # Support both flat `queries` list and categorised `query_categories` dict
+        # queries is always list[tuple[str, str]] = (query_text, category_name)
         query_cats = cfg.get("query_categories")
         if query_cats:
             if category:
@@ -836,13 +847,13 @@ def run(
                     print(f"  [site_agent] Category '{cat_lower}' not found for {country_code}. "
                           f"Available: {available}")
                     continue
-                queries     = query_cats[cat_lower]
+                queries     = [(q, cat_lower) for q in query_cats[cat_lower]]
                 cat_display = cat_lower
             else:
-                queries     = [q for qs in query_cats.values() for q in qs]
+                queries     = [(q, cat) for cat, qs in query_cats.items() for q in qs]
                 cat_display = "ALL (" + ", ".join(query_cats.keys()) + ")"
         else:
-            queries     = cfg.get("queries", [])
+            queries     = [(q, "") for q in cfg.get("queries", [])]
             cat_display = "—"
 
         print(f"\n{'='*60}")
