@@ -2,7 +2,8 @@
   "global_tlds": [
     ".com",
     ".org",
-    ".net"
+    ".net",
+    ".eu"
   ],
   "NO": {
     "name": "Norway",
@@ -2870,6 +2871,130 @@
       ".website",
       ".me",
       ".farm"
+    ]
+  },
+  "EU": {
+    "name": "European Union",
+    "tlds": [
+      ".eu"
+    ],
+    "phone_region": "EU",
+    "accept_language": "en;q=0.9,de;q=0.7,fr;q=0.7,nl;q=0.6,es;q=0.5,it;q=0.5,pl;q=0.5",
+    "keywords": {
+      "web_agency": [
+        "web design",
+        "website development",
+        "web agency",
+        "digital agency",
+        "web solutions",
+        "online presence",
+        "website",
+        "webdesign"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "search engine optimization",
+        "google ads",
+        "digital marketing",
+        "online visibility"
+      ],
+      "communication": [
+        "communications agency",
+        "content marketing",
+        "public relations",
+        "pr agency",
+        "brand communication",
+        "copywriting"
+      ],
+      "public_sector": [
+        "european institution",
+        "public authority",
+        "municipality",
+        "government agency",
+        "public sector",
+        "eu funded"
+      ],
+      "ai_interest": [
+        "ai",
+        "artificial intelligence",
+        "chatgpt",
+        "automation",
+        "machine learning"
+      ]
+    },
+    "service_words": [
+      "our services",
+      "services",
+      "clients",
+      "case studies",
+      "references",
+      "portfolio",
+      "solutions"
+    ],
+    "support_words": [
+      "maintenance",
+      "support",
+      "hosting",
+      "managed services"
+    ],
+    "contact_words": [
+      "contact",
+      "about",
+      "about-us",
+      "services",
+      "case-studies",
+      "portfolio",
+      "references"
+    ],
+    "agency_words": [
+      "we build websites",
+      "we develop",
+      "web projects",
+      "our clients",
+      "case study",
+      "digital solutions for",
+      "partner",
+      "we help businesses",
+      "portfolio",
+      "assignments",
+      "projects"
+    ],
+    "accepted_tlds": [
+      ".eu",
+      ".io",
+      ".co",
+      ".agency",
+      ".digital",
+      ".online",
+      ".biz",
+      ".info",
+      ".pro",
+      ".app",
+      ".dev",
+      ".tech",
+      ".studio",
+      ".design",
+      ".media",
+      ".marketing",
+      ".solutions",
+      ".services",
+      ".group",
+      ".works",
+      ".creative",
+      ".cloud",
+      ".consulting",
+      ".international",
+      ".global",
+      ".world",
+      ".business",
+      ".company"
     ]
   }
 }

@@ -45,6 +45,27 @@ coroutine moves on and the program doesn't hang.
 
 ---
 
+### RULE: Async coroutines that call multiple awaits MUST have a top-level timeout
+
+A coroutine that chains several `await` calls (e.g. fetch robots.txt → fetch N sitemaps →
+fetch homepage → fetch contact pages) can take far longer than any single call's timeout.
+Even though each inner `_async_get` has its own `timeout=N`, the **total** is unbounded.
+If that coroutine runs inside a consumer, it can block the consumer indefinitely.
+
+**Always wrap high-level async worker functions in `asyncio.wait_for`:**
+```python
+lead, excl_reason = await asyncio.wait_for(
+    process_site_async(session, url, ...),
+    timeout=120.0,   # hard ceiling for the entire site-processing chain
+)
+```
+
+This bug caused the final `asyncio.gather(*consumer_tasks)` to hang after the last
+printed item: one consumer was stuck inside `process_site_async` with no escape.
+The per-call aiohttp timeouts protect individual requests, not the whole chain.
+
+---
+
 ### RULE: Producer/consumer pipelines — sentinel guarantee
 
 In any `queue.get()` consumer loop, `queue.task_done()` must be called unconditionally.

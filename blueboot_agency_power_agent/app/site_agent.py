@@ -672,10 +672,13 @@ async def _run_country_full_async(
 
                     excl_reason = ""
                     try:
-                        lead, excl_reason = await process_site_async(
-                            session, url, source_query,
-                            eff_country, eff_country_name,
-                            min_pages, target_types,
+                        lead, excl_reason = await asyncio.wait_for(
+                            process_site_async(
+                                session, url, source_query,
+                                eff_country, eff_country_name,
+                                min_pages, target_types,
+                            ),
+                            timeout=120.0,
                         )
                     except Exception as exc:
                         counters["done"] += 1
