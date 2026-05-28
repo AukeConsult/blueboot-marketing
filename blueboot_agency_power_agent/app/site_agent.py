@@ -142,10 +142,14 @@ class SiteLead:
     sitemap_type:  str        # "index" | "urlset" | "none"
     source_query:  str
     crawled_at:    str
-    query_category: str           = ""
-    target_types:  list[str] = field(default_factory=list)
-    keywords:      list[str] = field(default_factory=list)
-    contacts:      list[SiteContact] = field(default_factory=list, repr=False)
+    query_category:      str       = ""
+    sitemap_oldest_date: str       = ""          # oldest <lastmod> across all sitemaps
+    sitemap_newest_date: str       = ""          # newest <lastmod> across all sitemaps
+    platform:        str           = ""          # "woocommerce" | "shopify" | "wordpress" | ""
+    sitemaps:        list          = field(default_factory=list)   # [{url, filename, lastmod}]
+    target_types:    list[str]     = field(default_factory=list)
+    keywords:        list[str]     = field(default_factory=list)
+    contacts:        list[SiteContact] = field(default_factory=list, repr=False)
 
 
 def _contact_id(email: str) -> str:
@@ -248,10 +252,25 @@ async def _async_get(session: aiohttp.ClientSession, url: str,
         ) as resp:
             if resp.status != 200:
                 return ""
-            ct = resp.headers.get("content-type", "")
-            if xml and "html" in ct:
-                return ""
-            return (await resp.text(errors="replace"))[:3_000_000]
+            raw = await resp.read()
+            # Decompress if the server sent gzip without Content-Encoding header
+            # (some hosts serve sitemap.xml.gz as application/xml without announcing it)
+            if raw[:2] == b"\x1f\x8b":
+                try:
+                    import gzip as _gzip
+                    raw = _gzip.decompress(raw)
+                except Exception:
+                    return ""
+            text = raw.decode("utf-8", errors="replace")[:3_000_000]
+            if xml:
+                # Ignore Content-Type — many servers send text/html for valid XML.
+                # Strip BOM (\ufeff) before checking, as lstrip() does not strip it.
+                stripped = text.lstrip("\ufeff").lstrip()
+                if not (stripped.startswith("<?xml")
+                        or stripped.startswith("<sitemapindex")
+                        or stripped.startswith("<urlset")):
+                    return ""
+            return text
     except Exception:
         return ""
 
@@ -262,15 +281,32 @@ async def _async_get(session: aiohttp.ClientSession, url: str,
 
 _SM_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
 _SITEMAP_PATHS = [
+    # Standard / most common
     "/sitemap.xml", "/sitemap_index.xml", "/sitemap-index.xml",
-    "/wp-sitemap.xml", "/sitemaps/sitemap.xml", "/sitemap/sitemap.xml",
+    "/sitemap1.xml",
+    # Compressed variants (some servers serve pre-gzipped sitemaps)
+    "/sitemap.xml.gz", "/sitemap_index.xml.gz",
+    # WordPress / Yoast SEO
+    "/wp-sitemap.xml",
+    "/post-sitemap.xml", "/page-sitemap.xml", "/category-sitemap.xml",
+    # Sub-directory conventions
+    "/sitemaps/sitemap.xml", "/sitemaps/sitemap_index.xml",
+    "/sitemap/sitemap.xml", "/sitemap/index.xml",
+    # News publishers
+    "/news-sitemap.xml", "/sitemap-news.xml",
+    "/sitemap-articles.xml", "/sitemap_news.xml",
+    "/artikkel-sitemap.xml",          # Nordic / Norwegian news
+    "/feed/sitemap.xml", "/feeds/sitemap.xml",
 ]
 
 
 def _parse_xml_safe(text: str) -> ET.Element | None:
+    # Strip BOM (U+FEFF) — ElementTree rejects it with "not at start of entity"
+    text = text.lstrip("﻿")
     try:
         return ET.fromstring(text)
     except ET.ParseError:
+        # Some servers include an XML declaration with encoding; strip it and retry
         cleaned = re.sub(r"<\?xml[^?]*\?>", "", text, count=1).strip()
         try:
             return ET.fromstring(cleaned)
@@ -283,52 +319,280 @@ def _count_urls(root: ET.Element) -> int:
     return n or len(root.findall("url"))
 
 
-def _index_children(root: ET.Element) -> list[str]:
-    locs = root.findall(f"{{{_SM_NS}}}sitemap/{{{_SM_NS}}}loc")
-    if not locs:
-        locs = root.findall("sitemap/loc")
-    return [loc.text.strip() for loc in locs if loc.text]
+def _sm_filename(url: str) -> str:
+    return url.rstrip("/").split("/")[-1] or url
+
+
+def _index_entries(root: ET.Element) -> list[tuple[str, str]]:
+    """Return (loc_url, lastmod) pairs from every <sitemap> entry in an index.
+
+    IMPORTANT: never use `elem or fallback` with ElementTree elements.
+    An element with no child nodes evaluates as falsy even when it exists,
+    so `find(ns_loc) or find(loc)` silently drops valid results.
+    Always use `is None` guards instead.
+    """
+    items = root.findall(f"{{{_SM_NS}}}sitemap")
+    if not items:
+        items = root.findall("sitemap")
+    result = []
+    for sm in items:
+        loc = sm.find(f"{{{_SM_NS}}}loc")
+        if loc is None:
+            loc = sm.find("loc")
+        lm = sm.find(f"{{{_SM_NS}}}lastmod")
+        if lm is None:
+            lm = sm.find("lastmod")
+        url     = (loc.text or "").strip() if loc is not None else ""
+        lastmod = (lm.text  or "").strip() if lm  is not None else ""
+        if url:
+            result.append((url, lastmod))
+    return result
+
+
+def _urlset_oldest_lastmod(root: ET.Element) -> str:
+    lms = root.findall(f"{{{_SM_NS}}}url/{{{_SM_NS}}}lastmod")
+    if not lms:
+        lms = root.findall("url/lastmod")
+    dates = [lm.text.strip() for lm in lms if lm.text]
+    return min(dates) if dates else ""
+
+
+def _urlset_newest_lastmod(root: ET.Element) -> str:
+    lms = root.findall(f"{{{_SM_NS}}}url/{{{_SM_NS}}}lastmod")
+    if not lms:
+        lms = root.findall("url/lastmod")
+    dates = [lm.text.strip() for lm in lms if lm.text]
+    return max(dates) if dates else ""
+
+
+def _detect_platform(found_url: str, sitemaps: list[dict]) -> str:
+    """Detect CMS/e-commerce platform from sitemap URL patterns.
+
+    Signals used (sitemap-only, no page HTML required):
+      shopify     -- sub-sitemaps named sitemap_products_N.xml / sitemap_collections_N.xml
+      woocommerce -- WordPress core sitemap (wp-sitemap) + product post-type sub-sitemap
+      wordpress   -- WordPress core sitemap (wp-sitemap) without WooCommerce products
+    Returns '' when no known platform is detected.
+    """
+    all_urls = [s.get("url", "").lower() for s in sitemaps]
+    all_fns  = [s.get("filename", "").lower() for s in sitemaps]
+    root_lc  = found_url.lower()
+
+    # Shopify: fixed naming convention for product/collection sub-sitemaps
+    if any("sitemap_products_" in fn or "sitemap_collections_" in fn for fn in all_fns):
+        return "shopify"
+
+    # WordPress family: identified by wp-sitemap in any URL
+    if any("wp-sitemap" in u for u in all_urls) or "wp-sitemap" in root_lc:
+        # WooCommerce adds a product post-type sub-sitemap
+        if any("product" in fn for fn in all_fns):
+            return "woocommerce"
+        return "wordpress"
+
+    return ""
+
+
+def _detect_platform_from_html(html: str) -> str:
+    """Detect CMS/platform from homepage HTML content.
+
+    Used as a fallback when sitemap filenames give no signal (e.g. Episerver,
+    Umbraco, Sitecore, Drupal).  Checks are ordered by confidence / specificity.
+    Returns '' when no known platform is detected.
+    """
+    if not html:
+        return ""
+    h = html.lower()
+
+    # Episerver / Optimizely Content Cloud (Swedish CMS, common in Scandinavia)
+    if "/episerver/" in h or "data-epi-" in h or '"episerver"' in h:
+        return "episerver"
+
+    # Umbraco (.NET CMS)
+    if "/umbraco/" in h or "umbraco.services" in h:
+        return "umbraco"
+
+    # Sitecore
+    if "/-/media/" in h or "/sitecore/" in h or "sitecore.net" in h:
+        return "sitecore"
+
+    # Drupal
+    if "drupal.settings" in h or '"drupal"' in h or "/sites/default/files/" in h:
+        return "drupal"
+
+    # TYPO3
+    if "typo3" in h and ("/typo3/" in h or "typo3conf" in h):
+        return "typo3"
+
+    # Joomla
+    if "/components/com_" in h or "joomla!" in h:
+        return "joomla"
+
+    # Angular (2+): ng-version attribute injected on root component element;
+    # _nghost- / _ngcontent- are Angular's view-encapsulation hash attributes.
+    # Also catches AngularJS 1.x via ng-app directive.
+    if "ng-version=" in h or "_nghost-" in h or "_ngcontent-" in h or "ng-app=" in h:
+        return "angular"
+
+    # React: data-reactroot / data-reactid are React's DOM markers.
+    # __NEXT_DATA__ is injected by Next.js (React SSR framework).
+    # react.production.min.js covers sites that load React from CDN or expose bundle names.
+    if ("data-reactroot" in h or "data-reactid" in h
+            or "__next_data__" in h or "react.production.min.js" in h
+            or "react-dom" in h):
+        return "react"
+
+    return ""
 
 
 async def read_sitemap_async(session: aiohttp.ClientSession,
-                             base_url: str) -> tuple[int, str, str]:
+                             base_url: str,
+                             debug: bool = False) -> tuple[int, str, str, list[dict], str, str, str]:
+    """Return (total_url_count, first_sitemap_url, sitemap_type).
+
+    Handles arbitrarily nested sitemap structures (index → sub-index → urlset):
+    - Tries every candidate entry point (robots.txt + well-known paths)
+    - Recurses into sub-sitemaps at any depth (capped at MAX_DEPTH=4)
+    - Shared fetch budget (MAX_FETCHES=150) across ALL levels to prevent runaway
+    - When budget is exhausted mid-index, extrapolates from the sample collected so far
+    - Skips Google News sitemaps (only cover the last 2 days, not the full archive)
+    - visited-URL set prevents any file being counted twice across all entry points
+    """
+    _MAX_FETCHES   = 150   # total HTTP fetches across all levels combined
+    _MAX_DEPTH     = 4     # maximum sitemap nesting depth
+    _SAMPLE_PER_LEVEL = 30 # max children fetched per index before extrapolating
+
     base = base_url.rstrip("/")
-    robots_sitemap: str | None = None
+    visited: set[str]  = set()
+    budget:       list[int] = [_MAX_FETCHES]  # mutable so nested closure can decrement it
+    found_url:    str = ""
+    found_type:   str = "none"
+    all_sitemaps: list[dict] = []  # {url, filename, lastmod} per sitemap successfully fetched
+
+    # Discover entry points from robots.txt — collect ALL Sitemap: lines.
+    # News sites (e.g. vg.no) list the Google News sitemap first and the real
+    # archive sitemap index on a later line; stopping at the first line misses it.
+    robots_sitemaps: list[str] = []
     robots_text = await _async_get(session, f"{base}/robots.txt", timeout=10)
     for line in robots_text.splitlines():
         if line.strip().lower().startswith("sitemap:"):
-            robots_sitemap = line.split(":", 1)[1].strip()
-            break
+            url = line.split(":", 1)[1].strip()
+            if url and url not in robots_sitemaps:
+                robots_sitemaps.append(url)
 
-    candidates = ([robots_sitemap] if robots_sitemap else []) + [base + p for p in _SITEMAP_PATHS]
-    for sitemap_url in candidates:
-        text = await _async_get(session, sitemap_url, timeout=15, xml=True)
+    # For each robots.txt sitemap URL that lives deep in a subdirectory
+    # (e.g. /sitemaps/files/articles-48hrs.xml), also probe its parent and
+    # grandparent directories for a sitemap index.  This catches sites like
+    # vg.no whose archive index is at /sitemaps/sitemap_index.xml but whose
+    # robots.txt only advertises the 48-hour news feed under /sitemaps/files/.
+    _INDEX_NAMES = ("sitemap_index.xml", "sitemap-index.xml", "sitemap.xml")
+    extra_from_robots: list[str] = []
+    for _sm_url in robots_sitemaps:
+        try:
+            from urllib.parse import urlparse as _urlparse
+            _path = _urlparse(_sm_url).path          # /sitemaps/files/articles-48hrs.xml
+            _parent      = _path.rsplit("/", 1)[0]   # /sitemaps/files
+            _grandparent = _parent.rsplit("/", 1)[0] # /sitemaps
+            for _dir in (_parent, _grandparent):
+                if _dir and _dir != "/":
+                    for _name in _INDEX_NAMES:
+                        _c = f"{base}{_dir}/{_name}"
+                        if _c not in extra_from_robots and _c not in robots_sitemaps:
+                            extra_from_robots.append(_c)
+        except Exception:
+            pass
+
+    # robots.txt entries first (preserve order), then parent-dir guesses, then
+    # well-known fallback paths.
+    # (dedup: _count_sitemap will skip any URL already in visited)
+    candidates = robots_sitemaps + extra_from_robots + [base + p for p in _SITEMAP_PATHS]
+
+    def _dbg(msg: str) -> None:
+        if debug:
+            print(f"    [sitemap-dbg] {msg}")
+
+    async def _count_sitemap(url: str, depth: int = 0, parent_lastmod: str = "") -> int:
+        nonlocal found_url, found_type
+        indent = "  " * depth
+        if not url or url in visited:
+            _dbg(f"{indent}SKIP (visited)  {url}")
+            return 0
+        if depth > _MAX_DEPTH or budget[0] <= 0:
+            _dbg(f"{indent}SKIP (budget={budget[0]} depth={depth})  {url}")
+            return 0
+
+        visited.add(url)
+        budget[0] -= 1
+
+        text = await _async_get(session, url, timeout=15, xml=True)
         if not text:
-            continue
+            _dbg(f"{indent}EMPTY (fetch returned nothing)  {url}")
+            return 0
         root = _parse_xml_safe(text)
         if root is None:
-            continue
+            _dbg(f"{indent}PARSE-FAIL  {url}  peek={repr(text[:80])}")
+            return 0
         tag = root.tag.lower()
+        _dbg(f"{indent}FETCH OK  tag={tag!r}  {url}")
+
         if "sitemapindex" in tag:
-            children = _index_children(root)
+            # This is an index — could be root, sub-index, or archive index.
+            # Recurse into every child (subject to budget + depth cap).
+            if not found_url:
+                found_url, found_type = url, "index"
+            entries  = _index_entries(root)
+            children = [(u, lm) for u, lm in entries if u not in visited]
+            _dbg(f"{indent}  index: {len(entries)} entries, {len(children)} unvisited children")
             sample_count = sampled = 0
-            for child_url in children[:10]:
-                child_text = await _async_get(session, child_url, timeout=12, xml=True)
-                if child_text:
-                    child_root = _parse_xml_safe(child_text)
-                    if child_root is not None:
-                        sample_count += _count_urls(child_root)
-                        sampled += 1
-            if sampled == 0:
-                total = 0
-            elif len(children) > sampled:
-                total = int((sample_count / sampled) * len(children))
-            else:
-                total = sample_count
-            return total, sitemap_url, "index"
+            for child_url, child_lm in children:
+                if sampled >= _SAMPLE_PER_LEVEL or budget[0] <= 0:
+                    # Extrapolate remaining children from the sample we have
+                    if sampled > 0:
+                        sample_count = int((sample_count / sampled) * len(children))
+                    _dbg(f"{indent}  extrapolated → {sample_count:,} (sampled {sampled}/{len(children)})")
+                    break
+                n = await _count_sitemap(child_url, depth + 1, parent_lastmod=child_lm)
+                sample_count += n
+                sampled += 1
+            # Append AFTER count is known so page_count is accurate
+            all_sitemaps.append({"url": url, "filename": _sm_filename(url),
+                                 "lastmod": parent_lastmod, "lastmod_newest": parent_lastmod,
+                                 "page_count": sample_count})
+            _dbg(f"{indent}  index total={sample_count:,}")
+            return sample_count
+
         if "urlset" in tag:
-            return _count_urls(root), sitemap_url, "urlset"
-    return 0, "", "none"
+            olm    = _urlset_oldest_lastmod(root) or parent_lastmod
+            newest = _urlset_newest_lastmod(root) or parent_lastmod
+            count  = _count_urls(root)
+            all_sitemaps.append({"url": url, "filename": _sm_filename(url),
+                                 "lastmod": olm, "lastmod_newest": newest,
+                                 "page_count": count})
+            if not found_url:
+                found_url, found_type = url, "urlset"
+            _dbg(f"{indent}urlset  count={count:,}  {url}")
+            return count
+
+        _dbg(f"{indent}UNKNOWN tag={tag!r}  {url}")
+        return 0
+
+    # Process every candidate entry point.
+    # visited set ensures the same sitemap file is never counted twice even if
+    # multiple entry points (robots.txt + /sitemap_index.xml) point to the same file.
+    total = 0
+    for candidate in candidates:
+        total += await _count_sitemap(candidate)
+
+    # Deduplicate by URL while preserving order
+    seen_urls: set[str] = set()
+    deduped = []
+    for s in all_sitemaps:
+        if s["url"] not in seen_urls:
+            seen_urls.add(s["url"])
+            deduped.append(s)
+    oldest_date = min((s["lastmod"]        for s in deduped if s.get("lastmod")),        default="")
+    newest_date = max((s["lastmod_newest"]  for s in deduped if s.get("lastmod_newest")), default="")
+    platform    = _detect_platform(found_url, deduped)
+    return total, found_url, found_type, deduped, oldest_date, newest_date, platform
 
 
 # ---------------------------------------------------------------------------
@@ -448,13 +712,17 @@ async def process_site_async(
         return None, "url_error"
 
     lead_id = lead_id_from_url(website)
-    page_count, sitemap_url, sitemap_type = await read_sitemap_async(session, website)
+    page_count, sitemap_url, sitemap_type, sitemaps, sitemap_oldest_date, sitemap_newest_date, platform = await read_sitemap_async(session, website)
     if min_pages > 0 and page_count < min_pages:
         print(f"    skip {domain}  pages={page_count} ({sitemap_type}) < min={min_pages}")
         return None, f"min_pages:{page_count}"
 
     homepage_html = await _async_get(session, website, timeout=15)
     title, description = _extract_meta(homepage_html) if homepage_html else ("", "")
+
+    # HTML-based platform fallback (catches Episerver, Umbraco, Sitecore, Drupal, etc.)
+    if not platform:
+        platform = _detect_platform_from_html(homepage_html)
 
     contacts: list[SiteContact] = []
     if sitemap_type != "none" and homepage_html:
@@ -472,6 +740,10 @@ async def process_site_async(
         sitemap_url=sitemap_url, sitemap_type=sitemap_type,
         source_query=source_query,
         query_category=query_category,
+        sitemap_oldest_date=sitemap_oldest_date,
+        sitemap_newest_date=sitemap_newest_date,
+        platform=platform,
+        sitemaps=sitemaps,
         crawled_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
         target_types=ttypes, keywords=keywords, contacts=contacts,
     ), ""
@@ -653,6 +925,8 @@ async def _run_country_full_async(
     counters = {"seen": 0, "blocked": 0, "tld_skip": 0, "deep_link": 0,
                 "excl_skip": 0, "queued": 0, "done": 0, "excluded": 0}
     leads: list[SiteLead] = []
+    failed_lead_writes: list[tuple]  = []   # (lead, collection) — retry after consumers drain
+    failed_excl_writes: list[tuple]  = []   # upsert_site_excluded *args — retry after consumers drain
 
     connector = aiohttp.TCPConnector(limit=workers, limit_per_host=3, ssl=False)
     timeout   = aiohttp.ClientTimeout(total=30, connect=8)
@@ -692,8 +966,9 @@ async def _run_country_full_async(
                         n = counters["done"]
                         excl_reason = "error"
                         print(f"  [{n}] [consumer] error on {url}: {exc}")
-                        try:
-                            if not no_firebase and not dry_run:
+                        _args = None
+                        if not no_firebase and not dry_run:
+                            try:
                                 lead_id = lead_id_from_url(normalize_url(url))
                                 _args = (d, url, lead_id, eff_country,
                                          excl_reason, 0, source_query, excl_collection,
@@ -704,10 +979,12 @@ async def _run_country_full_async(
                                     ),
                                     timeout=12.0,
                                 )
-                            excluded_domains.add(d)
-                            counters["excluded"] += 1
-                        except Exception:
-                            pass
+                            except (asyncio.TimeoutError, Exception) as exc:
+                                if _args is not None:
+                                    print(f"  [{n}] [excl-write] timeout/error — queued for retry")
+                                    failed_excl_writes.append(_args)
+                        excluded_domains.add(d)
+                        counters["excluded"] += 1
                         continue
 
                     counters["done"] += 1
@@ -727,7 +1004,8 @@ async def _run_country_full_async(
                                     timeout=12.0,
                                 )
                             except (asyncio.TimeoutError, Exception) as exc:
-                                print(f"  [{n}] [lead-write] timeout/error: {exc}")
+                                print(f"  [{n}] [lead-write] timeout/error: {exc} — queued for retry")
+                                failed_lead_writes.append((lead, collection))
                     else:
                         # Parse out real page_count if encoded in the reason string
                         stored_reason = excl_reason
@@ -737,8 +1015,9 @@ async def _run_country_full_async(
                             stored_reason = "min_pages"
                         print(f"  [{n}] -- excluded ({stored_reason})  {url}")
                         if excl_reason != "url_error":
-                            try:
-                                if not no_firebase and not dry_run:
+                            _args = None
+                            if not no_firebase and not dry_run:
+                                try:
                                     lead_id = lead_id_from_url(normalize_url(url))
                                     _args = (d, url, lead_id, eff_country,
                                              stored_reason, stored_pages,
@@ -750,10 +1029,12 @@ async def _run_country_full_async(
                                         ),
                                         timeout=12.0,
                                     )
-                                excluded_domains.add(d)
-                                counters["excluded"] += 1
-                            except (asyncio.TimeoutError, Exception) as exc:
-                                print(f"  [{n}] [excl-upsert] timeout/error: {exc}")
+                                except (asyncio.TimeoutError, Exception) as exc:
+                                    if _args is not None:
+                                        print(f"  [{n}] [excl-upsert] timeout/error — queued for retry")
+                                        failed_excl_writes.append(_args)
+                            excluded_domains.add(d)
+                            counters["excluded"] += 1
 
                 except Exception as exc:
                     print(f"  [consumer] unhandled error: {exc}")
@@ -788,6 +1069,31 @@ async def _run_country_full_async(
         for _ in range(workers):
             await queue.put(_QUEUE_SENTINEL)
         await asyncio.gather(*consumer_tasks)
+
+        # Flush any writes that timed out / errored during processing.
+        # Runs synchronously so nothing is lost before we return.
+        if not no_firebase and not dry_run:
+            if failed_lead_writes:
+                print(f"\n  [firebase] flushing {len(failed_lead_writes)} lead write(s) that failed inline...")
+                for _lead, _col in failed_lead_writes:
+                    for attempt in range(3):
+                        try:
+                            upsert_site_lead(_lead, _col)
+                            print(f"    ok {_lead.domain}")
+                            break
+                        except Exception as exc:
+                            if attempt == 2:
+                                print(f"    gave up {_lead.domain}: {exc}")
+            if failed_excl_writes:
+                print(f"  [firebase] flushing {len(failed_excl_writes)} excluded write(s) that failed inline...")
+                for _eargs in failed_excl_writes:
+                    for attempt in range(3):
+                        try:
+                            upsert_site_excluded(*_eargs)
+                            break
+                        except Exception as exc:
+                            if attempt == 2:
+                                print(f"    gave up {_eargs[0]}: {exc}")
 
     print(f"  [site_agent] {counters['done']} processed, {len(leads)} kept.\n")
     return leads

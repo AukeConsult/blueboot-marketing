@@ -124,3 +124,28 @@ open(path, 'wb').write(data[:idx] + tail)
 - All Firestore writes in async consumers → `run_in_executor` + `asyncio.wait_for(timeout=12)`
 - All Firestore reads at startup (preload) are sync and called before `asyncio.run()` — acceptable
 - `firebase_admin` is sync-only; never call it directly in a coroutine without `run_in_executor`
+
+---
+
+## ElementTree
+
+### RULE: Never use `or` to chain `Element.find()` calls
+
+`xml.etree.ElementTree.Element` evaluates as **falsy** when it has no child elements,
+even if it exists and has text content. A `<loc>` or `<lastmod>` node has text but no
+children, so `bool(element)` is `False`.
+
+**Never write:**
+```python
+loc = sm.find(f"{{{ns}}}loc") or sm.find("loc")   # WRONG — drops valid results
+```
+
+**Always write:**
+```python
+loc = sm.find(f"{{{ns}}}loc")
+if loc is None:
+    loc = sm.find("loc")
+```
+
+This bug caused `_index_entries` to return empty `children` lists for all sitemapindex
+nodes, making every site report `pages=0 (index)`.

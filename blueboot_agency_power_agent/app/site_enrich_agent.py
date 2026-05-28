@@ -20,11 +20,18 @@ Fields written to each site_leads doc:
   ai_classified_at  -- ISO timestamp
   keywords          -- existing keywords merged with ai_keywords (deduped, max 25)
 
+Fields written when --update-sitemaps is used:
+  sitemap_url       -- canonical sitemap URL found for the site
+  sitemap_type      -- "index" | "urlset" | "none"
+  page_count        -- estimated total indexed pages (updated)
+
 Usage:
     python app/site_enrich_agent.py
     python app/site_enrich_agent.py --countries NO,SE --batch-size 20
     python app/site_enrich_agent.py --limit 50 --dry-run
     python app/site_enrich_agent.py --force --concurrent 5
+    python app/site_enrich_agent.py --update-sitemaps --skip-ai --countries NO
+    python app/site_enrich_agent.py --update-sitemaps --force-sitemaps
 """
 from __future__ import annotations
 
@@ -183,6 +190,135 @@ def _stream_unclassified(
         f"(skipped: {skipped_done} already done, {skipped_country} wrong country)"
     )
     return results
+
+
+# ---------------------------------------------------------------------------
+# Sitemap update pass
+# ---------------------------------------------------------------------------
+
+SITEMAP_CONCURRENT = 10    # parallel sitemap fetches
+SITEMAP_TIMEOUT    = 120.0  # hard ceiling per site (robots.txt + index + url-sets)
+
+
+def _stream_for_sitemaps(
+    col,
+    countries:      list[str] | None,
+    force_sitemaps: bool,
+    limit:          int | None,
+) -> list[tuple]:
+    """Return [(doc_ref, doc_dict), ...] for leads that need sitemap data."""
+    print("  [sitemaps] Scanning site_leads…")
+    results: list[tuple] = []
+    scanned = skipped = 0
+
+    for doc in col.stream():
+        scanned += 1
+        data = doc.to_dict() or {}
+
+        if countries:
+            c = (data.get("country") or "").upper()
+            if c not in countries and c != "*":
+                continue
+
+        if not force_sitemaps:
+            s_url  = data.get("sitemap_url", "")
+            s_type = data.get("sitemap_type", "")
+            if s_url and s_type and s_type != "none":
+                skipped += 1
+                continue
+
+        website = data.get("website") or data.get("domain", "")
+        if not website:
+            skipped += 1
+            continue
+
+        results.append((doc.reference, data))
+        if limit and len(results) >= limit:
+            break
+
+    print(
+        f"  [sitemaps] {scanned} scanned → {len(results)} need sitemap update  "
+        f"({skipped} skipped — already have sitemap)"
+    )
+    return results
+
+
+async def _run_sitemaps_async(
+    to_process: list[tuple],
+    concurrent: int,
+    dry_run:    bool,
+) -> dict:
+    """Fetch sitemaps for all leads, write back sitemap_url/type/page_count."""
+    try:
+        import aiohttp as _aiohttp
+    except ImportError:
+        raise RuntimeError("aiohttp not installed — run: pip install aiohttp")
+    from site_agent import read_sitemap_async  # noqa: PLC0415
+
+    total    = len(to_process)
+    sem      = asyncio.Semaphore(concurrent)
+    loop     = asyncio.get_running_loop()
+    counters = {"total": total, "done": 0, "updated": 0, "failed": 0}
+
+    connector      = _aiohttp.TCPConnector(ssl=False, limit=concurrent + 5)
+    session_timeout = _aiohttp.ClientTimeout(total=45, connect=8)
+
+    async def _fetch_one(session, doc_ref, data: dict) -> None:
+        website = data.get("website") or f"https://{data.get('domain', '')}"
+        domain  = data.get("domain", website)
+        async with sem:
+            try:
+                count, s_url, s_type, s_sitemaps, s_oldest, s_newest, s_platform = await asyncio.wait_for(
+                    read_sitemap_async(session, website),
+                    timeout=SITEMAP_TIMEOUT,
+                )
+            except Exception as exc:
+                counters["done"]   += 1
+                counters["failed"] += 1
+                print(f"    [{counters['done']}/{total}] ERR  {domain}: {exc}")
+                return
+
+        updates = {
+            "sitemap_url":         s_url,
+            "sitemap_type":        s_type,
+            "page_count":          count,
+            "sitemaps":        s_sitemaps,
+            "sitemap_oldest_date": s_oldest,
+            "sitemap_newest_date": s_newest,
+            "platform":            s_platform,
+        }
+        counters["done"] += 1
+        s_url_short = (s_url or "—")[:60]
+        print(
+            f"    [{counters['done']}/{total}] {domain:<42}"
+            f"  pages={count:,}  ({s_type})  {s_url_short}"
+        )
+
+        if not dry_run:
+            try:
+                await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None, lambda r=doc_ref, u=updates: r.set(u, merge=True)
+                    ),
+                    timeout=12.0,
+                )
+                counters["updated"] += 1
+            except Exception as exc:
+                print(f"    [sitemaps] write error {domain}: {exc}")
+                counters["failed"] += 1
+        else:
+            counters["updated"] += 1
+
+    async with _aiohttp.ClientSession(
+        connector=connector, timeout=session_timeout
+    ) as session:
+        tasks = [
+            asyncio.create_task(_fetch_one(session, ref, data))
+            for ref, data in to_process
+        ]
+        await asyncio.gather(*tasks)
+
+    return counters
 
 
 # ---------------------------------------------------------------------------
@@ -365,15 +501,40 @@ async def _run_async(
 # ---------------------------------------------------------------------------
 
 def enrich_site_leads(
-    collection: str           = COLLECTION_DEFAULT,
-    countries:  list[str] | None = None,
-    limit:      int | None    = None,
-    batch_size: int           = BATCH_SIZE,
-    concurrent: int           = CONCURRENT_BATCHES,
-    force:      bool          = False,
-    dry_run:    bool          = False,
+    collection:     str           = COLLECTION_DEFAULT,
+    countries:      list[str] | None = None,
+    limit:          int | None    = None,
+    batch_size:     int           = BATCH_SIZE,
+    concurrent:     int           = CONCURRENT_BATCHES,
+    force:          bool          = False,
+    dry_run:        bool          = False,
+    update_sitemaps: bool         = False,
+    skip_ai:        bool          = False,
+    force_sitemaps: bool          = False,
 ) -> None:
     api_key, fb_key = _load_secrets()
+    _, col  = _init_firestore(fb_key, collection)
+
+    # ── sitemap pass (optional) ──────────────────────────────────────────────
+    if update_sitemaps:
+        sm_proc = _stream_for_sitemaps(col, countries, force_sitemaps, limit)
+        if sm_proc:
+            print(f"\n  [sitemaps] Fetching sitemaps for {len(sm_proc)} lead(s)…")
+            sm_counters = asyncio.run(
+                _run_sitemaps_async(sm_proc, SITEMAP_CONCURRENT, dry_run)
+            )
+            print("\n  [sitemaps] Done.")
+            print(f"  Updated  : {sm_counters['updated']}")
+            print(f"  Failed   : {sm_counters['failed']}")
+            if dry_run:
+                print("  (dry-run — nothing written to Firestore)")
+        else:
+            print("  [sitemaps] Nothing to update.")
+
+    if skip_ai:
+        return
+
+    # OpenAI key only needed for AI classification
     api_key = api_key or os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError(
@@ -382,7 +543,6 @@ def enrich_site_leads(
         )
 
     client  = _init_openai_async(api_key)
-    _, col  = _init_firestore(fb_key, collection)
     to_proc = _stream_unclassified(col, countries, force, limit)
 
     if not to_proc:
@@ -434,6 +594,12 @@ def main(argv=None) -> None:
                    help="Re-classify leads that are already classified")
     p.add_argument("--dry-run",     action="store_true",
                    help="Print results without writing to Firestore")
+    p.add_argument("--update-sitemaps", action="store_true",
+                   help="Fetch and update sitemap_url/sitemap_type/page_count for leads missing them")
+    p.add_argument("--skip-ai",     action="store_true",
+                   help="Skip OpenAI classification (use with --update-sitemaps for sitemap-only run)")
+    p.add_argument("--force-sitemaps", action="store_true",
+                   help="Re-fetch sitemaps even for leads that already have sitemap_url set")
 
     args = p.parse_args(argv)
 
@@ -442,13 +608,16 @@ def main(argv=None) -> None:
         countries = [c.strip().upper() for c in args.countries.split(",") if c.strip()]
 
     enrich_site_leads(
-        collection = args.collection,
-        countries  = countries,
-        limit      = args.limit,
-        batch_size = args.batch_size,
-        concurrent = args.concurrent,
-        force      = args.force,
-        dry_run    = args.dry_run,
+        collection      = args.collection,
+        countries       = countries,
+        limit           = args.limit,
+        batch_size      = args.batch_size,
+        concurrent      = args.concurrent,
+        force           = args.force,
+        dry_run         = args.dry_run,
+        update_sitemaps = args.update_sitemaps,
+        skip_ai         = args.skip_ai,
+        force_sitemaps  = args.force_sitemaps,
     )
 
 

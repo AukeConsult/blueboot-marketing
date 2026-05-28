@@ -1,5 +1,145 @@
 # BlueBoot Agency Power Agent
 
+> This repository contains **two independent lead-generation pipelines**. The newer
+> `site_agent` / `site_enrich_agent` pipeline (section 1) is the actively developed one.
+> The original `lead_agent` pipeline (section 2) remains for backward compatibility.
+
+---
+
+## Section 1 — Site Agent Pipeline (current)
+
+Async Python pipeline that discovers content-heavy websites via Bing search, measures site
+size via sitemap, extracts contact emails, and stores results in Firestore.
+
+### Architecture
+
+```
+Bing search (5 concurrent)
+    ↓ URLs
+Queue (asyncio)
+    ↓
+Site consumers (20 concurrent)
+    ├─ Fetch robots.txt + sitemap → page count
+    ├─ Fetch homepage → title, description, meta
+    └─ Scrape contact pages → emails, phones
+        ↓
+Firestore
+    site_leads/{lead_id}
+    site_leads/{lead_id}/site_contacts/{contact_id}
+    sites_excluded/{lead_id}   ← rejected sites, never re-fetched
+```
+
+### Scripts
+
+| Script | Purpose |
+|---|---|
+| `app/site_agent.py` | Discovers and stores `site_leads` |
+| `app/site_enrich_agent.py` | AI enrichment pass — sector, company type, country |
+| `site_scrape_no_se.bat` | Runs both scripts for Norway + Sweden in sequence |
+
+### CLI — site_agent.py
+
+```bash
+python app/site_agent.py --countries NO,SE
+python app/site_agent.py --countries NO --category real_estate
+python app/site_agent.py --countries ALL --workers 20
+python app/site_agent.py --countries NO --dry-run --max-results 20
+python app/site_agent.py --countries NO --main-page-only
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | `NO` | Comma-separated ISO codes or `ALL` |
+| `--category` | _(all)_ | Run only one query category (e.g. `real_estate`, `tech`, `company`) |
+| `--max-results` | `500` | Max Bing results per query |
+| `--min-pages` | `0` | Minimum sitemap page count to keep a site |
+| `--workers` | `20` | Async consumer concurrency |
+| `--delay` | `1.5` | Seconds between Bing queries |
+| `--no-firebase` | off | Skip all Firestore writes |
+| `--dry-run` | off | Process sites but don't write to Firestore |
+| `--collection` | `site_leads` | Firestore collection for accepted sites |
+| `--excl-collection` | `sites_excluded` | Firestore collection for rejected sites |
+| `--main-page-only` | off | Discard Bing results that are not homepage/root URLs |
+
+### CLI — site_enrich_agent.py
+
+```bash
+python app/site_enrich_agent.py --countries NO,SE
+python app/site_enrich_agent.py --countries NO,SE --limit 100
+```
+
+Reads unprocessed `site_leads` documents and writes back AI-inferred fields:
+
+| Field | Description |
+|---|---|
+| `ai_sector` | e.g. `public_sector`, `ecommerce`, `media`, `healthcare` |
+| `ai_company_type` | e.g. `agency`, `inhouse`, `brand`, `institution` |
+| `ai_country` | ISO 3166-1 alpha-2, inferred from TLD / language / address |
+| `ai_confidence` | Float 0.0–1.0 |
+| `ai_enriched_at` | ISO 8601 UTC timestamp |
+| `enriched` | Boolean flag |
+
+### Supported countries
+
+| Code | Country | Native queries |
+|---|---|---|
+| `NO` | Norway | ✓ |
+| `SE` | Sweden | ✓ |
+| `DK` | Denmark | ✓ |
+| `DE` | Germany | ✓ |
+| `UK` | United Kingdom | ✓ |
+| `FI` | Finland | ✓ |
+| `NL` | Netherlands | ✓ |
+| `FR` | France | ✓ |
+| `EU` | European Union (.eu domains) | ✓ (English) |
+
+### Query categories (16 per country, ~12 queries each)
+
+`municipality`, `public`, `healthcare`, `education`, `media`, `company`, `shop`,
+`association`, `finance`, `legal`, `real_estate`, `logistics`, `construction`,
+`tech`, `hr`, `hospitality`
+
+Each `site_lead` document carries a `query_category` field so results can be filtered
+by category in Firestore or exports.
+
+### Firestore structure
+
+```
+site_leads/{lead_id}
+    domain, website, country, country_name, company
+    title, description, page_count, sitemap_url, sitemap_type
+    source_query, query_category, crawled_at
+    target_types[], keywords[]
+    ai_sector, ai_company_type, ai_country, ai_confidence  ← written by site_enrich_agent
+    enriched, ai_enriched_at
+
+site_leads/{lead_id}/site_contacts/{contact_id}
+    email, name, title, phone, found_on
+    lead_id, domain, website, country, country_name
+
+sites_excluded/{lead_id}
+    domain, website, country, reason, page_count
+    source_query, query_category, excluded_at
+```
+
+### Config files
+
+| File | Purpose |
+|---|---|
+| `config/site_agent_queries.json` | Per-country query categories and search queries |
+| `config/countries.json` | TLD filters, accepted_tlds, keywords per country |
+| `config/site_agent_blocklist.txt` | Domain patterns to skip |
+
+**Adding a new country:** add entries to both `countries.json` and `site_agent_queries.json`
+— no code changes needed.
+
+**Adding a new query category:** add the category + queries to every country entry in
+`query_categories` in `site_agent_queries.json` — no code changes needed.
+
+---
+
+## Section 2 — Lead Agent Pipeline (legacy)
+
 Local Python lead-generation agent for finding web agencies, WordPress/WooCommerce providers, SEO agencies, digital agencies and communication agencies that may resell BlueSearch.
 
 Supported countries: Norway (`NO`), Sweden (`SE`), Denmark (`DK`), Germany (`DE`), United Kingdom (`UK`), and any country with a `config/queries_<CODE>.txt` file.
@@ -500,98 +640,3 @@ export_to_excel(results, outdir="output")
 results = summarise_reasons_count(leads_collection="leads", writeback=True)
 export_reasons_to_excel(results, outdir="output")
 ```
-
----
-
-## `site_agent.py` — find content-heavy websites via Bing + sitemap analysis
-
-Searches for websites that could benefit from BlueSearch AI-powered search — municipalities, universities, hospitals, public sector portals, media sites, large e-commerce stores, and associations. Unlike `lead_agent.py` (which looks for resellers), this agent targets **end-user sites** as direct BlueSearch customers.
-
-```bat
-cd app
-python site_agent.py [options]
-```
-
-### How it works
-
-1. Loads per-country search queries from `config/site_agent_queries.json`.
-2. Runs all Bing queries for a country **in parallel** (up to 5 concurrent), dispatching site-crawl tasks the moment each query returns — no waiting for all searches to finish.
-3. Filters results against `config/site_agent_blocklist.txt` (lean blocklist — does not exclude hospitals, municipalities, media etc.).
-4. Skips domains already stored in Firestore (preloaded at startup).
-5. For each candidate site (up to 20 crawling in parallel):
-   - Fetches `robots.txt` to find the sitemap URL, then tries common paths (`/sitemap.xml`, `/wp-sitemap.xml`, etc.).
-   - Parses the sitemap (follows index files, samples child sitemaps) to count total pages.
-   - Fetches homepage title and meta description.
-   - **If a sitemap is found**: crawls the homepage + up to 3 contact/about/team pages and extracts emails, phone numbers, and names.
-6. Writes a `SiteLead` document to Firestore `site_leads` collection.
-7. Writes each contact to a `site_contacts` subcollection under the lead.
-
-### Parameters
-
-| Parameter | Default | Description |
-|---|---|---|
-| `--countries` | `NO` | Comma-separated ISO codes or `ALL` |
-| `--max-results` | `50` | Max Bing results per query |
-| `--min-pages` | `0` | Minimum sitemap page count to store a site (0 = keep all) |
-| `--workers` | `20` | Async concurrency limit for site crawling |
-| `--delay` | `1.5` | Seconds to wait between Bing query slots |
-| `--no-firebase` | off | Skip writing to Firestore |
-| `--collection` | `site_leads` | Firestore collection name |
-| `--dry-run` | off | Run the full pipeline but skip all Firestore writes |
-
-### Example runs
-
-```bat
-REM Dry run — Norway, 10 results per query, no Firebase writes
-python app\site_agent.py --countries NO --max-results 10 --dry-run
-
-REM Norway only, keep sites with at least 50 pages
-python app\site_agent.py --countries NO --min-pages 50
-
-REM Scandinavia, 50 results per query
-python app\site_agent.py --countries NO,SE,DK --max-results 50
-
-REM All configured countries
-python app\site_agent.py --countries ALL --max-results 50 --min-pages 100
-```
-
-### Firestore structure
-
-```
-site_leads/                                  ← top-level collection
-  {lead_id}/                                 ← e.g. "www_oslo_kommune_no"
-    lead_id, domain, website
-    country, country_name, company
-    title, description
-    page_count, sitemap_url, sitemap_type    ← "index" | "urlset" | "none"
-    source_query, crawled_at
-
-    site_contacts/                           ← subcollection (only when sitemap found)
-      {contact_id}/                          ← SHA1 of email
-        email, name, title, phone
-        lead_id, domain, website
-        country, country_name
-        found_on                             ← URL where the email was scraped
-```
-
-The `lead_id` is generated by `lead_id_from_url(website)` — the same function used by `lead_agent` — so IDs are consistent across collections.
-
-### Configuration files
-
-| File | Purpose |
-|---|---|
-| `config/site_agent_queries.json` | Per-country Bing search queries, `min_pages` threshold, and `target_types` |
-| `config/site_agent_blocklist.txt` | Lean domain blocklist for site search — excludes social media, large retailers, classifieds, telecom, job boards per country. Does **not** exclude hospitals, municipalities, universities, or public services. |
-
-### Countries configured
-
-| Code | Min pages | Query count |
-|---|---|---|
-| `NO` | 50 | 35 |
-| `SE` | 50 | 34 |
-| `DK` | 50 | 30 |
-| `DE` | 100 | 35 |
-| `UK` | 100 | 34 |
-| `FI` | 50 | 28 |
-| `NL` | 50 | 29 |
-| `FR` | 100 | 33 |
