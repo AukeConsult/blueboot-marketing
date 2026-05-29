@@ -235,6 +235,15 @@ def _bing_search(query: str, max_results: int) -> list[str]:
         return []
 
 
+def _brave_search(query: str, max_results: int, country_code: str = "") -> list[str]:
+    try:
+        import search_runner
+        return search_runner.brave_search(query, max_results, country_code=country_code)
+    except Exception as exc:
+        print(f"  [brave] error: {exc}")
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Async HTTP helpers
 # ---------------------------------------------------------------------------
@@ -864,15 +873,34 @@ async def _bing_query_async(
 ) -> None:
     async with semaphore:
         loop = asyncio.get_running_loop()
+        # Run Brave and Bing in parallel, then merge results (deduped, Brave first)
+        brave_future = asyncio.wait_for(
+            loop.run_in_executor(None, lambda: _brave_search(query, max_results, country)),
+            timeout=45.0,
+        )
+        bing_future = asyncio.wait_for(
+            loop.run_in_executor(None, lambda: _bing_search(query, max_results)),
+            timeout=45.0,
+        )
+        brave_urls, bing_urls = [], []
         try:
-            urls = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _bing_search(query, max_results)),
-                timeout=45.0,
-            )
+            brave_urls = await brave_future
+        except asyncio.TimeoutError:
+            print(f"  [brave] timeout: {query!r}")
+        try:
+            bing_urls = await bing_future
         except asyncio.TimeoutError:
             print(f"  [bing] timeout: {query!r}")
-            urls = []
-        print(f"  [bing] {query!r}  -> {len(urls)} results")
+
+        # Merge: Brave first, then Bing extras (skip already-seen URLs)
+        seen_urls: set[str] = set()
+        urls: list[str] = []
+        for u in brave_urls + bing_urls:
+            if u not in seen_urls:
+                seen_urls.add(u)
+                urls.append(u)
+        urls = urls[:max_results * 2]  # allow extra since both engines contribute
+        print(f"  [search] {query!r}  brave={len(brave_urls)} bing={len(bing_urls)} merged={len(urls)}")
     await asyncio.sleep(delay)
 
     for url in urls:

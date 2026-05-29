@@ -109,6 +109,58 @@ def google_cse_search(query: str, max_results: int) -> list[str]:
     return urls[:max_results]
 
 
+def brave_search(query: str, max_results: int,
+                country_code: str = "") -> list[str]:
+    """Search via Brave Search API.
+
+    Requires BRAVE_API_KEY env var.
+    Free tier: 2,000 requests/month — https://api.search.brave.com/
+    Paid tiers available for higher volume.
+    country_code: ISO 2-letter code (e.g. "NO", "SE") — passed as Brave country + search_lang.
+    Returns up to max_results URL strings.
+    """
+    api_key = os.getenv("BRAVE_API_KEY", "")
+    if not api_key:
+        return []
+
+    # Brave expects lowercase 2-letter country code, e.g. "no", "se", "dk"
+    cc = country_code.lower() if country_code else ""
+
+    urls: list[str] = []
+    # Brave free tier: single request only, max 20 results per call
+    params: dict = {
+        "q":          query,
+        "count":      min(20, max_results),
+        "safesearch": "off",
+    }
+    if cc:
+        params["country"] = cc   # Brave uses ISO 3166-1 alpha-2 lowercase, e.g. "no", "se"
+
+    try:
+        resp = requests.get(
+            "https://api.search.brave.com/res/v1/web/search",
+            params=params,
+            headers={
+                "Accept":               "application/json",
+                "Accept-Encoding":      "gzip",
+                "X-Subscription-Token": api_key,
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        print(f"  [Brave] error: {e}")
+        return []
+
+    for item in data.get("web", {}).get("results", []):
+        u = item.get("url", "").strip()
+        if u and u not in urls:
+            urls.append(u)
+
+    return urls[:max_results]
+
+
 def clean_search_url(url: str) -> str:
     if "bing.com/ck/a" in url:
         qs = parse_qs(urlparse(url).query)
@@ -583,14 +635,18 @@ def run(args) -> None:
             total_queries_run += 1
             print(f"\n[{code} | leads={country_leads[code]} | streak={country_streak[code]}] Query: {query}")
 
+            # Run Brave + Bing in parallel (Google CSE as optional bonus), merge results
+            brave_urls  = brave_search(query, args.max_results, country_code=code)
+            bing_urls   = bing_search(query, args.max_results, exclude_domains=seen_domains)
             google_urls = google_cse_search(query, args.max_results)
-            if google_urls:
-                print(f"  Google: {len(google_urls)} results")
-                urls = google_urls
-            else:
-                bing_urls = bing_search(query, args.max_results, exclude_domains=seen_domains)
-                print(f"  Bing: {len(bing_urls)} results")
-                urls = bing_urls
+
+            seen_u: set[str] = set()
+            urls: list[str] = []
+            for u in brave_urls + bing_urls + google_urls:
+                if u not in seen_u:
+                    seen_u.add(u)
+                    urls.append(u)
+            print(f"  Search: brave={len(brave_urls)} bing={len(bing_urls)} google={len(google_urls)} merged={len(urls)}")
 
             added = 0
             for raw in urls:
@@ -619,44 +675,4 @@ def run(args) -> None:
                     seen_domains.add(dom)
                     added += 1
 
-            print(f"  -> {added} new candidates  (pending={len(pending[code])})")
-
-            if len(pending[code]) >= batch_size:
-                batch, pending[code] = pending[code][:batch_size], pending[code][batch_size:]
-                _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads,
-                         rejected_domains=rejected_domains)
-
-            if added:
-                country_streak[code] = 0
-            else:
-                country_streak[code] += 1
-                print(f"  [{code}] Nothing new — streak {country_streak[code]}/{args.give_up_after}")
-                if country_streak[code] >= args.give_up_after:
-                    # Drain ALL remaining pending sites before giving up
-                    while pending[code]:
-                        batch_now = pending[code][:batch_size]
-                        pending[code] = pending[code][batch_size:]
-                        print(f"  [{code}] Draining {len(batch_now)} remaining sites...")
-                        _crawl_batch(batch_now, args, code, configs,
-                                     all_leads, Path(args.output), country_leads,
-                                     rejected_domains=rejected_domains)
-                    print(f"  [{code}] Giving up after {args.give_up_after} empty queries.")
-                    country_done.add(code)
-
-            made_progress = True
-
-        if not made_progress:
-            break
-
-    print(f"\n{'='*60}")
-    print(f"Finished. Ran {total_queries_run} queries total.")
-    for code in countries:
-        _flush(code, "Final")
-
-    final_leads = dedupe_leads(all_leads)
-    if getattr(args, "no_output", False):
-        print(f"  [output] skipped (--no-output). {len(final_leads)} leads in memory.")
-    else:
-        export(final_leads, Path(args.output))
-        print(f"Exported {len(final_leads)} leads to {args.output}/agency_leads.xlsx")
-    return final_leads
+          
