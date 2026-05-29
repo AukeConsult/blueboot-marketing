@@ -1,6 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+call .venv\Scripts\activate.bat
 
 python app\site_agent.py --countries DK
 python app\site_enrich_agent.py --countries DK

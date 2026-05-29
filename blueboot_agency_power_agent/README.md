@@ -1,8 +1,94 @@
 # BlueBoot Agency Power Agent
 
-> This repository contains **two independent lead-generation pipelines**. The newer
-> `site_agent` / `site_enrich_agent` pipeline (section 1) is the actively developed one.
-> The original `lead_agent` pipeline (section 2) remains for backward compatibility.
+## Pipeline Overview
+
+Two independent pipelines share the same Firestore project. The **Site Pipeline** (Section 1)
+is the actively developed one. The **Lead Agent Pipeline** (Section 2) is the original and
+remains fully operational.
+
+---
+
+### Site Pipeline (Section 1 — current)
+
+Discovers content-heavy websites, measures them via sitemap, extracts and enriches contacts.
+
+```
+── Discover & collect ─────────────────────────────────────────────────────────
+
+1. site_agent.py              Discover sites via Bing + Brave search
+                              → site_leads + site_contacts in Firestore
+
+2. site_enrich_agent.py       AI classification of each site_lead (GPT)
+                              → sector, type, platform, hosting, keywords,
+                                summary, ai_contacts, confidence
+
+3. site_contact_enrich.py     Enrich site_contacts via Brave Search + GPT
+                              → occupation, company, linkedin, twitter,
+                                facebook, other_links
+
+── Maintenance ────────────────────────────────────────────────────────────────
+
+4. site_excluded_recheck.py   Re-check sites_excluded — recover passing sites
+5. site_sitemap_backfill.py   Backfill sitemap data on existing site_leads
+
+── Export ─────────────────────────────────────────────────────────────────────
+
+6. site_leads_export.py       Excel export — one row per lead
+7. site_contact_export.py     Excel export — one row per contact + site fields
+```
+
+**Quick start — Norway**
+
+```bat
+python app\site_agent.py --countries NO
+python app\site_enrich_agent.py --countries NO
+python app\site_contact_enrich.py --countries NO
+python app\site_contact_export.py --countries NO --with-email-only
+python app\site_leads_export.py --countries NO
+```
+
+---
+
+### Lead Agent Pipeline (Section 2 — legacy)
+
+Finds web agencies, WordPress/WooCommerce providers and digital agencies. Scores them
+for reseller fit and exports to Excel + Firestore.
+
+```
+── Discover ───────────────────────────────────────────────────────────────────
+
+1. lead_agent.py              Search (Bing/Google) + catalog scraping
+                              → leads + contacts in Firestore
+                                Modes: search | catalog | both | audit
+
+── Enrich ─────────────────────────────────────────────────────────────────────
+
+2. enrich_contacts.py         Social profile enrichment via Bing search
+                              → linkedin_personal, twitter, facebook,
+                                instagram, telegram, whatsapp per contact
+
+── Export ─────────────────────────────────────────────────────────────────────
+
+3. extract_leads.py           Filtered Excel export from leads collection
+                              → filter by score, country, priority, keyword
+                                Optionally saves extract to Firestore
+
+── Analytics ──────────────────────────────────────────────────────────────────
+
+4. statistics.py              Aggregates leads into Firestore statistics docs
+                              → priority × country breakdown
+                              → reasons count per country
+                              → Excel reports
+```
+
+**Quick start — Norway**
+
+```bat
+python app\lead_agent.py --countries NO --mode both
+python app\enrich_contacts.py --country NO --skip-enriched
+python app\extract_leads.py --country NO --with-email --min-score 60
+python app\statistics.py
+```
 
 ---
 
@@ -33,9 +119,14 @@ Firestore
 
 | Script | Purpose |
 |---|---|
-| `app/site_agent.py` | Discovers and stores `site_leads` |
-| `app/site_enrich_agent.py` | AI enrichment pass — sector, company type, country |
-| `site_scrape_no_se.bat` | Runs both scripts for Norway + Sweden in sequence |
+| `app/site_agent.py` | Discovers sites, stores `site_leads` + `site_contacts` |
+| `app/site_enrich_agent.py` | AI classification — sector, platform, hosting, contacts |
+| `app/site_contact_enrich.py` | Enriches `site_contacts` via Brave Search + GPT |
+| `app/site_contact_export.py` | Exports `site_contacts` to Excel (one row per contact) |
+| `app/site_excluded_recheck.py` | Re-checks `sites_excluded` and recovers passing sites |
+| `app/site_sitemap_backfill.py` | Backfills sitemap data for existing `site_leads` |
+| `app/site_leads_export.py` | Exports `site_leads` + contacts to Excel (one row per lead) |
+| `site_scrape.bat` | Runs site_agent + site_enrich_agent for all countries |
 
 ### CLI — site_agent.py
 
@@ -66,6 +157,7 @@ python app/site_agent.py --countries NO --main-page-only
 ```bash
 python app/site_enrich_agent.py --countries NO,SE
 python app/site_enrich_agent.py --countries NO,SE --limit 100
+python app/site_enrich_agent.py --force          # re-classify already classified sites
 ```
 
 Reads unprocessed `site_leads` documents and writes back AI-inferred fields:
@@ -75,9 +167,131 @@ Reads unprocessed `site_leads` documents and writes back AI-inferred fields:
 | `ai_sector` | e.g. `public_sector`, `ecommerce`, `media`, `healthcare` |
 | `ai_company_type` | e.g. `agency`, `inhouse`, `brand`, `institution` |
 | `ai_country` | ISO 3166-1 alpha-2, inferred from TLD / language / address |
+| `ai_keywords` | Up to 25 enriched English keywords |
+| `ai_summary` | One-sentence description of the site |
+| `ai_platform` | Detected CMS/site builder e.g. `WordPress`, `Shopify`, `Webflow` |
+| `ai_hosting` | Detected hosting provider e.g. `WP Engine`, `Cloudflare`, `AWS` |
+| `ai_contacts` | Array of `{name, email, role}` contacts found on the site |
 | `ai_confidence` | Float 0.0–1.0 |
-| `ai_enriched_at` | ISO 8601 UTC timestamp |
-| `enriched` | Boolean flag |
+| `ai_classified_at` | ISO 8601 UTC timestamp |
+
+### CLI — site_contact_enrich.py
+
+```bash
+python app/site_contact_enrich.py --countries NO,SE
+python app/site_contact_enrich.py --countries NO --limit 100 --dry-run
+python app/site_contact_enrich.py --force        # re-enrich already enriched contacts
+python app/site_contact_enrich.py --concurrent 5
+```
+
+Reads every document from the `site_contacts` collectionGroup
+(`site_leads/{lead_id}/site_contacts/{contact_id}`), runs a Brave Search per
+contact, then uses GPT to extract and write back enriched fields:
+
+| Field | Description |
+|---|---|
+| `occupation` | Confirmed/enriched job title |
+| `company` | Confirmed company name |
+| `linkedin` | LinkedIn profile URL |
+| `twitter` | Twitter/X profile URL |
+| `facebook` | Facebook profile URL |
+| `other_links` | Array of other relevant URLs |
+| `brave_enriched_at` | ISO 8601 UTC timestamp |
+
+Requires `BRAVE_API_KEY` in `.env`. Skips contacts with no name, and skips
+already-enriched contacts unless `--force` is passed.
+
+### CLI — site_excluded_recheck.py
+
+```bash
+python app/site_excluded_recheck.py --countries NO
+python app/site_excluded_recheck.py --domains example.no
+python app/site_excluded_recheck.py --min-pages 50 --dry-run
+```
+
+Re-checks sites in `sites_excluded` that were previously rejected (e.g. due to
+missing sitemaps). Sites that now pass are moved to `site_leads` and removed from
+`sites_excluded`.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Comma-separated country codes |
+| `--domains` | all | Comma-separated domains to re-check |
+| `--reason` | all | Only re-check sites whose exclusion reason contains this text |
+| `--min-pages` | `50` | Minimum page count to recover a site |
+| `--limit` | none | Max sites to re-check |
+| `--concurrent` | `50` | Parallel fetches |
+| `--dry-run` | off | Print results without writing to Firestore |
+| `--force` | off | Re-check even sites with page_count > 0 |
+
+### CLI — site_sitemap_backfill.py
+
+```bash
+python app/site_sitemap_backfill.py --countries NO
+python app/site_sitemap_backfill.py --countries NO --force
+python app/site_sitemap_backfill.py --limit 500 --dry-run
+```
+
+Backfills sitemap data (`page_count`, `sitemap_url`, `sitemap_type`, `sitemap_urls`,
+`sitemap_oldest_date`) for existing `site_leads` documents that are missing it.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Comma-separated country codes |
+| `--limit` | none | Max leads to process |
+| `--concurrent` | `20` | Parallel fetches |
+| `--dry-run` | off | Print results without writing to Firestore |
+| `--force` | off | Re-scan even leads that already have sitemap data |
+
+### CLI — site_leads_export.py
+
+```bash
+python app/site_leads_export.py
+python app/site_leads_export.py --countries NO,SE
+python app/site_leads_export.py --countries NO --sector ecommerce
+python app/site_leads_export.py --countries NO --with-contacts-only
+python app/site_leads_export.py --output exports/no_leads.xlsx
+```
+
+Exports `site_leads` to Excel — one row per lead, with all contacts folded into a
+single cell. Good for a full lead overview.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Comma-separated country codes |
+| `--sector` | all | Filter by `ai_sector` e.g. `ecommerce`, `technology` |
+| `--category` | all | Filter by `query_category` e.g. `real_estate`, `healthcare` |
+| `--with-contacts-only` | off | Only include leads that have at least one contact |
+| `--limit` | none | Max leads to export |
+| `--output` | auto-timestamped | Output `.xlsx` path |
+| `--dry-run` | off | Count leads without fetching contacts or writing file |
+
+### CLI — site_contact_export.py
+
+```bash
+python app/site_contact_export.py
+python app/site_contact_export.py --countries NO,SE
+python app/site_contact_export.py --countries NO --sector ecommerce
+python app/site_contact_export.py --countries NO --with-email-only
+python app/site_contact_export.py --countries NO --category healthcare
+python app/site_contact_export.py --output exports/contacts_no.xlsx
+```
+
+Exports `site_contacts` to Excel — one row per contact, enriched with key fields
+from the parent `site_lead` (domain, pages, sector, platform, hosting, AI summary,
+keywords). Ideal for outreach — filter by sector, platform, or country to find
+exactly the right contacts.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Comma-separated country codes |
+| `--sector` | all | Filter by `ai_sector` e.g. `ecommerce`, `technology` |
+| `--category` | all | Filter by `query_category` e.g. `real_estate`, `healthcare` |
+| `--with-email-only` | off | Only include contacts that have an email address |
+| `--limit` | none | Max contacts to export |
+| `--output` | auto-timestamped | Output `.xlsx` path |
+
+Output file includes a **Summary sheet** with totals by country and AI sector.
 
 ### Supported countries
 
@@ -111,11 +325,15 @@ site_leads/{lead_id}
     source_query, query_category, crawled_at
     target_types[], keywords[]
     ai_sector, ai_company_type, ai_country, ai_confidence  ← written by site_enrich_agent
-    enriched, ai_enriched_at
+    ai_keywords[], ai_summary, ai_platform, ai_hosting     ← written by site_enrich_agent
+    ai_contacts[{name, email, role}]                       ← written by site_enrich_agent
+    ai_classified_at
 
 site_leads/{lead_id}/site_contacts/{contact_id}
-    email, name, title, phone, found_on
+    email, name, title, phone, found_on                    ← written by site_agent
     lead_id, domain, website, country, country_name
+    occupation, company, linkedin, twitter, facebook       ← written by site_contact_enrich
+    other_links[], brave_enriched_at                       ← written by site_contact_enrich
 
 sites_excluded/{lead_id}
     domain, website, country, reason, page_count

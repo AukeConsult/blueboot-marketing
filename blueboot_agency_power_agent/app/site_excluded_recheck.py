@@ -88,6 +88,9 @@ def _stream_excluded(
     domains:    list[str] | None = None,
 ) -> list[tuple]:
     """Return [(doc_ref, doc_dict), ...] from sites_excluded."""
+    from functions.utils import load_country_configs, tld_accepted_for  # noqa: PLC0415
+    country_configs = load_country_configs()
+
     print(f"  [recheck] Scanning {EXCLUDED_COLLECTION}…")
     col = db.collection(EXCLUDED_COLLECTION)
     results: list[tuple] = []
@@ -122,6 +125,13 @@ def _stream_excluded(
 
         website = data.get("website") or data.get("domain", "")
         if not website:
+            skipped += 1
+            continue
+
+        # Skip sites whose TLD is not accepted for the stored country
+        _d = (data.get("domain") or "").lower().lstrip("www.")
+        _c = (data.get("country") or "NO").upper()
+        if _d and not tld_accepted_for(_d, _c, country_configs):
             skipped += 1
             continue
 
@@ -219,7 +229,7 @@ async def _run_async(
                     ),
                     timeout=SITE_TIMEOUT,
                 )
-            except asyncio.TimeoutError:
+            except (asyncio.TimeoutError, asyncio.CancelledError):
                 counters["done"]   += 1
                 counters["failed"] += 1
                 print(f"    [{counters['done']}/{total}] TIMEOUT  {domain}")
@@ -266,11 +276,12 @@ async def _run_async(
     async def _safe_recheck_one(session, ref, data):
         domain = data.get("domain", "?")
         try:
-            await asyncio.wait_for(_recheck_one(session, ref, data), timeout=SITE_TIMEOUT + 30)
-        except asyncio.TimeoutError:
+            await _recheck_one(session, ref, data)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            # Inner _recheck_one already handles these, but catch any that escape.
             counters["done"]   += 1
             counters["failed"] += 1
-            print(f"    [recheck] HARD-TIMEOUT (task-level)  {domain}")
+            print(f"    [recheck] HARD-TIMEOUT  {domain}")
         except Exception as exc:
             counters["done"]   += 1
             counters["failed"] += 1

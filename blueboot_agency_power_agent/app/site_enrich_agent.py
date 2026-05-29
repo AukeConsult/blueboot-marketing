@@ -49,7 +49,7 @@ import _pathsetup  # noqa: F401
 # Config
 # ---------------------------------------------------------------------------
 
-OPENAI_MODEL       = "gpt-5.4-nano"
+OPENAI_MODEL       = "gpt-5.4-mini"
 BATCH_SIZE         = 15    # sites per OpenAI call
 CONCURRENT_BATCHES = 3     # max simultaneous OpenAI calls
 RETRY_ATTEMPTS     = 3
@@ -67,8 +67,15 @@ SECTORS = [
 COMPANY_TYPES = ["B2B", "B2C", "government", "NGO", "media", "education", "mixed"]
 
 _SYSTEM_PROMPT = (
-    "You are a B2B lead classifier. You receive a list of websites and must return "
+    "You are a website classifier. You receive a list of websites and must return "
     "a JSON array classifying each one.\n\n"
+    "For each site analyse:\n"
+    "  - What type of website it is and what it does\n"
+    "  - What country it is used and managed from\n"
+    "  - Any potential contacts visible on the site (names, emails, roles)\n"
+    "  - What technology, site builder, CMS or platform the site is built on "
+    "(e.g. WordPress, WooCommerce, Shopify, Webflow, custom, etc.)\n"
+    "  - Who is hosting the site (infer from headers, DNS signals, or known patterns)\n\n"
     "For each site return an object with exactly these keys:\n"
     '  "lead_id"      : same string as in the input — never change it\n'
     '  "sector"       : one of ' + json.dumps(SECTORS) + "\n"
@@ -82,6 +89,12 @@ _SYSTEM_PROMPT = (
     "this site (merge and clean the input keywords, add obvious missing ones, "
     "remove noise/stopwords)\n"
     '  "summary"      : one sentence (max 20 words) describing what the site does\n'
+    '  "platform"     : detected CMS/site builder (e.g. "WordPress", "WooCommerce", '
+    '"Shopify", "Webflow", "Squarespace", "custom", "unknown")\n'
+    '  "hosting"      : detected hosting provider (e.g. "WP Engine", "Kinsta", '
+    '"AWS", "Cloudflare", "One.com", "unknown")\n'
+    '  "contacts"     : array of objects with keys "name", "email", "role" for any '
+    "contacts found or inferred from the site data (empty array if none)\n"
     '  "confidence"   : float 0.0-1.0 reflecting how certain you are\n\n'
     "Return ONLY a valid JSON array — no markdown, no explanation, no extra keys."
 )
@@ -425,6 +438,9 @@ async def _process_batch_async(
             "ai_keywords":      new_kw[:25],
             "ai_summary":       r.get("summary", ""),
             "ai_confidence":    float(r.get("confidence", 0.0)),
+            "ai_platform":      r.get("platform", "unknown"),
+            "ai_hosting":       r.get("hosting", "unknown"),
+            "ai_contacts":      r.get("contacts") or [],
             "ai_classified_at": now_ts,
             "keywords":         merged_kw,
         }
@@ -440,6 +456,17 @@ async def _process_batch_async(
         print(f"    [{done}/{total}] {domain:<42} {sector} / {ctype}  {country}  conf={conf:.2f}")
         if smry:
             print(f"           {smry}")
+        platform = updates.get("ai_platform") or ""
+        hosting  = updates.get("ai_hosting") or ""
+        contacts = updates.get("ai_contacts") or []
+        if platform or hosting:
+            print(f"           platform={platform}  hosting={hosting}")
+        if contacts:
+            for c in contacts[:3]:
+                name  = c.get("name", "")
+                email = c.get("email", "")
+                role  = c.get("role", "")
+                print(f"           contact: {name}  {email}  {role}")
 
         counters["done"] += 1
 
