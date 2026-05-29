@@ -248,19 +248,25 @@ def _brave_search(query: str, max_results: int, country_code: str = "") -> list[
 # Async HTTP helpers
 # ---------------------------------------------------------------------------
 
+# Bot UA for sitemap fetches — WordPress/Yoast serves raw XML to crawlers
+_BOT_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+
 async def _async_get(session: aiohttp.ClientSession, url: str,
-                     timeout: int = 15, xml: bool = False) -> str:
+                     timeout: int = 15, xml: bool = False,
+                     return_final_url: bool = False):
     headers = dict(_HTTP_HEADERS)
     if xml:
         headers["Accept"] = "application/xml,text/xml,*/*;q=0.8"
+        headers["User-Agent"] = _BOT_UA
     try:
         async with session.get(
             url, headers=headers,
             timeout=aiohttp.ClientTimeout(total=timeout),
             allow_redirects=True, ssl=False,
         ) as resp:
+            final_url = str(resp.url)
             if resp.status != 200:
-                return ""
+                return ("", url) if return_final_url else ""
             raw = await resp.read()
             # Decompress if the server sent gzip without Content-Encoding header
             # (some hosts serve sitemap.xml.gz as application/xml without announcing it)
@@ -269,7 +275,7 @@ async def _async_get(session: aiohttp.ClientSession, url: str,
                     import gzip as _gzip
                     raw = _gzip.decompress(raw)
                 except Exception:
-                    return ""
+                    return ("", url) if return_final_url else ""
             text = raw.decode("utf-8", errors="replace")[:3_000_000]
             if xml:
                 # Ignore Content-Type — many servers send text/html for valid XML.
@@ -278,10 +284,10 @@ async def _async_get(session: aiohttp.ClientSession, url: str,
                 if not (stripped.startswith("<?xml")
                         or stripped.startswith("<sitemapindex")
                         or stripped.startswith("<urlset")):
-                    return ""
-            return text
+                    return ("", url) if return_final_url else ""
+            return (text, final_url) if return_final_url else text
     except Exception:
-        return ""
+        return ("", url) if return_final_url else ""
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +297,7 @@ async def _async_get(session: aiohttp.ClientSession, url: str,
 _SM_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
 _SITEMAP_PATHS = [
     # Standard / most common
-    "/sitemap.xml", "/sitemap_index.xml", "/sitemap-index.xml",
+    "/sitemap.xml", "/sitemaps.xml", "/sitemap_index.xml", "/sitemap-index.xml",
     "/sitemap1.xml",
     # Compressed variants (some servers serve pre-gzipped sitemaps)
     "/sitemap.xml.gz", "/sitemap_index.xml.gz",
@@ -311,12 +317,14 @@ _SITEMAP_PATHS = [
 
 def _parse_xml_safe(text: str) -> ET.Element | None:
     # Strip BOM (U+FEFF) — ElementTree rejects it with "not at start of entity"
-    text = text.lstrip("﻿")
+    text = text.lstrip("\ufeff").lstrip("﻿")
     try:
         return ET.fromstring(text)
     except ET.ParseError:
-        # Some servers include an XML declaration with encoding; strip it and retry
-        cleaned = re.sub(r"<\?xml[^?]*\?>", "", text, count=1).strip()
+        # Strip ALL processing instructions (<?xml ...?>, <?xml-stylesheet ...?>, etc.)
+        # before retrying.  Yoast sitemaps include a <?xml-stylesheet?> PI that some
+        # builds of ElementTree reject, even though it is valid XML.
+        cleaned = re.sub(r"<\?[^>]*?\?>", "", text).strip()
         try:
             return ET.fromstring(cleaned)
         except ET.ParseError:
@@ -532,13 +540,103 @@ async def read_sitemap_async(session: aiohttp.ClientSession,
         visited.add(url)
         budget[0] -= 1
 
-        text = await _async_get(session, url, timeout=15, xml=True)
+        text, final_url = await _async_get(session, url, timeout=15, xml=True, return_final_url=True)
+        # If the server redirected us to a URL we already visited, it's a cycle — skip.
+        if final_url != url:
+            if final_url in visited:
+                _dbg(f"{indent}REDIRECT-CYCLE  {url} -> {final_url} (already visited)")
+                return 0
+            visited.add(final_url)
         if not text:
+            # Some CMS platforms (Episerver, Yoast) serve /sitemap.xml as a
+            # human-readable HTML page that *lists* the real child XML sitemaps.
+            # Fetch again without xml=True and extract <a href> links to .xml files.
+            html = await _async_get(session, url, timeout=15, xml=False)
+            _dbg(f"{indent}HTML-fallback: html_len={len(html)} for {url}")
+            if html:
+                import re as _re
+                child_urls = []
+                for m in _re.finditer(r"""href=["']((?:https?://[^"']*|/[^"']*)\.xml(?:\?[^"']*)?)["']""", html, _re.I):
+                    child_url = m.group(1)
+                    if not child_url.startswith("http"):
+                        child_url = base + ("" if child_url.startswith("/") else "/") + child_url
+                    if child_url not in visited and child_url not in child_urls:
+                        child_urls.append(child_url)
+                _dbg(f"{indent}HTML-fallback: found {len(child_urls)} .xml hrefs in {len(html)}-char HTML")
+                if child_urls:
+                    _dbg(f"{indent}HTML-sitemap-index: found {len(child_urls)} .xml links in HTML at {url}")
+                    if not found_url:
+                        found_url, found_type = url, "index"
+                    sample_count = sampled = 0
+                    for child_url in child_urls:
+                        if sampled >= _SAMPLE_PER_LEVEL or budget[0] <= 0:
+                            if sampled > 0:
+                                sample_count = int((sample_count / sampled) * len(child_urls))
+                            break
+                        n = await _count_sitemap(child_url, depth + 1)
+                        sample_count += n
+                        sampled += 1
+                    all_sitemaps.append({"url": url, "filename": _sm_filename(url),
+                                         "lastmod": "", "lastmod_newest": "",
+                                         "page_count": sample_count})
+                    return sample_count
+
+                # No .xml child links found — this HTML is likely a Yoast-rendered
+                # urlset page showing actual page URLs (not sub-sitemap links).
+                # Count distinct same-domain page hrefs as a proxy for page count.
+                from urllib.parse import urlparse as _up
+                _domain = _up(base).netloc
+                _skip_ext = ('.xml', '.css', '.js', '.png', '.jpg', '.jpeg',
+                             '.gif', '.svg', '.ico', '.pdf', '.woff', '.woff2')
+                _skip_paths = ('#', 'mailto:', 'tel:', 'javascript:')
+                page_links: set[str] = set()
+                for m in _re.finditer(r'href=["\'](' + 'https?://' + _re.escape(_domain) + r'/[^"\']*)["\']', html, _re.I):
+                    href = m.group(1).split('#')[0].rstrip('/')
+                    if href and not any(href.endswith(e) for e in _skip_ext)                             and not any(p in href for p in _skip_paths)                             and href != base:
+                        page_links.add(href)
+                if page_links:
+                    count = len(page_links)
+                    _dbg(f"{indent}HTML-urlset: counted {count} page links at {url}")
+                    if not found_url:
+                        found_url, found_type = url, "urlset"
+                    all_sitemaps.append({"url": url, "filename": _sm_filename(url),
+                                         "lastmod": "", "lastmod_newest": "",
+                                         "page_count": count})
+                    return count
+
             _dbg(f"{indent}EMPTY (fetch returned nothing)  {url}")
             return 0
         root = _parse_xml_safe(text)
         if root is None:
-            _dbg(f"{indent}PARSE-FAIL  {url}  peek={repr(text[:80])}")
+            _dbg(f"{indent}PARSE-FAIL (trying HTML fallback)  {url}  peek={repr(text[:80])}")
+            # text is non-empty but not valid XML — likely an HTML page (e.g. Yoast XSLT
+            # rendered with browser UA, or a CMS that always serves HTML for sitemap URLs).
+            # Try extracting <a href="*.xml"> links from the content we already have.
+            import re as _re2
+            child_urls = []
+            for m in _re2.finditer(r"""href=["']((?:https?://[^"']*|/[^"']*)\.xml(?:\?[^"']*)?)["']""", text, _re2.I):
+                child_url = m.group(1)
+                if not child_url.startswith("http"):
+                    child_url = base + ("" if child_url.startswith("/") else "/") + child_url
+                if child_url not in visited and child_url not in child_urls:
+                    child_urls.append(child_url)
+            _dbg(f"{indent}HTML-from-xml-fetch: found {len(child_urls)} .xml hrefs")
+            if child_urls:
+                if not found_url:
+                    found_url, found_type = url, "index"
+                sample_count = sampled = 0
+                for child_url in child_urls:
+                    if sampled >= _SAMPLE_PER_LEVEL or budget[0] <= 0:
+                        if sampled > 0:
+                            sample_count = int((sample_count / sampled) * len(child_urls))
+                        break
+                    n = await _count_sitemap(child_url, depth + 1)
+                    sample_count += n
+                    sampled += 1
+                all_sitemaps.append({"url": url, "filename": _sm_filename(url),
+                                     "lastmod": "", "lastmod_newest": "",
+                                     "page_count": sample_count})
+                return sample_count
             return 0
         tag = root.tag.lower()
         _dbg(f"{indent}FETCH OK  tag={tag!r}  {url}")

@@ -13,6 +13,7 @@ twitch.tv
 discord.com
 whatsapp.com
 telegram.org
+hao86.com
 
 # === SEARCH ENGINES ===
 google.*
