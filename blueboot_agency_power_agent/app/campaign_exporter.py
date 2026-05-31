@@ -97,7 +97,7 @@ def _json_default(obj):
 
 
 def _write_json(output_dir: Path, campaign: dict, leads: list, contacts: list):
-    json_file = output_dir / "campaign.json"
+    json_file = output_dir / f"lead_campaign_{campaign_id}.json"
     payload = {
         "schema_version": 1,
         "campaign": campaign,
@@ -355,7 +355,7 @@ def _build_xlsx(output_dir, campaign_id, campaign, leads, contacts):
     ws_contacts = wb.create_sheet("Contacts")
 
     _build_contacts_sheet(ws_contacts, contacts, styles)
-    xlsx_file = output_dir / "campaign.xlsx"
+    xlsx_file = output_dir / f"lead_campaign_{campaign_id}.xlsx"
     wb.save(xlsx_file)
 
     return xlsx_file
@@ -363,10 +363,10 @@ def _build_xlsx(output_dir, campaign_id, campaign, leads, contacts):
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
-def export_campaign(campaign_id: str):
+def export_campaign(campaign_id: str, output_dir: str | None = None):
     campaign_ref, campaign = (_load_campaign(campaign_id))
     leads, contacts = (_load_leads_and_contacts(campaign_ref))
-    output_dir = (Path("output") / campaign_id)
+    output_dir = Path(output_dir) if output_dir else (Path("output") / campaign_id)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if campaign.get("extract_id"):
@@ -394,9 +394,63 @@ def export_campaign(campaign_id: str):
         "xlsx_file": str(xlsx_file),
     }
 
-if __name__ == "__main__":
-    result = export_campaign(
-        "NO_high_score_may26"
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main(argv=None) -> None:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
+    import argparse
+    p = argparse.ArgumentParser(
+        description="Export a leads_extract campaign to Excel + JSON"
+    )
+    p.add_argument(
+        "campaign_id",
+        nargs="?",
+        default=None,
+        metavar="CAMPAIGN_ID",
+        help="Firestore document ID under leads_extract/  e.g. NO_high_score_may26",
+    )
+    p.add_argument(
+        "--list",
+        action="store_true",
+        help="List all available campaign IDs and exit",
+    )
+    p.add_argument(
+        "--output",
+        default=None,
+        metavar="DIR",
+        help="Output directory  (default: output/<campaign_id>/)",
     )
 
-    print(result)
+    args = p.parse_args(argv)
+
+    if args.list:
+        from app.firestore_client import get_firestore
+        db  = get_firestore()
+        ids = [doc.id for doc in db.collection("leads_extract").stream()]
+        if ids:
+            print("Available campaigns:")
+            for cid in sorted(ids):
+                print(f"  {cid}")
+        else:
+            print("No campaigns found in leads_extract collection.")
+        return
+
+    if not args.campaign_id:
+        p.error("campaign_id is required (or use --list to see available campaigns)")
+
+    result = export_campaign(args.campaign_id, output_dir=args.output)
+
+    print(f"\n  Done → {result['xlsx_file']}")
+    print(f"         {result['json_file']}")
+    print(f"  Leads: {result['lead_count']}  Contacts: {result['contact_count']}")
+
+
+if __name__ == "__main__":
+    main()
