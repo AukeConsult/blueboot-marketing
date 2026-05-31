@@ -379,7 +379,7 @@ Supported countries: Norway (`NO`), Sweden (`SE`), Denmark (`DK`), Germany (`DE`
 | `app/lead_enrich_agent.py` | AI classification of each lead (GPT) → sector, specialisation, reseller_potential |
 | `app/lead_enrich_contacts.py` | Enrich contacts with social media profiles via Bing |
 | `app/lead_extract.py` | Filtered Excel export + optional Firestore extract save |
-| `app/campaign_exporter.py` | Export a `leads_extract` campaign to `lead_campaign_<id>.xlsx` + JSON |
+| `app/campaign_exporter.py` | Export a `leads_extract` campaign to `output/<campaign_id>/campaign.xlsx` + JSON |
 | `app/statistics.py` | Aggregate lead counts by priority/country/reason → Excel + Firestore |
 | `app/fix_contact_country.py` | One-time migration: fix country field on contact docs |
 | `app/gmail_outreach.py` | Send personalised outreach emails via Gmail OAuth |
@@ -613,8 +613,8 @@ After a run, the `output/` directory contains:
 | `agency_leads.json` | All leads as JSON |
 | `agency_contacts.json` | All contacts as JSON |
 | `extract_leads_*.xlsx` | Filtered extracts produced by `lead_extract.py` |
-| `lead_campaign_<id>.xlsx` | Campaign export (Summary + Leads + Contacts sheets) |
-| `lead_campaign_<id>.json` | Same campaign data as JSON |
+| `output/<campaign_id>/campaign.xlsx` | Campaign export (Summary + Leads + Contacts sheets) |
+| `output/<campaign_id>/campaign.json` | Same campaign data as JSON |
 
 ### Key columns in leads
 
@@ -832,8 +832,8 @@ Reads a named campaign from the `leads_extract` Firestore collection (populated 
 
 | File | Contents |
 |---|---|
-| `lead_campaign_<id>.xlsx` | Four sheets: Summary, Campaign, Leads, Contacts |
-| `lead_campaign_<id>.json` | Full campaign payload (schema_version, campaign, leads, contacts) |
+| `campaign.xlsx` | Four sheets: Summary, Campaign, Leads, Contacts |
+| `campaign.json` | Full campaign payload (schema_version, campaign, leads, contacts) |
 
 ```bat
 :: List all saved campaigns

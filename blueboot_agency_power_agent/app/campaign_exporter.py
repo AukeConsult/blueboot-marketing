@@ -97,7 +97,8 @@ def _json_default(obj):
 
 
 def _write_json(output_dir: Path, campaign: dict, leads: list, contacts: list):
-    json_file = output_dir / f"lead_campaign_{campaign_id}.json"
+    json_file = output_dir / f"campaign.json"
+    print (json_file)
     payload = {
         "schema_version": 1,
         "campaign": campaign,
@@ -355,7 +356,7 @@ def _build_xlsx(output_dir, campaign_id, campaign, leads, contacts):
     ws_contacts = wb.create_sheet("Contacts")
 
     _build_contacts_sheet(ws_contacts, contacts, styles)
-    xlsx_file = output_dir / f"lead_campaign_{campaign_id}.xlsx"
+    xlsx_file = output_dir / "campaign.xlsx"
     wb.save(xlsx_file)
 
     return xlsx_file
