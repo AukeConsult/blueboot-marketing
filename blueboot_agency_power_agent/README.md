@@ -57,25 +57,32 @@ for reseller fit and exports to Excel + Firestore.
 ```
 ── Discover ───────────────────────────────────────────────────────────────────
 
-1. lead_agent.py              Search (Bing/Google) + catalog scraping
+1. lead_agent.py              Search (Bing + Brave + Google) + catalog scraping
                               → leads + contacts in Firestore
                                 Modes: search | catalog | both | audit
+                                Brave runs in parallel with Bing per query
+                                (requires BRAVE_API_KEY in .env)
 
 ── Enrich ─────────────────────────────────────────────────────────────────────
 
-2. enrich_contacts.py         Social profile enrichment via Bing search
+2. lead_enrich_agent.py       AI classification of each lead (GPT)
+                              → sector, specialisation, client_base,
+                                reseller_potential, platform, summary,
+                                confidence
+
+3. lead_enrich_contacts.py         Social profile enrichment via Bing search
                               → linkedin_personal, twitter, facebook,
                                 instagram, telegram, whatsapp per contact
 
 ── Export ─────────────────────────────────────────────────────────────────────
 
-3. extract_leads.py           Filtered Excel export from leads collection
+4. lead_extract.py           Filtered Excel export from leads collection
                               → filter by score, country, priority, keyword
                                 Optionally saves extract to Firestore
 
 ── Analytics ──────────────────────────────────────────────────────────────────
 
-4. statistics.py              Aggregates leads into Firestore statistics docs
+5. statistics.py              Aggregates leads into Firestore statistics docs
                               → priority × country breakdown
                               → reasons count per country
                               → Excel reports
@@ -85,8 +92,9 @@ for reseller fit and exports to Excel + Firestore.
 
 ```bat
 python app\lead_agent.py --countries NO --mode both
-python app\enrich_contacts.py --country NO --skip-enriched
-python app\extract_leads.py --country NO --with-email --min-score 60
+python app\lead_enrich_agent.py --countries NO
+python app\lead_enrich_contacts.py --country NO --skip-enriched
+python app\lead_extract.py --country NO --with-email --min-score 60
 python app\statistics.py
 ```
 
@@ -362,6 +370,18 @@ Local Python lead-generation agent for finding web agencies, WordPress/WooCommer
 
 Supported countries: Norway (`NO`), Sweden (`SE`), Denmark (`DK`), Germany (`DE`), United Kingdom (`UK`), and any country with a `config/queries_<CODE>.txt` file.
 
+### Scripts
+
+| Script | Purpose |
+|---|---|
+| `app/lead_agent.py` | Discover agency leads via Bing + Brave + Google + catalog scraping |
+| `app/lead_enrich_agent.py` | AI classification of each lead (GPT) → sector, specialisation, reseller_potential |
+| `app/lead_enrich_contacts.py` | Enrich contacts with social media profiles via Bing |
+| `app/lead_extract.py` | Filtered Excel export + optional Firestore extract save |
+| `app/statistics.py` | Aggregate lead counts by priority/country/reason → Excel + Firestore |
+| `app/fix_contact_country.py` | One-time migration: fix country field on contact docs |
+| `app/gmail_outreach.py` | Send personalised outreach emails via Gmail OAuth |
+
 ---
 
 ## What the agent does
@@ -369,7 +389,7 @@ Supported countries: Norway (`NO`), Sweden (`SE`), Denmark (`DK`), Germany (`DE`
 1. Loads country-specific search queries from `config/queries_<COUNTRY>.txt`.
 2. Optionally scrapes curated agency directories (Clutch, Sortlist, DesignRush, GoodFirms, etc.).
 3. Runs a GitHub organisation pre-pass to find agency orgs with a website.
-4. Searches Bing (or Google Custom Search if configured), requiring all query words in every result.
+4. Searches Bing + Brave (in parallel) and optionally Google Custom Search per query. Results are merged and de-duplicated. Brave requires `BRAVE_API_KEY` in `.env`; if not set it is silently skipped.
 5. Filters candidate domains against a domain blocklist (`config/blocklist_domains.txt`).
 6. Crawls each website and selected internal pages (contact, about, services, cases).
 7. Extracts emails, phone numbers, contact pages, and LinkedIn company links.
@@ -403,7 +423,7 @@ cp .env.example .env
 | `--countries` | all configured | Comma-separated ISO codes, e.g. `NO,SE,DK` |
 | `--queries` | _(per-country files)_ | Path to a custom queries file (overrides per-country files) |
 | `--output` | `output` | Directory for Excel/CSV/JSON output files |
-| `--max-results` | `200` | Max Bing/Google results per query |
+| `--max-results` | `200` | Max results per search engine per query (Bing, Brave, Google each) |
 | `--min-score` | `50` | Minimum reseller score (0–100) to store a lead |
 | `--max-pages` | `3` | Max pages to crawl per agency website |
 | `--max-country` | `5000` | Stop a country once this many leads are found (0 = unlimited) |
@@ -434,7 +454,7 @@ python app\lead_agent.py --mode audit
 
 ### Discovery modes (`--mode`)
 
-- **`search`** — runs Bing/Google queries, applies the full domain blocklist.
+- **`search`** — runs Bing + Brave (+ optional Google CSE) queries in parallel per query, applies the full domain blocklist. Results are merged and de-duplicated before crawling.
 - **`catalog`** — scrapes curated agency directories (Clutch, Sortlist, DesignRush, etc.); blocklist is **not** applied since catalog sources are already curated.
 - **`both`** — catalog runs first, then search. Domains found in catalog phase are skipped during search.
 
@@ -456,12 +476,12 @@ python app/lead_agent.py --countries NO --no-output --no-firebase
 
 ---
 
-## `extract_leads.py` — export a filtered extract from Firestore
+## `lead_extract.py` — export a filtered extract from Firestore
 
 Reads lead documents and their contacts sub-collections directly from Firestore and writes a focused Excel file. No local CSV is required. Global leads (`country="*"`) are excluded from all extracts.
 
 ```bat
-python app\extract_leads.py [options]
+python app\lead_extract.py [options]
 ```
 
 ### Filter parameters
@@ -513,19 +533,19 @@ leads_extract/
 
 ```bat
 REM A-priority Norwegian leads with email, score ≥ 70
-python app\extract_leads.py --min-score 70 --country NO --priority A --with-email
+python app\lead_extract.py --min-score 70 --country NO --priority A --with-email
 
 REM Catalog-sourced leads across Norway and Sweden
-python app\extract_leads.py --source catalog --country NO,SE
+python app\lead_extract.py --source catalog --country NO,SE
 
 REM All leads matching a specific query keyword
-python app\extract_leads.py --query "webbyrå"
+python app\lead_extract.py --query "webbyrå"
 
 REM Keyword search — WordPress or WooCommerce leads
-python app\extract_leads.py --keywords wordpress,woocommerce
+python app\lead_extract.py --keywords wordpress,woocommerce
 
 REM Dry-run: preview what would be saved to Firestore
-python app\extract_leads.py ^
+python app\lead_extract.py ^
   --keywords wordpress ^
   --country NO,SE ^
   --min-score 60 ^
@@ -533,14 +553,14 @@ python app\extract_leads.py ^
   --extract-dry-run
 
 REM Live save — writes to leads_extract/wordpress_nordic_may26
-python app\extract_leads.py ^
+python app\lead_extract.py ^
   --keywords wordpress ^
   --country NO,SE ^
   --min-score 60 ^
   --save-extract "wordpress_nordic_may26"
 
 REM Second extract — already-extracted leads are skipped automatically
-python app\extract_leads.py ^
+python app\lead_extract.py ^
   --keywords shopify ^
   --country NO,SE ^
   --save-extract "shopify_nordic_jun01"
@@ -590,7 +610,7 @@ After a run, the `output/` directory contains:
 | `agency_contacts.csv` | All contacts, one row per email address |
 | `agency_leads.json` | All leads as JSON |
 | `agency_contacts.json` | All contacts as JSON |
-| `extract_leads_*.xlsx` | Filtered extracts produced by `extract_leads.py` |
+| `extract_leads_*.xlsx` | Filtered extracts produced by `lead_extract.py` |
 
 ### Key columns in leads
 
@@ -648,7 +668,7 @@ leads_extract/{extract_name}/leads_extracted/{lead_id}/
     contacts_extracted/{contact_id}                              — extracted contact snapshot
 ```
 
-The `leads_extract` collection is populated by `extract_leads.py --save-extract`. A lead can belong to at most one extract; duplicates are detected via a `collectionGroup` query on `leads_extracted` before each run.
+The `leads_extract` collection is populated by `lead_extract.py --save-extract`. A lead can belong to at most one extract; duplicates are detected via a `collectionGroup` query on `leads_extracted` before each run.
 
 Credentials are loaded from (in order):
 
@@ -679,7 +699,44 @@ GOOGLE_CSE_ID=your_cse_id
 
 ---
 
-## `enrich_contacts.py` — social media profile enrichment
+---
+
+## `lead_enrich_agent.py` — AI classification for leads collection
+
+Reads documents from the `leads` collection and runs GPT classification to determine the agency type, specialisation, client base, and reseller potential. Uses the same batch/concurrent pattern as `site_enrich_agent.py`.
+
+New fields written to each `leads/{id}` document:
+
+| Field | Description |
+|---|---|
+| `ai_sector` | Agency category: `web_agency`, `seo_agency`, `design_agency`, `marketing_agency`, `hosting_provider`, `ecommerce_agency`, `communication_agency`, `it_consulting`, `pr_agency`, `media_agency`, `other` |
+| `ai_specialisation` | Array of service tags, e.g. `["wordpress", "woocommerce", "seo"]` |
+| `ai_client_base` | Primary client type: `SMB`, `enterprise`, `mixed`, `local`, `unknown` |
+| `ai_reseller_potential` | Reseller fit: `high`, `medium`, `low` |
+| `ai_platform` | Detected CMS/site builder |
+| `ai_summary` | One-sentence agency description |
+| `ai_confidence` | GPT confidence score (0.0–1.0) |
+| `ai_classified_at` | ISO timestamp of classification run |
+
+```bat
+python app\lead_enrich_agent.py --countries NO
+python app\lead_enrich_agent.py --countries NO,SE --force
+python app\lead_enrich_agent.py --limit 200 --dry-run
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--collection NAME` | `leads` | Firestore collection to classify |
+| `--countries CODES` | all | Comma-separated country codes, e.g. `NO,SE` |
+| `--limit N` | _(none)_ | Maximum number of leads to classify |
+| `--batch-size N` | `10` | Leads per GPT batch |
+| `--concurrent N` | `3` | Parallel GPT batch workers |
+| `--dry-run` | off | Print results without writing to Firestore |
+| `--force` | off | Re-classify leads that already have `ai_classified_at` set |
+
+## `lead_enrich_contacts.py` — social media profile enrichment
 
 Reads contact documents from Firestore and adds personal social media profile links. Searches Bing in parallel for LinkedIn, Twitter/X, Facebook, Instagram and Telegram profiles; derives a WhatsApp deep-link from the contact's phone number without any search.
 
@@ -699,7 +756,7 @@ Only contacts with a valid email address and at least a name or phone number are
 
 ```bat
 cd app
-python enrich_contacts.py [options]
+python lead_enrich_contacts.py [options]
 ```
 
 ### Parameters
@@ -723,16 +780,16 @@ Contacts are first filtered synchronously from Firestore. All filtered contacts 
 
 ```bat
 REM Preview first — no writes
-python app\enrich_contacts.py --country NO --limit 50 --dry-run
+python app\lead_enrich_contacts.py --country NO --limit 50 --dry-run
 
 REM LinkedIn + WhatsApp only, Norway and Sweden, skip already enriched
-python app\enrich_contacts.py --country NO,SE --platforms linkedin,whatsapp --skip-enriched
+python app\lead_enrich_contacts.py --country NO,SE --platforms linkedin,whatsapp --skip-enriched
 
 REM Full run, all platforms
-python app\enrich_contacts.py --country NO,SE,DK
+python app\lead_enrich_contacts.py --country NO,SE,DK
 
 REM Reduce concurrency if Bing starts rate-limiting
-python app\enrich_contacts.py --workers 10 --delay 2.0
+python app\lead_enrich_contacts.py --workers 10 --delay 2.0
 ```
 
 ---
