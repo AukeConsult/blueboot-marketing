@@ -94,7 +94,8 @@ for reseller fit and exports to Excel + Firestore.
 python app\lead_agent.py --countries NO --mode both
 python app\lead_enrich_agent.py --countries NO
 python app\lead_enrich_contacts.py --country NO --skip-enriched
-python app\lead_extract.py --country NO --with-email --min-score 60
+python app\lead_extract.py --country NO --with-email --min-score 60 --save-extract NO_jun01
+python app\campaign_exporter.py NO_jun01
 python app\statistics.py
 ```
 
@@ -378,6 +379,7 @@ Supported countries: Norway (`NO`), Sweden (`SE`), Denmark (`DK`), Germany (`DE`
 | `app/lead_enrich_agent.py` | AI classification of each lead (GPT) → sector, specialisation, reseller_potential |
 | `app/lead_enrich_contacts.py` | Enrich contacts with social media profiles via Bing |
 | `app/lead_extract.py` | Filtered Excel export + optional Firestore extract save |
+| `app/campaign_exporter.py` | Export a `leads_extract` campaign to `lead_campaign_<id>.xlsx` + JSON |
 | `app/statistics.py` | Aggregate lead counts by priority/country/reason → Excel + Firestore |
 | `app/fix_contact_country.py` | One-time migration: fix country field on contact docs |
 | `app/gmail_outreach.py` | Send personalised outreach emails via Gmail OAuth |
@@ -611,6 +613,8 @@ After a run, the `output/` directory contains:
 | `agency_leads.json` | All leads as JSON |
 | `agency_contacts.json` | All contacts as JSON |
 | `extract_leads_*.xlsx` | Filtered extracts produced by `lead_extract.py` |
+| `lead_campaign_<id>.xlsx` | Campaign export (Summary + Leads + Contacts sheets) |
+| `lead_campaign_<id>.json` | Same campaign data as JSON |
 
 ### Key columns in leads
 
@@ -819,6 +823,36 @@ python app\fix_contact_country.py
 This script only needs to be run once on existing data. All new contacts written by the crawler and catalog scraper now include both fields correctly.
 
 ---
+
+---
+
+## `campaign_exporter.py` — export a campaign to Excel + JSON
+
+Reads a named campaign from the `leads_extract` Firestore collection (populated by `lead_extract.py --save-extract`) and writes two files to `output/<campaign_id>/`:
+
+| File | Contents |
+|---|---|
+| `lead_campaign_<id>.xlsx` | Four sheets: Summary, Campaign, Leads, Contacts |
+| `lead_campaign_<id>.json` | Full campaign payload (schema_version, campaign, leads, contacts) |
+
+```bat
+:: List all saved campaigns
+python app\campaign_exporter.py --list
+
+:: Export a specific campaign
+python app\campaign_exporter.py NO_high_score_may26
+
+:: Export to a custom directory
+python app\campaign_exporter.py NO_high_score_may26 --output exports\no_may26
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `campaign_id` | _(required)_ | Firestore document ID under `leads_extract/` |
+| `--list` | off | List all available campaign IDs and exit |
+| `--output DIR` | `output/<campaign_id>/` | Custom output directory |
 
 ## `statistics.py` — lead statistics & Firestore aggregations
 
