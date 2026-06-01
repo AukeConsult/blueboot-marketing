@@ -107,6 +107,23 @@ NEW_INDEXES = [
             {"fieldPath": "name",        "order": "ASCENDING"},
         ],
     },
+    # ── leads_extract / contacts_extracted ─────────────────────────────────────
+    {
+        "collectionGroup": "contacts_extracted",
+        "queryScope": "COLLECTION_GROUP",
+        "fields": [
+            {"fieldPath": "extract_id", "order": "ASCENDING"},
+            {"fieldPath": "country",    "order": "ASCENDING"},
+        ],
+    },
+    {
+        "collectionGroup": "contacts_extracted",
+        "queryScope": "COLLECTION_GROUP",
+        "fields": [
+            {"fieldPath": "extract_id", "order": "ASCENDING"},
+            {"fieldPath": "email",      "order": "ASCENDING"},
+        ],
+    },
     # ── site_leads / site_contacts (top-level collections) ───────────────────
     {
         "collectionGroup": "site_contacts",
