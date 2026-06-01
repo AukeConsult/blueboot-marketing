@@ -1,0 +1,133 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "site_leads",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "ai_country",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "crawled_at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "site_leads",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "ai_country",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ai_sector",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "crawled_at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "site_leads",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "ai_country",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ai_confidence",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "site_leads",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "ai_country",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ai_sector",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "ai_confidence",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "site_contacts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "ai_country",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "name",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "site_contacts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "ai_country",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "email",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "brave_enriched_at",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "site_contacts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "ai_country",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "occupation",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "name",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "site_contacts",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "ai_country",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "brave_enriched_at",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
