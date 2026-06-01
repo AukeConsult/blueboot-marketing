@@ -35,6 +35,15 @@ Discovers content-heavy websites, measures them via sitemap, extracts and enrich
 
 6. site_leads_export.py       Excel export — one row per lead
 7. site_contact_export.py     Excel export — one row per contact + site fields
+
+── Campaign & Outreach ───────────────────────────────────────────────────────
+
+8. site_contact_export.py     --campaign  Copy selection to site_campaigns/{id}
+9. site_campaign_mail_prepare.py
+                              Prepare outbound mail per country + per contact
+                              → mailing/{campaign}/ scaffolded on first run
+                              → out_mail/{country} template docs
+                              → out_mail_contacts/{contact_id} personalised docs
 ```
 
 **Quick start — Norway**
@@ -45,6 +54,7 @@ python app\site_enrich_agent.py --countries NO
 python app\site_contact_enrich.py --countries NO
 python app\site_contact_export.py --countries NO --with-email-only
 python app\site_contact_export.py --countries NO --campaign NO_jun01
+python app\site_campaign_mail_prepare.py --campaign NO_jun01 --prepare-contacts
 python app\site_leads_export.py --countries NO
 ```
 
@@ -87,6 +97,15 @@ for reseller fit and exports to Excel + Firestore.
                               → priority × country breakdown
                               → reasons count per country
                               → Excel reports
+
+── Outreach ───────────────────────────────────────────────────────────────────
+
+6. lead_campaign_mail_prepare.py
+                              Prepare outbound mail per country + per contact
+                              → mailing/leads_{extract}/ scaffolded on first run
+                              → out_mail/{country} template docs
+                              → out_mail_contacts/{contact_id} personalised docs
+                                (status=pending, sent_at="")
 ```
 
 **Quick start — Norway**
@@ -97,6 +116,7 @@ python app\lead_enrich_agent.py --countries NO
 python app\lead_enrich_contacts.py --country NO --skip-enriched
 python app\lead_extract.py --country NO --with-email --min-score 60 --save-extract NO_jun01
 python app\campaign_exporter.py NO_jun01
+python app\lead_campaign_mail_prepare.py --extract NO_jun01 --prepare-contacts
 python app\statistics.py
 ```
 
@@ -133,6 +153,7 @@ Firestore
 | `app/site_enrich_agent.py` | AI classification — sector, platform, hosting, contacts |
 | `app/site_contact_enrich.py` | Enriches `site_contacts` via Brave Search + GPT |
 | `app/site_contact_export.py` | Exports `site_contacts` to Excel (one row per contact) |
+| `app/site_campaign_mail_prepare.py` | Prepare outbound mail templates and per-contact docs for a campaign |
 | `app/site_excluded_recheck.py` | Re-checks `sites_excluded` and recovers passing sites |
 | `app/site_sitemap_backfill.py` | Backfills sitemap data for existing `site_leads` |
 | `app/site_leads_export.py` | Exports `site_leads` + contacts to Excel (one row per lead) |
@@ -329,6 +350,99 @@ site_campaigns/{campaign}/
 [campaign] Done → 298 sites saved  14 skipped  1205 contacts
 ```
 
+---
+
+### CLI — site_campaign_mail_prepare.py
+
+Prepares outbound mail for a site campaign. Countries are detected by scanning `ai_country` on the `site_campaign_sites` docs. When `--prepare-contacts` is used, all site contacts are fetched in parallel (20 workers) within the `site_campaigns/{campaign}/` subtree — no cross-collection reads. On first run it scaffolds a mail catalogue at `mailing/{campaign}/` with example body files and a subject map. Edit those files, then re-run to push to Firestore.
+
+```bat
+:: First run — scaffolds mailing/NO_jun01/ with example files + writes country templates
+python app\site_campaign_mail_prepare.py --campaign NO_jun01
+
+:: Also prepare one personalised doc per email address (status=pending, sent_at="")
+python app\site_campaign_mail_prepare.py --campaign NO_jun01 --prepare-contacts
+
+:: Preview what would be written (still creates local mail files if missing)
+python app\site_campaign_mail_prepare.py --campaign NO_jun01 --dry-run
+
+:: Re-prepare pending contact docs after editing body files
+python app\site_campaign_mail_prepare.py --campaign NO_jun01 --prepare-contacts --force
+
+:: List campaigns
+python app\site_campaign_mail_prepare.py --list-campaigns
+```
+
+**Mail catalogue structure** (auto-created on first run, even on `--dry-run`):
+
+```
+mailing/
+    {campaign}/
+        subject.json          ← {"NO": "Hei fra BlueSearch…", "SE": "Hej från…"}
+        mails/
+            body_NO.html      ← Norwegian body template
+            body_SE.html      ← Swedish body template
+            body_DK.html      ← Danish body template (etc.)
+            body.html         ← fallback for any unlisted country
+```
+
+**Supported `{{placeholders}}` in body and subject:**
+
+| Placeholder | Replaced with |
+|---|---|
+| `{{name}}` | First name only |
+| `{{full_name}}` | Full name |
+| `{{email}}` | Email address |
+| `{{occupation}}` | Job title / occupation |
+| `{{company}}` | Company name |
+| `{{domain}}` | Site domain |
+| `{{website}}` | Full website URL |
+| `{{country}}` | Country code |
+| `{{ai_sector}}` | AI-detected sector |
+| `{{ai_summary}}` | AI site summary |
+
+**Parameters:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--campaign NAME` | _(required)_ | Campaign ID under `site_campaigns/` |
+| `--prepare-contacts` | off | Write one personalised doc per email address to `out_mail_contacts/` |
+| `--subject TEXT` | _(from subject.json)_ | Override default subject for all countries |
+| `--subject-file FILE` | `mailing/{campaign}/subject.json` | Override subject JSON path |
+| `--body-file FILE` | _(none)_ | Single body file for all countries (overrides body-dir) |
+| `--body-dir DIR` | `mailing/{campaign}/mails/` | Override body files directory |
+| `--dry-run` | off | Skip Firestore writes (mail catalogue files are still created if missing) |
+| `--force` | off | Re-prepare `status=pending` docs; never touches `sent` or `failed` docs |
+| `--list-campaigns` | off | List all available campaigns and exit |
+
+**Firestore structure written:**
+
+```
+site_campaigns/{campaign}/
+    out_mail/{country}
+        country, subject, body, site_count, contact_count, prepared_at
+
+    out_mail_contacts/{contact_id}    ← written when --prepare-contacts is set
+        email, name, country
+        subject                       ← personalised from template
+        body                          ← personalised from template
+        domain, site_doc_id, contact_id
+        status    = "pending"         ← set to "sending" / "sent" / "failed" by send script
+        sent_at   = ""                ← filled in by send script
+        prepared_at
+```
+
+**`--prepare-contacts` update rules:**
+
+| Doc state | Normal run | `--force` |
+|---|---|---|
+| Doesn't exist | ✓ created | ✓ created |
+| `status = pending` | skipped | ✓ re-prepared |
+| `status = sent` | skipped | skipped |
+| `status = failed` | skipped | skipped |
+
+Sent and failed docs are **never overwritten** — only pending ones can be re-prepared.
+
 ### Supported countries
 
 | Code | Country | Native queries |
@@ -407,6 +521,7 @@ Supported countries: Norway (`NO`), Sweden (`SE`), Denmark (`DK`), Germany (`DE`
 | `app/lead_enrich_contacts.py` | Enrich contacts with social media profiles via Bing |
 | `app/lead_extract.py` | Filtered Excel export + optional Firestore extract save |
 | `app/campaign_exporter.py` | Export a `leads_extract` campaign to `output/<campaign_id>/campaign.xlsx` + JSON |
+| `app/lead_campaign_mail_prepare.py` | Prepare outbound mail templates + per-contact docs for a leads_extract campaign |
 | `app/statistics.py` | Aggregate lead counts by priority/country/reason → Excel + Firestore |
 | `app/fix_contact_country.py` | One-time migration: fix country field on contact docs |
 | `app/gmail_outreach.py` | Send personalised outreach emails via Gmail OAuth |
@@ -880,6 +995,63 @@ python app\campaign_exporter.py NO_high_score_may26 --output exports\no_may26
 | `campaign_id` | _(required)_ | Firestore document ID under `leads_extract/` |
 | `--list` | off | List all available campaign IDs and exit |
 | `--output DIR` | `output/<campaign_id>/` | Custom output directory |
+
+---
+
+## `lead_campaign_mail_prepare.py` — outbound mail for leads_extract campaigns
+
+Mirrors `site_campaign_mail_prepare.py` but works on the `leads_extract` collection. Scaffolds mail templates on first run, writes country-level template docs, and optionally one personalised doc per email address. When `--prepare-contacts` is used, all lead contacts are fetched in parallel (20 workers) within the `leads_extract/{extract_id}/` subtree — no cross-collection reads.
+
+```bat
+:: First run — scaffolds mailing/leads_NO_jun01/ with example files
+python app\lead_campaign_mail_prepare.py --extract NO_jun01
+
+:: Prepare per-contact personalised docs (status=pending, sent_at="")
+python app\lead_campaign_mail_prepare.py --extract NO_jun01 --prepare-contacts
+
+:: Preview without Firestore writes (mail files still created if missing)
+python app\lead_campaign_mail_prepare.py --extract NO_jun01 --dry-run
+
+:: Re-prepare pending docs after editing templates
+python app\lead_campaign_mail_prepare.py --extract NO_jun01 --prepare-contacts --force
+
+:: List available extracts
+python app\lead_campaign_mail_prepare.py --list-extracts
+```
+
+**Mail catalogue** (auto-created):
+```
+mailing/
+    leads_{extract}/
+        subject.json
+        mails/
+            body_NO.html
+            body_SE.html
+            body.html     ← fallback
+```
+
+**Parameters:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--extract NAME` | _(required)_ | Extract ID under `leads_extract/` |
+| `--prepare-contacts` | off | Write one personalised doc per email to `out_mail_contacts/` |
+| `--subject TEXT` | _(from subject.json)_ | Override default subject |
+| `--subject-file FILE` | `mailing/leads_{extract}/subject.json` | Override subject JSON path |
+| `--body-file FILE` | _(none)_ | Single body file for all countries |
+| `--body-dir DIR` | `mailing/leads_{extract}/mails/` | Override body files directory |
+| `--dry-run` | off | Skip Firestore writes (mail files still created if missing) |
+| `--force` | off | Re-prepare `status=pending` docs; never touches `sent`/`failed` |
+| `--list-extracts` | off | List all available extract IDs and exit |
+
+**Firestore structure written:**
+```
+leads_extract/{extract_id}/
+    out_mail/{country}                ← subject, body, lead_count, prepared_at
+    out_mail_contacts/{contact_id}    ← email, subject, body, domain, status=pending, sent_at=""
+```
+
+Shared placeholder support — same `{{name}}`, `{{domain}}`, `{{company}}` etc. as `site_campaign_mail_prepare.py`.
 
 ## `statistics.py` — lead statistics & Firestore aggregations
 

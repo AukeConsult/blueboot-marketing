@@ -523,9 +523,6 @@ def _save_campaign(
     for lead_id, lead in used_leads.items():
         # Skip sites already in another campaign
         if lead_id in taken:
-            other = taken[lead_id]
-            domain = lead.get("domain", lead_id)
-            print(f"  [campaign] SKIP {domain:<35} already in '{other}'", flush=True)
             sites_skipped += 1
             continue
 
@@ -551,11 +548,60 @@ def _save_campaign(
                 flush=True,
             )
 
+    if sites_skipped:
+        # Summarise which campaigns the skipped sites belong to
+        from collections import Counter
+        skip_sources = Counter(
+            taken[lid] for lid in used_leads if lid in taken
+        )
+        skip_detail = "  ".join(f"{c}: {n}" for c, n in skip_sources.most_common())
+        print(
+            f"  [campaign] {sites_skipped} sites skipped (already in other campaigns): {skip_detail}",
+            flush=True,
+        )
     print(
         f"  [campaign] Done → site_campaigns/{campaign}  "
         f"{sites_written} sites saved  {sites_skipped} skipped  {contacts_written} contacts",
         flush=True,
     )
+
+
+def _load_campaign_data(db, campaign: str) -> tuple[list[dict], dict]:
+    """Read sites and contacts back from a saved campaign.
+
+    Returns (rows, used_leads) in the same shape as _stream_contacts so
+    _build_xlsx can consume them directly.
+    """
+    print(f"  [campaign] Loading data from site_campaigns/{campaign}…", flush=True)
+
+    camp_ref   = db.collection(SITE_CAMPAIGNS_COLLECTION).document(campaign)
+    sites_col  = camp_ref.collection("site_campaign_sites")
+
+    used_leads: dict[str, dict] = {}
+    rows:       list[dict]      = []
+
+    for site_doc in sites_col.stream():
+        lead_id  = site_doc.id
+        lead     = site_doc.to_dict() or {}
+        used_leads[lead_id] = lead
+
+        for contact_doc in site_doc.reference.collection("site_campaign_contacts").stream():
+            contact = contact_doc.to_dict() or {}
+            # Re-attach internal keys so _build_xlsx columns resolve correctly
+            contact["_doc_id"]      = contact_doc.id
+            contact["_site_doc_id"] = lead_id
+            contact["_lead_id"]     = lead_id
+            # Ensure ai_country is present
+            if "ai_country" not in contact:
+                contact["ai_country"] = lead.get("ai_country", "")
+            rows.append(contact)
+
+    print(
+        f"  [campaign] Loaded {len(used_leads)} sites  {len(rows)} contacts "
+        f"from campaign '{campaign}'",
+        flush=True,
+    )
+    return rows, used_leads
 
 
 # ---------------------------------------------------------------------------
@@ -575,9 +621,8 @@ def export_contacts(
     fb_key = _load_secrets()
     db     = _init_firestore(fb_key)
 
-    # Load leads first (for the join) — filtered by country
+    # ── Step 1: filter from site_leads + site_contacts ───────────────────────
     leads_index = _load_leads_index(db, countries)
-
     rows, used_leads = _stream_contacts(
         db, leads_index, with_email_only, sector, category, limit, countries=countries
     )
@@ -585,27 +630,7 @@ def export_contacts(
         print("  [contact-export] No contacts found matching filters.")
         return ""
 
-    if not output_path:
-        ts      = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
-        parts   = []
-        if countries:
-            parts.append("_".join(countries))
-        if sector:
-            parts.append(sector)
-        if category:
-            parts.append(category)
-        if with_email_only:
-            parts.append("email")
-        filter_str  = ("_" + "_".join(parts)) if parts else ""
-        output_path = str(
-            Path(__file__).parent.parent / "exports" / f"site_contacts{filter_str}_{ts}.xlsx"
-        )
-
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-
-    print(f"\n  [contact-export] Building Excel — {len(rows)} contacts…", flush=True)
-    _build_xlsx(rows, output_path, leads_index=used_leads)
-
+    # ── Step 2: if campaign set, save first then reload from campaign ─────────
     if campaign:
         _save_campaign(
             db, campaign, rows, used_leads,
@@ -616,6 +641,38 @@ def export_contacts(
             limit           = limit,
             force           = force,
         )
+        # Reload rows and leads from what was actually saved to the campaign
+        # (some sites may have been skipped as duplicates)
+        rows, used_leads = _load_campaign_data(db, campaign)
+        if not rows:
+            print(f"  [contact-export] No data in campaign '{campaign}' to export.")
+            return ""
+
+    # ── Step 3: build output path ─────────────────────────────────────────────
+    if not output_path:
+        ts      = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
+        parts   = []
+        if campaign:
+            parts.append(campaign)
+        else:
+            if countries:
+                parts.append("_".join(countries))
+            if sector:
+                parts.append(sector)
+            if category:
+                parts.append(category)
+            if with_email_only:
+                parts.append("email")
+        filter_str  = ("_" + "_".join(parts)) if parts else ""
+        output_path = str(
+            Path(__file__).parent.parent / "exports" / f"site_contacts{filter_str}_{ts}.xlsx"
+        )
+
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+    # ── Step 4: export to Excel ───────────────────────────────────────────────
+    print(f"\n  [contact-export] Building Excel — {len(rows)} contacts…", flush=True)
+    _build_xlsx(rows, output_path, leads_index=used_leads)
 
     return output_path
 
