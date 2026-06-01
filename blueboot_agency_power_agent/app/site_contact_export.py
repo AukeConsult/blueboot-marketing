@@ -743,6 +743,8 @@ def main(argv=None) -> None:
                    help="Save selection to site_campaigns/<NAME> in Firestore (sites + contacts)")
     p.add_argument("--force",            action="store_true",
                    help="Re-assign sites already in another campaign (skips duplicate check)")
+    p.add_argument("--page-count",       default=None, metavar="BUCKET",
+                   help="Filter by page count bucket: micro/small/medium/large/huge/ultra/unknown")
 
     args = p.parse_args(argv)
 
