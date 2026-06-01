@@ -1,0 +1,134 @@
+{
+  "_comment": "WordPress Plugin Catalogue lead config. Per-country search terms + TLD filters.",
+  "_tld_strict_note": "tld_strict=true: hard-filter by TLD (UK/IN/AU). tld_strict=false: accept all TLDs, flag tld_match in output (NO/SE/DK/FI).",
+
+  "blocked_domains": [
+    "wordpress.org", "wordpress.com", "gravatar.com", "github.com",
+    "automattic.com", "w.org", "wp.com", "wpengine.com",
+    "woocommerce.com", "yoast.com"
+  ],
+
+  "countries": {
+
+    "UK": {
+      "label": "United Kingdom",
+      "tlds": [".co.uk", ".uk"],
+      "tld_strict": true,
+      "terms": [
+        "wordpress agency uk", "woocommerce uk", "wordpress development london",
+        "wordpress manchester", "wordpress birmingham", "wordpress leeds",
+        "wordpress edinburgh", "booking plugin uk", "payment gateway uk",
+        "seo plugin uk", "membership uk", "ecommerce uk",
+        "form builder uk", "page builder uk", "wordpress plugin uk"
+      ]
+    },
+
+    "IN": {
+      "label": "India",
+      "tlds": [".in", ".co.in"],
+      "tld_strict": true,
+      "terms": [
+        "wordpress india", "wordpress agency india", "woocommerce india",
+        "wordpress pune", "wordpress mumbai", "wordpress bangalore",
+        "wordpress delhi", "wordpress chennai", "wordpress hyderabad",
+        "wordpress ahmedabad", "wordpress hinjewadi", "payment gateway india",
+        "razorpay wordpress", "paytm wordpress", "booking plugin india",
+        "hindi wordpress", "india seo plugin", "india ecommerce"
+      ]
+    },
+
+    "NO": {
+      "label": "Norway",
+      "tlds": [".no"],
+      "tld_strict": false,
+      "terms": [
+        "wordpress norge", "wordpress oslo", "wordpress bergen",
+        "woocommerce norsk", "wordpress byra", "wordpress norsk plugin",
+        "booking norsk", "betaling wordpress", "nettbutikk plugin",
+        "seo norsk wordpress"
+      ]
+    },
+
+    "SE": {
+      "label": "Sweden",
+      "tlds": [".se"],
+      "tld_strict": false,
+      "terms": [
+        "wordpress sverige", "wordpress stockholm", "wordpress goteborg",
+        "woocommerce svenska", "wordpress byra", "betallosning wordpress",
+        "bokningsplugin", "seo plugin svenska", "e-handel plugin",
+        "wordpress malmo"
+      ]
+    },
+
+    "DK": {
+      "label": "Denmark",
+      "tlds": [".dk"],
+      "tld_strict": false,
+      "terms": [
+        "wordpress danmark", "wordpress kobenhavn", "woocommerce dansk",
+        "wordpress bureau", "betaling wordpress", "booking plugin dansk",
+        "seo plugin dansk", "webshop plugin", "wordpress aarhus",
+        "formular plugin dansk"
+      ]
+    },
+
+    "FI": {
+      "label": "Finland",
+      "tlds": [".fi"],
+      "tld_strict": false,
+      "terms": [
+        "wordpress suomi", "wordpress helsinki", "woocommerce suomi",
+        "wordpress toimisto", "maksu plugin", "varaus plugin",
+        "seo plugin suomi", "verkkokauppa plugin",
+        "wordpress tampere", "wordpress turku"
+      ]
+    },
+
+    "AU": {
+      "label": "Australia",
+      "tlds": [".com.au", ".au"],
+      "tld_strict": true,
+      "terms": [
+        "wordpress australia", "wordpress sydney", "wordpress melbourne",
+        "woocommerce australia", "wordpress brisbane", "wordpress perth",
+        "payment gateway australia", "booking plugin australia",
+        "seo plugin australia", "ecommerce australia"
+      ]
+    },
+
+    "NZ": {
+      "label": "New Zealand",
+      "tlds": [".co.nz", ".nz"],
+      "tld_strict": true,
+      "terms": [
+        "wordpress new zealand", "wordpress auckland", "woocommerce nz",
+        "wordpress wellington", "payment gateway nz",
+        "booking nz", "ecommerce new zealand"
+      ]
+    },
+
+    "IE": {
+      "label": "Ireland",
+      "tlds": [".ie"],
+      "tld_strict": true,
+      "terms": [
+        "wordpress ireland", "wordpress dublin", "woocommerce ireland",
+        "payment gateway ireland", "seo plugin ireland",
+        "booking plugin ireland", "ecommerce ireland"
+      ]
+    },
+
+    "ZA": {
+      "label": "South Africa",
+      "tlds": [".co.za", ".za"],
+      "tld_strict": true,
+      "terms": [
+        "wordpress south africa", "wordpress cape town",
+        "wordpress johannesburg", "woocommerce south africa",
+        "payment gateway south africa", "ecommerce south africa",
+        "booking plugin south africa"
+      ]
+    }
+  }
+}
