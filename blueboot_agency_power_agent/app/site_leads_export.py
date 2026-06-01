@@ -53,6 +53,10 @@ LEAD_COLUMNS: list[tuple[str, str, int]] = [
     ("ai_confidence",   "AI Conf",           9),
     ("ai_keywords",     "AI Keywords",      45),
     ("ai_summary",      "AI Summary",       40),
+    ("location",         "Location",         35),
+    ("location_city",    "City",             18),
+    ("location_country", "Loc Country",      10),
+    ("location_confidence", "Loc Conf",       8),
     ("title",           "Title",            35),
     ("description",     "Description",      50),
     ("keywords",        "Keywords",         40),
@@ -131,6 +135,7 @@ def _stream_leads(
     countries:          list[str] | None,
     sector:             str | None,
     category:           str | None,
+    location:           str | None,
     with_contacts_only: bool,
     limit:              int | None,
     dry_run:            bool = False,
@@ -158,6 +163,12 @@ def _stream_leads(
 
         if category:
             if (data.get("query_category") or "").lower() != category.lower():
+                skipped += 1
+                continue
+
+        if location:
+            loc_full = (data.get("location_full") or data.get("location") or "").lower()
+            if location.lower() not in loc_full:
                 skipped += 1
                 continue
 
@@ -358,6 +369,7 @@ def export_site_leads(
     countries:          list[str] | None = None,
     sector:             str | None    = None,
     category:           str | None    = None,
+    location:           str | None    = None,
     limit:              int | None    = None,
     output:             str | None    = None,
     with_contacts_only: bool          = False,
@@ -367,7 +379,7 @@ def export_site_leads(
     fb_key = _load_secrets()
     _, col = _init_firestore(fb_key, collection)
 
-    rows = _stream_leads(col, countries, sector, category, with_contacts_only, limit, dry_run=dry_run)
+    rows = _stream_leads(col, countries, sector, category, location, with_contacts_only, limit, dry_run=dry_run)
     if not rows:
         print("  [export] No leads matched the filters — nothing to export.")
         return ""
@@ -382,6 +394,7 @@ def export_site_leads(
         suffix     = f"_{countries[0]}" if countries and len(countries) == 1 else ""
         suffix    += f"_{category}"     if category else ""
         suffix    += f"_{sector}"       if sector   else ""
+        suffix    += f"_{location}"     if location else ""
         out_dir    = Path(__file__).parent.parent / "exports"
         out_dir.mkdir(exist_ok=True)
         output     = str(out_dir / f"site_leads{suffix}_{ts}.xlsx")
@@ -416,6 +429,8 @@ def main(argv=None) -> None:
                    help="Filter by ai_sector  e.g. technology, ecommerce")
     p.add_argument("--category",     default=None, metavar="NAME",
                    help="Filter by query_category  e.g. real_estate, company")
+    p.add_argument("--location",     default=None, metavar="TEXT",
+                   help="Filter by location_full keyword e.g. London, Pune, Manchester")
     p.add_argument("--limit",        type=int, default=None, metavar="N",
                    help="Max leads to export")
     p.add_argument("--output",       default=None, metavar="PATH",
@@ -435,6 +450,7 @@ def main(argv=None) -> None:
         countries          = countries,
         sector             = args.sector,
         category           = args.category,
+        location           = args.location,
         limit              = args.limit,
         output             = args.output,
         with_contacts_only = args.with_contacts_only,

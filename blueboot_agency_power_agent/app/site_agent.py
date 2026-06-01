@@ -950,7 +950,7 @@ def upsert_site_excluded(
 # Async orchestrator
 # ---------------------------------------------------------------------------
 
-BING_WORKERS    = 5
+BING_WORKERS    = 10
 _QUEUE_SENTINEL = None
 
 
@@ -1355,7 +1355,7 @@ def main(argv=None) -> None:
                    help="Minimum sitemap page count to keep a site  (default: 0)")
     p.add_argument("--workers",     type=int, default=WORKERS_DEFAULT, metavar="N",
                    help="Async concurrency limit  (default: 20)")
-    p.add_argument("--delay",       type=float, default=1.5, metavar="SECS",
+    p.add_argument("--delay",       type=float, default=0.5, metavar="SECS",
                    help="Seconds between Bing queries  (default: 1.5)")
     p.add_argument("--no-firebase", action="store_true",
                    help="Skip writing to Firestore")

@@ -158,6 +158,7 @@ def _stream_contacts(
     with_email_only: bool,
     sector:          str | None,
     category:        str | None,
+    location:        str | None,
     limit:           int | None,
     countries:       list[str] | None = None,
     page_count:       str | None       = None,
@@ -216,6 +217,13 @@ def _stream_contacts(
         if page_count:
             bucket = _page_count_bucket(lead.get("page_count"))
             if bucket != page_count.lower():
+                skipped += 1
+                continue
+
+        # Location filter (keyword search in location_full)
+        if location:
+            loc_full = (lead.get("location_full") or lead.get("location") or "").lower()
+            if location.lower() not in loc_full:
                 skipped += 1
                 continue
 
@@ -646,6 +654,7 @@ def export_contacts(
     countries:       list[str] | None = None,
     sector:          str | None       = None,
     category:        str | None       = None,
+    location:        str | None       = None,
     with_email_only: bool             = False,
     limit:           int | None       = None,
     output_path:     str | None       = None,
@@ -659,7 +668,7 @@ def export_contacts(
     # ── Step 1: filter from site_leads + site_contacts ───────────────────────
     leads_index = _load_leads_index(db, countries)
     rows, used_leads = _stream_contacts(
-        db, leads_index, with_email_only, sector, category, limit,
+        db, leads_index, with_email_only, sector, category, location, limit,
         countries=countries, page_count=page_count
     )
     if not rows:
@@ -733,6 +742,8 @@ def main(argv=None) -> None:
                    help="Filter by ai_sector  e.g. ecommerce, technology")
     p.add_argument("--category",        default=None, metavar="CATEGORY",
                    help="Filter by query_category  e.g. real_estate, healthcare")
+    p.add_argument("--location",        default=None, metavar="TEXT",
+                   help="Filter by location keyword e.g. London, Pune, Manchester")
     p.add_argument("--with-email-only", action="store_true",
                    help="Only include contacts that have an email address")
     p.add_argument("--limit",           type=int, default=None, metavar="N",
@@ -756,6 +767,7 @@ def main(argv=None) -> None:
         countries       = countries,
         sector          = args.sector,
         category        = args.category,
+        location        = args.location,
         with_email_only = args.with_email_only,
         limit           = args.limit,
         output_path     = args.output,

@@ -473,11 +473,14 @@ async def _process_batch_async(
         if not dry_run:
             doc_ref = ref_map[lid][0]
             try:
-                await loop.run_in_executor(
-                    None, lambda ref=doc_ref, upd=updates: ref.set(upd, merge=True)
+                await asyncio.wait_for(
+                    loop.run_in_executor(
+                        None, lambda ref=doc_ref, upd=updates: ref.set(upd, merge=True)
+                    ),
+                    timeout=12.0,
                 )
                 counters["updated"] += 1
-            except Exception as e:
+            except (asyncio.TimeoutError, Exception) as e:
                 print(f"    [enrich] write error for {lid}: {e}")
                 counters["failed"] += 1
         else:

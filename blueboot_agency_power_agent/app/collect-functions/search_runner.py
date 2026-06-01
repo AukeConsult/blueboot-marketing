@@ -494,13 +494,16 @@ async def _run_batch_async(
         else:
             _blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
         tasks = [
-            asyncio.create_task(_crawl_with_dom(session, url, query))
+            asyncio.create_task(asyncio.wait_for(_crawl_with_dom(session, url, query), timeout=120.0))
             for url, query in batch
             if not is_blocked(domain_of(url), _blocklist)
         ]
         for coro in asyncio.as_completed(tasks):
             try:
                 dom, lead = await coro
+            except asyncio.TimeoutError:
+                print(f"    [crawl timeout] site took >120s — skipping")
+                continue
             except Exception as exc:
                 print(f"    [crawl error]: {exc}")
                 continue
@@ -747,4 +750,39 @@ def run(args) -> None:
                     )
                     print(f"  → Batch of {len(batch)} queued for crawling (background)  queue={len(pending[code])} remaining")
 
-          
+            else:
+                # No new URLs from this query — increment give-up streak
+                country_streak[code] += 1
+                print(f"  No new URLs (streak={country_streak[code]}/{args.give_up_after})")
+                if args.give_up_after and country_streak[code] >= args.give_up_after:
+                    _flush(code, f"Final batch of {len(pending[code])} sites")
+                    _bg_crawler.wait()
+                    print(f"\n[{code}] {args.give_up_after} consecutive empty queries — giving up.")
+                    country_done.add(code)
+                    continue
+            if added:
+                country_streak[code] = 0
+            made_progress = True
+
+        if not made_progress:
+            break
+
+    # Final flush — drain any remaining pending sites for all countries
+    for code in countries:
+        if pending[code]:
+            _flush(code, f"Final flush: {len(pending[code])} remaining sites")
+    _bg_crawler.wait()
+
+    print(f"\n{'='*60}")
+    print(f"Search complete. Queries run: {total_queries_run}")
+    for code in countries:
+        print(f"  {code}: {country_leads.get(code, 0)} leads")
+    print(f"{'='*60}")
+
+    final_leads = dedupe_leads(all_leads)
+    if getattr(args, "no_output", False):
+        print(f"  [output] skipped (--no-output). {len(final_leads)} leads in memory.")
+    else:
+        export(final_leads, Path(args.output))
+        print(f"Exported {len(final_leads)} leads to {args.output}/agency_leads.xlsx")
+    return final_leads

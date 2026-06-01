@@ -26,20 +26,30 @@ Discovers content-heavy websites, measures them via sitemap, extracts and enrich
                               → occupation, company, linkedin, twitter,
                                 facebook, other_links
 
+4. site_location_enrich.py    AI-infer company city/region for each site_lead
+                              → location, location_full, location_city,
+                                location_region, location_country,
+                                location_confidence, location_source
+                              Batches of 50 sites, 3 parallel OpenAI calls.
+                              Filter by --location when exporting.
+
 ── Maintenance ────────────────────────────────────────────────────────────────
 
-4. site_excluded_recheck.py   Re-check sites_excluded — recover passing sites
-5. site_sitemap_backfill.py   Backfill sitemap data on existing site_leads
+5. site_excluded_recheck.py   Re-check sites_excluded — recover passing sites
+6. site_sitemap_backfill.py   Backfill sitemap data on existing site_leads
 
 ── Export ─────────────────────────────────────────────────────────────────────
 
-6. site_leads_export.py       Excel export — one row per lead
-7. site_contact_export.py     Excel export — one row per contact + site fields
+7. site_leads_export.py       Excel export — one row per lead
+                              Filter flags: --sector --category --location
+8. site_contact_export.py     Excel export — one row per contact + site fields
+                              Filter flags: --sector --category --page-count
+                                            --location --with-email-only
 
 ── Campaign & Outreach ───────────────────────────────────────────────────────
 
-8. site_contact_export.py     --campaign  Copy selection to site_campaigns/{id}
-9. site_campaign_mail_prepare.py
+9. site_contact_export.py     --campaign  Copy selection to site_campaigns/{id}
+10. site_campaign_mail_prepare.py
                               Prepare outbound mail per country + per contact
                               → mailing/{campaign}/ scaffolded on first run
                               → out_mail/{country} template docs
@@ -52,11 +62,14 @@ Discovers content-heavy websites, measures them via sitemap, extracts and enrich
 python app\site_agent.py --countries NO
 python app\site_enrich_agent.py --countries NO
 python app\site_contact_enrich.py --countries NO
+python app\site_location_enrich.py --countries NO
 python app\site_contact_export.py --countries NO --with-email-only
+python app\site_contact_export.py --countries NO --location Oslo --with-email-only
 python app\site_contact_export.py --countries NO --page-count small
 python app\site_contact_export.py --countries NO --campaign NO_jun01
 python app\site_campaign_mail_prepare.py --campaign NO_jun01 --prepare-contacts
 python app\site_leads_export.py --countries NO
+python app\site_leads_export.py --countries NO --location Bergen
 ```
 
 ---
@@ -131,11 +144,13 @@ python app\statistics.py
 ### Site Pipeline — Full Workflow (from discovery to mail-ready)
 
 ```
-1. DISCOVER   site_agent.py          Search Bing + Brave, crawl sites, extract contacts
-2. CLASSIFY   site_enrich_agent.py   GPT: sector, country, platform, hosting, summary
-3. ENRICH     site_contact_enrich.py Brave Search + GPT: occupation, LinkedIn, socials
-4. EXPORT     site_contact_export.py Excel + optional Firestore campaign
-5. MAIL PREP  site_campaign_mail_prepare.py  Templates + personalised docs per email
+1. DISCOVER   site_agent.py              Search Bing + Brave, crawl sites, extract contacts
+2. CLASSIFY   site_enrich_agent.py       GPT: sector, country, platform, hosting, summary
+3. ENRICH     site_contact_enrich.py     Brave Search + GPT: occupation, LinkedIn, socials
+4. LOCATE     site_location_enrich.py    GPT: city, region, full location text per site
+5. EXPORT     site_contact_export.py     Excel + optional Firestore campaign
+              site_leads_export.py       Excel — one row per lead
+6. MAIL PREP  site_campaign_mail_prepare.py  Templates + personalised docs per email
 ```
 
 **Step-by-step (India example):**
@@ -152,10 +167,17 @@ python app\site_enrich_agent.py --countries IN
 REM 3. Enrich contacts (Brave Search + GPT — needs BRAVE_API_KEY + OPENAI_API_KEY)
 python app\site_contact_enrich.py --countries IN
 
-REM 4a. Export contacts to Excel only
+REM 4. Infer city + location for each site (dry-run 20 first to verify)
+python app\site_location_enrich.py --countries IN --dry-run 20
+python app\site_location_enrich.py --countries IN
+
+REM 5a. Export contacts to Excel only
 python app\site_contact_export.py --countries IN --with-email-only --page-count medium
 
-REM 4b. Export and save as a campaign (for mail prep)
+REM 5b. Export filtered by city (e.g. Pune only)
+python app\site_contact_export.py --countries IN --location Pune --with-email-only
+
+REM 5c. Export and save as a campaign (for mail prep)
 python app\site_contact_export.py --countries IN --with-email-only --page-count medium --campaign IN_medium_jun01
 
 REM 5. Scaffold mail templates (creates mailing/IN_medium_jun01/ with example files)
@@ -173,6 +195,8 @@ python app\site_campaign_mail_prepare.py --campaign IN_medium_jun01 --prepare-co
 | `--countries IN` | Filter by ai_country |
 | `--page-count medium` | Sites with 501–3000 pages |
 | `--sector ecommerce` | Sites classified as ecommerce |
+| `--location Pune` | Only sites located in Pune (searches location_full) |
+| `--location "Hinjewadi"` | Narrow to a specific area or suburb |
 | `--with-email-only` | Only contacts that have an email |
 | `--campaign NAME` | Save to Firestore for mail prep |
 
@@ -419,6 +443,50 @@ Backfills sitemap data (`page_count`, `sitemap_url`, `sitemap_type`, `sitemap_ur
 | `--dry-run` | off | Print results without writing to Firestore |
 | `--force` | off | Re-scan even leads that already have sitemap data |
 
+### CLI — site_location_enrich.py
+
+Enriches `site_leads` with AI-inferred city and country location. Sends batches of 50
+sites to OpenAI (3 parallel), writing `location`, `location_full`, `location_city`,
+`location_region`, `location_country`, `location_confidence`, and `location_source`.
+
+```bash
+# Dry-run 20 UK sites — prints inferred locations, no writes
+python app/site_location_enrich.py --countries UK --dry-run 20
+
+# Run for real
+python app/site_location_enrich.py --countries UK
+python app/site_location_enrich.py --countries IN
+
+# Re-enrich sites already processed
+python app/site_location_enrich.py --countries UK --force
+
+# Larger batches, more parallelism
+python app/site_location_enrich.py --countries IN --batch-size 50 --concurrent 4
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Country codes to process e.g. `UK IN NO` |
+| `--dry-run N` | off | Run on N sites, print results, skip Firestore writes |
+| `--batch-size` | 50 | Sites per OpenAI call |
+| `--concurrent` | 3 | Parallel OpenAI batch calls |
+| `--force` | off | Re-enrich sites that already have `location_enriched_at` |
+| `--limit N` | none | Max sites to process |
+
+**Fields written to `site_leads`:**
+
+| Field | Example |
+|---|---|
+| `location` | `London, England, United Kingdom` |
+| `location_full` | `London, England, United Kingdom` |
+| `location_city` | `London` |
+| `location_region` | `England` |
+| `location_country` | `UK` |
+| `location_confidence` | `0.85` (1.0=address found, 0.3=TLD only) |
+| `location_source` | `address` / `phone` / `postcode` / `content` / `company_name` / `domain` |
+
+---
+
 ### CLI — site_leads_export.py
 
 ```bash
@@ -437,6 +505,7 @@ single cell. Good for a full lead overview.
 | `--countries` | all | Comma-separated country codes |
 | `--sector` | all | Filter by `ai_sector` e.g. `ecommerce`, `technology` |
 | `--category` | all | Filter by `query_category` e.g. `real_estate`, `healthcare` |
+| `--location` | all | Keyword filter on `location_full` e.g. `London`, `Pune`, `Oslo` |
 | `--with-contacts-only` | off | Only include leads that have at least one contact |
 | `--limit` | none | Max leads to export |
 | `--output` | auto-timestamped | Output `.xlsx` path |
@@ -463,6 +532,7 @@ python app\site_contact_export.py --output exports\contacts_no.xlsx
 | `--countries` | all | Comma-separated country codes — filters on `ai_country` from site_lead |
 | `--sector` | all | Filter by `ai_sector` e.g. `ecommerce`, `technology` |
 | `--category` | all | Filter by `query_category` e.g. `real_estate`, `healthcare` |
+| `--location` | all | Keyword filter on `location_full` e.g. `London`, `Pune`, `Manchester` |
 | `--with-email-only` | off | Only include contacts that have an email address |
 | `--limit` | none | Max contacts to export |
 | `--output` | auto-named | Output `.xlsx` path (default: `exports/site_contacts_<filter>_<date>.xlsx`) |

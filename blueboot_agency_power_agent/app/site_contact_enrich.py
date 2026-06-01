@@ -46,7 +46,7 @@ import _pathsetup  # noqa: F401
 LEADS_COLLECTION    = "site_leads"
 CONTACTS_COLLECTION = "site_contacts"
 OPENAI_MODEL        = "gpt-4.1-mini"
-CONCURRENT_DEFAULT  = 5      # parallel Brave+GPT tasks
+CONCURRENT_DEFAULT  = 15     # parallel Brave+GPT tasks
 CONTACT_TIMEOUT     = 45.0   # hard ceiling per contact
 RETRY_ATTEMPTS      = 2
 SEARCH_RESULTS      = 5      # Brave results to fetch per contact query
@@ -243,6 +243,8 @@ async def _enrich_one(
     domain  = data.get("domain", "")
     title   = data.get("title", "")
     country = (data.get("country") or "").upper()
+    if country in ("*", "GLOBAL", "ALL", "?"):
+        country = ""   # wildcard — do not pass to Brave API
     query   = f"{name} {domain}".strip()
 
     counters["done"] += 1
