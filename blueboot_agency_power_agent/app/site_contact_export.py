@@ -40,6 +40,8 @@ CONTACTS_COLLECTION = "site_contacts"
 
 # Columns in output order: (contact_field, header, width)
 CONTACT_COLUMNS: list[tuple[str, str, int]] = [
+    ("_doc_id",          "Doc ID",           28),
+    ("_site_doc_id",     "Site Doc ID",      28),
     ("name",             "Name",             28),
     ("email",            "Email",            32),
     ("phone",            "Phone",            18),
@@ -49,6 +51,7 @@ CONTACT_COLUMNS: list[tuple[str, str, int]] = [
     ("linkedin",         "LinkedIn",         40),
     ("twitter",          "Twitter",          30),
     ("facebook",         "Facebook",         30),
+    ("ai_country",       "AI Country",       12),
 ]
 
 LEAD_COLUMNS: list[tuple[str, str, int]] = [
@@ -56,6 +59,7 @@ LEAD_COLUMNS: list[tuple[str, str, int]] = [
     ("website",          "Website",          34),
     ("country",          "Country",           8),
     ("country_name",     "Country Name",     16),
+    ("ai_country",       "AI Country",       12),
     ("query_category",   "Category",         16),
     ("page_count",       "Pages",             9),
     ("ai_sector",        "AI Sector",        18),
@@ -114,8 +118,8 @@ def _load_leads_index(db, countries: list[str] | None) -> dict[str, dict]:
     for doc in col.stream():
         data = doc.to_dict() or {}
         if countries:
-            c = (data.get("country") or "").upper()
-            if c not in countries:
+            ai_c = (data.get("ai_country") or "").upper()
+            if ai_c not in countries:
                 continue
         index[doc.id] = data
     print(f"  [contact-export] {len(index)} leads loaded into index", flush=True)
@@ -129,11 +133,17 @@ def _stream_contacts(
     sector:          str | None,
     category:        str | None,
     limit:           int | None,
-) -> list[dict]:
-    """Stream site_contacts collectionGroup, join with parent lead data."""
+    countries:       list[str] | None = None,
+) -> tuple[list[dict], dict]:
+    """Stream site_contacts collectionGroup, join with parent lead data.
+
+    Returns (rows, used_leads) where used_leads contains only the site_leads
+    that have at least one contact in the result set.
+    """
     print(f"  [contact-export] Scanning collectionGroup '{CONTACTS_COLLECTION}'…", flush=True)
-    col     = db.collection_group(CONTACTS_COLLECTION)
-    rows    = []
+    col        = db.collection_group(CONTACTS_COLLECTION)
+    rows       = []
+    used_leads: dict[str, dict] = {}
     scanned = skipped = 0
 
     for doc in col.stream():
@@ -158,6 +168,13 @@ def _stream_contacts(
             skipped += 1
             continue
 
+        # Contact-level country filter: match on lead's ai_country only
+        if countries:
+            ai_c = (lead.get("ai_country") or "").upper()
+            if ai_c not in countries:
+                skipped += 1
+                continue
+
         # Sector filter
         if sector and (lead.get("ai_sector") or "").lower() != sector.lower():
             skipped += 1
@@ -170,11 +187,15 @@ def _stream_contacts(
 
         # Merge contact + lead fields into one flat row
         row = dict(contact)
-        row["_lead_id"] = lead_id
+        row["_doc_id"]      = doc.id
+        row["_site_doc_id"] = lead_id
+        row["_lead_id"]     = lead_id
         # Copy lead fields (prefix collision avoided — lead fields go under their own keys)
         for key in [c[0] for c in LEAD_COLUMNS]:
             if key not in row:  # don't overwrite contact's own field
                 row[key] = lead.get(key, "")
+        # ai_country always comes from the parent site_lead, never from the contact doc
+        row["ai_country"] = (lead.get("ai_country") or "").upper()
         # found_on may be on contact, not lead
         if "found_on" not in contact:
             row["found_on"] = ""
@@ -185,6 +206,7 @@ def _stream_contacts(
             row["ai_keywords"] = ", ".join(kw)
 
         rows.append(row)
+        used_leads[lead_id] = lead
 
         if len(rows) % 200 == 0:
             print(f"  [contact-export] … {len(rows)} contacts collected (scanned {scanned})", flush=True)
@@ -194,17 +216,18 @@ def _stream_contacts(
 
     print(
         f"  [contact-export] {scanned} scanned → {len(rows)} rows  "
-        f"({skipped} skipped by filter)",
+        f"({skipped} skipped by filter)  "
+        f"({len(used_leads)} unique sites)",
         flush=True,
     )
-    return rows
+    return rows, used_leads
 
 
 # ---------------------------------------------------------------------------
 # Excel builder
 # ---------------------------------------------------------------------------
 
-def _build_xlsx(rows: list[dict], output_path: str) -> None:
+def _build_xlsx(rows: list[dict], output_path: str, leads_index: dict | None = None) -> None:
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -289,11 +312,11 @@ def _build_xlsx(rows: list[dict], output_path: str) -> None:
     ws2.column_dimensions["A"].width = 22
     ws2.column_dimensions["B"].width = 30
 
-    # Country breakdown
-    ws2.cell(row=10, column=1, value="By Country").font = Font(name="Arial", bold=True, size=10)
+    # Country breakdown — by ai_country from site_lead
+    ws2.cell(row=10, column=1, value="By AI Country").font = Font(name="Arial", bold=True, size=10)
     country_counts: dict[str, int] = {}
     for r in rows:
-        c = (r.get("country") or "?").upper()
+        c = (r.get("ai_country") or "?").upper()
         country_counts[c] = country_counts.get(c, 0) + 1
     for i, (c, cnt) in enumerate(sorted(country_counts.items()), start=11):
         ws2.cell(row=i, column=1, value=c).font   = Font(name="Arial", size=9)
@@ -310,8 +333,229 @@ def _build_xlsx(rows: list[dict], output_path: str) -> None:
         ws2.cell(row=i, column=1, value=s).font   = Font(name="Arial", size=9)
         ws2.cell(row=i, column=2, value=cnt).font = Font(name="Arial", size=9)
 
+    # ── Sites sheet ─────────────────────────────────────────────────────────
+    if leads_index:
+        SITE_COLUMNS: list[tuple[str, str, int]] = [
+            ("_doc_id",          "Doc ID",           28),
+            ("domain",           "Domain",           28),
+            ("website",          "Website",          34),
+            ("country",          "Country",           8),
+            ("country_name",     "Country Name",     16),
+            ("ai_country",       "AI Country",       12),
+            ("query_category",   "Category",         16),
+            ("page_count",       "Pages",             9),
+            ("ai_sector",        "AI Sector",        18),
+            ("ai_company_type",  "AI Type",          14),
+            ("ai_platform",      "Platform",         16),
+            ("ai_hosting",       "Hosting",          16),
+            ("ai_confidence",    "AI Conf",           9),
+            ("ai_summary",       "AI Summary",       45),
+            ("ai_keywords",      "AI Keywords",      45),
+            ("crawled_at",       "Crawled At",       20),
+        ]
+        ws_sites = wb.create_sheet("Sites")
+        site_fields  = [f for f, _, _ in SITE_COLUMNS]
+        site_headers = [h for _, h, _ in SITE_COLUMNS]
+        site_widths  = [w for _, _, w in SITE_COLUMNS]
+
+        for col_idx, (header, width) in enumerate(zip(site_headers, site_widths), start=1):
+            cell = ws_sites.cell(row=1, column=col_idx, value=header)
+            cell.font      = hdr_font
+            cell.fill      = hdr_fill
+            cell.alignment = hdr_align
+            cell.border    = cell_border
+            ws_sites.column_dimensions[get_column_letter(col_idx)].width = width
+        ws_sites.row_dimensions[1].height = 20
+        ws_sites.freeze_panes = "A2"
+
+        for row_idx, (lead_id, lead) in enumerate(sorted(leads_index.items()), start=2):
+            fill = fill_even if row_idx % 2 == 0 else fill_odd
+            lead_row = dict(lead)
+            lead_row["_doc_id"] = lead_id
+            kw = lead_row.get("ai_keywords")
+            if isinstance(kw, list):
+                lead_row["ai_keywords"] = ", ".join(kw)
+            for col_idx, field in enumerate(site_fields, start=1):
+                val = lead_row.get(field, "") or ""
+                if isinstance(val, list):
+                    val = ", ".join(str(v) for v in val)
+                if isinstance(val, float):
+                    val = round(val, 3)
+                cell           = ws_sites.cell(row=row_idx, column=col_idx, value=val)
+                cell.font      = data_font
+                cell.fill      = fill
+                cell.alignment = data_align_wrap if field == "ai_summary" else data_align
+                cell.border    = cell_border
+        ws_sites.auto_filter.ref = f"A1:{get_column_letter(len(SITE_COLUMNS))}1"
+
+        # ── Sites Summary sheet ──────────────────────────────────────────────
+        ws_ss = wb.create_sheet("Sites Summary")
+        ws_ss["A1"]       = "Site Leads Export"
+        ws_ss["A1"].font  = Font(name="Arial", bold=True, size=14)
+        ws_ss.column_dimensions["A"].width = 22
+        ws_ss.column_dimensions["B"].width = 30
+
+        site_summary_rows = [
+            ("Generated at",     datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")),
+            ("Total sites",      len(leads_index)),
+            ("With AI analysis", sum(1 for l in leads_index.values() if l.get("ai_classified_at"))),
+        ]
+        for i, (label, value) in enumerate(site_summary_rows, start=3):
+            ws_ss.cell(row=i, column=1, value=label).font = Font(name="Arial", bold=True, size=10)
+            ws_ss.cell(row=i, column=2, value=value).font = Font(name="Arial", size=10)
+
+        # Country breakdown (sites) — by ai_country only
+        ws_ss.cell(row=8, column=1, value="By AI Country").font = Font(name="Arial", bold=True, size=10)
+        site_country: dict[str, int] = {}
+        for l in leads_index.values():
+            c = (l.get("ai_country") or "?").upper()
+            site_country[c] = site_country.get(c, 0) + 1
+        for i, (c, cnt) in enumerate(sorted(site_country.items()), start=9):
+            ws_ss.cell(row=i, column=1, value=c).font   = Font(name="Arial", size=9)
+            ws_ss.cell(row=i, column=2, value=cnt).font = Font(name="Arial", size=9)
+
+        # Sector breakdown (sites)
+        site_sector_start = 9 + len(site_country) + 2
+        ws_ss.cell(row=site_sector_start, column=1, value="By AI Sector").font = Font(name="Arial", bold=True, size=10)
+        site_sector: dict[str, int] = {}
+        for l in leads_index.values():
+            s = l.get("ai_sector") or "unknown"
+            site_sector[s] = site_sector.get(s, 0) + 1
+        for i, (s, cnt) in enumerate(sorted(site_sector.items(), key=lambda x: -x[1]), start=site_sector_start + 1):
+            ws_ss.cell(row=i, column=1, value=s).font   = Font(name="Arial", size=9)
+            ws_ss.cell(row=i, column=2, value=cnt).font = Font(name="Arial", size=9)
+
     wb.save(output_path)
     print(f"  [contact-export] Saved → {output_path}", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Campaign save
+# ---------------------------------------------------------------------------
+
+SITE_CAMPAIGNS_COLLECTION = "site_campaigns"
+
+def _load_taken_sites(db) -> dict[str, str]:
+    """Query site_campaign_sites collectionGroup to find all lead_ids already in a campaign.
+
+    Returns {lead_id: campaign_name} for every site already claimed.
+    One upfront scan — no per-site reads needed.
+    """
+    print("  [campaign] Scanning site_campaign_sites for already-claimed sites…", flush=True)
+    taken: dict[str, str] = {}
+    for doc in db.collection_group("site_campaign_sites").stream():
+        lead_id  = doc.id
+        campaign = doc.reference.parent.parent.id
+        taken[lead_id] = campaign
+    print(f"  [campaign] {len(taken)} sites already in campaigns", flush=True)
+    return taken
+
+
+def _save_campaign(
+    db,
+    campaign:        str,
+    rows:            list[dict],
+    used_leads:      dict,
+    countries:       list[str] | None = None,
+    sector:          str | None       = None,
+    category:        str | None       = None,
+    with_email_only: bool             = False,
+    limit:           int | None       = None,
+    force:           bool             = False,
+) -> None:
+    """Copy only the filtered sites and contacts into site_campaigns/{campaign}/.
+
+    Checks site_campaign_sites collectionGroup first — any site already in another
+    campaign is skipped (unless --force is set).
+
+    Structure:
+      site_campaigns/{campaign}/
+          site_campaign_sites/{lead_id}/
+              site_campaign_contacts/{contact_id}
+    """
+
+    total_sites    = len(used_leads)
+    total_contacts = len(rows)
+
+    print(
+        f"  [campaign] Saving '{campaign}' → "
+        f"{total_sites} sites  {total_contacts} contacts…",
+        flush=True,
+    )
+
+    # ── Check which sites are already claimed ────────────────────────────────
+    if not force:
+        taken = _load_taken_sites(db)
+        # Remove this campaign's own entries so re-runs don't self-block
+        taken = {lid: c for lid, c in taken.items() if c != campaign}
+    else:
+        taken = {}
+        print("  [campaign] --force: skipping duplicate check", flush=True)
+
+    # Build contact lookup: site_doc_id → [contact rows]
+    contacts_by_site: dict[str, list[dict]] = {}
+    for row in rows:
+        sid = row.get("_site_doc_id", "unknown")
+        contacts_by_site.setdefault(sid, []).append(row)
+
+    camp_ref = db.collection(SITE_CAMPAIGNS_COLLECTION).document(campaign)
+
+    # ── Campaign summary doc ─────────────────────────────────────────────────
+    camp_ref.set({
+        "campaign_id":    campaign,
+        "created_at":     datetime.now(timezone.utc).isoformat(),
+        "site_count":     total_sites,
+        "contact_count":  total_contacts,
+        "filters": {
+            "countries":       countries or [],
+            "sector":          sector or "",
+            "category":        category or "",
+            "with_email_only": with_email_only,
+            "limit":           limit,
+        },
+    }, merge=True)
+
+    # ── Write sites + contacts ───────────────────────────────────────────────
+    sites_written    = 0
+    sites_skipped    = 0
+    contacts_written = 0
+
+    for lead_id, lead in used_leads.items():
+        # Skip sites already in another campaign
+        if lead_id in taken:
+            other = taken[lead_id]
+            domain = lead.get("domain", lead_id)
+            print(f"  [campaign] SKIP {domain:<35} already in '{other}'", flush=True)
+            sites_skipped += 1
+            continue
+
+        data = {k: v for k, v in lead.items() if not k.startswith("_")}
+        kw = data.get("ai_keywords")
+        if isinstance(kw, list):
+            data["ai_keywords"] = ", ".join(kw)
+
+        site_ref = camp_ref.collection("site_campaign_sites").document(lead_id)
+        site_ref.set(data, merge=True)
+        sites_written += 1
+
+        for row in contacts_by_site.get(lead_id, []):
+            contact_data = {k: v for k, v in row.items() if not k.startswith("_")}
+            doc_id = row.get("_doc_id") or "unknown"
+            site_ref.collection("site_campaign_contacts").document(doc_id).set(contact_data, merge=True)
+            contacts_written += 1
+
+        if sites_written % 50 == 0:
+            print(
+                f"  [campaign] sites {sites_written}/{total_sites - sites_skipped}  "
+                f"contacts {contacts_written}/{total_contacts}",
+                flush=True,
+            )
+
+    print(
+        f"  [campaign] Done → site_campaigns/{campaign}  "
+        f"{sites_written} sites saved  {sites_skipped} skipped  {contacts_written} contacts",
+        flush=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +569,8 @@ def export_contacts(
     with_email_only: bool             = False,
     limit:           int | None       = None,
     output_path:     str | None       = None,
+    campaign:        str | None       = None,
+    force:           bool             = False,
 ) -> str:
     fb_key = _load_secrets()
     db     = _init_firestore(fb_key)
@@ -332,22 +578,44 @@ def export_contacts(
     # Load leads first (for the join) — filtered by country
     leads_index = _load_leads_index(db, countries)
 
-    rows = _stream_contacts(db, leads_index, with_email_only, sector, category, limit)
+    rows, used_leads = _stream_contacts(
+        db, leads_index, with_email_only, sector, category, limit, countries=countries
+    )
     if not rows:
         print("  [contact-export] No contacts found matching filters.")
         return ""
 
     if not output_path:
-        ts          = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
-        suffix      = ("_" + "_".join(countries)) if countries else ""
+        ts      = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
+        parts   = []
+        if countries:
+            parts.append("_".join(countries))
+        if sector:
+            parts.append(sector)
+        if category:
+            parts.append(category)
+        if with_email_only:
+            parts.append("email")
+        filter_str  = ("_" + "_".join(parts)) if parts else ""
         output_path = str(
-            Path(__file__).parent.parent / "exports" / f"contacts{suffix}_{ts}.xlsx"
+            Path(__file__).parent.parent / "exports" / f"site_contacts{filter_str}_{ts}.xlsx"
         )
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     print(f"\n  [contact-export] Building Excel — {len(rows)} contacts…", flush=True)
-    _build_xlsx(rows, output_path)
+    _build_xlsx(rows, output_path, leads_index=used_leads)
+
+    if campaign:
+        _save_campaign(
+            db, campaign, rows, used_leads,
+            countries       = countries,
+            sector          = sector,
+            category        = category,
+            with_email_only = with_email_only,
+            limit           = limit,
+            force           = force,
+        )
 
     return output_path
 
@@ -378,6 +646,10 @@ def main(argv=None) -> None:
                    help="Max contacts to export")
     p.add_argument("--output",          default=None, metavar="FILE",
                    help="Output .xlsx path  (default: exports/contacts_<country>_<ts>.xlsx)")
+    p.add_argument("--campaign",        default=None, metavar="NAME",
+                   help="Save selection to site_campaigns/<NAME> in Firestore (sites + contacts)")
+    p.add_argument("--force",            action="store_true",
+                   help="Re-assign sites already in another campaign (skips duplicate check)")
 
     args = p.parse_args(argv)
 
@@ -392,6 +664,8 @@ def main(argv=None) -> None:
         with_email_only = args.with_email_only,
         limit           = args.limit,
         output_path     = args.output,
+        campaign        = args.campaign,
+        force           = args.force,
     )
     if path:
         print(f"\n  Done → {path}")

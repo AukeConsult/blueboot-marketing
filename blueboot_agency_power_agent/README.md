@@ -44,6 +44,7 @@ python app\site_agent.py --countries NO
 python app\site_enrich_agent.py --countries NO
 python app\site_contact_enrich.py --countries NO
 python app\site_contact_export.py --countries NO --with-email-only
+python app\site_contact_export.py --countries NO --campaign NO_jun01
 python app\site_leads_export.py --countries NO
 ```
 
@@ -277,30 +278,56 @@ single cell. Good for a full lead overview.
 
 ### CLI — site_contact_export.py
 
-```bash
-python app/site_contact_export.py
-python app/site_contact_export.py --countries NO,SE
-python app/site_contact_export.py --countries NO --sector ecommerce
-python app/site_contact_export.py --countries NO --with-email-only
-python app/site_contact_export.py --countries NO --category healthcare
-python app/site_contact_export.py --output exports/contacts_no.xlsx
-```
+Exports `site_contacts` to Excel — one row per contact, enriched with key fields from the parent `site_lead`. Country filtering uses **`ai_country`** from the site_lead only (the AI-detected country, which is more reliable than the scraped `country` field). Optionally saves the selection to a `site_campaigns` Firestore collection.
 
-Exports `site_contacts` to Excel — one row per contact, enriched with key fields
-from the parent `site_lead` (domain, pages, sector, platform, hosting, AI summary,
-keywords). Ideal for outreach — filter by sector, platform, or country to find
-exactly the right contacts.
+```bat
+python app\site_contact_export.py
+python app\site_contact_export.py --countries NO,SE
+python app\site_contact_export.py --countries NO --sector ecommerce
+python app\site_contact_export.py --countries NO --with-email-only
+python app\site_contact_export.py --countries NO --category healthcare
+python app\site_contact_export.py --countries NO --campaign NO_jun01
+python app\site_contact_export.py --countries NO --campaign NO_jun01 --force
+python app\site_contact_export.py --output exports\contacts_no.xlsx
+```
 
 | Flag | Default | Description |
 |---|---|---|
-| `--countries` | all | Comma-separated country codes |
+| `--countries` | all | Comma-separated country codes — filters on `ai_country` from site_lead |
 | `--sector` | all | Filter by `ai_sector` e.g. `ecommerce`, `technology` |
 | `--category` | all | Filter by `query_category` e.g. `real_estate`, `healthcare` |
 | `--with-email-only` | off | Only include contacts that have an email address |
 | `--limit` | none | Max contacts to export |
-| `--output` | auto-timestamped | Output `.xlsx` path |
+| `--output` | auto-named | Output `.xlsx` path (default: `exports/site_contacts_<filter>_<date>.xlsx`) |
+| `--campaign NAME` | off | Save filtered sites + contacts to `site_campaigns/<NAME>` in Firestore |
+| `--force` | off | Re-assign sites already in another campaign (bypasses duplicate check) |
 
-Output file includes a **Summary sheet** with totals by country and AI sector.
+**Output sheets:**
+
+| Sheet | Contents |
+|---|---|
+| `Contacts` | One row per contact — Doc ID, Site Doc ID, name, email, phone, title, occupation, company, linkedin, twitter, facebook, AI Country, then all site fields |
+| `Summary` | Totals (contacts, with email/LinkedIn/phone, enriched), breakdown by AI Country and AI Sector |
+| `Sites` | One row per site that has at least one contact in the selection — all site_lead fields |
+| `Sites Summary` | Site totals, breakdown by AI Country and AI Sector |
+
+**`--campaign` Firestore structure:**
+
+```
+site_campaigns/{campaign}/
+    campaign_id, created_at, site_count, contact_count
+    filters: { countries, sector, category, with_email_only, limit }
+
+    site_campaign_sites/{lead_id}/
+        site_campaign_contacts/{contact_id}
+```
+
+**Duplicate prevention:** when `--campaign` is used, the script first queries the `site_campaign_sites` collectionGroup across all existing campaigns. Any site already claimed by another campaign is skipped and logged — it will not appear in two campaigns. Use `--force` to override and re-assign. The final output reports how many sites were saved vs skipped:
+
+```
+[campaign] SKIP agency-oslo.no            already in 'NO_may26'
+[campaign] Done → 298 sites saved  14 skipped  1205 contacts
+```
 
 ### Supported countries
 
@@ -948,4 +975,71 @@ export_to_excel(results, outdir="output")
 # Reasons aggregation (writeback on by default)
 results = summarise_reasons_count(leads_collection="leads", writeback=True)
 export_reasons_to_excel(results, outdir="output")
+```
+
+---
+
+## `firestore_index_sync.py` — manage Firestore composite indexes
+
+Merges new composite indexes into `firestore.indexes.json`, de-duplicates against what is already defined, and optionally deploys them to Firestore. Also introspects the live Firestore database to report all top-level collections and their subcollections.
+
+Run whenever you add a new collection or query pattern that needs a composite index.
+
+```bat
+:: Discover collections + merge indexes into firestore.indexes.json
+python app\firestore_index_sync.py
+
+:: Preview merged result without writing
+python app\firestore_index_sync.py --dry-run
+
+:: Merge and deploy to Firestore in one step
+python app\firestore_index_sync.py --deploy
+
+:: Just list what collections/subcollections exist
+python app\firestore_index_sync.py --discover-only
+
+:: Skip discovery, only merge the index file
+python app\firestore_index_sync.py --no-discover
+
+:: Write to a custom path
+python app\firestore_index_sync.py --output config\firestore.indexes.json
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--output FILE` | `firestore.indexes.json` | Path to read/write the index file |
+| `--dry-run` | off | Print merged JSON without writing the file |
+| `--deploy` | off | Run `firebase deploy --only firestore:indexes` after writing |
+| `--discover-only` | off | List collections and subcollections, then exit |
+| `--no-discover` | off | Skip Firestore introspection, only merge the file |
+
+### Indexes defined
+
+Two collectionGroup scopes are managed — both work across all parent paths
+(e.g. `site_leads` directly under `site_leads/` **and** nested under `site_campaigns/{id}/site_leads/`):
+
+**`site_leads` collectionGroup**
+
+| Fields | Use case |
+|---|---|
+| `ai_country` ↑ · `crawled_at` ↓ | Latest sites per country |
+| `ai_country` ↑ · `ai_sector` ↑ · `crawled_at` ↓ | Sites by country + sector, newest first |
+| `ai_country` ↑ · `ai_confidence` ↓ | Highest-confidence sites per country |
+| `ai_country` ↑ · `ai_sector` ↑ · `ai_confidence` ↓ | Sector filter + confidence ranking |
+
+**`site_contacts` collectionGroup**
+
+| Fields | Use case |
+|---|---|
+| `ai_country` ↑ · `name` ↑ | All contacts for a country, alphabetical |
+| `ai_country` ↑ · `email` ↑ · `brave_enriched_at` ↓ | Contacts with email, newest enriched first |
+| `ai_country` ↑ · `occupation` ↑ · `name` ↑ | Filter by country + role |
+| `ai_country` ↑ · `brave_enriched_at` ↓ | Contacts sorted by enrichment date |
+
+### Deploy manually
+
+```bat
+firebase deploy --only firestore:indexes
 ```
