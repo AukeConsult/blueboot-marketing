@@ -53,7 +53,7 @@ python app\site_agent.py --countries NO
 python app\site_enrich_agent.py --countries NO
 python app\site_contact_enrich.py --countries NO
 python app\site_contact_export.py --countries NO --with-email-only
-python app\site_contact_export.py --countries NO --page-count small  :: small sites only (51-500 pages)
+python app\site_contact_export.py --countries NO --page-count small
 python app\site_contact_export.py --countries NO --campaign NO_jun01
 python app\site_campaign_mail_prepare.py --campaign NO_jun01 --prepare-contacts
 python app\site_leads_export.py --countries NO
@@ -307,7 +307,7 @@ python app\site_contact_export.py
 python app\site_contact_export.py --countries NO,SE
 python app\site_contact_export.py --countries NO --sector ecommerce
 python app\site_contact_export.py --countries NO --with-email-only
-python app\site_contact_export.py --countries NO --page-count small  :: small sites only (51-500 pages)
+python app\site_contact_export.py --countries NO --page-count small
 python app\site_contact_export.py --countries NO --category healthcare
 python app\site_contact_export.py --countries NO --campaign NO_jun01
 python app\site_contact_export.py --countries NO --campaign NO_jun01 --force
