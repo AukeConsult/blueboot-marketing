@@ -379,7 +379,7 @@ def enrich_contacts(
     if not api_key:
         raise RuntimeError("No OpenAI API key found.")
     if not os.getenv("BRAVE_API_KEY"):
-        raise RuntimeError("BRAVE_API_KEY env var not set.")
+        print("  [contact-enrich] WARNING: BRAVE_API_KEY not set — Brave search will be skipped.")
 
     db     = _init_firestore(fb_key)
     client = _init_openai(api_key)
