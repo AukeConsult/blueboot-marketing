@@ -2342,5 +2342,113 @@
         "site:.eu hostel accommodation booking"
       ]
     }
+  },
+  "IN": {
+    "name": "India",
+    "language": "en",
+    "accept_language": "en-IN,en;q=0.9",
+    "min_pages": 30,
+    "target_types": [
+      "company",
+      "technology",
+      "ecommerce",
+      "finance",
+      "education",
+      "healthcare",
+      "media",
+      "logistics",
+      "real_estate",
+      "hr",
+      "hospitality"
+    ],
+    "query_categories": {
+      "company": [
+        "web design agency india",
+        "web development company india",
+        "digital agency india",
+        "website development company india",
+        "it company website india",
+        "creative agency india",
+        "software company website india"
+      ],
+      "technology": [
+        "saas company india website",
+        "fintech website india",
+        "healthtech website india",
+        "edtech website india",
+        "b2b software company india website",
+        "it services company india",
+        "software agency hyderabad",
+        "it company website bangalore"
+      ],
+      "ecommerce": [
+        "ecommerce website development india",
+        "woocommerce developer india",
+        "wordpress agency india",
+        "wordpress development company india",
+        "wordpress website design india",
+        "ecommerce agency india",
+        "shopify agency india"
+      ],
+      "media": [
+        "digital marketing agency india",
+        "seo company india website",
+        "content marketing agency india",
+        "social media agency india"
+      ],
+      "bangalore": [
+        "web agency bangalore",
+        "digital agency bangalore",
+        "wordpress agency bangalore",
+        "it company bangalore website"
+      ],
+      "mumbai": [
+        "web agency mumbai",
+        "digital agency mumbai",
+        "wordpress agency mumbai",
+        "ecommerce agency mumbai"
+      ],
+      "delhi": [
+        "web agency delhi",
+        "digital agency delhi",
+        "wordpress agency delhi",
+        "it company delhi website"
+      ],
+      "hyderabad": [
+        "web agency hyderabad",
+        "software agency hyderabad",
+        "wordpress agency hyderabad",
+        "digital agency hyderabad"
+      ],
+      "pune": [
+        "web design agency pune",
+        "web development company pune",
+        "digital agency pune",
+        "website development pune",
+        "it company pune website",
+        "software company pune website",
+        "digital marketing agency pune",
+        "seo agency pune",
+        "wordpress agency pune",
+        "wordpress development pune",
+        "shopify agency pune",
+        "ecommerce agency pune",
+        "ui ux design agency pune",
+        "mobile app development pune website",
+        "b2b software company pune"
+      ],
+      "other_cities": [
+        "web agency chennai",
+        "web agency ahmedabad",
+        "web agency kolkata",
+        "web agency jaipur",
+        "web agency kochi",
+        "web agency noida",
+        "web agency coimbatore",
+        "web agency surat",
+        "digital agency kolkata",
+        "digital agency jaipur"
+      ]
+    }
   }
 }

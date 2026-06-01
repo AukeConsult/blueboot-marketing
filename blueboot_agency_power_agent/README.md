@@ -123,6 +123,150 @@ python app\statistics.py
 
 ---
 
+
+---
+
+## End-to-End Procedures
+
+### Site Pipeline — Full Workflow (from discovery to mail-ready)
+
+```
+1. DISCOVER   site_agent.py          Search Bing + Brave, crawl sites, extract contacts
+2. CLASSIFY   site_enrich_agent.py   GPT: sector, country, platform, hosting, summary
+3. ENRICH     site_contact_enrich.py Brave Search + GPT: occupation, LinkedIn, socials
+4. EXPORT     site_contact_export.py Excel + optional Firestore campaign
+5. MAIL PREP  site_campaign_mail_prepare.py  Templates + personalised docs per email
+```
+
+**Step-by-step (India example):**
+
+```bat
+call .venv\Scripts\activate.bat
+
+REM 1. Discover sites (Bing + Brave search, crawl, extract contacts)
+python app\site_agent.py --countries IN
+
+REM 2. AI classify each site (GPT — needs OPENAI_API_KEY)
+python app\site_enrich_agent.py --countries IN
+
+REM 3. Enrich contacts (Brave Search + GPT — needs BRAVE_API_KEY + OPENAI_API_KEY)
+python app\site_contact_enrich.py --countries IN
+
+REM 4a. Export contacts to Excel only
+python app\site_contact_export.py --countries IN --with-email-only --page-count medium
+
+REM 4b. Export and save as a campaign (for mail prep)
+python app\site_contact_export.py --countries IN --with-email-only --page-count medium --campaign IN_medium_jun01
+
+REM 5. Scaffold mail templates (creates mailing/IN_medium_jun01/ with example files)
+python app\site_campaign_mail_prepare.py --campaign IN_medium_jun01
+REM   -> edit mailing/IN_medium_jun01/mails/body.html and subject.json
+
+REM 6. Generate one personalised mail doc per email address
+python app\site_campaign_mail_prepare.py --campaign IN_medium_jun01 --prepare-contacts
+```
+
+**Filtering options at export time (Step 4):**
+
+| Flag | Purpose |
+|---|---|
+| `--countries IN` | Filter by ai_country |
+| `--page-count medium` | Sites with 501–3000 pages |
+| `--sector ecommerce` | Sites classified as ecommerce |
+| `--with-email-only` | Only contacts that have an email |
+| `--campaign NAME` | Save to Firestore for mail prep |
+
+**What gets created:**
+
+```
+site_leads/{lead_id}                          ← crawled site data + ai_* fields
+site_leads/{lead_id}/site_contacts/{id}       ← scraped contacts
+site_campaigns/{campaign}/
+    site_campaign_sites/{lead_id}             ← filtered site snapshot
+    site_campaign_sites/{lead_id}/
+        site_campaign_contacts/{id}           ← contact snapshot
+    out_mail_contacts/{id}                    ← personalised mail doc (status=pending)
+    out_mail/{country}                        ← mail template per country
+mailing/{campaign}/mails/body_IN.html         ← editable mail body
+mailing/{campaign}/subject.json               ← editable subjects per country
+```
+
+---
+
+### Lead Agent Pipeline — Full Workflow (from discovery to mail-ready)
+
+```
+1. DISCOVER   lead_agent.py              Bing + Brave search, crawl agency sites
+2. CLASSIFY   lead_enrich_agent.py       GPT: sector, specialisation, reseller fit
+3. ENRICH     lead_enrich_contacts.py    Bing: LinkedIn, Twitter, social profiles
+4. EXTRACT    lead_extract.py            Filtered Excel + Firestore extract
+5. MAIL PREP  lead_campaign_mail_prepare.py  Templates + personalised docs per email
+```
+
+**Step-by-step (UK example):**
+
+```bat
+call .venv\Scripts\activate.bat
+
+REM 1. Discover agency leads (Bing + Brave + GitHub)
+python app\lead_agent.py --countries UK --mode both
+
+REM 2. AI classify leads (GPT — needs OPENAI_API_KEY)
+python app\lead_enrich_agent.py --countries UK
+
+REM 3. Enrich contacts with social profiles (Bing search)
+python app\lead_enrich_contacts.py --country UK --skip-enriched
+
+REM 4. Export filtered extract to Firestore
+python app\lead_extract.py --country UK --with-email --min-score 60 --save-extract UK_jun01
+
+REM 5. Scaffold mail templates
+python app\lead_campaign_mail_prepare.py --extract UK_jun01
+REM   -> edit mailing/leads_UK_jun01/mails/body.html and subject.json
+
+REM 6. Generate one personalised mail doc per email address
+python app\lead_campaign_mail_prepare.py --extract UK_jun01 --prepare-contacts
+```
+
+**Filtering options at extract time (Step 4):**
+
+| Flag | Purpose |
+|---|---|
+| `--country UK` | Filter by country |
+| `--min-score 60` | Minimum reseller score (0–100) |
+| `--priority A,B` | Only A/B priority leads |
+| `--with-email` | Only leads with at least 1 email |
+| `--keywords wordpress` | Keyword filter |
+| `--save-extract NAME` | Save to Firestore for mail prep |
+
+**What gets created:**
+
+```
+leads/{lead_id}                               ← crawled lead data + ai_* fields
+leads/{lead_id}/contacts/{id}                 ← scraped contacts
+leads_extract/{extract_id}/
+    leads_extracted/{lead_id}                 ← filtered lead snapshot
+    leads_extracted/{lead_id}/
+        contacts_extracted/{id}               ← contact snapshot
+    out_mail_contacts/{id}                    ← personalised mail doc (status=pending)
+    out_mail/{country}                        ← mail template per country
+mailing/leads_{extract_id}/mails/body.html    ← editable mail body
+mailing/leads_{extract_id}/subject.json       ← editable subjects per country
+```
+
+---
+
+### Mail doc lifecycle
+
+Every `out_mail_contacts/{id}` document goes through these statuses:
+
+```
+pending  → (send script picks up)  →  sending  →  sent
+                                                 →  failed
+```
+
+Fields on each mail doc: `email`, `name`, `subject`, `body`, `status`, `sent_at`, `prepared_at`, `domain`, `country`.
+
 ## Section 1 — Site Agent Pipeline (current)
 
 Async Python pipeline that discovers content-heavy websites via Bing search, measures site
