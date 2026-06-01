@@ -304,6 +304,8 @@ web agency stirling
 web agency perth
 digital agency aberdeen
 digital agency dundee
+wordpress agency edinburgh
+wordpress agency glasgow
 wordpress agency aberdeen
 
 # --- Wales cities ---
@@ -311,6 +313,7 @@ web agency swansea
 web agency newport
 web agency wrexham
 web agency bangor
+digital agency cardiff
 digital agency swansea
 wordpress agency cardiff
 wordpress agency swansea

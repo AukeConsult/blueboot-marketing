@@ -59,7 +59,7 @@ def _get_credentials():
         return None
 
     # 1. blueboot_secrets.py in project root
-    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
+    secrets_path = Path(__file__).parent.parent.parent / "blueboot_secrets.py"
     if secrets_path.exists():
         try:
             import importlib.util
@@ -101,6 +101,46 @@ def _get_db(collection: str | None = None):
     col = db.collection(col_name)
     return db, col, col_name
 
+
+
+LEADS_EXCLUDED_COLLECTION = "leads_excluded"
+
+
+def load_leads_excluded() -> set[str]:
+    """Return the set of lead_ids already in leads_excluded.
+
+    Called at startup to pre-populate the rejected_domains set so previously
+    excluded sites are never re-crawled.
+    """
+    db, _, _ = _get_db()
+    if db is None:
+        return set()
+
+    excluded: set[str] = set()
+    for doc in db.collection(LEADS_EXCLUDED_COLLECTION).select([]).stream():
+        excluded.add(doc.id)
+
+    print(f"  [firebase] {len(excluded)} excluded leads loaded from '{LEADS_EXCLUDED_COLLECTION}'")
+    return excluded
+
+
+def upsert_lead_excluded(domain: str, reason: str = "", website: str = "") -> None:
+    """Write a domain to leads_excluded so it is never re-crawled.
+
+    Uses the same lead_id derivation as upsert_lead.
+    """
+    db, _, _ = _get_db()
+    if db is None:
+        return
+
+    from datetime import datetime, timezone
+    lead_id = _lead_id(website or f"https://{domain}/")
+    db.collection(LEADS_EXCLUDED_COLLECTION).document(lead_id).set({
+        "lead_id":    lead_id,
+        "domain":     domain,
+        "reason":     reason,
+        "excluded_at": datetime.now(timezone.utc).isoformat(),
+    }, merge=True)
 
 def upsert_lead(lead: "Lead", collection: str | None = None) -> None:
     """Write a single lead + its contacts to Firestore immediately.

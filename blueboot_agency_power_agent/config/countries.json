@@ -2996,5 +2996,126 @@
       ".business",
       ".company"
     ]
+  },
+  "GB": {
+    "name": "Great Britain",
+    "tlds": [
+      ".co.uk",
+      ".uk"
+    ],
+    "phone_region": "GB",
+    "accept_language": "en-GB,en;q=0.9",
+    "keywords": {
+      "web_agency": [
+        "web agency",
+        "web design",
+        "web development",
+        "website design",
+        "digital agency",
+        "website build"
+      ],
+      "wordpress": [
+        "wordpress",
+        "wp-content",
+        "woocommerce",
+        "elementor",
+        "divi"
+      ],
+      "seo": [
+        "seo",
+        "search engine optimisation",
+        "search engine optimization",
+        "google ads",
+        "visibility"
+      ],
+      "communication": [
+        "communications agency",
+        "communication",
+        "content",
+        "public relations",
+        "pr agency"
+      ],
+      "public_sector": [
+        "council",
+        "public sector",
+        "government",
+        "nhs",
+        "university",
+        "charity"
+      ],
+      "ai_interest": [
+        "ai",
+        "artificial intelligence",
+        "chatgpt",
+        "automation"
+      ]
+    },
+    "service_words": [
+      "our services",
+      "services",
+      "clients",
+      "case studies",
+      "portfolio",
+      "work"
+    ],
+    "support_words": [
+      "maintenance",
+      "support",
+      "hosting",
+      "care plan"
+    ],
+    "contact_words": [
+      "contact",
+      "about",
+      "about-us",
+      "services",
+      "case-studies",
+      "portfolio",
+      "work"
+    ],
+    "agency_words": [
+      "we build websites",
+      "we develop",
+      "web project",
+      "our clients",
+      "case studies",
+      "digital solutions for",
+      "partner",
+      "we help businesses",
+      "portfolio",
+      "projects"
+    ],
+    "accepted_tlds": [
+      ".co.uk",
+      ".uk",
+      ".io",
+      ".co",
+      ".agency",
+      ".digital",
+      ".online",
+      ".eu",
+      ".biz",
+      ".info",
+      ".pro",
+      ".app",
+      ".dev",
+      ".tech",
+      ".studio",
+      ".design",
+      ".media",
+      ".marketing",
+      ".solutions",
+      ".services",
+      ".group",
+      ".works",
+      ".creative",
+      ".cloud",
+      ".systems",
+      ".space",
+      ".site",
+      ".website",
+      ".me",
+      ".farm"
+    ]
   }
 }

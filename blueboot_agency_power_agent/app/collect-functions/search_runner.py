@@ -24,7 +24,7 @@ from app.functions.utils import (
     load_lines, load_country_configs, selected_countries, DEFAULT_COUNTRIES,
     linkedin_hints, normalize_phone_list,
 )
-from app.functions.firebase_sync import upsert_lead
+from app.functions.firebase_sync import upsert_lead, upsert_lead_excluded, load_leads_excluded
 from app.functions.models import Lead, dedupe_leads, export
 
 
@@ -124,7 +124,10 @@ def brave_search(query: str, max_results: int,
         return []
 
     # Brave expects lowercase 2-letter country code, e.g. "no", "se", "dk"
+    # Map internal country codes to ISO 3166-1 alpha-2 for Brave API
+    _BRAVE_CC_MAP = {"uk": "gb", "en": "gb"}
     cc = country_code.lower() if country_code else ""
+    cc = _BRAVE_CC_MAP.get(cc, cc)
 
     urls: list[str] = []
     # Brave free tier: single request only, max 20 results per call
@@ -206,7 +209,11 @@ def github_org_search(country_cfg: dict, country_code: str,
     # "web agency" as anchor, then add one native keyword if available.
     agency_kw   = country_cfg.get("keywords", {}).get("web_agency", [])
     native_term = agency_kw[0] if agency_kw else ""
-    terms = f"web agency {native_term}".strip()
+    # Avoid duplicating "web agency" if the native term is the same
+    if native_term.lower() in ("web agency", ""):
+        terms = "web agency digital agency website"
+    else:
+        terms = f"web agency {native_term}"
     query = f"type:org location:{country_name} {terms}"
 
     websites: list[str] = []
@@ -501,6 +508,7 @@ async def _run_batch_async(
                 # Crawl returned nothing (score==0 or fetch failed) — remember domain
                 if rejected_domains is not None:
                     rejected_domains.add(dom)
+                upsert_lead_excluded(dom, reason="crawl_failed_or_score_zero", website=f"https://{dom}/")
                 continue
             has_email = "yes" if lead.emails else "no"
             print(f"    -> {lead.priority} score={lead.reseller_score} email={has_email}  {lead.website}")
@@ -508,6 +516,7 @@ async def _run_batch_async(
                 print(f"       [skip] score {lead.reseller_score} < {min_score} threshold")
                 if rejected_domains is not None:
                     rejected_domains.add(dom)
+                upsert_lead_excluded(dom, reason=f"score {lead.reseller_score} < {min_score}", website=lead.website)
                 continue
             all_leads.append(lead)
             country_leads[code] = country_leads.get(code, 0) + 1
@@ -550,7 +559,56 @@ def load_queries_for_countries(countries: list[str],
     return pairs
 
 
+# ---------------------------------------------------------------------------
+# Background crawl executor — search and scrape run independently
+# ---------------------------------------------------------------------------
+
+import threading
+import queue as _queue
+
+class _BackgroundCrawler:
+    """Runs crawl batches in a background thread so the search loop never blocks.
+
+    The search loop submits batches via submit(); the crawler thread processes
+    them in order. Call wait() at the end to drain all queued batches.
+    """
+
+    def __init__(self):
+        self._queue: "_queue.Queue" = _queue.Queue()
+        self._thread = threading.Thread(target=self._worker, daemon=True)
+        self._thread.start()
+        self._error: Exception | None = None
+
+    def _worker(self):
+        while True:
+            item = self._queue.get()
+            if item is None:          # shutdown sentinel
+                self._queue.task_done()
+                break
+            fn, args_tuple = item
+            try:
+                fn(*args_tuple)
+            except Exception as exc:
+                print(f"  [bg-crawl] error: {exc}")
+                self._error = exc
+            finally:
+                self._queue.task_done()
+
+    def submit(self, fn, *args):
+        self._queue.put((fn, args))
+
+    def wait(self):
+        """Block until all queued batches are done."""
+        self._queue.join()
+        self._queue.put(None)   # shutdown
+        self._thread.join()
+        if self._error:
+            raise self._error
+
+
+
 def run(args) -> None:
+    _bg_crawler = _BackgroundCrawler()
     configs     = load_country_configs()
     countries   = selected_countries(args.countries, configs) or DEFAULT_COUNTRIES
     query_pairs = load_queries_for_countries(countries, args.queries or None)
@@ -599,7 +657,7 @@ def run(args) -> None:
                     inserted += 1
             if inserted:
                 print(f"  [{code}] {inserted} GitHub orgs queued for crawling")
-                if len(pending[code]) >= batch_size:
+                if pending[code]:  # flush GitHub orgs immediately
                     batch, pending[code] = pending[code][:batch_size], pending[code][batch_size:]
                     _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads,
                              rejected_domains=rejected_domains)
@@ -610,6 +668,8 @@ def run(args) -> None:
         batch, pending[code] = pending[code], []
         if label:
             print(f"  [{code}] {label}")
+        # Wait for any background crawls to finish before final flush
+        _bg_crawler.wait()
         _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads,
                      rejected_domains=rejected_domains)
 
@@ -627,13 +687,14 @@ def run(args) -> None:
                 continue
             if not queues[code]:
                 _flush(code, f"Final batch of {len(pending[code])} sites")
+                _bg_crawler.wait()
                 print(f"\n[{code}] No more queries — giving up.")
                 country_done.add(code)
                 continue
 
             query = queues[code].pop(0)
             total_queries_run += 1
-            print(f"\n[{code} | leads={country_leads[code]} | streak={country_streak[code]}] Query: {query}")
+            print(f"\n[{code} | leads={country_leads[code]} | streak={country_streak[code]} | queue={len(pending[code])}] Query: {query}")
 
             # Run Brave + Bing in parallel (Google CSE as optional bonus), merge results
             brave_urls  = brave_search(query, args.max_results, country_code=code)
@@ -674,5 +735,16 @@ def run(args) -> None:
                     pending[code].append((url, query))
                     seen_domains.add(dom)
                     added += 1
+            if added:
+                print(f"  Added {added} URLs → queue now {len(pending[code])} pending")
+                # Submit batches to background crawler (non-blocking)
+                while len(pending[code]) >= batch_size:
+                    batch, pending[code] = pending[code][:batch_size], pending[code][batch_size:]
+                    _bg_crawler.submit(
+                        _crawl_batch, batch, args, code, configs,
+                        all_leads, Path(args.output), country_leads,
+                        rejected_domains, "search"
+                    )
+                    print(f"  → Batch of {len(batch)} queued for crawling (background)  queue={len(pending[code])} remaining")
 
           

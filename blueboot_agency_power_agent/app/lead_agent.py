@@ -68,7 +68,7 @@ def load_leads_from_firebase(collection: str | None = None) -> set[str]:
         if Path(creds_path).exists():
             cred = fb_creds.Certificate(creds_path)
 
-    if cred is None:
+    if cred is None and not firebase_admin._apps:
         print("  [firebase] no credentials found — skipping preload.")
         return set()
 
@@ -87,6 +87,51 @@ def load_leads_from_firebase(collection: str | None = None) -> set[str]:
 
     print(f"  [firebase] preloaded {len(domains)} existing domains from '{col_name}'")
     return domains
+
+
+
+def load_leads_excluded() -> set[str]:
+    """Return the set of domains already in leads_excluded.
+
+    Merges with preloaded_domains at startup so excluded sites
+    are never re-crawled in future runs.
+    """
+    try:
+        import firebase_admin
+        import firebase_admin.credentials as fb_creds
+        from firebase_admin import firestore
+    except ImportError:
+        return set()
+
+    cred = None
+    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
+    if secrets_path.exists():
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
+            mod  = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            key_dict = getattr(mod, "fireBaseAdminKey", None)
+            if key_dict:
+                cred = fb_creds.Certificate(key_dict)
+        except Exception:
+            pass
+
+    if cred is None and not firebase_admin._apps:
+        return set()
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(cred)
+
+    db = firestore.client()
+    excluded: set[str] = set()
+    for doc in db.collection("leads_excluded").select([]).stream():
+        data = doc.to_dict() or {}
+        domain = data.get("domain", "")
+        if domain:
+            excluded.add(domain.strip().lower())
+
+    print(f"  [firebase] {len(excluded)} excluded leads loaded")
+    return excluded
 
 
 def push_to_firebase(leads: list["Lead"], collection: str | None = None) -> None:
@@ -118,11 +163,10 @@ def push_to_firebase(leads: list["Lead"], collection: str | None = None) -> None
         if Path(creds_path).exists():
             cred = fb_creds.Certificate(creds_path)
 
-    if cred is None:
+    col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
+    if cred is None and not firebase_admin._apps:
         print("  [firebase] no credentials found — skipping upload.")
         return
-
-    col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred)
 
@@ -652,6 +696,12 @@ def main() -> None:
     args = _build_parser().parse_args()
 
     args.preloaded_domains = load_leads_from_firebase(collection=args.firebase_collection)
+
+    # Also preload leads_excluded so rejected sites are never re-crawled
+    _excluded = load_leads_excluded()
+    args.preloaded_domains |= _excluded
+    if _excluded:
+        print(f"  [firebase] {len(_excluded)} excluded leads merged into skip list")
 
     if args.mode == "audit":
         audit_tlds(collection=args.firebase_collection, dry_run=args.audit_dry_run)

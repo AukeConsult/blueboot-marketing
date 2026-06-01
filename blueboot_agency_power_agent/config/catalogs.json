@@ -2208,60 +2208,6 @@
       "pages": 10
     },
     {
-      "name": "DesignRush UK – web development",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/web-development-companies/united-kingdom?page={page}",
-      "pages": 50
-    },
-    {
-      "name": "DesignRush UK – web design",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/website-design-development/united-kingdom?page={page}",
-      "pages": 50
-    },
-    {
-      "name": "DesignRush WordPress UK",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/wordpress-website-design/united-kingdom?page={page}",
-      "pages": 50,
-      "__platform_added": true
-    },
-    {
-      "name": "DesignRush WooCommerce UK",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/woocommerce/united-kingdom?page={page}",
-      "pages": 50,
-      "__platform_added": true
-    },
-    {
-      "name": "DesignRush Shopify UK",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/shopify/united-kingdom?page={page}",
-      "pages": 50,
-      "__platform_added": true
-    },
-    {
-      "name": "DesignRush E-commerce UK",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/ecommerce/united-kingdom?page={page}",
-      "pages": 50,
-      "__platform_added": true
-    },
-    {
-      "name": "DesignRush CMS dev UK",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/cms-development/united-kingdom?page={page}",
-      "pages": 50,
-      "__platform_added": true
-    },
-    {
-      "name": "DesignRush Drupal UK",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/drupal/united-kingdom?page={page}",
-      "pages": 50,
-      "__platform_added": true
-    },
-    {
       "name": "Sortlist UK – SEO",
       "type": "sortlist",
       "url": "https://www.sortlist.com/s/seo/united-kingdom-gb?page={page}",
@@ -2302,36 +2248,6 @@
       "type": "sortlist",
       "url": "https://www.sortlist.com/s/social-media-marketing/united-kingdom-gb?page={page}",
       "pages": 10
-    },
-    {
-      "name": "DesignRush Digital Marketing UK",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/digital-marketing/united-kingdom?page={page}",
-      "pages": 50
-    },
-    {
-      "name": "DesignRush SEO UK",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/seo-companies/united-kingdom?page={page}",
-      "pages": 50
-    },
-    {
-      "name": "DesignRush Mobile App UK",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/mobile-app-development/united-kingdom?page={page}",
-      "pages": 50
-    },
-    {
-      "name": "DesignRush Social Media UK",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/social-media-marketing/united-kingdom?page={page}",
-      "pages": 50
-    },
-    {
-      "name": "DesignRush UX Design UK",
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/ux-design/united-kingdom?page={page}",
-      "pages": 50
     },
     {
       "name": "Sitecore Partner Finder",
@@ -2745,46 +2661,6 @@
       "type": "dan",
       "url": "https://digitalagencynetwork.com/agencies/uk/seo/",
       "pages": 1
-    },
-    {
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/magento/united-kingdom?page={page}",
-      "pages": 10
-    },
-    {
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/content-marketing/united-kingdom?page={page}",
-      "pages": 10
-    },
-    {
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/branding/united-kingdom?page={page}",
-      "pages": 10
-    },
-    {
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/ppc/united-kingdom?page={page}",
-      "pages": 10
-    },
-    {
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/react/united-kingdom?page={page}",
-      "pages": 10
-    },
-    {
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/app-development/united-kingdom?page={page}",
-      "pages": 10
-    },
-    {
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/graphic-design/united-kingdom?page={page}",
-      "pages": 10
-    },
-    {
-      "type": "designrush",
-      "url": "https://www.designrush.com/agency/bigcommerce/united-kingdom?page={page}",
-      "pages": 10
     }
   ],
   "IE": [
