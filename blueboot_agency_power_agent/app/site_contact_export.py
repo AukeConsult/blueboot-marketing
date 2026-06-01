@@ -32,6 +32,32 @@ from pathlib import Path
 import _pathsetup  # noqa: F401
 
 # ---------------------------------------------------------------------------
+# Page size buckets (shared with statistics.py)
+# ---------------------------------------------------------------------------
+
+PAGE_SIZE_BUCKETS = {
+    "micro":   (1,      50),
+    "small":   (51,     500),
+    "medium":  (501,    3000),
+    "large":   (3001,   10000),
+    "huge":    (10001,  100000),
+    "ultra":   (100001, 999999999),
+}
+
+def _page_count_bucket(page_count) -> str:
+    """Return the bucket name for a page_count value."""
+    try:
+        pc = int(page_count or 0)
+    except (TypeError, ValueError):
+        pc = 0
+    if pc == 0:
+        return "unknown"
+    for name, (lo, hi) in PAGE_SIZE_BUCKETS.items():
+        if lo <= pc <= hi:
+            return name
+    return "ultra"
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
@@ -134,6 +160,7 @@ def _stream_contacts(
     category:        str | None,
     limit:           int | None,
     countries:       list[str] | None = None,
+    page_count:       str | None       = None,
 ) -> tuple[list[dict], dict]:
     """Stream site_contacts collectionGroup, join with parent lead data.
 
@@ -184,6 +211,13 @@ def _stream_contacts(
         if category and (lead.get("query_category") or "").lower() != category.lower():
             skipped += 1
             continue
+
+        # Page size filter
+        if page_count:
+            bucket = _page_count_bucket(lead.get("page_count"))
+            if bucket != page_count.lower():
+                skipped += 1
+                continue
 
         # Merge contact + lead fields into one flat row
         row = dict(contact)
@@ -617,6 +651,7 @@ def export_contacts(
     output_path:     str | None       = None,
     campaign:        str | None       = None,
     force:           bool             = False,
+    page_count:       str | None       = None,
 ) -> str:
     fb_key = _load_secrets()
     db     = _init_firestore(fb_key)
@@ -624,7 +659,8 @@ def export_contacts(
     # ── Step 1: filter from site_leads + site_contacts ───────────────────────
     leads_index = _load_leads_index(db, countries)
     rows, used_leads = _stream_contacts(
-        db, leads_index, with_email_only, sector, category, limit, countries=countries
+        db, leads_index, with_email_only, sector, category, limit,
+        countries=countries, page_count=page_count
     )
     if not rows:
         print("  [contact-export] No contacts found matching filters.")
@@ -723,6 +759,7 @@ def main(argv=None) -> None:
         output_path     = args.output,
         campaign        = args.campaign,
         force           = args.force,
+        page_count       = args.page_count,
     )
     if path:
         print(f"\n  Done → {path}")

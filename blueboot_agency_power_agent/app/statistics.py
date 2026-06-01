@@ -566,6 +566,225 @@ def export_reasons_to_excel(results, outdir=None):
     print(f"  [reasons] Excel written -> {out_path}")
     return out_path
 
+
+# ---------------------------------------------------------------------------
+# Collection overview statistics
+# ---------------------------------------------------------------------------
+
+OVERVIEW_COLLECTIONS = [
+    # (collection_name, display_label, subcollections_to_count)
+    ("leads",           "Leads (legacy)",        [("contacts", "contacts")]),
+    ("leads_extract",   "Lead Extracts",          [("leads_extracted", "extracted leads"), ("out_mail_contacts", "mail contacts")]),
+    ("leads_excluded",  "Leads Excluded",         []),
+    ("site_leads",      "Site Leads",             [("site_contacts", "contacts")]),
+    ("sites_excluded",  "Sites Excluded",         []),
+    ("site_campaigns",  "Site Campaigns",         [("site_campaign_sites", "sites"), ("out_mail_contacts", "mail contacts")]),
+    ("statistics",      "Statistics",             []),
+]
+
+
+def _count_by_field(db, col_name: str, field: str, limit: int = 5000) -> dict[str, int]:
+    """Stream a collection (up to limit docs) and tally values of a field."""
+    counts: dict[str, int] = {}
+    for doc in db.collection(col_name).select([field]).limit(limit).stream():
+        val = (doc.to_dict() or {}).get(field) or "?"
+        if isinstance(val, str):
+            val = val.strip().upper() or "?"
+        counts[str(val)] = counts.get(str(val), 0) + 1
+    return dict(sorted(counts.items(), key=lambda x: -x[1]))
+
+
+def collection_overview(stats_collection: str = "statistics") -> dict:
+    """Count documents in all major collections with country + dimension breakdowns."""
+    import firebase_admin
+    from firebase_admin import firestore
+
+    cred = _get_credentials()
+    if cred is None:
+        print("  [overview] no credentials — skipping")
+        return {}
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(cred)
+    db = firestore.client()
+
+    now_ts = datetime.utcnow().isoformat() + "Z"
+    results = {"generated_at": now_ts, "collections": {}}
+
+    print("\n--- Collection Overview ---")
+    print(f"  {'Collection':<30} {'Docs':>7}  Breakdowns")
+    print("  " + "─" * 70)
+
+    # ── leads (legacy) ──────────────────────────────────────────────────────
+    def _leads_stats():
+        count = sum(1 for _ in db.collection("leads").select([]).stream())
+        by_country  = _count_by_field(db, "leads", "country")
+        by_priority = _count_by_field(db, "leads", "priority")
+        top_c = "  ".join(f"{k}:{v}" for k, v in list(by_country.items())[:5])
+        top_p = "  ".join(f"{k}:{v}" for k, v in by_priority.items())
+        print(f"  {'Leads (legacy)':<30} {count:>7}  country: {top_c}")
+        print(f"  {'':30}         priority: {top_p}")
+        return {"count": count, "by_country": by_country, "by_priority": by_priority}
+
+    # ── leads_excluded ──────────────────────────────────────────────────────
+    def _leads_excluded_stats():
+        count = sum(1 for _ in db.collection("leads_excluded").select([]).stream())
+        by_country = _count_by_field(db, "leads_excluded", "country") if count else {}
+        by_reason  = _count_by_field(db, "leads_excluded", "reason")  if count else {}
+        top_c = "  ".join(f"{k}:{v}" for k, v in list(by_country.items())[:5])
+        top_r = "  ".join(f"{k}:{v}" for k, v in list(by_reason.items())[:3])
+        print(f"  {'Leads Excluded':<30} {count:>7}  country: {top_c or '—'}")
+        print(f"  {'':30}         reason: {top_r or '—'}")
+        return {"count": count, "by_country": by_country, "by_reason": by_reason}
+
+    # ── leads_extract ───────────────────────────────────────────────────────
+    def _leads_extract_stats():
+        extracts = list(db.collection("leads_extract").stream())
+        count = len(extracts)
+        details = []
+        for ex in extracts:
+            sub = sum(1 for _ in ex.reference.collection("leads_extracted").select([]).stream())
+            details.append(f"{ex.id}({sub})")
+        print(f"  {'Lead Extracts':<30} {count:>7}  {',  '.join(details[:5])}")
+        return {"count": count, "extracts": [{"id": e.id} for e in extracts]}
+
+    # ── site_leads ──────────────────────────────────────────────────────────
+    def _site_leads_stats():
+        count = sum(1 for _ in db.collection("site_leads").select([]).stream())
+        by_country    = _count_by_field(db, "site_leads", "country")
+        by_ai_country = _count_by_field(db, "site_leads", "ai_country")
+        by_ai_sector  = _count_by_field(db, "site_leads", "ai_sector")
+
+        # Page count breakdown — read page_count field
+        page_buckets: dict[str, int] = {
+            "micro   (1–50)":       0,
+            "small   (51–500)":     0,
+            "medium  (501–3k)":     0,
+            "large   (3k–10k)":     0,
+            "huge    (10k–100k)":   0,
+            "ultra   (100k+)":      0,
+            "unknown (0/None)":     0,
+        }
+        for doc in db.collection("site_leads").select(["page_count"]).stream():
+            pc = (doc.to_dict() or {}).get("page_count") or 0
+            try:
+                pc = int(pc)
+            except (TypeError, ValueError):
+                pc = 0
+            if pc == 0:
+                page_buckets["unknown (0/None)"] += 1
+            elif pc <= 50:
+                page_buckets["micro   (1–50)"] += 1
+            elif pc <= 500:
+                page_buckets["small   (51–500)"] += 1
+            elif pc <= 3000:
+                page_buckets["medium  (501–3k)"] += 1
+            elif pc <= 10000:
+                page_buckets["large   (3k–10k)"] += 1
+            elif pc <= 100000:
+                page_buckets["huge    (10k–100k)"] += 1
+            else:
+                page_buckets["ultra   (100k+)"] += 1
+
+        top_c   = "  ".join(f"{k}:{v}" for k, v in list(by_country.items())[:5])
+        top_aic = "  ".join(f"{k}:{v}" for k, v in list(by_ai_country.items())[:5])
+        top_s   = "  ".join(f"{k}:{v}" for k, v in list(by_ai_sector.items())[:4])
+        top_pg  = "  ".join(f"{k}:{v}" for k, v in page_buckets.items() if v > 0)
+        print(f"  {'Site Leads':<30} {count:>7}  country: {top_c}")
+        print(f"  {'':30}         ai_country: {top_aic}")
+        print(f"  {'':30}         ai_sector: {top_s}")
+        print(f"  {'':30}         page_size: {top_pg}")
+        return {"count": count, "by_country": by_country,
+                "by_ai_country": by_ai_country, "by_ai_sector": by_ai_sector,
+                "by_page_size": page_buckets}
+
+    # ── sites_excluded ──────────────────────────────────────────────────────
+    def _sites_excluded_stats():
+        count = sum(1 for _ in db.collection("sites_excluded").select([]).stream())
+        by_country = _count_by_field(db, "sites_excluded", "country") if count else {}
+        by_reason  = _count_by_field(db, "sites_excluded", "reason")  if count else {}
+        top_c = "  ".join(f"{k}:{v}" for k, v in list(by_country.items())[:5])
+        top_r = "  ".join(f"{k}:{v}" for k, v in list(by_reason.items())[:3])
+        print(f"  {'Sites Excluded':<30} {count:>7}  country: {top_c or '—'}")
+        print(f"  {'':30}         reason: {top_r or '—'}")
+        return {"count": count, "by_country": by_country, "by_reason": by_reason}
+
+    # ── site_campaigns ──────────────────────────────────────────────────────
+    def _site_campaigns_stats():
+        camps = list(db.collection("site_campaigns").stream())
+        count = len(camps)
+        details = []
+        for c in camps:
+            d = c.to_dict() or {}
+            details.append(f"{c.id}(sites:{d.get('site_count','?')} contacts:{d.get('contact_count','?')})")
+        print(f"  {'Site Campaigns':<30} {count:>7}  {',  '.join(details[:4])}")
+        return {"count": count, "campaigns": [{"id": c.id, **(c.to_dict() or {})} for c in camps]}
+
+    runners = [
+        ("leads",          _leads_stats),
+        ("leads_excluded", _leads_excluded_stats),
+        ("leads_extract",  _leads_extract_stats),
+        ("site_leads",     _site_leads_stats),
+        ("sites_excluded", _sites_excluded_stats),
+        ("site_campaigns", _site_campaigns_stats),
+    ]
+
+    for col_name, fn in runners:
+        try:
+            results["collections"][col_name] = fn()
+        except Exception as exc:
+            print(f"  {col_name:<30} ERROR: {exc}")
+            results["collections"][col_name] = {"error": str(exc)}
+
+    # Write to Firestore
+    try:
+        # Strip large subcollection detail before writing (keep counts only)
+        slim = {"generated_at": now_ts, "collections": {}}
+        for k, v in results["collections"].items():
+            slim["collections"][k] = {kk: vv for kk, vv in v.items()
+                                       if not isinstance(vv, list) or len(str(vv)) < 2000}
+        db.collection(stats_collection).document("collection-overview").set(slim, merge=True)
+        print(f"\n  Written → {stats_collection}/collection-overview")
+    except Exception as exc:
+        print(f"  [overview] Firestore write error: {exc}")
+
+    return results
+
+
+def export_overview_to_excel(results: dict, outdir: str | None = None) -> str:
+    """Write collection overview to Excel with country/dimension breakdowns."""
+    try:
+        import pandas as pd
+        from openpyxl import load_workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+    except ImportError:
+        print("  [overview] pandas/openpyxl not installed — skipping Excel")
+        return ""
+
+    outdir = Path(outdir) if outdir else Path(__file__).parent.parent / "output"
+    outdir.mkdir(parents=True, exist_ok=True)
+    out_path = outdir / "collection_overview.xlsx"
+
+    rows = []
+    for col_name, entry in results.get("collections", {}).items():
+        if "error" in entry:
+            rows.append({"Collection": col_name, "Dimension": "ERROR",
+                         "Key": entry["error"], "Count": 0})
+            continue
+        rows.append({"Collection": col_name, "Dimension": "total",
+                     "Key": "(all)", "Count": entry.get("count", 0)})
+        for dim in ("by_country", "by_ai_country", "by_ai_sector", "by_priority", "by_reason", "by_page_size"):
+            for k, v in (entry.get(dim) or {}).items():
+                rows.append({"Collection": col_name, "Dimension": dim.replace("by_", ""),
+                              "Key": k, "Count": v})
+
+    df = pd.DataFrame(rows)
+    df.to_excel(out_path, index=False, sheet_name="Overview")
+    print(f"  [overview] Excel written → {out_path}")
+    return str(out_path)
+
+
+
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
@@ -600,13 +819,18 @@ def main():
         help="Skip writing reasons-list back to each lead document.",
     )
     parser.add_argument(
-        "--only", choices=["priority", "reasons"], default=None,
-        help="Run only one aggregation (default: run both).",
+        "--only", choices=["priority", "reasons", "overview"], default=None,
+        help="Run only one aggregation (default: run both + overview).",
+    )
+    parser.add_argument(
+        "--no-overview", action="store_true",
+        help="Skip collection overview statistics.",
     )
     args = parser.parse_args()
 
     run_priority = args.only in (None, "priority")
     run_reasons  = args.only in (None, "reasons")
+    run_overview = args.only in (None, "overview") and not getattr(args, "no_overview", False)
 
     if run_priority:
         print("\n--- Priority x Country ---")
@@ -627,6 +851,11 @@ def main():
         )
         if not args.no_excel:
             export_reasons_to_excel(reason_results, outdir=args.output)
+
+    if run_overview:
+        overview_results = collection_overview(stats_collection=args.stats_collection)
+        if not args.no_excel and overview_results:
+            export_overview_to_excel(overview_results, outdir=args.output)
 
 
 if __name__ == "__main__":

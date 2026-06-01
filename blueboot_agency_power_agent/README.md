@@ -53,6 +53,7 @@ python app\site_agent.py --countries NO
 python app\site_enrich_agent.py --countries NO
 python app\site_contact_enrich.py --countries NO
 python app\site_contact_export.py --countries NO --with-email-only
+python app\site_contact_export.py --countries NO --page-count small  :: small sites only (51-500 pages)
 python app\site_contact_export.py --countries NO --campaign NO_jun01
 python app\site_campaign_mail_prepare.py --campaign NO_jun01 --prepare-contacts
 python app\site_leads_export.py --countries NO
@@ -306,6 +307,7 @@ python app\site_contact_export.py
 python app\site_contact_export.py --countries NO,SE
 python app\site_contact_export.py --countries NO --sector ecommerce
 python app\site_contact_export.py --countries NO --with-email-only
+python app\site_contact_export.py --countries NO --page-count small  :: small sites only (51-500 pages)
 python app\site_contact_export.py --countries NO --category healthcare
 python app\site_contact_export.py --countries NO --campaign NO_jun01
 python app\site_contact_export.py --countries NO --campaign NO_jun01 --force
@@ -321,6 +323,7 @@ python app\site_contact_export.py --output exports\contacts_no.xlsx
 | `--limit` | none | Max contacts to export |
 | `--output` | auto-named | Output `.xlsx` path (default: `exports/site_contacts_<filter>_<date>.xlsx`) |
 | `--campaign NAME` | off | Save filtered sites + contacts to `site_campaigns/<NAME>` in Firestore |
+| `--page-count BUCKET` | all | Filter by site page count bucket (see table below) |
 | `--force` | off | Re-assign sites already in another campaign (bypasses duplicate check) |
 
 **Output sheets:**
@@ -331,6 +334,19 @@ python app\site_contact_export.py --output exports\contacts_no.xlsx
 | `Summary` | Totals (contacts, with email/LinkedIn/phone, enriched), breakdown by AI Country and AI Sector |
 | `Sites` | One row per site that has at least one contact in the selection — all site_lead fields |
 | `Sites Summary` | Site totals, breakdown by AI Country and AI Sector |
+
+
+**Page size buckets (`--page-count`):**
+
+| Bucket | Page count range |
+|---|---|
+| `micro` | 1 – 50 |
+| `small` | 51 – 500 |
+| `medium` | 501 – 3 000 |
+| `large` | 3 001 – 10 000 |
+| `huge` | 10 001 – 100 000 |
+| `ultra` | 100 001+ |
+| `unknown` | 0 / None |
 
 **`--campaign` Firestore structure:**
 
@@ -1074,6 +1090,8 @@ Runs **both** aggregations by default. Use `--only` to target one.
 | `--only` | _(both)_ | `priority` or `reasons` — run only one aggregation |
 | `--no-excel` | off | Skip writing Excel files |
 | `--no-writeback` | off | Skip writing `reasons-list` back to each lead document |
+
+**Collection overview** (`--only overview` or run by default) counts all major collections with breakdowns by country, ai_country, ai_sector, priority, reason, and **page size buckets** (micro/small/medium/large/huge/ultra).
 
 ### Aggregation 1 — Priority × Country
 
