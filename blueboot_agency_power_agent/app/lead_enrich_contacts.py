@@ -279,14 +279,27 @@ _VALID_EMAIL_RE = re.compile(
     r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+$'
 )
 _PLACEHOLDER_EMAIL_RE = re.compile(
-    r'(example|test|noemail|noreply|no-reply|donotreply|invalid|'
+    r'('
+    r'example|test|noemail|noreply|no-reply|donotreply|invalid|'
     r'localhost|placeholder|dummy|sample|fake|info@example|'
-    r'user@example|admin@example|[0-9a-f]{16,}@)',
+    r'user@example|admin@example|[0-9a-f]{16,}@|'
+    r'guided-selling|guided_selling|automated|automailer|autorespond|'
+    r'besttemplate|template@|campaign@|mailer-daemon|'
+    r'bounce@|bounced@|ndr@|postmaster|'
+    r'my-orders|my-packages|orders-packages|tracking@|shipment@|'
+    r'vtex\\.|notification@|system@|robot@|bot@|no_reply|_noreply'
+    r')',
     re.IGNORECASE,
+
 )
 
 def _is_valid_email(email: str) -> bool:
     """Return True if email looks like a real, reachable address."""
+    # Reject control characters or JSON-artifact chars leaked from bad parsing
+    if any(ord(c) < 32 or ord(c) == 127 for c in email):
+        return False
+    if any(c in email for c in ('"', '{', '}', '\\', '<', '>')):
+        return False
     if not email or "@" not in email:
         return False
     local, _, domain = email.partition("@")
@@ -294,6 +307,8 @@ def _is_valid_email(email: str) -> bool:
         return False
     if not _VALID_EMAIL_RE.match(email):
         return False
+    if not re.search(r"\.[a-zA-Z]{2,}$", domain):
+        return False  # reject single-char TLDs like .x
     if _PLACEHOLDER_EMAIL_RE.search(email):
         return False
     # Reject suspiciously long hex local parts (automated/hash addresses)

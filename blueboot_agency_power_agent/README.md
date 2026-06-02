@@ -53,10 +53,12 @@ Discovers content-heavy websites, measures them via sitemap, extracts and enrich
   site_contact_export.py      Per-contact Excel with full filter options
   lead_extract.py             Filter leads → Excel (+ optional Firestore extract)
   leads_smart_export.py       Tiered Excel from leads (5 tiers by reseller score)
+  email_contacts_export.py    Unified Excel from email_contacts collection (both pipelines)
 
-  Note: These are operator tools, not pipeline stages. They select and export
-  data for review. The planned email_contacts collection will eventually replace
-  leads_extract as the primary campaign mechanism.
+  Note: These are operator tools — not pipeline stages. They select, export,
+  and feed the unified email_contacts Firestore collection for outreach.
+  Use --write-contacts on site_smart_export / leads_smart_export to populate it,
+  then email_contacts_export.py to produce a unified cross-pipeline Excel.
 
 ── Campaign & Outreach ───────────────────────────────────────────────────────
 
@@ -345,7 +347,10 @@ Firestore
 | `app/site_excluded_recheck.py` | Re-checks `sites_excluded` and recovers passing sites |
 | `app/site_sitemap_backfill.py` | Backfills sitemap data for existing `site_leads` |
 | `app/site_email_check.py` | Classifies `site_contacts` by email type and contact role (OpenAI) |
-| `app/site_smart_export.py` | Tiered prospect Excel (6 tiers by page size + BlueSearch fit signals) |
+| `app/site_smart_export.py` | Tiered prospect Excel — also writes to `email_contacts` via `--write-contacts` |
+| `app/leads_smart_export.py` | Tiered reseller Excel — also writes to `email_contacts` via `--write-contacts` |
+| `app/email_contacts_export.py` | Unified Excel from `email_contacts` collection — both pipelines, all filters |
+| `app/functions/excel_builder.py` | Shared Excel builder used by all three export scripts |
 | `app/site_leads_export.py` | Exports `site_leads` + contacts to Excel (one row per lead) |
 | `site_scrape.bat` | Runs site_agent + site_enrich_agent for all countries |
 
@@ -1599,7 +1604,10 @@ python app\site_smart_export.py --countries NO SE DK
 |---|---|---|
 | `--countries` | all | Country codes |
 | `--min-pages` | 0 | Minimum page count |
-| `--outreach-priority N` | all | Only include contacts with `outreach_priority` <= N |
+| `--outreach-priority N` | all | Only contacts with `outreach_priority` <= N |
+| `--write-contacts` | off | Write contacts to `email_contacts` Firestore collection |
+| `--campaign NAME` | — | Tag written to `email_contacts` (e.g. `UK_tier2_jun02`) |
+| `--dry-run-contacts` | off | Print what would be written without writing |
 | `--out` | `exports/site_prospects_<cc>_<ts>.xlsx` | Output path |
 
 **Tier system (by page count + bonus signals):**
@@ -1614,6 +1622,47 @@ python app\site_smart_export.py --countries NO SE DK
 | 6 — Cold | <50 | Grey | |
 
 **Excel sheets:** Contacts (colour-coded, sorted tier→pages), Summary (tier/sector/platform counts), WordPress vs Others.
+
+---
+
+### CLI — leads_smart_export.py
+
+Tiered reseller prospect export from `leads` + `contacts`.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Country codes |
+| `--min-score N` | 0 | Minimum reseller score |
+| `--outreach-priority N` | all | Only contacts with `outreach_priority` <= N |
+| `--write-contacts` | off | Write contacts to `email_contacts` Firestore collection |
+| `--campaign NAME` | — | Tag written to `email_contacts` (e.g. `UK_resellers_jun02`) |
+| `--dry-run-contacts` | off | Print what would be written without writing |
+| `--out` | `exports/leads_prospects_<cc>_<ts>.xlsx` | Output path |
+
+---
+
+### CLI — email_contacts_export.py
+
+Reads directly from the unified `email_contacts` collection. Use after both smart exports have run with `--write-contacts`.
+
+```bat
+python app\email_contacts_export.py --countries NO
+python app\email_contacts_export.py --countries UK NO --status pending
+python app\email_contacts_export.py --campaign NO_resellers_jun02
+python app\email_contacts_export.py --mark both
+python app\email_contacts_export.py --mark site --countries UK
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Country codes |
+| `--campaign NAME` | — | Filter by campaign tag |
+| `--status` | all | Filter by status (`pending` / `approved` / `sent`) |
+| `--mark` | all | `site` = SITE_LEADS only, `leads` = LEADS only, `both` = in both pipelines |
+| `--out` | `exports/email_contacts_<cc>_<ts>.xlsx` | Output path |
+
+**Excel sheets:** Contacts (all fields, sorted tier→company), Summary (tier/country/pipeline mark/status breakdowns).
+
 ---
 
 ## Outreach Pipeline Architecture
@@ -1666,18 +1715,44 @@ SITE PIPELINE                  LEAD PIPELINE
 
 ### email_contacts Fields
 
-| Field | Description |
-|-------|-------------|
-| `email` | Validated email address |
-| `name / title` | Contact name and job title |
-| `company / domain` | Company and website |
-| `email_type` | `personal` / `role` / `department` / `admin` |
-| `contact_type` | `decision_maker` / `marketing` / `developer` / `sales` / `operations` / `unknown` |
-| `outreach_priority` | 1 (personal email + decision maker) → 4 (admin/unknown) |
-| `pipeline` | `site` or `lead` |
-| `status` | Current lifecycle state |
-| `template_key` | Mail template identifier |
-| `personalisation` | Pre-filled: `{{name}}` `{{company}}` `{{domain}}` `{{ai_summary}}` |
+| Field | Site | Leads | Description |
+|-------|------|-------|-------------|
+| `email` | ✅ | ✅ | Validated, clean email address |
+| `name` | ✅ | ✅ | Contact name (cleaned via `clean_str`) |
+| `title` | ✅ | ✅ | Job title (cleaned via `clean_str`) |
+| `phone` | ✅ | ✅ | Phone number |
+| `linkedin` | ✅ | ✅ | LinkedIn URL |
+| `domain` | ✅ | ✅ | Company domain |
+| `website` | ✅ | ✅ | Company website URL |
+| `company` | ✅ | ✅ | Company name |
+| `country` | ✅ | ✅ | Normalised country code via `resolve_country()` |
+| `location` / `location_city` / `location_region` | ✅ | — | Location (site pipeline only) |
+| `ai_sector` | ✅ | ✅ | GPT-classified sector |
+| `ai_platform` | ✅ | ✅ | Platform (WordPress, Shopify, etc.) |
+| `ai_summary` | ✅ | ✅ | AI-generated company summary |
+| `ai_company_type` | ✅ | — | Company type (site pipeline only) |
+| `ai_confidence` | ✅ | — | GPT confidence score (site pipeline only) |
+| `ai_potential` | — | ✅ | Reseller potential: high/medium/low |
+| `ai_client_base` | — | ✅ | SMB / enterprise / mixed |
+| `reseller_score` | — | ✅ | Numeric reseller score 0–100 |
+| `keywords` | ✅ | — | Extracted site keywords |
+| `page_count` | ✅ | — | Site page count |
+| `tier` / `tier_label` | ✅ | ✅ | Scoring tier (1–5/6) |
+| `email_type` | ✅ | ✅ | `personal` / `role` / `department` / `admin` |
+| `contact_type` | ✅ | ✅ | `decision_maker` / `marketing` / `developer` / etc. |
+| `outreach_priority` | ✅ | ✅ | 1 (best) → 4 (weakest) |
+| `mark_site_leads` | ✅ | — | `true` if written by site pipeline |
+| `mark_leads` | — | ✅ | `true` if written by leads pipeline |
+| `category_site` | ✅ | — | Search query category (site pipeline) |
+| `category_leads` | — | ✅ | `catalog` or `search` (leads pipeline) |
+| `doc_id` | ✅ | ✅ | Normalised Firestore document ID (from email) |
+| `lead_id_site` | ✅ | — | Source `site_leads` document ID |
+| `lead_id_leads` | — | ✅ | Source `leads` document ID |
+| `contact_id` | ✅ | — | Source `site_contacts` document ID |
+| `campaign` | ✅ | ✅ | Campaign tag (set via `--campaign`) |
+| `personalisation` | ✅ | ✅ | `{name, full_name}` for mail merge |
+| `status` | ✅ | ✅ | `pending` / `approved` / `rejected` / `sent` / `replied` / etc. |
+| `created_at` | ✅ | ✅ | ISO timestamp — set once on first write, never updated |
 
 ### Architecture PDF
 

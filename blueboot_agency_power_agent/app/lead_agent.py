@@ -188,7 +188,7 @@ def push_to_firebase(leads: list["Lead"], collection: str | None = None) -> None
         return [
             {
                 "email":    email,
-                "title":    titles[i] if i < len(titles) else "",
+                "title":    clean_str(titles[i]) if i < len(titles) else "",
                 "lead_id":  _lead_id(lead.website),
                 "company":  lead.company,
                 "domain":   lead.domain,
@@ -591,6 +591,7 @@ def audit_tlds(collection: str | None = None, dry_run: bool = False) -> None:
     except ModuleNotFoundError:
         from functions.utils import (
             is_blocked, load_lines, domain_of, _CONTENT_NEG_KWS as _NEG_KWS,
+            clean_str,
         )
 
     from pathlib import Path as _PPath

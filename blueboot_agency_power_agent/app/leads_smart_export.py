@@ -26,10 +26,16 @@ import threading as _threading
 
 # Guards firebase_admin.initialize_app against concurrent init
 _local_fb_lock = _threading.Lock()
+import sys
 import argparse
 import importlib.util
 import os
 import re
+from pathlib import Path as _Path
+sys.path.insert(0, str(_Path(__file__).parent))  # make functions/ importable
+from functions.utils import clean_str, resolve_country, ISO_TO_CC
+from functions.excel_builder import write_contacts_sheet, make_header_cell, save_workbook, TIER_COLORS, TIER_TEXT
+from functions.excel_builder import write_contacts_sheet, make_header_cell, save_workbook, TIER_COLORS, TIER_TEXT
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,19 +46,52 @@ from pathlib import Path
 
 _EMAIL_RE  = re.compile(r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+$')
 _EMAIL_BAD = re.compile(
-    r'(noreply|no-reply|donotreply|example|localhost|invalid|test@|dummy|placeholder)',
+    r'('
+    r'noreply|no-reply|donotreply|do-not-reply|unsubscribe|optout|opt-out|'
+    r'example|localhost|invalid|dummy|placeholder|fake|sample|'
+    r'test@|testmail|mailtest|'
+    r'guided-selling|guided_selling|automated|automailer|autorespond|'
+    r'besttemplate|template@|campaign@|mailer-daemon|'
+    r'bounce@|bounced@|ndr@|postmaster|mailer@|'
+    r'my-orders|my-packages|order-notify|orders-packages|'
+    r'tracking@|shipment@|invoice@|notification@|'
+    r'vtex\\.|system@|robot@|bot@|no_reply|_noreply'
+    r')',
     re.IGNORECASE
 )
 
+_VALID_TLD_RE = re.compile(r'\.[a-zA-Z]{2,}$')  # requires 2+ letter TLD
+_NUMERIC_DOMAIN_RE = re.compile(r'@[0-9]+\.')    # block @0., @1., @123. domains
+
+
+
 def _valid_email(email: str) -> bool:
+    # Reject strings with control chars or JSON-artifact characters
+    # e.g. 'partner","slug":"anne-sofie...' leaked from JSON parsing
+    if any(ord(c) < 32 or ord(c) == 127 for c in email):
+        return False
+    if any(c in email for c in ('"', '{', '}', '\\', '<', '>')):
+        return False
     if not email or '@' not in email:
         return False
-    local = email.split('@')[0]
+    local, _, domain = email.partition('@')
+    if not local or not domain:
+        return False
     if not _EMAIL_RE.match(email):
+        return False
+    # Reject single-char TLDs (.x, .y) and numeric-only TLDs (.1, .123)
+    if not _VALID_TLD_RE.search(domain):
+        return False
+    # Reject numeric domain prefix like @0., @1., @123.
+    if _NUMERIC_DOMAIN_RE.search(email):
         return False
     if _EMAIL_BAD.search(email):
         return False
+    # Reject hex/UUID local parts (automated system addresses)
     if len(local) >= 16 and re.fullmatch(r'[0-9a-f\-]+', local):
+        return False
+    # Reject all-digit local parts
+    if re.fullmatch(r'[0-9\-]+', local):
         return False
     return True
 
@@ -133,6 +172,169 @@ def _init_firestore(fb_key):
     return firestore.client()
 
 # ---------------------------------------------------------------------------
+# email_contacts writer helpers
+# ---------------------------------------------------------------------------
+
+def _doc_id(email: str) -> str:
+    """Stable Firestore document ID from an email address."""
+    return re.sub(r'[^a-zA-Z0-9_]', '_', email.lower())
+
+
+def _derive_name_from_email(email: str) -> tuple[str, str]:
+    """For personal emails with no known name, derive first/full from local part.
+    john.smith@… → ('John', 'John Smith')
+    """
+    local = email.split('@')[0]
+    parts = re.split(r'[._\-]', local)
+    parts = [p.capitalize() for p in parts if p.isalpha() and len(p) > 1]
+    if not parts:
+        return ('', '')
+    return parts[0], ' '.join(parts)
+
+
+def _write_email_contacts(db, rows: list[dict], campaign: str | None,
+                           dry_run: bool = False) -> int:
+    """Write leads contacts to email_contacts Firestore collection.
+
+    Strategy (same as site pipeline):
+    - Document ID = _doc_id(email)  →  natural deduplication by email.
+    - Data fields always overwritten (merge=True in batches of 400).
+    - Lifecycle fields (status, created_at) only set for NEW documents.
+    - Parallel pre-scan + batch writes — no per-doc round trips.
+    Returns count of docs written.
+    """
+    from concurrent.futures import ThreadPoolExecutor as _TPE
+
+    BATCH_SIZE = 400
+    WORKERS    = 10
+    col        = db.collection('email_contacts')
+    now_ts     = datetime.now(timezone.utc).isoformat()
+
+    # ── Build valid rows ───────────────────────────────────────────────────
+    valid_rows = []
+    for row in rows:
+        email = (row.get('email') or '').strip()
+        if not email:
+            continue
+        name = clean_str((row.get('name') or '').strip())
+        if not name and (row.get('email_type') or '') == 'personal':
+            first, name = _derive_name_from_email(email)
+        else:
+            first = (name.split() or [''])[0]
+        doc_id = _doc_id(email)
+        valid_rows.append((doc_id, email, name, first, row))
+
+    if not valid_rows:
+        print('  [write] No valid contacts to write.', flush=True)
+        return 0
+
+    total = len(valid_rows)
+    print(f'  [write] {total} contacts to write…', flush=True)
+
+    if dry_run:
+        from collections import Counter as _Ctr
+        tier_c = _Ctr(row.get('tier', 0) for _, _, _, _, row in valid_rows)
+        prio_c = _Ctr(str(row.get('outreach_priority', '?')) for _, _, _, _, row in valid_rows)
+        print(f'  [DRY] Would write {total} contacts to email_contacts', flush=True)
+        print(f'  [DRY] Tiers:    { dict(sorted(tier_c.items())) }', flush=True)
+        print(f'  [DRY] Priority: { dict(sorted(prio_c.items())) }', flush=True)
+        return total
+
+    # ── Step A: parallel pre-scan for existing docs ────────────────────────
+    print(f'  [write] Step A: scanning {total} existing docs…', flush=True)
+    doc_ids = [r[0] for r in valid_rows]
+    existing_ids: set[str] = set()
+
+    def _check_batch(ids):
+        refs  = [col.document(i) for i in ids]
+        snaps = db.get_all(refs)
+        return {s.id for s in snaps if s.exists}
+
+    id_batches = [doc_ids[i:i+BATCH_SIZE] for i in range(0, len(doc_ids), BATCH_SIZE)]
+    with _TPE(max_workers=WORKERS) as pool:
+        for result in pool.map(_check_batch, id_batches):
+            existing_ids |= result
+    new_count = total - len(existing_ids)
+    print(f'  [write] Step A done: {len(existing_ids)} existing, {new_count} new', flush=True)
+
+    # ── Step B: build doc dicts ────────────────────────────────────────────
+    data_docs:      list[tuple[str, dict]] = []
+    lifecycle_docs: list[tuple[str, dict]] = []
+
+    for doc_id, email, name, first, row in valid_rows:
+        doc = {
+            # Identity
+            'doc_id':            doc_id,
+            'approved':           '',
+            'lead_id_leads':     row.get('lead_id_leads', ''),
+            'mark_leads':        True,
+            'email':             email,
+            'name':              name,
+            'title':             clean_str(row.get('title', '')),
+            'phone':             row.get('phone', ''),
+            'linkedin':          row.get('linkedin', ''),
+            # Source agency
+            'domain':            row.get('domain', ''),
+            'website':           row.get('website', ''),
+            'company':           row.get('company', ''),
+            'country':           resolve_country(row),
+            # Classification
+            'ai_sector':         row.get('ai_sector', ''),
+            'ai_platform':       row.get('platform', ''),
+            'ai_potential':      row.get('ai_potential', ''),
+            'ai_client_base':    row.get('client_base', ''),
+            'ai_summary':        row.get('summary', ''),
+            # Contact scoring
+            'tier':              row.get('tier', 0),
+            'tier_label':        row.get('tier_label', ''),
+            'email_type':        row.get('email_type', ''),
+            'contact_type':      row.get('contact_type', ''),
+            'outreach_priority': row.get('outreach_priority', 4),
+            'reseller_score':    row.get('reseller_score', 0),
+            # Origin
+            'category_leads':    row.get('source', ''),
+            # Pipeline metadata
+            'campaign':          campaign or '',
+            # Mail-merge
+            'personalisation': {
+                'name':      first,
+                'full_name': name,
+            },
+        }
+        data_docs.append((doc_id, doc))
+        if doc_id not in existing_ids:
+            lifecycle_docs.append((doc_id, {'status': 'pending', 'created_at': now_ts}))
+
+    # ── Step C: batch write data fields ───────────────────────────────────
+    total_batches = (len(data_docs) + BATCH_SIZE - 1) // BATCH_SIZE
+    print(f'  [write] Step C: writing data in {total_batches} batch(es)…', flush=True)
+    done = 0
+    for i in range(0, len(data_docs), BATCH_SIZE):
+        chunk = data_docs[i:i+BATCH_SIZE]
+        batch = db.batch()
+        for doc_id, doc in chunk:
+            batch.set(col.document(doc_id), doc, merge=True)
+        batch.commit()
+        done += len(chunk)
+        print(f'  [write]   {done}/{len(data_docs)} data docs written', flush=True)
+
+    # ── Step D: lifecycle fields — new docs only ───────────────────────────
+    if lifecycle_docs:
+        print(f'  [write] Step D: lifecycle on {len(lifecycle_docs)} new docs…', flush=True)
+        done = 0
+        for i in range(0, len(lifecycle_docs), BATCH_SIZE):
+            chunk = lifecycle_docs[i:i+BATCH_SIZE]
+            batch = db.batch()
+            for doc_id, lc in chunk:
+                batch.set(col.document(doc_id), lc, merge=True)
+            batch.commit()
+            done += len(chunk)
+
+    print(f'  [write] Done: {len(data_docs)} written ({len(lifecycle_docs)} new, {len(existing_ids)} updated)', flush=True)
+    return len(data_docs)
+
+
+# ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
 
@@ -141,27 +343,90 @@ def _load_data(db, countries: list[str] | None, min_score: int,
                collection: str = 'leads') -> list[dict]:
     from google.cloud.firestore_v1.base_query import FieldFilter
 
-    col   = db.collection(collection)
+    from concurrent.futures import ThreadPoolExecutor
+    SCAN_PARTITIONS = 32
+    WORKERS         = 20
+    LEAD_BATCH      = 300   # get_all batch size
+
     rows: list[dict] = []
-    scanned = skipped = 0
+    skipped = 0
 
-    if countries and len(countries) <= 10:
-        stream = col.where(filter=FieldFilter('country', 'in', countries)).stream()
-        print(f'[leads-export] Firestore query: country in {countries}', flush=True)
-    else:
-        stream = col.stream()
-        print(f'[leads-export] Streaming all {collection}…', flush=True)
+    # Step 1: scan contacts collectionGroup in parallel partitions
+    print('[leads-export] Step 1: scanning contacts in parallel partitions...', flush=True)
+    cg = db.collection_group('contacts')
 
-    for lead_doc in stream:
-        scanned += 1
-        lead = lead_doc.to_dict() or {}
+    def _scan_partition(query):
+        local: dict[str, list[dict]] = {}
+        for doc in query.stream():
+            c = doc.to_dict() or {}
+            if not _valid_email((c.get('email') or '').strip()):
+                continue
+            parts = doc.reference.path.split('/')   # {collection}/{lead_id}/contacts/{cid}
+            if len(parts) >= 4:
+                local.setdefault(parts[1], []).append(c)
+        return local
+
+    try:
+        queries = [pt.query() for pt in cg.get_partitions(SCAN_PARTITIONS)]
+    except Exception as exc:
+        print(f'[leads-export]   partitioning unavailable ({exc}); single-pass scan', flush=True)
+        queries = [cg.order_by('__name__')]
+
+    contact_map: dict[str, list[dict]] = {}
+    total_contacts = 0
+    done_parts = 0
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        for local in pool.map(_scan_partition, queries):
+            for lid, lst in local.items():
+                contact_map.setdefault(lid, []).extend(lst)
+                total_contacts += len(lst)
+            done_parts += 1
+            print(f'[leads-export]   partition {done_parts}/{len(queries)} done  '
+                  f'{total_contacts} valid contacts in {len(contact_map)} agencies', flush=True)
+    print(f'[leads-export] Step 1 done: {total_contacts} valid contacts in {len(contact_map)} agencies', flush=True)
+
+    # Step 2: batch-fetch parent lead docs in parallel
+    print('[leads-export] Step 2: batch-fetching parent leads...', flush=True)
+    leads_col = db.collection(collection)
+    lead_data: dict[str, dict] = {}
+    lead_ids  = list(contact_map.keys())
+
+    def _fetch_batch(batch_ids):
+        return db.get_all([leads_col.document(i) for i in batch_ids])
+
+    batches = [lead_ids[i:i+LEAD_BATCH] for i in range(0, len(lead_ids), LEAD_BATCH)]
+    n_batches = len(batches)
+    print(f'[leads-export]   {len(lead_ids)} leads → {n_batches} batch(es) of {LEAD_BATCH}', flush=True)
+    done_b = 0
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        for res in pool.map(_fetch_batch, batches):
+            for d in res:
+                if d.exists:
+                    lead_data[d.id] = d.to_dict() or {}
+            done_b += 1
+            print(f'[leads-export]   batch {done_b}/{n_batches}  ({len(lead_data)} leads fetched so far)', flush=True)
+    print(f'[leads-export] Step 2 done: {len(lead_data)} lead docs fetched', flush=True)
+
+    # Step 3: merge + filter
+    total_leads = len(contact_map)
+    print(f'[leads-export] Step 3: merging and filtering {total_leads} agencies...', flush=True)
+    done_l = 0
+    for lead_id, valid in contact_map.items():
+        done_l += 1
+        if done_l % 100 == 0 or done_l == total_leads:
+            print(f'[leads-export]   {done_l}/{total_leads} agencies processed  '
+                  f'{len(rows)} contacts kept  {skipped} skipped', flush=True)
+        lead = lead_data.get(lead_id)
+        if not lead:
+            skipped += 1
+            continue
 
         if lead.get('country') == '*':
             skipped += 1
             continue
 
         if countries:
-            c = (lead.get('country') or '').upper()
+            c = resolve_country(lead)
             if c not in countries:
                 skipped += 1
                 continue
@@ -171,24 +436,14 @@ def _load_data(db, countries: list[str] | None, min_score: int,
             skipped += 1
             continue
 
-        # Load contacts
-        contacts_raw = list(lead_doc.reference.collection('contacts').stream())
-        valid = [
-            c.to_dict() or {} for c in contacts_raw
-            if _valid_email((c.to_dict() or {}).get('email', ''))
-        ]
-        if not valid:
-            skipped += 1
-            continue
-
         # Outreach priority filter on contacts
         if outreach_priority is not None:
             valid = [c for c in valid
                      if c.get("outreach_priority") is None
                      or int(c.get("outreach_priority", 4)) <= outreach_priority]
-            if not valid:
-                skipped += 1
-                continue
+        if not valid:
+            skipped += 1
+            continue
 
         tier, tier_label = _score_lead(lead, len(valid))
 
@@ -199,7 +454,7 @@ def _load_data(db, countries: list[str] | None, min_score: int,
             'domain':         lead.get('domain', ''),
             'website':        lead.get('website', ''),
             'company':        lead.get('company', ''),
-            'country':        (lead.get('country') or '').upper(),
+            'country':        resolve_country(lead),
             'reseller_score': score,
             'priority':       lead.get('priority', ''),
             'ai_potential':   lead.get('ai_reseller_potential', ''),
@@ -210,15 +465,17 @@ def _load_data(db, countries: list[str] | None, min_score: int,
             'summary':        (lead.get('ai_summary') or lead.get('description') or '')[:120],
             'reasons':        (lead.get('reasons') or '')[:100],
             'email_count':    len(valid),
-            'source':         'catalog' if lead.get('found_by_catalog') == 'yes' else 'search',
+            'mark_leads':   True,
+            'category_leads': 'catalog' if lead.get('found_by_catalog') == 'yes' else 'search',
         }
 
         for contact in valid:
             rows.append({
                 **base,
+                'lead_id_leads':     lead_id,
                 'email':             contact.get('email', ''),
-                'name':              contact.get('name', ''),
-                'title':             contact.get('title', ''),
+                'name':              clean_str(contact.get('name', '')),
+                'title':             clean_str(contact.get('title', '')),
                 'phone':             contact.get('phone', ''),
                 'linkedin':          contact.get('linkedin', ''),
                 'email_type':        contact.get('email_type', ''),
@@ -226,11 +483,8 @@ def _load_data(db, countries: list[str] | None, min_score: int,
                 'outreach_priority': contact.get('outreach_priority', ''),
             })
 
-        if scanned % 500 == 0:
-            print(f'[leads-export] {scanned} leads scanned, {len(rows)} contacts…', flush=True)
-
-    print(f'[leads-export] {scanned} scanned, {skipped} filtered, '
-          f'{len(rows)} contacts in {len(set(r["domain"] for r in rows))} agencies', flush=True)
+    print(f'[leads-export] Done: {len(rows)} contacts in '
+          f'{len(set(r["domain"] for r in rows))} agencies  ({skipped} leads skipped)', flush=True)
     return rows
 
 # ---------------------------------------------------------------------------
@@ -245,34 +499,17 @@ TIER_TEXT = {1: 'FFFFFF', 2: 'FFFFFF', 3: '000000', 4: '000000', 5: '000000'}
 
 def _build_excel(rows: list[dict], out_path: Path) -> None:
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
 
     wb = Workbook()
-
-    THIN   = Side(style='thin', color='CCCCCC')
-    BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
-    HDR_FILL = PatternFill('solid', start_color='1F497D')
-    HDR_FONT = Font(name='Arial', bold=True, color='FFFFFF', size=10)
-    DATA_FONT = Font(name='Arial', size=10)
-    WRAP  = Alignment(wrap_text=True, vertical='top')
-    NOWRAP = Alignment(vertical='top')
-
-    def _hdr(ws, row, col, val, w=None):
-        c = ws.cell(row, col, val)
-        c.font = HDR_FONT
-        c.fill = HDR_FILL
-        c.alignment = Alignment(horizontal='center', vertical='center')
-        c.border = BORDER
-        if w:
-            ws.column_dimensions[get_column_letter(col)].width = w
-        return c
 
     # ── Sheet 1: All Contacts ───────────────────────────────────────────
     ws = wb.active
     ws.title = 'Contacts'
 
     COLS = [
+        ('Approved',       'approved',        10),
         ('Tier',           'tier_label',     20),
         ('Score',          'reseller_score',  8),
         ('Priority',       'priority',       12),
@@ -292,41 +529,19 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
         ('Specialisation', 'specialisation', 30),
         ('Client Base',    'client_base',    12),
         ('Platform',       'platform',       14),
-        ('Source',         'source',         10),
+        ('Category',       'category_leads', 10),
+        ('Mark',           'mark_leads',      14),
         ('Summary',        'summary',        50),
         ('Reasons',        'reasons',        35),
+        ('Doc ID',         'doc_id',          28),
+        ('Lead ID Leads',  'lead_id_leads',   28),
     ]
 
-    for ci, (hdr, _, w) in enumerate(COLS, 1):
-        _hdr(ws, 1, ci, hdr, w)
-    ws.row_dimensions[1].height = 22
-    ws.freeze_panes = 'A2'
-
-    sorted_rows = sorted(rows, key=lambda r: (r['tier'], -r['reseller_score']))
-
-    for ri, row in enumerate(sorted_rows, 2):
-        tier = row['tier']
-        bg, fg = TIER_COLORS.get(tier, 'FFFFFF'), TIER_TEXT.get(tier, '000000')
-        tier_fill = PatternFill('solid', start_color=bg)
-        tier_font = Font(name='Arial', size=10, color=fg, bold=tier <= 2)
-
-        for ci, (_, key, _) in enumerate(COLS, 1):
-            val  = row.get(key, '')
-            cell = ws.cell(ri, ci, val)
-            cell.border = BORDER
-            if ci == 1:
-                cell.fill = tier_fill
-                cell.font = tier_font
-                cell.alignment = Alignment(horizontal='center', vertical='top')
-            elif key in ('summary', 'reasons', 'linkedin', 'specialisation'):
-                cell.font = DATA_FONT
-                cell.alignment = WRAP
-            else:
-                cell.font = DATA_FONT
-                cell.alignment = NOWRAP
-        ws.row_dimensions[ri].height = 18
-
-    ws.auto_filter.ref = f'A1:{get_column_letter(len(COLS))}1'
+    write_contacts_sheet(
+        ws, rows, COLS,
+        sort_key  = lambda r: (int(r.get('tier') or 5), -int(r.get('reseller_score') or 0)),
+        wrap_keys = {'summary', 'reasons', 'linkedin', 'specialisation'},
+    )
 
     # ── Sheet 2: Summary ────────────────────────────────────────────────
     ws2 = wb.create_sheet('Summary')
@@ -337,7 +552,7 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
     ws2.column_dimensions['E'].width = 10
 
     for ci, hdr in enumerate(['Tier', 'Agencies', 'Contacts'], 1):
-        _hdr(ws2, 1, ci, hdr)
+        make_header_cell(ws2, 1, ci, hdr)
 
     tier_labels = {1:'1-Prime Reseller', 2:'2-Strong Prospect',
                    3:'3-Good Prospect', 4:'4-Possible', 5:'5-Low Priority'}
@@ -355,7 +570,6 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
             cell = ws2.cell(ri, ci, val)
             cell.fill = PatternFill('solid', start_color=bg)
             cell.font = Font(name='Arial', size=10, color=fg)
-            cell.border = BORDER
 
     ws2.cell(8, 1, 'TOTAL').font = Font(name='Arial', bold=True)
     ws2.cell(8, 2, len(set(r['domain'] for r in rows))).font = Font(name='Arial', bold=True)
@@ -388,7 +602,7 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
     ot_rows = [r for r in rows if r not in wp_rows]
 
     for ci, hdr in enumerate(['Group', 'Agencies', 'Contacts', 'Avg Score'], 1):
-        _hdr(ws3, 1, ci, hdr)
+        make_header_cell(ws3, 1, ci, hdr)
     ws3.column_dimensions['A'].width = 22
     for col in ['B', 'C', 'D']: ws3.column_dimensions[col].width = 12
 
@@ -401,9 +615,7 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
         for ci, val in enumerate([label, sites, len(grp), avg_scr], 1):
             ws3.cell(ri, ci, val).font = Font(name='Arial', size=10)
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(out_path)
-    print(f'[leads-export] Saved → {out_path}', flush=True)
+    save_workbook(wb, out_path, '[leads-export]')
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -421,6 +633,12 @@ def main(argv=None):
                    help='Firestore collection (default: leads)')
     p.add_argument('--out', default=None, metavar='PATH',
                    help='Output .xlsx path (default: exports/leads_prospects_<countries>_<ts>.xlsx)')
+    p.add_argument('--write-contacts', action='store_true',
+                   help='Write contacts to email_contacts Firestore collection')
+    p.add_argument('--campaign', default=None, metavar='NAME',
+                   help='Campaign tag written to email_contacts (e.g. UK_resellers_jun02)')
+    p.add_argument('--dry-run-contacts', action='store_true',
+                   help='Print what would be written to email_contacts without writing')
     args = p.parse_args(argv)
 
     countries = None
@@ -451,6 +669,17 @@ def main(argv=None):
     print('\n[leads-export] Tier breakdown:')
     for label, count in sorted(tc.items()):
         print(f'  {label}: {count} contacts')
+
+    # ── Write to email_contacts if requested ──────────────────────────────
+    if args.write_contacts or args.dry_run_contacts:
+        tag = '[DRY RUN] ' if args.dry_run_contacts else ''
+        print(f'\n[leads-export] {tag}Writing {len(rows)} contacts to email_contacts…', flush=True)
+        n = _write_email_contacts(
+            db, rows,
+            campaign  = args.campaign,
+            dry_run   = args.dry_run_contacts,
+        )
+        print(f'[leads-export] {tag}{n} contacts written to email_contacts', flush=True)
 
 
 if __name__ == '__main__':

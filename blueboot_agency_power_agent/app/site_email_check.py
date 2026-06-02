@@ -30,6 +30,7 @@ import threading as _threading
 _local_fb_lock = _threading.Lock()
 import argparse
 import asyncio
+import concurrent.futures as _futures
 import importlib.util
 import json
 import os
@@ -70,14 +71,15 @@ OUTREACH PRIORITY — combined score 1-4:
   3 = role or department email AND non-admin contact type
   4 = admin email OR unknown type with generic email
 
-Return a JSON array — one object per contact — with exactly these keys:
+Return a JSON object with a single key "contacts" whose value is an array —
+one object per input contact — each with exactly these keys:
   "contact_id"        : same string as in the input — never change it
   "email_type"        : one of personal / role / department / admin
   "contact_type"      : one of decision_maker / marketing / developer / sales / operations / unknown
   "outreach_priority" : integer 1, 2, 3, or 4
   "reasoning"         : one short sentence (max 15 words) explaining the classification
 
-Return ONLY the JSON array. No markdown, no explanation.
+Return ONLY the JSON object, e.g. {"contacts": [ ... ]}. No markdown, no explanation.
 """
 
 
@@ -136,52 +138,131 @@ def _init_openai(api_key):
 # Load contacts
 # ---------------------------------------------------------------------------
 
+# Minimal field sets keep the matching pass lightweight - only marker fields
+# travel over the wire until a contact is matched to a fully-enriched site.
+_CONTACT_MATCH_FIELDS = ["email", "country", "ai_country",
+                         "brave_enriched_at", "email_checked_at"]
+_SITE_MATCH_FIELDS    = ["ai_classified_at", "location_enriched_at"]
+
+_GET_CHUNK       = 300   # documents per get_all batch
+_SCAN_PARTITIONS = 32    # parallel slices for the contact scan
+_SCAN_WORKERS    = 8     # threads for the parallel scan
+_READ_WORKERS    = 8     # threads for parallel get_all batches
+
+
+def _scan_one_partition(query, countries, force) -> list:
+    """Stream one collection-group partition (marker fields only) and return the
+    references of contacts that pass the contact-level checks."""
+    out = []
+    for doc in query.stream():
+        data = doc.to_dict() or {}
+        if not (data.get("email") or "").strip():
+            continue
+        if not (data.get("brave_enriched_at") or "").strip():
+            continue                                   # site_contact_enrich not done -> not ready
+        if not force and (data.get("email_checked_at") or "").strip():
+            continue                                   # already email-checked -> skip
+        if countries:
+            cc = (data.get("country") or data.get("ai_country") or "").upper()
+            if cc not in countries:
+                continue
+        out.append(doc.reference)
+    return out
+
+
+def _parallel_get_all(db, refs: list, field_paths, workers: int, label: str) -> list:
+    """Batched, parallel db.get_all over refs. Returns a list of snapshots."""
+    chunks = [refs[i:i + _GET_CHUNK] for i in range(0, len(refs), _GET_CHUNK)]
+    snaps, done, total = [], 0, len(refs)
+    with _futures.ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {ex.submit(lambda c=c: list(db.get_all(c, field_paths=field_paths))): c
+                for c in chunks}
+        for fut in _futures.as_completed(futs):
+            snaps.extend(fut.result())
+            done += len(futs[fut])
+            print(f"  [enriched] {label} {done:>6,}/{total:,}", flush=True)
+    return snaps
+
+
 def _load_contacts(db, countries: list[str] | None, limit: int | None,
-                   force: bool) -> list[tuple]:
-    """Return list of (doc_ref, data_dict) for contacts needing classification."""
-    from google.cloud.firestore_v1.base_query import FieldFilter
+                   force: bool,
+                   scan_partitions: int = _SCAN_PARTITIONS,
+                   scan_workers: int = _SCAN_WORKERS,
+                   read_workers: int = _READ_WORKERS) -> list[tuple]:
+    """Load contacts READY for email-check but NOT yet email-checked.
 
+    Ready = prior enrichment stages complete:
+        contact doc : brave_enriched_at (site_contact_enrich)
+        parent site : ai_classified_at  (site_enrich_agent)
+                      location_enriched_at (site_location_enrich)
+    AND the contact has NO email_checked_at yet (unless --force re-runs all).
+
+    Phase 1 (minimal reads) - scan contacts in parallel partitions reading only
+      marker fields, batch-read parent sites' markers, then match.
+    Phase 2 (full reads)    - fetch complete docs for matched contacts only.
+    """
     cg = db.collection_group("site_contacts")
-    results = []
-    PAGE_SIZE = 500
-    last_doc  = None
 
-    print("  [email-check] Loading contacts from Firestore…", flush=True)
+    # ---- Phase 1a: parallel contact scan (marker fields only) ----
+    print(f"  [enriched] Phase 1a - scanning contacts in up to {scan_partitions} "
+          f"parallel partitions (markers only)…", flush=True)
+    try:
+        partitions = list(cg.get_partitions(scan_partitions))
+        queries    = [p.query().select(_CONTACT_MATCH_FIELDS) for p in partitions]
+    except Exception as exc:
+        print(f"  [enriched] partitioning unavailable ({exc}); single-pass scan", flush=True)
+        queries = [cg.select(_CONTACT_MATCH_FIELDS).order_by("__name__")]
 
-    while True:
-        q = cg.order_by("__name__").limit(PAGE_SIZE)
-        if last_doc:
-            q = q.start_after(last_doc)
-        page = list(q.stream())
-        if not page:
-            break
-        last_doc = page[-1]
+    cand_refs: list = []
+    done_parts = 0
+    with _futures.ThreadPoolExecutor(max_workers=scan_workers) as ex:
+        futs = [ex.submit(_scan_one_partition, q, countries, force) for q in queries]
+        for fut in _futures.as_completed(futs):
+            cand_refs.extend(fut.result())
+            done_parts += 1
+            print(f"  [enriched] …partition {done_parts}/{len(queries)} done  "
+                  f"contact-matched so far {len(cand_refs):>6,}", flush=True)
+    print(f"  [enriched] Phase 1a done - {len(cand_refs):,} contacts pass contact checks",
+          flush=True)
+    if not cand_refs:
+        return []
 
-        for doc in page:
-            data = doc.to_dict() or {}
-            if not (data.get("email") or "").strip():
-                continue
-            if not force and data.get("email_checked_at"):
-                continue
+    # ---- Phase 1b: parallel parent-site marker read (deduped) ----
+    parent_by_path = {r.parent.parent.path: r.parent.parent for r in cand_refs}
+    site_refs = list(parent_by_path.values())
+    print(f"  [enriched] Phase 1b - checking {len(site_refs):,} unique parent sites…",
+          flush=True)
+    enriched_sites: set = set()
+    for snap in _parallel_get_all(db, site_refs, _SITE_MATCH_FIELDS,
+                                  read_workers, "…sites checked"):
+        if not snap.exists:
+            continue
+        s = snap.to_dict() or {}
+        if (s.get("ai_classified_at") or "").strip() and            (s.get("location_enriched_at") or "").strip():
+            enriched_sites.add(snap.reference.path)
+    print(f"  [enriched] Phase 1b done - {len(enriched_sites):,} sites fully enriched",
+          flush=True)
 
-            # Country filter via parent lead
-            if countries:
-                c = (data.get("country") or data.get("ai_country") or "").upper()
-                if c not in countries:
-                    continue
+    # ---- Phase 1c: match contacts to fully-enriched sites ----
+    matched_refs = [r for r in cand_refs if r.parent.parent.path in enriched_sites]
+    if limit:
+        matched_refs = matched_refs[:limit]
+    print(f"  [enriched] Phase 1c - {len(matched_refs):,} contacts matched to enriched sites",
+          flush=True)
+    if not matched_refs:
+        return []
 
-            # Build contact_id from doc path
-            parts = doc.reference.path.split("/")
-            contact_id = parts[-1] if parts else doc.id
-
-            results.append((doc.reference, {**data, "contact_id": contact_id}))
-            if limit and len(results) >= limit:
-                return results
-
-        if len(page) < PAGE_SIZE:
-            break
-
-    print(f"  [email-check] {len(results)} contacts to classify", flush=True)
+    # ---- Phase 2: parallel full-detail load for matched contacts ----
+    print(f"  [enriched] Phase 2 - loading full detail for {len(matched_refs):,} contacts…",
+          flush=True)
+    results: list = []
+    for snap in _parallel_get_all(db, matched_refs, None, read_workers, "…detail"):
+        if not snap.exists:
+            continue
+        data = snap.to_dict() or {}
+        contact_id = snap.reference.path.split("/")[-1]
+        results.append((snap.reference, {**data, "contact_id": contact_id}))
+    print(f"  [enriched] Done - {len(results):,} fully-enriched contacts loaded", flush=True)
     return results
 
 
@@ -214,6 +295,7 @@ async def _enrich_batch(client, loop, batch_refs, batch_data, counters, dry_run)
                         {"role": "system", "content": _SYSTEM_PROMPT},
                         {"role": "user",   "content": _user_prompt(batch_data)},
                     ],
+                    response_format={"type": "json_object"},
                 ),
                 timeout=60.0,
             )
@@ -341,6 +423,12 @@ def main(argv=None):
                    help="Dry-run on N contacts: print results, skip Firestore writes")
     p.add_argument("--force",       action="store_true",
                    help="Re-classify contacts that already have email_checked_at")
+    p.add_argument("--scan-partitions", type=int, default=_SCAN_PARTITIONS, metavar="N",
+                   help=f"Parallel Firestore scan partitions for loading (default {_SCAN_PARTITIONS})")
+    p.add_argument("--scan-workers", type=int, default=_SCAN_WORKERS, metavar="N",
+                   help=f"Threads for the parallel contact scan (default {_SCAN_WORKERS})")
+    p.add_argument("--read-workers", type=int, default=_READ_WORKERS, metavar="N",
+                   help=f"Threads for parallel batched get_all reads (default {_READ_WORKERS})")
     args = p.parse_args(argv)
 
     dry_run = args.dry_run is not None
@@ -361,7 +449,12 @@ def main(argv=None):
     db     = _init_firestore(fb_key)
     client = _init_openai(api_key)
 
-    to_proc = _load_contacts(db, countries, limit, args.force)
+    to_proc = _load_contacts(
+        db, countries, limit, args.force,
+        scan_partitions=args.scan_partitions,
+        scan_workers=args.scan_workers,
+        read_workers=args.read_workers,
+    )
     if not to_proc:
         print("  [email-check] Nothing to classify.")
         return

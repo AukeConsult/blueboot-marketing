@@ -21,6 +21,86 @@ from bs4 import BeautifulSoup
 USER_AGENT      = "BlueBootLeadAgent/1.1 (+https://blueboot.ai)"
 BROWSER_UA      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 EMAIL_RE        = re.compile(r"[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+")
+
+# Characters that signal a JSON-artifact or label suffix in a title/name field
+# Straight quote, curly/smart quotes (“”‘’), JSON chars, operator chars
+_CLEAN_BAD_CHARS = frozenset('()&:\\/<>+=,|"\u201c\u201d\u2018\u2019{}')
+# Scandinavian email-label prefixes: ' E-post', ' E ', ' E:', space-padded dash ' - '
+_CLEAN_LABEL_RE  = re.compile(
+    r'\s+[Ee]-[Pp]ost\b'          # E-post / e-post (Norwegian/Danish/Swedish)
+    r'|\s+[Ee][:\s]'               # standalone E / e followed by : or space
+    r'|\s+-\s'                     # space-padded dash separator
+    # Phone label prefixes across languages (must be preceded by whitespace)
+    r'|\s+[Tt][Ee][Ll]\.?(?=[\s:+\d]|$)'         # Tel / TEL (universal)
+    r'|\s+[Tt][Ll][Ff]\.?(?=[\s:+\d]|$)'  # Tlf / TLF / Tlf. (NO/DK)
+    r'|\s+[Tt]elefon\b'           # Telefon (NO/DK/SE/DE)
+    r'|\s+[Tt]elephone\b'         # Telephone (EN/FR)
+    r'|\s+[Pp]hone\b'             # Phone (EN)
+    r'|\s+[Pp]uh\.?(?=[\s:+\d]|$)'  # Puh / Puh. (FI — Puhelin)
+    r'|\s+[Mm]ob\.?(?=[\s:+\d]|$)'  # Mob / Mob. (mobile, universal)
+    r'|\s+[Mm]obil\b'             # Mobil (NO/SE/DK)
+    r'|\s+[Tt]él\.?(?=[\s:+\d]|$)'  # Tél / Tel. (FR)
+    r'|\s+[Gg][Ss][Mm](?=[\s:+\d]|$)',  # GSM (universal)
+    re.IGNORECASE,
+)
+
+# If the truncated result is itself just a label word, discard it entirely
+_BARE_LABEL_RE = re.compile(
+    r'^(?:[Tt][Ll][Ff]|[Tt][Ee][Ll]|[Gg][Ss][Mm]|[Mm]ob|[Mm]obil'
+    r'|[Pp]uh|[Tt]él|[Pp]hone|[Tt]elefon|[Tt]elephone|[Ee])\.?$',
+    re.IGNORECASE,
+)
+
+
+def clean_str(value: str) -> str:
+    """Truncate a name/title string at the earliest of:
+      - a control character (ord < 32 or 127)
+      - a JSON-artifact / operator char: \\ / | , < > + = " \u201c \u201d \u2018 \u2019 { }
+      - a digit (phone numbers, codes)
+      - a label prefix: E-post, Tlf/Tel/Phone/Mob/GSM/... (all languages), ' - '
+    Truncates at the position of the trigger — never discards content before it.
+    Hyphenated names like Anne-Sofie are preserved.
+    """
+    # Decode HTML entities (&amp; → &, &lt; → <, etc.) before scanning
+    import html as _html
+    value = _html.unescape(value)
+    cut = len(value)
+    # 1. Char-by-char: control chars, JSON-artifact / operator chars, digits
+    for i, c in enumerate(value):
+        if ord(c) < 32 or ord(c) == 127 or c in _CLEAN_BAD_CHARS or c.isdigit():
+            cut = i
+            break
+    # 2. Regex: label prefixes (may fire earlier than a bare + in phone number)
+    m = _CLEAN_LABEL_RE.search(value)
+    if m and m.start() < cut:
+        cut = m.start()
+    result = value[:cut].strip()
+    # If truncation leaves only a bare label word (Tlf, Tel, GSM …), discard it
+    if _BARE_LABEL_RE.match(result):
+        return ''
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Country normalisation
+# ---------------------------------------------------------------------------
+
+ISO_TO_CC = {"GB": "UK", "AU": "AU", "NZ": "NZ", "IN": "IN",
+             "NO": "NO", "SE": "SE", "DK": "DK", "FI": "FI",
+             "IE": "IE", "ZA": "ZA", "DE": "DE", "FR": "FR",
+             "BE": "BE", "NL": "NL", "ES": "ES", "IT": "IT"}
+
+
+def resolve_country(lead: dict) -> str:
+    """Best available country code — location_country > ai_country > country.
+    ISO codes normalised via ISO_TO_CC (e.g. GB → UK).
+    """
+    raw = (lead.get('location_country') or
+           lead.get('ai_country') or
+           lead.get('country') or '').upper().strip()
+    return ISO_TO_CC.get(raw, raw)
+
+
 GENERIC_PHONE_RE = re.compile(r"(?:(?:\+|00)\d{1,3}\s*)?(?:\d[\s().-]?){7,15}")
 DEFAULT_COUNTRIES      = ["NO"]
 COUNTRY_CONFIG_PATH    = Path("config/countries.json")
@@ -373,7 +453,7 @@ def extract_contacts(html: str, text: str) -> dict[str, str]:
                 if at_pos != -1:
                     title = title[:at_pos].rstrip(" .,;")
                 title = title[:60]
-        contacts[e] = title
+        contacts[e] = clean_str(title)
     return contacts
 
 
@@ -913,59 +993,4 @@ def angle(cats: set[str], tech: set[str]) -> str:
     if "communication" in cats or "public_sector" in cats:
         return "Focus on public-information sites: help visitors find answers across pages, PDFs and articles."
     return "General reseller angle: add AI-powered search to existing customer websites without rebuilding them."
-
-# ---------------------------------------------------------------------------
-# Tech detection
-# ---------------------------------------------------------------------------
-
-def detect_tech(html: str, soup: BeautifulSoup) -> set[str]:
-    found: set[str] = set()
-    h = html.lower()
-    if "wp-content" in h or "wp-includes" in h:
-        found.add("wordpress")
-    if "woocommerce" in h:
-        found.add("woocommerce")
-    if "cdn.shopify.com" in h or "shopify.com/s/files" in h:
-        found.add("shopify")
-    if "webflow.io" in h or "framerusercontent.com" in h or 'data-wf-' in h:
-        found.add("webflow")
-    if "wix.com" in h or "wixsite.com" in h or "static.wixstatic" in h:
-        found.add("wix")
-    if "squarespace.com" in h:
-        found.add("squarespace")
-    if "framer.com" in h or "framerusercontent.com" in h:
-        found.add("framer")
-    if "elementor" in h:
-        found.add("elementor")
-    if "et-pb-" in h:
-        found.add("divi")
-    if "_next/static" in h or "next.js" in h:
-        found.add("nextjs")
-    if "gatsby" in h:
-        found.add("gatsby")
-    if "sites/default/files" in h and "drupal" in h:
-        found.add("drupal")
-    if "joomla" in h and ("/media/jui/" in h or "joomla!" in h):
-        found.add("joomla")
-    if "umbraco" in h:
-        found.add("umbraco")
-    if "typo3" in h:
-        found.add("typo3")
-    if "magento" in h or "mage/cookies" in h:
-        found.add("magento")
-    if "prestashop" in h:
-        found.add("prestashop")
-    if "shopware" in h:
-        found.add("shopware")
-    if "hs-scripts.com" in h or "hubspot.com" in h:
-        found.add("hubspot")
-    if "contentful" in h:
-        found.add("contentful")
-    if "storyblok" in h:
-        found.add("storyblok")
-    if "sanity.io" in h:
-        found.add("sanity")
-    if "craft" in h and "craftcms" in h:
-        found.add("craftcms")
-    return found
 
