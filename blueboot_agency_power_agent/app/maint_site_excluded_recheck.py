@@ -375,7 +375,7 @@ def main(argv=None) -> None:
         description="Re-check sites_excluded — recover sites that now pass the site check"
     )
     p.add_argument("--countries",  default=None, metavar="CODES",
-                   help="Comma-separated country codes  e.g. NO,SE  (default: all)")
+                   help="Space or comma-separated country codes e.g. --countries NO SE UK")
     p.add_argument("--domains",    default=None, metavar="NAMES",
                    help="Comma-separated domains to re-check  e.g. boligpluss.no")
     p.add_argument("--reason",     default=None, metavar="TEXT",

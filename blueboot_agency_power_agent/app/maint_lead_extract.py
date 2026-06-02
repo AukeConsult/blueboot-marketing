@@ -915,8 +915,8 @@ def _parse_args(argv=None):
                    help="Minimum reseller_score (default: 0)")
     p.add_argument("--max-score", type=int, default=100,
                    help="Maximum reseller_score (default: 100)")
-    p.add_argument("--country",   action="append", dest="countries", metavar="CODE",
-                   help="Country code to include (repeatable, e.g. --country NO --country SE)")
+    p.add_argument("--countries", nargs="+", metavar="CC", default=None,
+                   help="Space or comma-separated country codes e.g. --countries NO SE UK")
     p.add_argument("--source",    choices=["search", "catalog", "both"],
                    help="Filter by discovery source: search | catalog | both")
     p.add_argument("--query",     metavar="TEXT",

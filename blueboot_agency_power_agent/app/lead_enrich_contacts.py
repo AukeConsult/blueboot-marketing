@@ -487,10 +487,8 @@ def _parse_args(argv=None):
     )
     p.add_argument("--collection",    metavar="NAME", default=None,
                    help="Firestore leads collection (default: leads)")
-    p.add_argument("--country",       metavar="CODE", action="append", dest="countries",
-                   help="Country code(s) to filter on (repeatable or comma-separated)")
-    p.add_argument("--countries",     metavar="CODES", default=None, dest="countries_alias",
-                   help="Comma-separated country codes, e.g. --countries NO,SE,QQ")
+    p.add_argument("--countries", nargs="+", metavar="CC", default=None,
+                   help="Space or comma-separated country codes e.g. --countries NO SE UK")
     p.add_argument("--limit",         metavar="N", type=int, default=None,
                    help="Maximum number of contacts to process")
     p.add_argument("--workers",       metavar="N", type=int, default=50,
@@ -511,14 +509,10 @@ def main(argv=None):
     args = _parse_args(argv)
 
     countries = None
-    raw_countries = list(args.countries or [])
-    # Also accept --countries NO,SE,QQ (alias)
-    if getattr(args, "countries_alias", None):
-        raw_countries.extend(args.countries_alias.split(","))
-    if raw_countries:
+    if args.countries:
         expanded = []
-        for c in raw_countries:
-            expanded.extend(x.strip().upper() for x in c.split(",") if x.strip())
+        for token in args.countries:
+            expanded.extend(x.strip().upper() for x in token.split(",") if x.strip())
         countries = expanded or None
 
     platforms = None

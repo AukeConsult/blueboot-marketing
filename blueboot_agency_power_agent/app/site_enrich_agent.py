@@ -618,7 +618,7 @@ def main(argv=None) -> None:
     p.add_argument("--collection",  default=COLLECTION_DEFAULT, metavar="NAME",
                    help=f"Firestore collection  (default: {COLLECTION_DEFAULT})")
     p.add_argument("--countries",   default=None, metavar="CODES",
-                   help="Comma-separated country codes  e.g. NO,SE")
+                   help="Space or comma-separated country codes e.g. --countries NO SE UK")
     p.add_argument("--limit",       type=int, default=None, metavar="N",
                    help="Max leads to process")
     p.add_argument("--batch-size",  type=int, default=BATCH_SIZE, metavar="N",

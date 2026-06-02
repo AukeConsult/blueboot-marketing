@@ -430,7 +430,7 @@ def main(argv=None) -> None:
     p.add_argument("--collection",   default=COLLECTION_DEFAULT, metavar="NAME",
                    help=f"Firestore collection  (default: {COLLECTION_DEFAULT})")
     p.add_argument("--countries",    default=None, metavar="CODES",
-                   help="Comma-separated country codes  e.g. NO,SE  (default: all)")
+                   help="Space or comma-separated country codes e.g. --countries NO SE UK")
     p.add_argument("--sector",       default=None, metavar="NAME",
                    help="Filter by ai_sector  e.g. technology, ecommerce")
     p.add_argument("--category",     default=None, metavar="NAME",
@@ -439,7 +439,7 @@ def main(argv=None) -> None:
                    help="Filter by location_full keyword e.g. London, Pune, Manchester")
     p.add_argument("--limit",        type=int, default=None, metavar="N",
                    help="Max leads to export")
-    p.add_argument("--output",       default=None, metavar="PATH",
+    p.add_argument("--out",       default=None, metavar="PATH",
                    help="Output .xlsx path  (default: exports/site_leads_<ts>.xlsx)")
     p.add_argument("--with-contacts-only", action="store_true",
                    help="Only export leads that have at least one contact")
@@ -458,7 +458,7 @@ def main(argv=None) -> None:
         category           = args.category,
         location           = args.location,
         limit              = args.limit,
-        output             = args.output,
+        output             = args.out,
         with_contacts_only = args.with_contacts_only,
         dry_run            = args.dry_run,
     )

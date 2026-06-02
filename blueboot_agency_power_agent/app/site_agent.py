@@ -1368,7 +1368,7 @@ def main(argv=None) -> None:
         description="Site Agent -- find content-heavy websites via Bing + sitemap + contacts"
     )
     p.add_argument("--countries",   default="NO",
-                   help="Comma-separated ISO codes or ALL  (default: NO)")
+                   help="Space or comma-separated country codes e.g. --countries NO SE UK")
     p.add_argument("--max-results", type=int, default=500, metavar="N",
                    help="Max Bing results per query  (default: 50)")
     p.add_argument("--min-pages",   type=int, default=0, metavar="N",

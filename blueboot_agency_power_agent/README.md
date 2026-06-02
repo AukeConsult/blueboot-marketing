@@ -35,39 +35,23 @@ Discovers content-heavy websites, measures them via sitemap, extracts and enrich
 
 ── Maintenance ────────────────────────────────────────────────────────────────
 
-5. site_excluded_recheck.py   Re-check sites_excluded — recover passing sites
-6. site_sitemap_backfill.py   Backfill sitemap data on existing site_leads
+5. maint_site_excluded_recheck.py   Re-check sites_excluded — recover passing sites
+6. maint_site_sitemap_backfill.py   Backfill sitemap data on existing site_leads
 
 ── Export ─────────────────────────────────────────────────────────────────────
 
 7. site_email_check.py        AI classify each contact: email type + contact role
                               → email_type, contact_type, outreach_priority (1–4)
-8. site_leads_export.py       Excel export — one row per lead (helper)
-                              Filter flags: --sector --category --location
-9. [Helper] site_contact_export.py / site_smart_export.py
-                              Filtered Excel exports — see Helper Functions section
 
-── Helper Functions (filtering & export tools) ──────────────────────────
+8. site_smart_export.py       Tiered Excel (6 tiers by page count + signals)
+                              → exports/site_prospects_<cc>_<ts>.xlsx
+                              → writes to email_contacts via --write-contacts
 
-  site_smart_export.py        Tiered Excel from site_leads (6 tiers by page count)
-  site_contact_export.py      Per-contact Excel with full filter options
-  lead_extract.py             Filter leads → Excel (+ optional Firestore extract)
-  leads_smart_export.py       Tiered Excel from leads (5 tiers by reseller score)
-  email_contacts_export.py    Unified Excel from email_contacts collection (both pipelines)
+── Unified Outreach ──────────────────────────────────────────────────────────
 
-  Note: These are operator tools — not pipeline stages. They select, export,
-  and feed the unified email_contacts Firestore collection for outreach.
-  Use --write-contacts on site_smart_export / leads_smart_export to populate it,
-  then email_contacts_export.py to produce a unified cross-pipeline Excel.
-
-── Campaign & Outreach ───────────────────────────────────────────────────────
-
-9. site_contact_export.py     --campaign  Copy selection to site_campaigns/{id}
-10. site_campaign_mail_prepare.py
-                              Prepare outbound mail per country + per contact
-                              → mailing/{campaign}/ scaffolded on first run
-                              → out_mail/{country} template docs
-                              → out_mail_contacts/{contact_id} personalised docs
+9. email_contacts_export.py   Unified Excel from email_contacts collection
+                              → combines site + leads pipeline contacts
+                              → filter by status, campaign, pipeline mark
 ```
 
 **Quick start — Norway**
@@ -78,15 +62,8 @@ python app\site_enrich_agent.py --countries NO
 python app\site_contact_enrich.py --countries NO
 python app\site_location_enrich.py --countries NO
 python app\site_email_check.py --countries NO
-python app\site_contact_export.py --countries NO --with-email-only
-python app\site_contact_export.py --countries NO --outreach-priority 2 --with-email-only
-python app\site_contact_export.py --countries NO --location Oslo --with-email-only
-python app\site_smart_export.py --countries NO
-python app\site_contact_export.py --countries NO --page-count small
-python app\site_contact_export.py --countries NO --campaign NO_jun01
-python app\site_campaign_mail_prepare.py --campaign NO_jun01 --prepare-contacts
-python app\site_leads_export.py --countries NO
-python app\site_leads_export.py --countries NO --location Bergen
+python app\site_smart_export.py --countries NO --write-contacts --campaign NO_jun02
+python app\email_contacts_export.py --countries NO --campaign NO_jun02
 ```
 
 ---
@@ -116,43 +93,34 @@ for reseller fit and exports to Excel + Firestore.
                               → linkedin_personal, twitter, facebook,
                                 instagram, telegram, whatsapp per contact
 
+4. leads_email_check.py       AI classify each contact: email type + contact role
+                              → email_type, contact_type, outreach_priority (1–4)
+
 ── Export ─────────────────────────────────────────────────────────────────────
 
-4. lead_extract.py           Filtered Excel export from leads collection
-                              → filter by score, country, priority, keyword
-                                Optionally saves extract to Firestore
+5. leads_smart_export.py      Tiered Excel (5 tiers by reseller score)
+                              → exports/leads_prospects_<cc>_<ts>.xlsx
+                              → writes to email_contacts via --write-contacts
 
-── Analytics ──────────────────────────────────────────────────────────────────
+── Unified Outreach ──────────────────────────────────────────────────────────
 
-5. statistics.py              Aggregates leads into Firestore statistics docs
-                              → priority × country breakdown
-                              → reasons count per country
-                              → Excel reports
-
-── Outreach ───────────────────────────────────────────────────────────────────
-
-6. lead_campaign_mail_prepare.py
-                              Prepare outbound mail per country + per contact
-                              → mailing/leads_{extract}/ scaffolded on first run
-                              → out_mail/{country} template docs
-                              → out_mail_contacts/{contact_id} personalised docs
-                                (status=pending, sent_at="")
+5. email_contacts_export.py   Unified Excel from email_contacts collection
+                              → combines site + leads pipeline contacts
+                              → filter by status, campaign, pipeline mark
 ```
 
 **Quick start — Norway**
 
 ```bat
-python app\lead_agent.py --countries NO --mode both
+python app\lead_agent.py --countries NO --mode both --max-country 500
 python app\lead_enrich_agent.py --countries NO
-python app\lead_enrich_contacts.py --country NO --skip-enriched
-python app\lead_extract.py --country NO --with-email --min-score 60 --save-extract NO_jun01
-python app\campaign_exporter.py NO_jun01
-python app\lead_campaign_mail_prepare.py --extract NO_jun01 --prepare-contacts
-python app\statistics.py
+python app\lead_enrich_contacts.py --countries NO --skip-enriched
+python app\leads_email_check.py --countries NO
+python app\leads_smart_export.py --countries NO --write-contacts --campaign NO_jun02
+python app\email_contacts_export.py --countries NO --campaign NO_jun02
 ```
 
 ---
-
 
 ---
 
@@ -165,9 +133,9 @@ python app\statistics.py
 2. CLASSIFY   site_enrich_agent.py       GPT: sector, country, platform, hosting, summary
 3. ENRICH     site_contact_enrich.py     Brave Search + GPT: occupation, LinkedIn, socials
 4. LOCATE     site_location_enrich.py    GPT: city, region, full location text per site
-5. EXPORT     site_contact_export.py     Excel + optional Firestore campaign
-              site_leads_export.py       Excel — one row per lead
-6. MAIL PREP  site_campaign_mail_prepare.py  Templates + personalised docs per email
+5. CHECK      site_email_check.py        AI classify email type + contact role (priority 1–4)
+6. EXPORT     site_smart_export.py       Tiered Excel + write to email_contacts
+7. REVIEW     email_contacts_export.py   Unified Excel for review and approval
 ```
 
 **Step-by-step (India example):**
@@ -192,21 +160,11 @@ REM 5. Classify email type and contact role (dry-run 20 to verify)
 python app\site_email_check.py --countries IN --dry-run 20
 python app\site_email_check.py --countries IN
 
-REM 6a. Export contacts to Excel only
-python app\site_contact_export.py --countries IN --with-email-only --page-count medium
+REM 6. Export tiered Excel and write to email_contacts
+python app\site_smart_export.py --countries IN --write-contacts --campaign IN_jun02
 
-REM 6b. Export filtered by city (e.g. Pune only)
-python app\site_contact_export.py --countries IN --location Pune --with-email-only
-
-REM 6c. Export and save as a campaign (for mail prep)
-python app\site_contact_export.py --countries IN --with-email-only --page-count medium --campaign IN_medium_jun01
-
-REM 5. Scaffold mail templates (creates mailing/IN_medium_jun01/ with example files)
-python app\site_campaign_mail_prepare.py --campaign IN_medium_jun01
-REM   -> edit mailing/IN_medium_jun01/mails/body.html and subject.json
-
-REM 6. Generate one personalised mail doc per email address
-python app\site_campaign_mail_prepare.py --campaign IN_medium_jun01 --prepare-contacts
+REM 7. Export unified review Excel
+python app\email_contacts_export.py --countries IN --campaign IN_jun02 --status pending
 ```
 
 **Filtering options at export time (Step 4):**
@@ -214,26 +172,22 @@ python app\site_campaign_mail_prepare.py --campaign IN_medium_jun01 --prepare-co
 | Flag | Purpose |
 |---|---|
 | `--countries IN` | Filter by ai_country |
-| `--page-count medium` | Sites with 501–3000 pages |
-| `--sector ecommerce` | Sites classified as ecommerce |
-| `--location Pune` | Only sites located in Pune (searches location_full) |
-| `--location "Hinjewadi"` | Narrow to a specific area or suburb |
-| `--with-email-only` | Only contacts that have an email |
-| `--campaign NAME` | Save to Firestore for mail prep |
+| `--min-pages N` | Minimum page count |
+| `--outreach-priority N` | Only contacts with priority <= N (1=best) |
+| `--write-contacts` | Write to email_contacts Firestore collection |
+| `--campaign NAME` | Tag written to email_contacts docs |
+| `--dry-run-contacts` | Preview write without committing |
 
 **What gets created:**
 
 ```
 site_leads/{lead_id}                          ← crawled site data + ai_* fields
 site_leads/{lead_id}/site_contacts/{id}       ← scraped contacts
-site_campaigns/{campaign}/
-    site_campaign_sites/{lead_id}             ← filtered site snapshot
-    site_campaign_sites/{lead_id}/
-        site_campaign_contacts/{id}           ← contact snapshot
-    out_mail_contacts/{id}                    ← personalised mail doc (status=pending)
-    out_mail/{country}                        ← mail template per country
-mailing/{campaign}/mails/body_IN.html         ← editable mail body
-mailing/{campaign}/subject.json               ← editable subjects per country
+email_contacts/{doc_id}                       ← unified contact (mark_site_leads=true)
+    status = pending
+    approved = '' (filled in during review)
+exports/site_prospects_IN_<ts>.xlsx           ← tiered Excel
+exports/email_contacts_IN_<ts>.xlsx           ← unified review Excel
 ```
 
 ---
@@ -244,8 +198,9 @@ mailing/{campaign}/subject.json               ← editable subjects per country
 1. DISCOVER   lead_agent.py              Bing + Brave search, crawl agency sites
 2. CLASSIFY   lead_enrich_agent.py       GPT: sector, specialisation, reseller fit
 3. ENRICH     lead_enrich_contacts.py    Bing: LinkedIn, Twitter, social profiles
-4. EXTRACT    lead_extract.py            Filtered Excel + Firestore extract
-5. MAIL PREP  lead_campaign_mail_prepare.py  Templates + personalised docs per email
+4. CHECK      leads_email_check.py       AI classify email type + contact role (priority 1–4)
+5. EXPORT     leads_smart_export.py      Tiered Excel + write to email_contacts
+6. REVIEW     email_contacts_export.py   Unified Excel for review and approval
 ```
 
 **Step-by-step (UK example):**
@@ -260,57 +215,64 @@ REM 2. AI classify leads (GPT — needs OPENAI_API_KEY)
 python app\lead_enrich_agent.py --countries UK
 
 REM 3. Enrich contacts with social profiles (Bing search)
-python app\lead_enrich_contacts.py --country UK --skip-enriched
+python app\lead_enrich_contacts.py --countries UK --skip-enriched
 
-REM 4. Export filtered extract to Firestore
-python app\lead_extract.py --country UK --with-email --min-score 60 --save-extract UK_jun01
+REM 4. Classify email type and contact role
+python app\leads_email_check.py --countries UK --dry-run 20
+python app\leads_email_check.py --countries UK
 
-REM 5. Scaffold mail templates
-python app\lead_campaign_mail_prepare.py --extract UK_jun01
-REM   -> edit mailing/leads_UK_jun01/mails/body.html and subject.json
+REM 5. Export tiered Excel and write to email_contacts
+python app\leads_smart_export.py --countries UK --write-contacts --campaign UK_jun02
 
-REM 6. Generate one personalised mail doc per email address
-python app\lead_campaign_mail_prepare.py --extract UK_jun01 --prepare-contacts
+REM 5. Export unified review Excel
+python app\email_contacts_export.py --countries UK --campaign UK_jun02 --status pending
 ```
 
 **Filtering options at extract time (Step 4):**
 
 | Flag | Purpose |
 |---|---|
-| `--country UK` | Filter by country |
-| `--min-score 60` | Minimum reseller score (0–100) |
-| `--priority A,B` | Only A/B priority leads |
-| `--with-email` | Only leads with at least 1 email |
-| `--keywords wordpress` | Keyword filter |
-| `--save-extract NAME` | Save to Firestore for mail prep |
+| `--countries UK` | Filter by country |
+| `--min-score N` | Minimum reseller score (0–100) |
+| `--outreach-priority N` | Only contacts with priority <= N (1=best) |
+| `--write-contacts` | Write to email_contacts Firestore collection |
+| `--campaign NAME` | Tag written to email_contacts docs |
+| `--dry-run-contacts` | Preview write without committing |
 
 **What gets created:**
 
 ```
 leads/{lead_id}                               ← crawled lead data + ai_* fields
 leads/{lead_id}/contacts/{id}                 ← scraped contacts
-leads_extract/{extract_id}/
-    leads_extracted/{lead_id}                 ← filtered lead snapshot
-    leads_extracted/{lead_id}/
-        contacts_extracted/{id}               ← contact snapshot
-    out_mail_contacts/{id}                    ← personalised mail doc (status=pending)
-    out_mail/{country}                        ← mail template per country
-mailing/leads_{extract_id}/mails/body.html    ← editable mail body
-mailing/leads_{extract_id}/subject.json       ← editable subjects per country
+email_contacts/{doc_id}                       ← unified contact (mark_leads=true)
+    status = pending
+    approved = '' (filled in during review)
+exports/leads_prospects_UK_<ts>.xlsx          ← tiered Excel
+exports/email_contacts_UK_<ts>.xlsx           ← unified review Excel
 ```
 
 ---
 
-### Mail doc lifecycle
+## Starter Scripts
 
-Every `out_mail_contacts/{id}` document goes through these statuses:
+Two ready-to-run batch files cover the full pipeline for each track. Edit the two variables at the top before running:
 
+```bat
+set COUNTRIES=NO        REM space-separated: NO SE DK
+set CAMPAIGN=NO_jun02   REM tag written to email_contacts docs
 ```
-pending  → (send script picks up)  →  sending  →  sent
-                                                 →  failed
+
+| Script | Pipeline | Steps |
+|---|---|---|
+| `run_site_pipeline.bat` | Site | discover → classify → enrich contacts → locate → email check → export+write |
+| `run_lead_pipeline.bat` | Lead | discover → classify → enrich contacts → email check → export+write |
+
+Both scripts stop immediately if any step fails and print the review command at the end:
+```bat
+python app\email_contacts_export.py --countries NO --campaign NO_jun02 --status pending
 ```
 
-Fields on each mail doc: `email`, `name`, `subject`, `body`, `status`, `sent_at`, `prepared_at`, `domain`, `country`.
+---
 
 ## Section 1 — Site Agent Pipeline (current)
 
@@ -342,17 +304,10 @@ Firestore
 | `app/site_agent.py` | Discovers sites, stores `site_leads` + `site_contacts` |
 | `app/site_enrich_agent.py` | AI classification — sector, platform, hosting, contacts |
 | `app/site_contact_enrich.py` | Enriches `site_contacts` via Brave Search + GPT |
-| `app/site_contact_export.py` | Exports `site_contacts` to Excel (one row per contact) |
-| `app/site_campaign_mail_prepare.py` | Prepare outbound mail templates and per-contact docs for a campaign |
-| `app/site_excluded_recheck.py` | Re-checks `sites_excluded` and recovers passing sites |
-| `app/site_sitemap_backfill.py` | Backfills sitemap data for existing `site_leads` |
 | `app/site_email_check.py` | Classifies `site_contacts` by email type and contact role (OpenAI) |
-| `app/site_smart_export.py` | Tiered prospect Excel — also writes to `email_contacts` via `--write-contacts` |
-| `app/leads_smart_export.py` | Tiered reseller Excel — also writes to `email_contacts` via `--write-contacts` |
-| `app/email_contacts_export.py` | Unified Excel from `email_contacts` collection — both pipelines, all filters |
-| `app/functions/excel_builder.py` | Shared Excel builder used by all three export scripts |
-| `app/site_leads_export.py` | Exports `site_leads` + contacts to Excel (one row per lead) |
+| `app/site_smart_export.py` | Tiered Excel (6 tiers) + writes to `email_contacts` via `--write-contacts` |
 | `site_scrape.bat` | Runs site_agent + site_enrich_agent for all countries |
+| `run_site_pipeline.bat` | **Full Site Pipeline starter** — runs all 6 steps, edit `COUNTRIES` + `CAMPAIGN` at top |
 
 ### CLI — site_agent.py
 
@@ -366,11 +321,11 @@ python app/site_agent.py --countries NO --main-page-only
 
 | Flag | Default | Description |
 |---|---|---|
-| `--countries` | `NO` | Comma-separated ISO codes or `ALL` |
+| `--countries` | `NO` | Space or comma-separated country codes e.g. `NO SE UK`|
 | `--category` | _(all)_ | Run only one query category (e.g. `real_estate`, `tech`, `company`) |
 | `--max-results` | `500` | Max Bing results per query |
 | `--min-pages` | `0` | Minimum sitemap page count to keep a site |
-| `--workers` | `20` | Async consumer concurrency |
+| `--workers` | `20` | Parallel async workers |
 | `--delay` | `1.5` | Seconds between Bing queries |
 | `--no-firebase` | off | Skip all Firestore writes |
 | `--dry-run` | off | Process sites but don't write to Firestore |
@@ -427,48 +382,6 @@ contact, then uses GPT to extract and write back enriched fields:
 Requires `BRAVE_API_KEY` in `.env`. Skips contacts with no name, and skips
 already-enriched contacts unless `--force` is passed.
 
-### CLI — site_excluded_recheck.py
-
-```bash
-python app/site_excluded_recheck.py --countries NO
-python app/site_excluded_recheck.py --domains example.no
-python app/site_excluded_recheck.py --min-pages 50 --dry-run
-```
-
-Re-checks sites in `sites_excluded` that were previously rejected (e.g. due to
-missing sitemaps). Sites that now pass are moved to `site_leads` and removed from
-`sites_excluded`.
-
-| Flag | Default | Description |
-|---|---|---|
-| `--countries` | all | Comma-separated country codes |
-| `--domains` | all | Comma-separated domains to re-check |
-| `--reason` | all | Only re-check sites whose exclusion reason contains this text |
-| `--min-pages` | `50` | Minimum page count to recover a site |
-| `--limit` | none | Max sites to re-check |
-| `--concurrent` | `50` | Parallel fetches |
-| `--dry-run` | off | Print results without writing to Firestore |
-| `--force` | off | Re-check even sites with page_count > 0 |
-
-### CLI — site_sitemap_backfill.py
-
-```bash
-python app/site_sitemap_backfill.py --countries NO
-python app/site_sitemap_backfill.py --countries NO --force
-python app/site_sitemap_backfill.py --limit 500 --dry-run
-```
-
-Backfills sitemap data (`page_count`, `sitemap_url`, `sitemap_type`, `sitemap_urls`,
-`sitemap_oldest_date`) for existing `site_leads` documents that are missing it.
-
-| Flag | Default | Description |
-|---|---|---|
-| `--countries` | all | Comma-separated country codes |
-| `--limit` | none | Max leads to process |
-| `--concurrent` | `20` | Parallel fetches |
-| `--dry-run` | off | Print results without writing to Firestore |
-| `--force` | off | Re-scan even leads that already have sitemap data |
-
 ### CLI — site_location_enrich.py
 
 Enriches `site_leads` with AI-inferred city and country location. Sends batches of 50
@@ -492,7 +405,7 @@ python app/site_location_enrich.py --countries IN --batch-size 50 --concurrent 4
 
 | Flag | Default | Description |
 |---|---|---|
-| `--countries` | all | Country codes to process e.g. `UK IN NO` |
+| `--countries` | all | Space or comma-separated country codes e.g. `NO SE UK`|
 | `--dry-run N` | off | Run on N sites, print results, skip Firestore writes |
 | `--batch-size` | 50 | Sites per OpenAI call |
 | `--concurrent` | 3 | Parallel OpenAI batch calls |
@@ -513,252 +426,89 @@ python app/site_location_enrich.py --countries IN --batch-size 50 --concurrent 4
 
 ---
 
-### CLI — site_leads_export.py
+### CLI — site_email_check.py
 
-```bash
-python app/site_leads_export.py
-python app/site_leads_export.py --countries NO,SE
-python app/site_leads_export.py --countries NO --sector ecommerce
-python app/site_leads_export.py --countries NO --with-contacts-only
-python app/site_leads_export.py --output exports/no_leads.xlsx
-```
-
-Exports `site_leads` to Excel — one row per lead, with all contacts folded into a
-single cell. Good for a full lead overview.
-
-| Flag | Default | Description |
-|---|---|---|
-| `--countries` | all | Comma-separated country codes |
-| `--sector` | all | Filter by `ai_sector` e.g. `ecommerce`, `technology` |
-| `--category` | all | Filter by `query_category` e.g. `real_estate`, `healthcare` |
-| `--location` | all | Keyword filter on `location_full` e.g. `London`, `Pune`, `Oslo` |
-| `--with-contacts-only` | off | Only include leads that have at least one contact |
-| `--limit` | none | Max leads to export |
-| `--output` | auto-timestamped | Output `.xlsx` path |
-| `--dry-run` | off | Count leads without fetching contacts or writing file |
-
-### CLI — site_contact_export.py
-
-Exports `site_contacts` to Excel — one row per contact, enriched with key fields from the parent `site_lead`. Country filtering uses **`ai_country`** from the site_lead only (the AI-detected country, which is more reliable than the scraped `country` field). Optionally saves the selection to a `site_campaigns` Firestore collection.
+Classifies each `site_contact` that has an email address. Sends batches of 50 to OpenAI
+to determine the email type (personal vs role inbox) and the contact's likely role, then
+writes `email_type`, `contact_type`, `outreach_priority`, and `email_checked_at` back to
+the contact document.
 
 ```bat
-python app\site_contact_export.py
-python app\site_contact_export.py --countries NO,SE
-python app\site_contact_export.py --countries NO --sector ecommerce
-python app\site_contact_export.py --countries NO --with-email-only
-python app\site_contact_export.py --countries NO --page-count small
-python app\site_contact_export.py --countries NO --category healthcare
-python app\site_contact_export.py --countries NO --campaign NO_jun01
-python app\site_contact_export.py --countries NO --campaign NO_jun01 --force
-python app\site_contact_export.py --output exports\contacts_no.xlsx
+REM Dry-run 20 UK contacts — print results, no writes
+python app\site_email_check.py --countries UK --dry-run 20
+
+REM Classify all UK contacts
+python app\site_email_check.py --countries UK
+
+REM Re-classify already-processed contacts
+python app\site_email_check.py --countries UK --force
 ```
 
 | Flag | Default | Description |
 |---|---|---|
-| `--countries` | all | Comma-separated country codes — filters on `ai_country` from site_lead |
-| `--sector` | all | Filter by `ai_sector` e.g. `ecommerce`, `technology` |
-| `--category` | all | Filter by `query_category` e.g. `real_estate`, `healthcare` |
-| `--location` | all | Keyword filter on `location_full` e.g. `London`, `Pune`, `Manchester` |
-| `--with-email-only` | off | Only include contacts that have an email address |
-| `--limit` | none | Max contacts to export |
-| `--output` | auto-named | Output `.xlsx` path (default: `exports/site_contacts_<filter>_<date>.xlsx`) |
-| `--campaign NAME` | off | Save filtered sites + contacts to `site_campaigns/<NAME>` in Firestore |
-| `--page-count BUCKET` | all | Filter by site page count bucket (see table below) |
-| `--force` | off | Re-assign sites already in another campaign (bypasses duplicate check) |
+| `--countries` | all | Space or comma-separated country codes e.g. `NO SE UK`|
+| `--dry-run N` | off | Run on N contacts, print results, skip writes |
+| `--batch-size` | 50 | Contacts per OpenAI call |
+| `--concurrent` | 3 | Parallel OpenAI batches |
+| `--force` | off | Re-classify contacts already having `email_checked_at` |
+| `--limit N` | none | Max contacts to process |
 
-**Output sheets:**
+**Fields written to `site_contacts`:**
 
-| Sheet | Contents |
+| Field | Values | Meaning |
+|---|---|---|
+| `email_type` | `personal` / `role` / `department` / `admin` | What kind of inbox it is |
+| `contact_type` | `decision_maker` / `marketing` / `developer` / `sales` / `operations` / `unknown` | Likely role |
+| `outreach_priority` | `1` – `4` | 1=personal email + decision maker/marketing (best); 4=admin/unknown (skip) |
+| `email_checked_at` | ISO timestamp | When classified |
+
+**Outreach priority logic:**
+
+| Priority | Condition |
 |---|---|
-| `Contacts` | One row per contact — Doc ID, Site Doc ID, name, email, phone, title, occupation, company, linkedin, twitter, facebook, AI Country, then all site fields |
-| `Summary` | Totals (contacts, with email/LinkedIn/phone, enriched), breakdown by AI Country and AI Sector |
-| `Sites` | One row per site that has at least one contact in the selection — all site_lead fields |
-| `Sites Summary` | Site totals, breakdown by AI Country and AI Sector |
-
-
-**Page size buckets (`--page-count`):**
-
-| Bucket | Page count range |
-|---|---|
-| `micro` | 1 – 50 |
-| `small` | 51 – 500 |
-| `medium` | 501 – 3 000 |
-| `large` | 3 001 – 10 000 |
-| `huge` | 10 001 – 100 000 |
-| `ultra` | 100 001+ |
-| `unknown` | 0 / None |
-
-**`--campaign` Firestore structure:**
-
-```
-site_campaigns/{campaign}/
-    campaign_id, created_at, site_count, contact_count
-    filters: { countries, sector, category, with_email_only, limit }
-
-    site_campaign_sites/{lead_id}/
-        site_campaign_contacts/{contact_id}
-```
-
-**Duplicate prevention:** when `--campaign` is used, the script first queries the `site_campaign_sites` collectionGroup across all existing campaigns. Any site already claimed by another campaign is skipped and logged — it will not appear in two campaigns. Use `--force` to override and re-assign. The final output reports how many sites were saved vs skipped:
-
-```
-[campaign] SKIP agency-oslo.no            already in 'NO_may26'
-[campaign] Done → 298 sites saved  14 skipped  1205 contacts
-```
+| 1 | Personal email + decision_maker or marketing role |
+| 2 | Personal email + other role  OR  role/dept email + decision_maker |
+| 3 | Role or department email + non-admin contact type |
+| 4 | Admin email OR unknown type with generic inbox |
 
 ---
 
-### CLI — site_campaign_mail_prepare.py
+### CLI — site_smart_export.py
 
-Prepares outbound mail for a site campaign. Countries are detected by scanning `ai_country` on the `site_campaign_sites` docs. When `--prepare-contacts` is used, all site contacts are fetched in parallel (20 workers) within the `site_campaigns/{campaign}/` subtree — no cross-collection reads. On first run it scaffolds a mail catalogue at `mailing/{campaign}/` with example body files and a subject map. Edit those files, then re-run to push to Firestore.
+Tiered prospect export — reads `site_contacts` (collectionGroup) then batch-fetches parent
+`site_leads`, scores each site into 6 tiers, and exports a colour-coded Excel.
 
 ```bat
-:: First run — scaffolds mailing/NO_jun01/ with example files + writes country templates
-python app\site_campaign_mail_prepare.py --campaign NO_jun01
-
-:: Also prepare one personalised doc per email address (status=pending, sent_at="")
-python app\site_campaign_mail_prepare.py --campaign NO_jun01 --prepare-contacts
-
-:: Preview what would be written (still creates local mail files if missing)
-python app\site_campaign_mail_prepare.py --campaign NO_jun01 --dry-run
-
-:: Re-prepare pending contact docs after editing body files
-python app\site_campaign_mail_prepare.py --campaign NO_jun01 --prepare-contacts --force
-
-:: List campaigns
-python app\site_campaign_mail_prepare.py --list-campaigns
+python app\site_smart_export.py --countries UK
+python app\site_smart_export.py --countries UK --outreach-priority 2
+python app\site_smart_export.py --countries IN --min-pages 50 --out exports\india.xlsx
+python app\site_smart_export.py --countries NO SE DK
 ```
-
-**Mail catalogue structure** (auto-created on first run, even on `--dry-run`):
-
-```
-mailing/
-    {campaign}/
-        subject.json          ← {"NO": "Hei fra BlueSearch…", "SE": "Hej från…"}
-        mails/
-            body_NO.html      ← Norwegian body template
-            body_SE.html      ← Swedish body template
-            body_DK.html      ← Danish body template (etc.)
-            body.html         ← fallback for any unlisted country
-```
-
-**Supported `{{placeholders}}` in body and subject:**
-
-| Placeholder | Replaced with |
-|---|---|
-| `{{name}}` | First name only |
-| `{{full_name}}` | Full name |
-| `{{email}}` | Email address |
-| `{{occupation}}` | Job title / occupation |
-| `{{company}}` | Company name |
-| `{{domain}}` | Site domain |
-| `{{website}}` | Full website URL |
-| `{{country}}` | Country code |
-| `{{ai_sector}}` | AI-detected sector |
-| `{{ai_summary}}` | AI site summary |
-
-**Parameters:**
 
 | Flag | Default | Description |
 |---|---|---|
-| `--campaign NAME` | _(required)_ | Campaign ID under `site_campaigns/` |
-| `--prepare-contacts` | off | Write one personalised doc per email address to `out_mail_contacts/` |
-| `--subject TEXT` | _(from subject.json)_ | Override default subject for all countries |
-| `--subject-file FILE` | `mailing/{campaign}/subject.json` | Override subject JSON path |
-| `--body-file FILE` | _(none)_ | Single body file for all countries (overrides body-dir) |
-| `--body-dir DIR` | `mailing/{campaign}/mails/` | Override body files directory |
-| `--dry-run` | off | Skip Firestore writes (mail catalogue files are still created if missing) |
-| `--force` | off | Re-prepare `status=pending` docs; never touches `sent` or `failed` docs |
-| `--list-campaigns` | off | List all available campaigns and exit |
+| `--countries` | all | Space or comma-separated country codes e.g. `NO SE UK`|
+| `--min-pages` | 0 | Minimum page count |
+| `--outreach-priority N` | all | Only contacts with `outreach_priority` <= N |
+| `--write-contacts` | off | Write contacts to `email_contacts` Firestore collection |
+| `--campaign NAME` | — | Tag written to `email_contacts` (e.g. `UK_tier2_jun02`) |
+| `--dry-run-contacts` | off | Print what would be written without writing |
+| `--out` | `exports/site_prospects_<cc>_<ts>.xlsx` | Output path |
 
-**Firestore structure written:**
+**Tier system (by page count + bonus signals):**
 
-```
-site_campaigns/{campaign}/
-    out_mail/{country}
-        country, subject, body, site_count, contact_count, prepared_at
+| Tier | Pages | Colour | Bonus signals can lift tiers 3–6 |
+|---|---|---|---|
+| 1 — Ultra Enterprise | >100,000 | Purple | Immune |
+| 2 — Enterprise | >10,000 | Dark red | Immune |
+| 3 — Hot | 500–10,000 | Red | WordPress + hot sector + 3 emails |
+| 4 — Good | 100–500 | Orange | |
+| 5 — Warm | 50–100 | Yellow | |
+| 6 — Cold | <50 | Grey | |
 
-    out_mail_contacts/{contact_id}    ← written when --prepare-contacts is set
-        email, name, country
-        subject                       ← personalised from template
-        body                          ← personalised from template
-        domain, site_doc_id, contact_id
-        status    = "pending"         ← set to "sending" / "sent" / "failed" by send script
-        sent_at   = ""                ← filled in by send script
-        prepared_at
-```
+**Excel sheets:** Contacts (colour-coded, sorted tier→pages), Summary (tier/sector/platform counts), WordPress vs Others.
 
-**`--prepare-contacts` update rules:**
-
-| Doc state | Normal run | `--force` |
-|---|---|---|
-| Doesn't exist | ✓ created | ✓ created |
-| `status = pending` | skipped | ✓ re-prepared |
-| `status = sent` | skipped | skipped |
-| `status = failed` | skipped | skipped |
-
-Sent and failed docs are **never overwritten** — only pending ones can be re-prepared.
-
-### Supported countries
-
-| Code | Country | Native queries |
-|---|---|---|
-| `NO` | Norway | ✓ |
-| `SE` | Sweden | ✓ |
-| `DK` | Denmark | ✓ |
-| `DE` | Germany | ✓ |
-| `UK` | United Kingdom | ✓ |
-| `FI` | Finland | ✓ |
-| `NL` | Netherlands | ✓ |
-| `FR` | France | ✓ |
-| `EU` | European Union (.eu domains) | ✓ (English) |
-
-### Query categories (16 per country, ~12 queries each)
-
-`municipality`, `public`, `healthcare`, `education`, `media`, `company`, `shop`,
-`association`, `finance`, `legal`, `real_estate`, `logistics`, `construction`,
-`tech`, `hr`, `hospitality`
-
-Each `site_lead` document carries a `query_category` field so results can be filtered
-by category in Firestore or exports.
-
-### Firestore structure
-
-```
-site_leads/{lead_id}
-    domain, website, country, country_name, company
-    title, description, page_count, sitemap_url, sitemap_type
-    source_query, query_category, crawled_at
-    target_types[], keywords[]
-    ai_sector, ai_company_type, ai_country, ai_confidence  ← written by site_enrich_agent
-    ai_keywords[], ai_summary, ai_platform, ai_hosting     ← written by site_enrich_agent
-    ai_contacts[{name, email, role}]                       ← written by site_enrich_agent
-    ai_classified_at
-
-site_leads/{lead_id}/site_contacts/{contact_id}
-    email, name, title, phone, found_on                    ← written by site_agent
-    lead_id, domain, website, country, country_name
-    occupation, company, linkedin, twitter, facebook       ← written by site_contact_enrich
-    other_links[], brave_enriched_at                       ← written by site_contact_enrich
-
-sites_excluded/{lead_id}
-    domain, website, country, reason, page_count
-    source_query, query_category, excluded_at
-```
-
-### Config files
-
-| File | Purpose |
-|---|---|
-| `config/site_agent_queries.json` | Per-country query categories and search queries |
-| `config/countries.json` | TLD filters, accepted_tlds, keywords per country |
-| `config/site_agent_blocklist.txt` | Domain patterns to skip |
-
-**Adding a new country:** add entries to both `countries.json` and `site_agent_queries.json`
-— no code changes needed.
-
-**Adding a new query category:** add the category + queries to every country entry in
-`query_categories` in `site_agent_queries.json` — no code changes needed.
+---
 
 ---
 
@@ -775,12 +525,10 @@ Supported countries: Norway (`NO`), Sweden (`SE`), Denmark (`DK`), Germany (`DE`
 | `app/lead_agent.py` | Discover agency leads via Bing + Brave + Google + catalog scraping |
 | `app/lead_enrich_agent.py` | AI classification of each lead (GPT) → sector, specialisation, reseller_potential |
 | `app/lead_enrich_contacts.py` | Enrich contacts with social media profiles via Bing |
-| `app/lead_extract.py` | Filtered Excel export + optional Firestore extract save |
-| `app/campaign_exporter.py` | Export a `leads_extract` campaign to `output/<campaign_id>/campaign.xlsx` + JSON |
-| `app/lead_campaign_mail_prepare.py` | Prepare outbound mail templates + per-contact docs for a leads_extract campaign |
-| `app/statistics.py` | Aggregate lead counts by priority/country/reason → Excel + Firestore |
-| `app/fix_contact_country.py` | One-time migration: fix country field on contact docs |
-| `app/gmail_outreach.py` | Send personalised outreach emails via Gmail OAuth |
+| `app/leads_email_check.py` | AI classify each contact: email type + contact role + outreach priority |
+| `app/leads_smart_export.py` | Tiered Excel (5 tiers by reseller score) + writes to `email_contacts` via `--write-contacts` |
+| `app/email_contacts_export.py` | Unified review Excel from `email_contacts` — filter by status, campaign, mark |
+| `run_lead_pipeline.bat` | **Full Lead Pipeline starter** — runs all 5 steps, edit `COUNTRIES` + `CAMPAIGN` at top |
 
 ---
 
@@ -819,8 +567,8 @@ cp .env.example .env
 
 | Parameter | Default | Description |
 |---|---|---|
-| `--mode` | `both` | `search` = Bing/Google keyword search; `catalog` = scrape directory listings; `both` = catalog first, then search; `audit` = run database cleanup passes (see below) |
-| `--countries` | all configured | Comma-separated ISO codes, e.g. `NO,SE,DK` |
+| `--mode` | `both` | `search` = keyword search only · `catalog` = directory scraping only · `both` = catalog then search · `audit` = TLD mismatch cleanup |
+| `--countries` | all configured | Space or comma-separated country codes e.g. `NO SE UK`|
 | `--queries` | _(per-country files)_ | Path to a custom queries file (overrides per-country files) |
 | `--output` | `output` | Directory for Excel/CSV/JSON output files |
 | `--max-results` | `200` | Max results per search engine per query (Bing, Brave, Google each) |
@@ -829,7 +577,7 @@ cp .env.example .env
 | `--max-country` | `5000` | Stop a country once this many leads are found (0 = unlimited) |
 | `--give-up-after` | `10` | Give up a country after this many consecutive empty queries |
 | `--delay` | `1.0` | Seconds to wait between page fetches within one site |
-| `--workers` | `20` | Parallel crawl workers / batch size |
+| `--workers` | `20` | Parallel async workers |
 | `--max-catalog-pages` | _(unlimited)_ | Limit pages per catalog source (useful for testing) |
 | `--no-output` | off | Skip writing the Excel/CSV/JSON files |
 | `--no-firebase` | off | Skip uploading results to Firestore |
@@ -860,311 +608,25 @@ python app\lead_agent.py --mode audit
 
 ### Example runs
 
-```bash
-# Norway only, both modes, stop at 200 leads
-python app/lead_agent.py --countries NO --mode both --max-country 200
-
-# Scandinavia search-only, 50 results per query
-python app/lead_agent.py --countries NO,SE,DK --mode search --max-results 50
-
-# Catalog only, first 5 pages per source (test run)
-python app/lead_agent.py --mode catalog --max-catalog-pages 5 --no-github
-
-# Full run, no output file, no Firebase (dry run)
-python app/lead_agent.py --countries NO --no-output --no-firebase
-```
-
----
-
-## `lead_extract.py` — export a filtered extract from Firestore
-
-Reads lead documents and their contacts sub-collections directly from Firestore and writes a focused Excel file. No local CSV is required. Global leads (`country="*"`) are excluded from all extracts.
-
 ```bat
-python app\lead_extract.py [options]
+REM Norway — both modes (catalog first then search), stop at 200 leads per country
+python app\lead_agent.py --countries NO --mode both --max-country 200
+
+REM Scandinavia — search only, 50 results per query
+python app\lead_agent.py --countries NO SE DK --mode search --max-results 50
+
+REM Catalog only — first 5 pages per source (quick test, skip GitHub pre-pass)
+python app\lead_agent.py --mode catalog --max-catalog-pages 5 --no-github
+
+REM Dry run — skip Excel output and Firestore upload
+python app\lead_agent.py --countries NO --no-output --no-firebase
+
+REM Audit mode — check for TLD mismatches in existing leads (dry run)
+python app\lead_agent.py --mode audit --audit-dry-run
+
+REM Re-crawl all sites ignoring existing Firestore history
+python app\lead_agent.py --countries UK --mode both --force
 ```
-
-### Priority & Scoring
-
-Every lead receives a `reseller_score` (0–100) and a `priority` label when it is crawled.
-The score is built from keyword signals found on the agency's website:
-
-| Signal | Points | What it detects |
-|--------|--------|----------------|
-| `web_agency` keyword | +25 | "web agency", "web design", "wordpress agency", "shopify developer", etc. |
-| `wordpress` keyword | +25 | WordPress/WooCommerce/Elementor detected on site or in content |
-| `care_plan` keyword | +15 | "care plan", "managed wordpress", "maintenance plan", "monthly retainer" |
-| `seo` keyword | +18 | SEO services mentioned |
-| `smb_focus` keyword | +12 | "small business", "local business", "SMB", "independent businesses" |
-| `communication` keyword | +15 | PR/comms/social services |
-| Agency language | up to +20 | "we build", "our portfolio", "get a quote", "our clients" |
-| Services/clients/cases language | +8 | "services", "case studies", "portfolio" |
-| Maintenance/support language | +6 | "maintenance", "hosting", "support", "SLA" |
-| No `web_agency` keyword + no agency language | cap at 35 | Core-signal gate — prevents banks/telcos from scoring high |
-| Negative keyword (≥2 occurrences) | −30 each, max −90 | Restaurant, salon, clinic, etc. |
-| Adult content | −90 | Instant near-zero score |
-
-**Priority bands:**
-
-| Priority | Score | Meaning |
-|----------|-------|---------|
-| **A — High fit** | ≥ 75 | WordPress/WooCommerce agency with SMB clients, care plans, or maintenance retainers |
-| **B — Good fit** | 55–74 | Digital/SEO agency with web capability, mixed client base |
-| **C — Maybe** | 35–54 | Web-adjacent but unclear specialisation or client base |
-| **D — Low fit** | < 35 | Enterprise-only, non-web sector, or insufficient signals |
-
-A WordPress agency with SMB clients and a care plan will typically score 85–95 (A).
-
-### AI Reseller Potential
-
-After crawl scoring, `lead_enrich_agent.py` sends each lead to GPT for a second-pass
-classification. This produces `ai_reseller_potential` — a qualitative judgement of how
-likely the agency is to become a BlueSearch reseller partner.
-
-| Value | Meaning |
-|-------|---------|
-| `high` | WordPress/WooCommerce agency with SMB/local clients, ongoing hosting or maintenance services. Ideal reseller target. |
-| `medium` | Digital or SEO agency with web capability but unclear client base or mixed specialisation. Worth contacting. |
-| `low` | Enterprise-only firm, pure brand/advertising agency, app-only developer, or unrelated sector. Skip or deprioritise. |
-
-**Two scoring systems work together:**
-
-- `reseller_score` + `priority` (A/B/C/D) — set at crawl time by keyword matching. Fast and deterministic.
-- `ai_reseller_potential` — set by GPT after enrichment. Slower but reads actual site content for nuance.
-
-Use both to build high-precision extracts:
-```bat
-python app\lead_extract.py --country UK --min-score 55 --priority A --priority B --ai-potential high --auto-name --save-extract
-```
-→ Extract ID: `UK_score55_a_b_high_jun02`
-
-### Filter parameters
-
-| Parameter | Default | Description |
-|---|---|---|
-| `--collection` | `leads` | Firestore collection name |
-| `--output` | `<project_root>/output` | Directory to write the Excel file |
-| `--min-score` | `0` | Minimum reseller_score to include |
-| `--max-score` | `100` | Maximum reseller_score to include |
-| `--country CODE` | all | Country code(s), comma-separated or repeatable: `--country NO,SE` |
-| `--source` | all | `search` / `catalog` / `both` — filter by discovery mode |
-| `--query TEXT` | _(none)_ | Substring match on `source_query` (case-insensitive) |
-| `--priority P` | all | Priority label(s), repeatable: `--priority A --priority B` |
-| `--ai-potential LEVEL` | all | Filter by `ai_reseller_potential`: `high`, `medium`, `low` (repeatable: `--ai-potential high --ai-potential medium`) |
-| `--with-email` | off | Only include leads with at least one contact email |
-| `--keywords KW` | _(none)_ | Comma-separated keywords (OR logic). A lead matches if **any** keyword appears in `source_query`, `title`, `description`, `company`, `domain`, `website`, `keywords`, or `reasons`. E.g. `--keywords wordpress,woocommerce` |
-| `--limit N` | _(none)_ | Maximum number of leads to include. Applied after all other filters. |
-| `--out FILE` | auto-timestamped | Output filename |
-
-### Save-extract parameters
-
-Saving an extract persists the filtered leads to a dedicated `leads_extract` Firestore collection. A lead can only belong to **one** extract — any lead already in a previous extract is automatically skipped.
-
-| Parameter | Default | Description |
-|---|---|---|
-| `--save-extract NAME` | _(none)_ | Save extract to `leads_extract/<NAME>` in Firestore |
-| `--auto-name` | off | Auto-generate the extract ID from active filters. Overrides `--save-extract` name. Pattern: `{countries}_{score}_{priorities}_{ai_potentials}_{source}_{date}` e.g. `UK_score70_A_B_high_jun02` |
-| `--extract-dry-run` | off | Preview what `--save-extract` would write without touching Firestore |
-
-### Firestore structure written by `--save-extract`
-
-```
-leads_extract/
-  {extract_name}/
-    name, created_at, lead_count, contact_count, filters{…}
-    leads_extracted/
-      {lead_id}/
-        (all lead fields)
-        contacts_extracted/
-          {contact_id}/   (all contact fields)
-```
-
-### Output Excel sheets
-
-- **Extract** — one row per email contact with all lead fields merged in; leads without email appear at the bottom.
-- **Leads** — one row per lead (raw Firestore fields).
-- **Summary** — filter criteria, counts, and extract name.
-
-### Example runs
-
-```bat
-REM A-priority Norwegian leads with email, score ≥ 70
-python app\lead_extract.py --min-score 70 --country NO --priority A --with-email
-
-REM Catalog-sourced leads across Norway and Sweden
-python app\lead_extract.py --source catalog --country NO,SE
-
-REM All leads matching a specific query keyword
-python app\lead_extract.py --query "webbyrå"
-
-REM Keyword search — WordPress or WooCommerce leads
-python app\lead_extract.py --keywords wordpress,woocommerce
-
-REM Best leads — A/B priority + GPT high potential + email, auto-named extract
-python app\lead_extract.py --country UK --min-score 55 --priority A --priority B --ai-potential high --with-email --auto-name --save-extract
-
-REM High or medium AI potential from Norway and Sweden
-python app\lead_extract.py --country NO,SE --ai-potential high --ai-potential medium --priority A --auto-name --save-extract
-
-REM India high-score WordPress agencies only
-python app\lead_extract.py --country IN --min-score 70 --ai-potential high --keywords wordpress,woocommerce --auto-name --save-extract
-
-REM Dry-run: preview what would be saved to Firestore
-python app\lead_extract.py ^
-  --keywords wordpress ^
-  --country NO,SE ^
-  --min-score 60 ^
-  --save-extract "wordpress_nordic_may26" ^
-  --extract-dry-run
-
-REM Live save — writes to leads_extract/wordpress_nordic_may26
-python app\lead_extract.py ^
-  --keywords wordpress ^
-  --country NO,SE ^
-  --min-score 60 ^
-  --save-extract "wordpress_nordic_may26"
-
-REM Second extract — already-extracted leads are skipped automatically
-python app\lead_extract.py ^
-  --keywords shopify ^
-  --country NO,SE ^
-  --save-extract "shopify_nordic_jun01"
-```
-
-### Function API
-
-```python
-from extract_leads import extract_leads
-
-path = extract_leads(
-    min_score=70,
-    countries=["NO", "SE"],
-    source="search",
-    priorities=["A", "B"],
-    with_email=True,
-    keywords=["wordpress", "woocommerce"],
-    save_extract="wordpress_nordic_may26",
-    extract_dry_run=False,
-    out_file="my_extract.xlsx",
-)
-```
-
----
-
-## `gmail_outreach.py` — send outreach emails via Gmail
-
-Sends personalised outreach emails to contacts from an Excel file, tracks opens and replies, and avoids re-sending to anyone who has already replied.
-
-```bash
-cd app
-python gmail_outreach.py [options]
-```
-
-Requires Gmail OAuth credentials (`credentials.json` in the project root). On first run the browser opens for authorisation; a `token.json` is saved for future runs.
-
----
-
-## Output files
-
-After a run, the `output/` directory contains:
-
-| File | Contents |
-|---|---|
-| `agency_leads.xlsx` | Leads sheet + Contacts sheet + Dashboard + Queries |
-| `agency_leads.csv` | All leads, one row per lead |
-| `agency_contacts.csv` | All contacts, one row per email address |
-| `agency_leads.json` | All leads as JSON |
-| `agency_contacts.json` | All contacts as JSON |
-| `extract_leads_*.xlsx` | Filtered extracts produced by `lead_extract.py` |
-| `output/<campaign_id>/campaign.xlsx` | Campaign export (Summary + Leads + Contacts sheets) |
-| `output/<campaign_id>/campaign.json` | Same campaign data as JSON |
-
-### Key columns in leads
-
-| Column | Description |
-|---|---|
-| `company` | Agency name (derived from domain) |
-| `website` | Canonical website URL |
-| `country` / `country_name` | ISO code and full name |
-| `emails` | Comma-separated email addresses |
-| `phones` | Comma-separated phone numbers |
-| `linkedin` | LinkedIn company page URL |
-| `detected_tech` | Technologies detected on the site |
-| `categories` | Agency category labels |
-| `reseller_score` | Fit score 0–100 |
-| `priority` | A / B / C based on score |
-| `reasons` | Scoring rationale |
-| `suggested_angle` | Recommended BlueSearch sales angle |
-| `found_by_search` | `yes` if discovered via keyword search |
-| `found_by_catalog` | `yes` if discovered via directory catalog |
-| `crawled_at` | ISO timestamp of last crawl |
-
----
-
-## Configuration files
-
-| File | Purpose |
-|---|---|
-| `config/countries.json` | Per-country settings: language, TLDs, keywords, phone region |
-| `config/queries_<CODE>.txt` | Search queries per country |
-| `config/blocklist_domains.txt` | Domain glob patterns and content negative keywords to exclude |
-| `config/catalogs.json` | Directory catalog sources and page counts per country |
-
-### `config/blocklist_domains.txt`
-
-Single source of truth for all domain filtering. Contains two types of entries:
-
-- **Domain glob patterns** (e.g. `*pizza*`, `*hotel*`) — any domain matching a pattern is skipped during search.
-- **Content negative keywords** (under the `CONTENT NEGATIVE KEYWORDS` section) — plain substrings checked against visible page text during scoring; two or more occurrences trigger a score penalty.
-
-Blocklist filtering applies to **search mode only**. Catalog sources are pre-curated and bypass the blocklist.
-
----
-
-## Firebase / Firestore
-
-Results are written to Firestore in real time as each site is crawled. Structure:
-
-```
-leads/{lead_id}                                                  — one document per agency
-leads/{lead_id}/contacts/{id}                                    — one document per email address
-
-leads_extract/{extract_name}                                     — one document per named extract
-leads_extract/{extract_name}/leads_extracted/{lead_id}           — extracted lead snapshot
-leads_extract/{extract_name}/leads_extracted/{lead_id}/
-    contacts_extracted/{contact_id}                              — extracted contact snapshot
-```
-
-The `leads_extract` collection is populated by `lead_extract.py --save-extract`. A lead can belong to at most one extract; duplicates are detected via a `collectionGroup` query on `leads_extracted` before each run.
-
-Credentials are loaded from (in order):
-
-1. `blueboot_secrets.py` in the project root (`fireBaseAdminKey` dict)
-2. `FIREBASE_CREDENTIALS` environment variable (path to a service account JSON)
-3. `config/serviceAccountKey.json`
-
-At startup, already-crawled domains are preloaded from Firestore so they are never re-crawled within the same run or across runs.
-
----
-
-## Optional Google Search API
-
-The agent works without API keys using Bing as fallback. For more stable results, add Google Custom Search credentials to `.env`:
-
-```env
-GOOGLE_API_KEY=your_key
-GOOGLE_CSE_ID=your_cse_id
-```
-
----
-
-## Notes
-
-- Use reasonable rate limits (`--delay`, `--workers`) and only collect public business contact information.
-- This agent is designed for B2B lead research, not aggressive scraping or spam.
-- `blueboot_secrets.py` is never committed to version control.
-
----
 
 ---
 
@@ -1231,7 +693,7 @@ python lead_enrich_contacts.py [options]
 | Parameter | Default | Description |
 |---|---|---|
 | `--collection NAME` | `leads` | Firestore leads collection |
-| `--country CODE` | all | Country code(s), comma-separated or repeatable: `--country NO,SE` |
+| `--countries CC [CC ...]` | all | Space or comma-separated country codes, e.g. `--countries NO SE UK` |
 | `--limit N` | _(none)_ | Maximum number of contacts to process |
 | `--workers N` | `50` | Parallel async workers (Bing searches run concurrently) |
 | `--delay SECS` | `1.0` | Seconds to wait between Bing searches per worker |
@@ -1247,13 +709,13 @@ Contacts are first filtered synchronously from Firestore. All filtered contacts 
 
 ```bat
 REM Preview first — no writes
-python app\lead_enrich_contacts.py --country NO --limit 50 --dry-run
+python app\lead_enrich_contacts.py --countries NO --limit 50 --dry-run
 
 REM LinkedIn + WhatsApp only, Norway and Sweden, skip already enriched
-python app\lead_enrich_contacts.py --country NO,SE --platforms linkedin,whatsapp --skip-enriched
+python app\lead_enrich_contacts.py --countries NO SE --platforms linkedin,whatsapp --skip-enriched
 
 REM Full run, all platforms
-python app\lead_enrich_contacts.py --country NO,SE,DK
+python app\lead_enrich_contacts.py --countries NO SE DK
 
 REM Reduce concurrency if Bing starts rate-limiting
 python app\lead_enrich_contacts.py --workers 10 --delay 2.0
@@ -1261,7 +723,504 @@ python app\lead_enrich_contacts.py --workers 10 --delay 2.0
 
 ---
 
-## `fix_contact_country.py` — one-time country field migration
+### CLI — leads_email_check.py
+
+Classifies `leads` contacts by email type and contact role. Mirrors `site_email_check.py` for the leads pipeline.
+
+```bat
+python app\leads_email_check.py --countries UK --dry-run 20
+python app\leads_email_check.py --countries UK
+python app\leads_email_check.py --countries NO SE DK
+python app\leads_email_check.py --countries UK --force
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Space or comma-separated country codes |
+| `--dry-run N` | off | Run on N contacts, print results, skip writes |
+| `--force` | off | Re-classify contacts already checked |
+| `--limit N` | none | Max contacts to process |
+| `--batch-size N` | 50 | Contacts per OpenAI call |
+| `--concurrent N` | 3 | Parallel OpenAI batch calls |
+
+**Fields written to each contact:**
+
+| Field | Values |
+|---|---|
+| `email_type` | `personal` / `role` / `department` / `admin` |
+| `contact_type` | `decision_maker` / `marketing` / `developer` / `sales` / `operations` / `unknown` |
+| `outreach_priority` | 1 (best) → 4 (lowest) |
+| `email_checked_at` | ISO timestamp |
+
+---
+
+### CLI — leads_smart_export.py
+
+Tiered reseller prospect export from `leads` + `contacts`.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Space or comma-separated country codes e.g. `NO SE UK`|
+| `--min-score N` | 0 | Minimum reseller score |
+| `--outreach-priority N` | all | Only contacts with `outreach_priority` <= N |
+| `--write-contacts` | off | Write contacts to `email_contacts` Firestore collection |
+| `--campaign NAME` | — | Tag written to `email_contacts` (e.g. `UK_resellers_jun02`) |
+| `--dry-run-contacts` | off | Print what would be written without writing |
+| `--out` | `exports/leads_prospects_<cc>_<ts>.xlsx` | Output path |
+
+---
+
+---
+
+## Unified Export — email_contacts
+
+### CLI — email_contacts_export.py
+
+Reads directly from the unified `email_contacts` collection. Use after one or both smart exports have run with `--write-contacts`.
+
+```bat
+python app\email_contacts_export.py --countries NO
+python app\email_contacts_export.py --countries UK NO --status pending
+python app\email_contacts_export.py --campaign NO_resellers_jun02
+python app\email_contacts_export.py --mark both
+python app\email_contacts_export.py --mark site --countries UK
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Space or comma-separated country codes e.g. `NO SE UK`|
+| `--campaign NAME` | — | Filter by campaign tag |
+| `--status` | all | `pending` / `approved` / `sent` / `replied` |
+| `--mark` | all | `site` = SITE_LEADS only · `leads` = LEADS only · `both` = in both pipelines |
+| `--out` | `exports/email_contacts_<cc>_<ts>.xlsx` | Output path |
+
+**How `--mark` filtering works:**
+
+| `--mark` | Firestore query | Client-side filter |
+|---|---|---|
+| `site` | `WHERE mark_site_leads == true` | — |
+| `leads` | `WHERE mark_leads == true` | — |
+| `both` | fetch all, filter in memory | drops docs where either mark is missing |
+
+`--mark both` is client-side because Firestore requires a composite index to AND two boolean fields. For large collections, adding a `(mark_site_leads, mark_leads)` composite index would push this server-side.
+
+**Excel sheets:** Contacts (all fields, sorted tier→company), Summary (tier/country/pipeline mark/status breakdowns).
+
+---
+
+---
+
+## Output files
+
+After a run, the `output/` directory contains:
+
+| File | Contents |
+|---|---|
+| `agency_leads.xlsx` | Leads sheet + Contacts sheet + Dashboard + Queries |
+| `agency_leads.csv` | All leads, one row per lead |
+| `agency_contacts.csv` | All contacts, one row per email address |
+| `agency_leads.json` | All leads as JSON |
+| `agency_contacts.json` | All contacts as JSON |
+| `extract_leads_*.xlsx` | Filtered extracts produced by `maint_lead_extract.py` |
+| `output/<campaign_id>/campaign.xlsx` | Campaign export (Summary + Leads + Contacts sheets) |
+| `output/<campaign_id>/campaign.json` | Same campaign data as JSON |
+
+### Key columns in leads
+
+| Column | Description |
+|---|---|
+| `company` | Agency name (derived from domain) |
+| `website` | Canonical website URL |
+| `country` / `country_name` | ISO code and full name |
+| `emails` | Comma-separated email addresses |
+| `phones` | Comma-separated phone numbers |
+| `linkedin` | LinkedIn company page URL |
+| `detected_tech` | Technologies detected on the site |
+| `categories` | Agency category labels |
+| `reseller_score` | Fit score 0–100 |
+| `priority` | A / B / C based on score |
+| `reasons` | Scoring rationale |
+| `suggested_angle` | Recommended BlueSearch sales angle |
+| `found_by_search` | `yes` if discovered via keyword search |
+| `found_by_catalog` | `yes` if discovered via directory catalog |
+| `crawled_at` | ISO timestamp of last crawl |
+
+---
+
+## Configuration files
+
+| File | Purpose |
+|---|---|
+| `config/countries.json` | Per-country settings: language, TLDs, keywords, phone region |
+| `config/queries_<CODE>.txt` | Search queries per country |
+| `config/blocklist_domains.txt` | Domain glob patterns and content negative keywords to exclude |
+| `config/catalogs.json` | Directory catalog sources and page counts per country |
+
+### `config/blocklist_domains.txt`
+
+Single source of truth for all domain filtering. Contains two types of entries:
+
+- **Domain glob patterns** (e.g. `*pizza*`, `*hotel*`) — any domain matching a pattern is skipped during search.
+- **Content negative keywords** (under the `CONTENT NEGATIVE KEYWORDS` section) — plain substrings checked against visible page text during scoring; two or more occurrences trigger a score penalty.
+
+Blocklist filtering applies to **search mode only**. Catalog sources are pre-curated and bypass the blocklist.
+
+---
+
+## Firebase / Firestore
+
+Results are written to Firestore in real time as each site is crawled. Structure:
+
+```
+leads/{lead_id}                                                  — one document per agency
+leads/{lead_id}/contacts/{id}                                    — one document per email address
+
+leads_extract/{extract_name}                                     — one document per named extract
+leads_extract/{extract_name}/leads_extracted/{lead_id}           — extracted lead snapshot
+leads_extract/{extract_name}/leads_extracted/{lead_id}/
+    contacts_extracted/{contact_id}                              — extracted contact snapshot
+```
+
+The `leads_extract` collection is populated by `maint_lead_extract.py --save-extract`. A lead can belong to at most one extract; duplicates are detected via a `collectionGroup` query on `leads_extracted` before each run.
+
+Credentials are loaded from (in order):
+
+1. `blueboot_secrets.py` in the project root (`fireBaseAdminKey` dict)
+2. `FIREBASE_CREDENTIALS` environment variable (path to a service account JSON)
+3. `config/serviceAccountKey.json`
+
+At startup, already-crawled domains are preloaded from Firestore so they are never re-crawled within the same run or across runs.
+
+---
+
+## Optional Google Search API
+
+The agent works without API keys using Bing as fallback. For more stable results, add Google Custom Search credentials to `.env`:
+
+```env
+GOOGLE_API_KEY=your_key
+GOOGLE_CSE_ID=your_cse_id
+```
+
+---
+
+## Notes
+
+- Use reasonable rate limits (`--delay`, `--workers`) and only collect public business contact information.
+- This agent is designed for B2B lead research, not aggressive scraping or spam.
+- `blueboot_secrets.py` is never committed to version control.
+
+---
+
+---
+
+---
+
+## Maintenance Scripts
+
+Scripts for one-off fixes, backfills, and legacy exports. All prefixed `maint_`.
+
+### CLI — maint_site_excluded_recheck.py
+
+```bash
+python app/maint_site_excluded_recheck.py --countries NO
+python app/maint_site_excluded_recheck.py --domains example.no
+python app/maint_site_excluded_recheck.py --min-pages 50 --dry-run
+```
+
+Re-checks sites in `sites_excluded` that were previously rejected (e.g. due to
+missing sitemaps). Sites that now pass are moved to `site_leads` and removed from
+`sites_excluded`.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Space or comma-separated country codes e.g. `NO SE UK`|
+| `--domains` | all | Comma-separated domains to re-check |
+| `--reason` | all | Only re-check sites whose exclusion reason contains this text |
+| `--min-pages` | `50` | Minimum page count to recover a site |
+| `--limit` | none | Max sites to re-check |
+| `--concurrent` | `50` | Parallel fetches |
+| `--dry-run` | off | Print results without writing to Firestore |
+| `--force` | off | Re-check even sites with page_count > 0 |
+
+### CLI — maint_site_sitemap_backfill.py
+
+```bash
+python app/maint_site_sitemap_backfill.py --countries NO
+python app/maint_site_sitemap_backfill.py --countries NO --force
+python app/maint_site_sitemap_backfill.py --limit 500 --dry-run
+```
+
+Backfills sitemap data (`page_count`, `sitemap_url`, `sitemap_type`, `sitemap_urls`,
+`sitemap_oldest_date`) for existing `site_leads` documents that are missing it.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Space or comma-separated country codes e.g. `NO SE UK`|
+| `--limit` | none | Max leads to process |
+| `--concurrent` | `20` | Parallel fetches |
+| `--dry-run` | off | Print results without writing to Firestore |
+| `--force` | off | Re-scan even leads that already have sitemap data |
+
+### CLI — maint_site_leads_export.py
+
+```bash
+python app/maint_site_leads_export.py
+python app/maint_site_leads_export.py --countries NO,SE
+python app/maint_site_leads_export.py --countries NO --sector ecommerce
+python app/maint_site_leads_export.py --countries NO --with-contacts-only
+python app/maint_site_leads_export.py --out exports/no_leads.xlsx
+```
+
+Exports `site_leads` to Excel — one row per lead, with all contacts folded into a
+single cell. Good for a full lead overview.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Space or comma-separated country codes e.g. `NO SE UK`|
+| `--sector` | all | Filter by `ai_sector` e.g. `ecommerce`, `technology` |
+| `--category` | all | Filter by `query_category` e.g. `real_estate`, `healthcare` |
+| `--location` | all | Keyword filter on `location_full` e.g. `London`, `Pune`, `Oslo` |
+| `--with-contacts-only` | off | Only include leads that have at least one contact |
+| `--limit` | none | Max leads to export |
+| `--out` | auto-timestamped | Output `.xlsx` path |
+| `--dry-run` | off | Count leads without fetching contacts or writing file |
+
+Exports `site_contacts` to Excel — one row per contact, enriched with key fields from the parent `site_lead`. Country filtering uses **`ai_country`** from the site_lead only (the AI-detected country, which is more reliable than the scraped `country` field). Optionally saves the selection to a `site_campaigns` Firestore collection.
+
+```bat
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Space or comma-separated country codes e.g. `NO SE UK`|
+| `--sector` | all | Filter by `ai_sector` e.g. `ecommerce`, `technology` |
+| `--category` | all | Filter by `query_category` e.g. `real_estate`, `healthcare` |
+| `--location` | all | Keyword filter on `location_full` e.g. `London`, `Pune`, `Manchester` |
+| `--with-email-only` | off | Only include contacts that have an email address |
+| `--limit` | none | Max contacts to export |
+| `--output` | auto-named | Output `.xlsx` path (default: `exports/site_contacts_<filter>_<date>.xlsx`) |
+| `--campaign NAME` | off | Save filtered sites + contacts to `site_campaigns/<NAME>` in Firestore |
+| `--page-count BUCKET` | all | Filter by site page count bucket (see table below) |
+| `--force` | off | Re-assign sites already in another campaign (bypasses duplicate check) |
+
+**Output sheets:**
+
+| Sheet | Contents |
+|---|---|
+| `Contacts` | One row per contact — Doc ID, Site Doc ID, name, email, phone, title, occupation, company, linkedin, twitter, facebook, AI Country, then all site fields |
+| `Summary` | Totals (contacts, with email/LinkedIn/phone, enriched), breakdown by AI Country and AI Sector |
+| `Sites` | One row per site that has at least one contact in the selection — all site_lead fields |
+| `Sites Summary` | Site totals, breakdown by AI Country and AI Sector |
+
+**Page size buckets (`--page-count`):**
+
+| Bucket | Page count range |
+|---|---|
+| `micro` | 1 – 50 |
+| `small` | 51 – 500 |
+| `medium` | 501 – 3 000 |
+| `large` | 3 001 – 10 000 |
+| `huge` | 10 001 – 100 000 |
+| `ultra` | 100 001+ |
+| `unknown` | 0 / None |
+
+**`--campaign` Firestore structure:**
+
+```
+site_campaigns/{campaign}/
+    campaign_id, created_at, site_count, contact_count
+    filters: { countries, sector, category, with_email_only, limit }
+
+    site_campaign_sites/{lead_id}/
+        site_campaign_contacts/{contact_id}
+```
+
+**Duplicate prevention:** when `--campaign` is used, the script first queries the `site_campaign_sites` collectionGroup across all existing campaigns. Any site already claimed by another campaign is skipped and logged — it will not appear in two campaigns. Use `--force` to override and re-assign. The final output reports how many sites were saved vs skipped:
+
+```
+[campaign] SKIP agency-oslo.no            already in 'NO_may26'
+[campaign] Done → 298 sites saved  14 skipped  1205 contacts
+```
+
+---
+
+## `maint_lead_extract.py` — export a filtered extract from Firestore
+
+Reads lead documents and their contacts sub-collections directly from Firestore and writes a focused Excel file. No local CSV is required. Global leads (`country="*"`) are excluded from all extracts.
+
+```bat
+python app\maint_lead_extract.py [options]
+```
+
+### Priority & Scoring
+
+Every lead receives a `reseller_score` (0–100) and a `priority` label when it is crawled.
+The score is built from keyword signals found on the agency's website:
+
+| Signal | Points | What it detects |
+|--------|--------|----------------|
+| `web_agency` keyword | +25 | "web agency", "web design", "wordpress agency", "shopify developer", etc. |
+| `wordpress` keyword | +25 | WordPress/WooCommerce/Elementor detected on site or in content |
+| `care_plan` keyword | +15 | "care plan", "managed wordpress", "maintenance plan", "monthly retainer" |
+| `seo` keyword | +18 | SEO services mentioned |
+| `smb_focus` keyword | +12 | "small business", "local business", "SMB", "independent businesses" |
+| `communication` keyword | +15 | PR/comms/social services |
+| Agency language | up to +20 | "we build", "our portfolio", "get a quote", "our clients" |
+| Services/clients/cases language | +8 | "services", "case studies", "portfolio" |
+| Maintenance/support language | +6 | "maintenance", "hosting", "support", "SLA" |
+| No `web_agency` keyword + no agency language | cap at 35 | Core-signal gate — prevents banks/telcos from scoring high |
+| Negative keyword (≥2 occurrences) | −30 each, max −90 | Restaurant, salon, clinic, etc. |
+| Adult content | −90 | Instant near-zero score |
+
+**Priority bands:**
+
+| Priority | Score | Meaning |
+|----------|-------|---------|
+| **A — High fit** | ≥ 75 | WordPress/WooCommerce agency with SMB clients, care plans, or maintenance retainers |
+| **B — Good fit** | 55–74 | Digital/SEO agency with web capability, mixed client base |
+| **C — Maybe** | 35–54 | Web-adjacent but unclear specialisation or client base |
+| **D — Low fit** | < 35 | Enterprise-only, non-web sector, or insufficient signals |
+
+A WordPress agency with SMB clients and a care plan will typically score 85–95 (A).
+
+### AI Reseller Potential
+
+After crawl scoring, `lead_enrich_agent.py` sends each lead to GPT for a second-pass
+classification. This produces `ai_reseller_potential` — a qualitative judgement of how
+likely the agency is to become a BlueSearch reseller partner.
+
+| Value | Meaning |
+|-------|---------|
+| `high` | WordPress/WooCommerce agency with SMB/local clients, ongoing hosting or maintenance services. Ideal reseller target. |
+| `medium` | Digital or SEO agency with web capability but unclear client base or mixed specialisation. Worth contacting. |
+| `low` | Enterprise-only firm, pure brand/advertising agency, app-only developer, or unrelated sector. Skip or deprioritise. |
+
+**Two scoring systems work together:**
+
+- `reseller_score` + `priority` (A/B/C/D) — set at crawl time by keyword matching. Fast and deterministic.
+- `ai_reseller_potential` — set by GPT after enrichment. Slower but reads actual site content for nuance.
+
+Use both to build high-precision extracts:
+```bat
+python app\maint_lead_extract.py --countries UK --min-score 55 --priority A --priority B --ai-potential high --auto-name --save-extract
+```
+→ Extract ID: `UK_score55_a_b_high_jun02`
+
+### Filter parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--collection` | `leads` | Firestore collection name |
+| `--output` | `<project_root>/output` | Directory to write the Excel file |
+| `--min-score` | `0` | Minimum reseller_score to include |
+| `--max-score` | `100` | Maximum reseller_score to include |
+| `--countries CC [CC ...]` | all | Space or comma-separated country codes, e.g. `--countries NO SE UK` |
+| `--source` | all | `search` / `catalog` / `both` — filter by discovery mode |
+| `--query TEXT` | _(none)_ | Substring match on `source_query` (case-insensitive) |
+| `--priority P` | all | Priority label(s), repeatable: `--priority A --priority B` |
+| `--ai-potential LEVEL` | all | Filter by `ai_reseller_potential`: `high`, `medium`, `low` (repeatable: `--ai-potential high --ai-potential medium`) |
+| `--with-email` | off | Only include leads with at least one contact email |
+| `--keywords KW` | _(none)_ | Comma-separated keywords (OR logic). A lead matches if **any** keyword appears in `source_query`, `title`, `description`, `company`, `domain`, `website`, `keywords`, or `reasons`. E.g. `--keywords wordpress,woocommerce` |
+| `--limit N` | _(none)_ | Maximum number of leads to include. Applied after all other filters. |
+| `--out FILE` | auto-timestamped | Output filename |
+
+### Save-extract parameters
+
+Saving an extract persists the filtered leads to a dedicated `leads_extract` Firestore collection. A lead can only belong to **one** extract — any lead already in a previous extract is automatically skipped.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--save-extract NAME` | _(none)_ | Save extract to `leads_extract/<NAME>` in Firestore |
+| `--auto-name` | off | Auto-generate the extract ID from active filters. Overrides `--save-extract` name. Pattern: `{countries}_{score}_{priorities}_{ai_potentials}_{source}_{date}` e.g. `UK_score70_A_B_high_jun02` |
+| `--extract-dry-run` | off | Preview what `--save-extract` would write without touching Firestore |
+
+### Firestore structure written by `--save-extract`
+
+```
+leads_extract/
+  {extract_name}/
+    name, created_at, lead_count, contact_count, filters{…}
+    leads_extracted/
+      {lead_id}/
+        (all lead fields)
+        contacts_extracted/
+          {contact_id}/   (all contact fields)
+```
+
+### Output Excel sheets
+
+- **Extract** — one row per email contact with all lead fields merged in; leads without email appear at the bottom.
+- **Leads** — one row per lead (raw Firestore fields).
+- **Summary** — filter criteria, counts, and extract name.
+
+### Example runs
+
+```bat
+REM A-priority Norwegian leads with email, score ≥ 70
+python app\maint_lead_extract.py --min-score 70 --countries NO --priority A --with-email
+
+REM Catalog-sourced leads across Norway and Sweden
+python app\maint_lead_extract.py --source catalog --countries NO SE
+
+REM All leads matching a specific query keyword
+python app\maint_lead_extract.py --query "webbyrå"
+
+REM Keyword search — WordPress or WooCommerce leads
+python app\maint_lead_extract.py --keywords wordpress,woocommerce
+
+REM Best leads — A/B priority + GPT high potential + email, auto-named extract
+python app\maint_lead_extract.py --countries UK --min-score 55 --priority A --priority B --ai-potential high --with-email --auto-name --save-extract
+
+REM High or medium AI potential from Norway and Sweden
+python app\maint_lead_extract.py --countries NO SE --ai-potential high --ai-potential medium --priority A --auto-name --save-extract
+
+REM India high-score WordPress agencies only
+python app\maint_lead_extract.py --countries IN --min-score 70 --ai-potential high --keywords wordpress,woocommerce --auto-name --save-extract
+
+REM Dry-run: preview what would be saved to Firestore
+python app\maint_lead_extract.py ^
+  --keywords wordpress ^
+  --countries NO SE ^
+  --min-score 60 ^
+  --save-extract "wordpress_nordic_may26" ^
+  --extract-dry-run
+
+REM Live save — writes to leads_extract/wordpress_nordic_may26
+python app\maint_lead_extract.py ^
+  --keywords wordpress ^
+  --countries NO SE ^
+  --min-score 60 ^
+  --save-extract "wordpress_nordic_may26"
+
+REM Second extract — already-extracted leads are skipped automatically
+python app\maint_lead_extract.py ^
+  --keywords shopify ^
+  --countries NO SE ^
+  --save-extract "shopify_nordic_jun01"
+```
+
+### Function API
+
+```python
+from extract_leads import extract_leads
+
+path = extract_leads(
+    min_score=70,
+    countries=["NO", "SE"],
+    source="search",
+    priorities=["A", "B"],
+    with_email=True,
+    keywords=["wordpress", "woocommerce"],
+    save_extract="wordpress_nordic_may26",
+    extract_dry_run=False,
+    out_file="my_extract.xlsx",
+)
+```
+
+---
+
+## `maint_fix_contact_country.py` — one-time country field migration
 
 Fixes an earlier data issue where contact documents stored the full country name (e.g. `"Norway"`) in the `country` field instead of the ISO code (`"NO"`). After this migration every contact document has:
 
@@ -1272,10 +1231,10 @@ The script loads all lead documents into memory first (to get the correct `count
 
 ```bat
 REM Preview — no writes
-python app\fix_contact_country.py --dry-run
+python app\maint_fix_contact_country.py --dry-run
 
 REM Live run
-python app\fix_contact_country.py
+python app\maint_fix_contact_country.py
 ```
 
 | Parameter | Default | Description |
@@ -1291,7 +1250,7 @@ This script only needs to be run once on existing data. All new contacts written
 
 ## `campaign_exporter.py` — export a campaign to Excel + JSON
 
-Reads a named campaign from the `leads_extract` Firestore collection (populated by `lead_extract.py --save-extract`) and writes two files to `output/<campaign_id>/`:
+Reads a named campaign from the `leads_extract` Firestore collection (populated by `maint_lead_extract.py --save-extract`) and writes two files to `output/<campaign_id>/`:
 
 | File | Contents |
 |---|---|
@@ -1319,68 +1278,13 @@ python app\campaign_exporter.py NO_high_score_may26 --output exports\no_may26
 
 ---
 
-## `lead_campaign_mail_prepare.py` — outbound mail for leads_extract campaigns
-
-Mirrors `site_campaign_mail_prepare.py` but works on the `leads_extract` collection. Scaffolds mail templates on first run, writes country-level template docs, and optionally one personalised doc per email address. When `--prepare-contacts` is used, all lead contacts are fetched in parallel (20 workers) within the `leads_extract/{extract_id}/` subtree — no cross-collection reads.
-
-```bat
-:: First run — scaffolds mailing/leads_NO_jun01/ with example files
-python app\lead_campaign_mail_prepare.py --extract NO_jun01
-
-:: Prepare per-contact personalised docs (status=pending, sent_at="")
-python app\lead_campaign_mail_prepare.py --extract NO_jun01 --prepare-contacts
-
-:: Preview without Firestore writes (mail files still created if missing)
-python app\lead_campaign_mail_prepare.py --extract NO_jun01 --dry-run
-
-:: Re-prepare pending docs after editing templates
-python app\lead_campaign_mail_prepare.py --extract NO_jun01 --prepare-contacts --force
-
-:: List available extracts
-python app\lead_campaign_mail_prepare.py --list-extracts
-```
-
-**Mail catalogue** (auto-created):
-```
-mailing/
-    leads_{extract}/
-        subject.json
-        mails/
-            body_NO.html
-            body_SE.html
-            body.html     ← fallback
-```
-
-**Parameters:**
-
-| Flag | Default | Description |
-|---|---|---|
-| `--extract NAME` | _(required)_ | Extract ID under `leads_extract/` |
-| `--prepare-contacts` | off | Write one personalised doc per email to `out_mail_contacts/` |
-| `--subject TEXT` | _(from subject.json)_ | Override default subject |
-| `--subject-file FILE` | `mailing/leads_{extract}/subject.json` | Override subject JSON path |
-| `--body-file FILE` | _(none)_ | Single body file for all countries |
-| `--body-dir DIR` | `mailing/leads_{extract}/mails/` | Override body files directory |
-| `--dry-run` | off | Skip Firestore writes (mail files still created if missing) |
-| `--force` | off | Re-prepare `status=pending` docs; never touches `sent`/`failed` |
-| `--list-extracts` | off | List all available extract IDs and exit |
-
-**Firestore structure written:**
-```
-leads_extract/{extract_id}/
-    out_mail/{country}                ← subject, body, lead_count, prepared_at
-    out_mail_contacts/{contact_id}    ← email, subject, body, domain, status=pending, sent_at=""
-```
-
-Shared placeholder support — same `{{name}}`, `{{domain}}`, `{{company}}` etc. as `site_campaign_mail_prepare.py`.
-
-## `statistics.py` — lead statistics & Firestore aggregations
+## `maint_statistics.py` — lead statistics & Firestore aggregations
 
 Reads all leads and contacts from Firestore, computes aggregated statistics, writes results back to a `statistics` collection, and exports Excel reports to `output/`.
 
 ```bash
 cd app
-python statistics.py [options]
+python maint_statistics.py [options]
 ```
 
 Runs **both** aggregations by default. Use `--only` to target one.
@@ -1445,16 +1349,16 @@ Excel output: `output/statistics_reasons.xlsx` — sheets **Global Reasons**, **
 
 ```bash
 # Run both aggregations (default)
-python statistics.py
+python maint_statistics.py
 
 # Priority stats only, no Excel
-python statistics.py --only priority --no-excel
+python maint_statistics.py --only priority --no-excel
 
 # Reasons count only, skip writing back to leads
-python statistics.py --only reasons --no-writeback
+python maint_statistics.py --only reasons --no-writeback
 
 # Write to a non-default stats collection
-python statistics.py --stats-collection statistics_test
+python maint_statistics.py --stats-collection statistics_test
 ```
 
 ### Function API
@@ -1474,7 +1378,7 @@ export_reasons_to_excel(results, outdir="output")
 
 ---
 
-## `firestore_index_sync.py` — manage Firestore composite indexes
+## `maint_firestore_index_sync.py` — manage Firestore composite indexes
 
 Merges new composite indexes into `firestore.indexes.json`, de-duplicates against what is already defined, and optionally deploys them to Firestore. Also introspects the live Firestore database to report all top-level collections and their subcollections.
 
@@ -1482,22 +1386,22 @@ Run whenever you add a new collection or query pattern that needs a composite in
 
 ```bat
 :: Discover collections + merge indexes into firestore.indexes.json
-python app\firestore_index_sync.py
+python app\maint_firestore_index_sync.py
 
 :: Preview merged result without writing
-python app\firestore_index_sync.py --dry-run
+python app\maint_firestore_index_sync.py --dry-run
 
 :: Merge and deploy to Firestore in one step
-python app\firestore_index_sync.py --deploy
+python app\maint_firestore_index_sync.py --deploy
 
 :: Just list what collections/subcollections exist
-python app\firestore_index_sync.py --discover-only
+python app\maint_firestore_index_sync.py --discover-only
 
 :: Skip discovery, only merge the index file
-python app\firestore_index_sync.py --no-discover
+python app\maint_firestore_index_sync.py --no-discover
 
 :: Write to a custom path
-python app\firestore_index_sync.py --output config\firestore.indexes.json
+python app\maint_firestore_index_sync.py --output config\firestore.indexes.json
 ```
 
 ### Parameters
@@ -1541,127 +1445,18 @@ firebase deploy --only firestore:indexes
 
 ---
 
-### CLI — site_email_check.py
+## `gmail_outreach.py` — send outreach emails via Gmail
 
-Classifies each `site_contact` that has an email address. Sends batches of 50 to OpenAI
-to determine the email type (personal vs role inbox) and the contact's likely role, then
-writes `email_type`, `contact_type`, `outreach_priority`, and `email_checked_at` back to
-the contact document.
+Sends personalised outreach emails to contacts from an Excel file, tracks opens and replies, and avoids re-sending to anyone who has already replied.
 
-```bat
-REM Dry-run 20 UK contacts — print results, no writes
-python app\site_email_check.py --countries UK --dry-run 20
-
-REM Classify all UK contacts
-python app\site_email_check.py --countries UK
-
-REM Re-classify already-processed contacts
-python app\site_email_check.py --countries UK --force
+```bash
+cd app
+python gmail_outreach.py [options]
 ```
 
-| Flag | Default | Description |
-|---|---|---|
-| `--countries` | all | Country codes to process |
-| `--dry-run N` | off | Run on N contacts, print results, skip writes |
-| `--batch-size` | 50 | Contacts per OpenAI call |
-| `--concurrent` | 3 | Parallel OpenAI batches |
-| `--force` | off | Re-classify contacts already having `email_checked_at` |
-| `--limit N` | none | Max contacts to process |
-
-**Fields written to `site_contacts`:**
-
-| Field | Values | Meaning |
-|---|---|---|
-| `email_type` | `personal` / `role` / `department` / `admin` | What kind of inbox it is |
-| `contact_type` | `decision_maker` / `marketing` / `developer` / `sales` / `operations` / `unknown` | Likely role |
-| `outreach_priority` | `1` – `4` | 1=personal email + decision maker/marketing (best); 4=admin/unknown (skip) |
-| `email_checked_at` | ISO timestamp | When classified |
-
-**Outreach priority logic:**
-
-| Priority | Condition |
-|---|---|
-| 1 | Personal email + decision_maker or marketing role |
-| 2 | Personal email + other role  OR  role/dept email + decision_maker |
-| 3 | Role or department email + non-admin contact type |
-| 4 | Admin email OR unknown type with generic inbox |
+Requires Gmail OAuth credentials (`credentials.json` in the project root). On first run the browser opens for authorisation; a `token.json` is saved for future runs.
 
 ---
-
-### CLI — site_smart_export.py
-
-Tiered prospect export — reads `site_contacts` (collectionGroup) then batch-fetches parent
-`site_leads`, scores each site into 6 tiers, and exports a colour-coded Excel.
-
-```bat
-python app\site_smart_export.py --countries UK
-python app\site_smart_export.py --countries UK --outreach-priority 2
-python app\site_smart_export.py --countries IN --min-pages 50 --out exports\india.xlsx
-python app\site_smart_export.py --countries NO SE DK
-```
-
-| Flag | Default | Description |
-|---|---|---|
-| `--countries` | all | Country codes |
-| `--min-pages` | 0 | Minimum page count |
-| `--outreach-priority N` | all | Only contacts with `outreach_priority` <= N |
-| `--write-contacts` | off | Write contacts to `email_contacts` Firestore collection |
-| `--campaign NAME` | — | Tag written to `email_contacts` (e.g. `UK_tier2_jun02`) |
-| `--dry-run-contacts` | off | Print what would be written without writing |
-| `--out` | `exports/site_prospects_<cc>_<ts>.xlsx` | Output path |
-
-**Tier system (by page count + bonus signals):**
-
-| Tier | Pages | Colour | Bonus signals can lift tiers 3–6 |
-|---|---|---|---|
-| 1 — Ultra Enterprise | >100,000 | Purple | Immune |
-| 2 — Enterprise | >10,000 | Dark red | Immune |
-| 3 — Hot | 500–10,000 | Red | WordPress + hot sector + 3 emails |
-| 4 — Good | 100–500 | Orange | |
-| 5 — Warm | 50–100 | Yellow | |
-| 6 — Cold | <50 | Grey | |
-
-**Excel sheets:** Contacts (colour-coded, sorted tier→pages), Summary (tier/sector/platform counts), WordPress vs Others.
-
----
-
-### CLI — leads_smart_export.py
-
-Tiered reseller prospect export from `leads` + `contacts`.
-
-| Flag | Default | Description |
-|---|---|---|
-| `--countries` | all | Country codes |
-| `--min-score N` | 0 | Minimum reseller score |
-| `--outreach-priority N` | all | Only contacts with `outreach_priority` <= N |
-| `--write-contacts` | off | Write contacts to `email_contacts` Firestore collection |
-| `--campaign NAME` | — | Tag written to `email_contacts` (e.g. `UK_resellers_jun02`) |
-| `--dry-run-contacts` | off | Print what would be written without writing |
-| `--out` | `exports/leads_prospects_<cc>_<ts>.xlsx` | Output path |
-
----
-
-### CLI — email_contacts_export.py
-
-Reads directly from the unified `email_contacts` collection. Use after both smart exports have run with `--write-contacts`.
-
-```bat
-python app\email_contacts_export.py --countries NO
-python app\email_contacts_export.py --countries UK NO --status pending
-python app\email_contacts_export.py --campaign NO_resellers_jun02
-python app\email_contacts_export.py --mark both
-python app\email_contacts_export.py --mark site --countries UK
-```
-
-| Flag | Default | Description |
-|---|---|---|
-| `--countries` | all | Country codes |
-| `--campaign NAME` | — | Filter by campaign tag |
-| `--status` | all | Filter by status (`pending` / `approved` / `sent`) |
-| `--mark` | all | `site` = SITE_LEADS only, `leads` = LEADS only, `both` = in both pipelines |
-| `--out` | `exports/email_contacts_<cc>_<ts>.xlsx` | Output path |
-
-**Excel sheets:** Contacts (all fields, sorted tier→company), Summary (tier/country/pipeline mark/status breakdowns).
 
 ---
 
@@ -1679,7 +1474,7 @@ SITE PIPELINE                  LEAD PIPELINE
   site_agent                    lead_agent
   site_enrich_agent             lead_enrich_agent
   site_contact_enrich           lead_enrich_contacts
-  site_location_enrich          leads_email_check
+  site_location_enrich          maint_leads_email_check
   site_email_check                     │
         │                              │
         └──────────┬───────────────────┘

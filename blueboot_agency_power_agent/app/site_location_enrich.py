@@ -416,7 +416,7 @@ def enrich_locations(
 def main() -> None:
     p = argparse.ArgumentParser(description="Enrich site_leads with AI-inferred company location")
     p.add_argument("--countries",   nargs="+", default=None, metavar="CC",
-                   help="Filter by country codes e.g. UK IN NO")
+                   help="Space or comma-separated country codes e.g. --countries NO SE UK")
     p.add_argument("--batch-size",  type=int, default=BATCH_SIZE, metavar="N",
                    help=f"Sites per OpenAI call (default {BATCH_SIZE})")
     p.add_argument("--concurrent",  type=int, default=CONCURRENT_BATCHES, metavar="N",

@@ -412,7 +412,7 @@ async def _run_async(client, to_process, batch_size, concurrent, dry_run):
 def main(argv=None):
     p = argparse.ArgumentParser(description="Classify site_contacts by email type and contact role")
     p.add_argument("--countries",   nargs="+", default=None, metavar="CC",
-                   help="Country codes e.g. UK IN NO")
+                   help="Space or comma-separated country codes e.g. --countries NO SE UK")
     p.add_argument("--batch-size",  type=int, default=BATCH_SIZE, metavar="N",
                    help=f"Contacts per OpenAI call (default {BATCH_SIZE})")
     p.add_argument("--concurrent",  type=int, default=CONCURRENT_BATCHES, metavar="N",

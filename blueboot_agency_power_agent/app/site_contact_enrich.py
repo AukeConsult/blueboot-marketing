@@ -436,7 +436,7 @@ def main(argv=None) -> None:
         description="Enrich site_contacts collectionGroup via Brave Search + GPT"
     )
     p.add_argument("--countries",  default=None, metavar="CODES",
-                   help="Comma-separated country codes  e.g. NO,SE  (default: all)")
+                   help="Space or comma-separated country codes e.g. --countries NO SE UK")
     p.add_argument("--limit",      type=int, default=None, metavar="N",
                    help="Max contacts to process")
     p.add_argument("--concurrent", type=int, default=CONCURRENT_DEFAULT, metavar="N",
