@@ -13,12 +13,16 @@ from bs4 import BeautifulSoup
 from app.functions.utils import domain_of, is_blocked, fetch, linkedin_hints, load_country_configs, selected_countries, DEFAULT_COUNTRIES
 from app.functions.models import Lead, dedupe_leads, export
 
-CATALOG_CONFIG_PATH = Path("config/catalogs.json")
+CATALOG_CONFIG_PATH = Path(__file__).parent.parent.parent / "config" / "catalogs.json"
 
 
 def load_catalogs(path: Path = CATALOG_CONFIG_PATH) -> dict:
     if not path.exists():
-        return {}
+        raise FileNotFoundError(
+            f"[load_catalogs] config file not found: {path}\n"
+            f"Expected at: {path.resolve()}\n"
+            f"Run from the project root or check CATALOG_CONFIG_PATH."
+        )
     return json.loads(path.read_text(encoding="utf-8"))
 
 

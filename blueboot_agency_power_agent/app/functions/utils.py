@@ -105,7 +105,7 @@ def resolve_country(lead: dict) -> str:
 
 GENERIC_PHONE_RE = re.compile(r"(?:(?:\+|00)\d{1,3}\s*)?(?:\d[\s().-]?){7,15}")
 DEFAULT_COUNTRIES      = ["NO"]
-COUNTRY_CONFIG_PATH    = Path("config/countries.json")
+COUNTRY_CONFIG_PATH    = Path(__file__).parent.parent.parent / "config" / "countries.json"
 
 PRODUCT_PAGE_PATTERNS = [
     "/c/", "/category/", "/katalog/", "/kategori/",
@@ -339,7 +339,11 @@ def load_lines(path: Path) -> list[str]:
 
 def load_country_configs(path: Path = COUNTRY_CONFIG_PATH) -> dict:
     if not path.exists():
-        return {}
+        raise FileNotFoundError(
+            f"[load_country_configs] config file not found: {path}\n"
+            f"Expected at: {path.resolve()}\n"
+            f"Run from the project root or check COUNTRY_CONFIG_PATH."
+        )
     return json.loads(path.read_text(encoding="utf-8"))
 
 

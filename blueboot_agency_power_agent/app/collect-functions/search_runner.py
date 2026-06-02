@@ -498,7 +498,7 @@ async def _run_batch_async(
         if source == "catalog":
             _blocklist: set[str] = set()
         else:
-            _blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
+            _blocklist = set(load_lines(Path(__file__).parent.parent.parent / "config" / "blocklist_domains.txt"))
 
         tasks = [
             asyncio.create_task(asyncio.wait_for(_crawl_with_dom(session, url, query), timeout=120.0))
@@ -682,7 +682,7 @@ def run(args) -> None:
     configs     = load_country_configs()
     countries   = selected_countries(args.countries, configs) or DEFAULT_COUNTRIES
     query_pairs = load_queries_for_countries(countries, args.queries or None)
-    blocklist   = set(load_lines(Path("config/blocklist_domains.txt")))
+    blocklist   = set(load_lines(Path(__file__).parent.parent.parent / "config" / "blocklist_domains.txt"))
 
     all_leads: list[Lead] = []
     # seen_domains is seeded exclusively from Firestore — no local CSV read.

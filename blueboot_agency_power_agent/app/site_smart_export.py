@@ -33,7 +33,7 @@ import os
 import re
 from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).parent))  # make functions/ importable
-from functions.utils import clean_str, resolve_country, ISO_TO_CC, email_matches_name
+from functions.utils import clean_str, resolve_country, ISO_TO_CC, email_matches_name, normalize_url
 from functions.excel_builder import write_contacts_sheet, make_header_cell, save_workbook, TIER_COLORS, TIER_TEXT
 from datetime import datetime, timezone
 from pathlib import Path
@@ -650,7 +650,6 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
             'contact_type':       row.get('contact_type', ''),
             'outreach_priority':  row.get('outreach_priority', 4),
             # Pipeline metadata
-            'campaign':           campaign or '',
             # Mail-merge
             'personalisation': {
                 'name':      first,
@@ -662,6 +661,7 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
         lifecycle = {
             'status':     'pending',
             'created_at': now_ts,
+            'campaign':   campaign or '',
         }
 
         data_docs.append((doc_id, doc))

@@ -33,8 +33,7 @@ import os
 import re
 from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).parent))  # make functions/ importable
-from functions.utils import clean_str, resolve_country, ISO_TO_CC, email_matches_name
-from functions.excel_builder import write_contacts_sheet, make_header_cell, save_workbook, TIER_COLORS, TIER_TEXT
+from functions.utils import clean_str, resolve_country, ISO_TO_CC, email_matches_name, normalize_url
 from functions.excel_builder import write_contacts_sheet, make_header_cell, save_workbook, TIER_COLORS, TIER_TEXT
 from collections import Counter
 from datetime import datetime, timezone
@@ -298,7 +297,6 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
             # Origin
             'category_leads':    row.get('source', ''),
             # Pipeline metadata
-            'campaign':          campaign or '',
             # Mail-merge
             'personalisation': {
                 'name':      first,
@@ -307,7 +305,7 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
         }
         data_docs.append((doc_id, doc))
         if doc_id not in existing_ids:
-            lifecycle_docs.append((doc_id, {'status': 'pending', 'created_at': now_ts}))
+            lifecycle_docs.append((doc_id, {'status': 'pending', 'created_at': now_ts, 'campaign': campaign or ''}))
 
     # ── Step C: batch write data fields ───────────────────────────────────
     total_batches = (len(data_docs) + BATCH_SIZE - 1) // BATCH_SIZE

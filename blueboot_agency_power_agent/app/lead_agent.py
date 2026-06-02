@@ -791,3 +791,7 @@ def main() -> None:
         push_to_firebase(leads, collection=args.firebase_collection)
     else:
         print("  [firebase] no leads to upload.")
+
+
+if __name__ == "__main__":
+    main()

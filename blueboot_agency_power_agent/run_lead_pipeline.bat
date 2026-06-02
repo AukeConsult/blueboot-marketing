@@ -8,8 +8,8 @@ REM  LEAD PIPELINE — Web Agency / Reseller Discovery
 REM  Edit COUNTRIES and CAMPAIGN before running
 REM ============================================================
 
-set COUNTRIES=NO
-set CAMPAIGN=NO_jun02
+set COUNTRIES=SE
+set CAMPAIGN=SE_jun02
 
 echo.
 echo ============================================================
