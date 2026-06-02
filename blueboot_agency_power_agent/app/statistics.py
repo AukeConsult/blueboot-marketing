@@ -28,6 +28,9 @@ Head document includes a by_priority summary across ALL countries:
 from __future__ import annotations
 
 import threading as _threading
+
+# Guards firebase_admin.initialize_app against concurrent init
+_local_fb_lock = _threading.Lock()
 import _pathsetup  # noqa: F401 — adds project root, app/, app/functions/, app/collect-functions/ to sys.path
 import os
 from collections import defaultdict
@@ -607,9 +610,8 @@ def collection_overview(stats_collection: str = "statistics") -> dict:
         return {}
 
     with _local_fb_lock:
-        with _local_fb_lock:
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(cred)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
     db = firestore.client()
 
     now_ts = datetime.utcnow().isoformat() + "Z"

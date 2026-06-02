@@ -8,6 +8,9 @@ Usage:
 """
 from __future__ import annotations
 import threading as _threading
+
+# Guards firebase_admin.initialize_app against concurrent init
+_local_fb_lock = _threading.Lock()
 import argparse, importlib.util, json, os, sys
 from pathlib import Path
 
@@ -30,9 +33,8 @@ def _get_db():
             else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
                                                 "config/serviceAccountKey.json")))
     with _local_fb_lock:
-        with _local_fb_lock:
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(cred)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
     return firestore.client()
 
 

@@ -36,6 +36,9 @@ Usage:
 from __future__ import annotations
 
 import threading as _threading
+
+# Guards firebase_admin.initialize_app against concurrent init
+_local_fb_lock = _threading.Lock()
 import argparse
 import asyncio
 import importlib.util
@@ -159,9 +162,8 @@ def _init_firestore(fb_key_dict, collection: str):
             else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
                                                 "config/serviceAccountKey.json")))
     with _local_fb_lock:
-        with _local_fb_lock:
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(cred)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
 
     db  = firestore.client()
     col = db.collection(collection)

@@ -42,14 +42,21 @@ Discovers content-heavy websites, measures them via sitemap, extracts and enrich
 
 7. site_email_check.py        AI classify each contact: email type + contact role
                               → email_type, contact_type, outreach_priority (1–4)
-8. site_leads_export.py       Excel export — one row per lead
+8. site_leads_export.py       Excel export — one row per lead (helper)
                               Filter flags: --sector --category --location
-9. site_contact_export.py     Excel export — one row per contact + site fields
-                              Filter flags: --sector --category --page-count
-                                            --location --with-email-only --outreach-priority
-10. site_smart_export.py      Tiered prospect Excel (6 tiers by page size + signals)
-                              Filter flags: --min-pages --outreach-priority
-                              Sheets: Contacts (colour-coded), Summary, WP vs Others
+9. [Helper] site_contact_export.py / site_smart_export.py
+                              Filtered Excel exports — see Helper Functions section
+
+── Helper Functions (filtering & export tools) ──────────────────────────
+
+  site_smart_export.py        Tiered Excel from site_leads (6 tiers by page count)
+  site_contact_export.py      Per-contact Excel with full filter options
+  lead_extract.py             Filter leads → Excel (+ optional Firestore extract)
+  leads_smart_export.py       Tiered Excel from leads (5 tiers by reseller score)
+
+  Note: These are operator tools, not pipeline stages. They select and export
+  data for review. The planned email_contacts collection will eventually replace
+  leads_extract as the primary campaign mechanism.
 
 ── Campaign & Outreach ───────────────────────────────────────────────────────
 
@@ -1607,3 +1614,73 @@ python app\site_smart_export.py --countries NO SE DK
 | 6 — Cold | <50 | Grey | |
 
 **Excel sheets:** Contacts (colour-coded, sorted tier→pages), Summary (tier/sector/platform counts), WordPress vs Others.
+---
+
+## Outreach Pipeline Architecture
+
+The full system connects two discovery pipelines through a unified contact store to an automated email sender.
+
+### Concept
+
+```
+SITE PIPELINE                  LEAD PIPELINE
+(end-user companies)           (web agencies / resellers)
+        │                              │
+  discover → enrich             discover → enrich
+  site_agent                    lead_agent
+  site_enrich_agent             lead_enrich_agent
+  site_contact_enrich           lead_enrich_contacts
+  site_location_enrich          leads_email_check
+  site_email_check                     │
+        │                              │
+        └──────────┬───────────────────┘
+                   ▼
+          ┌─────────────────┐
+          │  email_contacts │  ← Firestore collection (status=pending)
+          │   (Firestore)   │     unified from both pipelines
+          └────────┬────────┘
+                   │
+          ┌────────▼────────┐
+          │  Excel Export   │  ← human reviews, approves / rejects
+          │  + Import Back  │    status updated to approved
+          └────────┬────────┘
+                   │  status=approved only
+          ┌────────▼────────┐
+          │  Automated      │  ← personalised mail, rate-limited
+          │  Outreach Sender│    tracks replies, updates status=sent
+          └─────────────────┘
+```
+
+### Contact Status Lifecycle
+
+| Status | Set by | Meaning |
+|--------|--------|---------|
+| `pending` | Pipeline export | Ready for human review |
+| `approved` | Human via Excel import | OK to send |
+| `rejected` | Human via Excel import | Never send |
+| `sent` | Outreach sender | Mail dispatched |
+| `replied` | Reply tracker | Contact responded |
+| `bounced` | Send delivery | Invalid email |
+| `unsubscribed` | Opt-out | Remove from all lists |
+| `converted` | Manual / CRM | Became customer/partner |
+
+### email_contacts Fields
+
+| Field | Description |
+|-------|-------------|
+| `email` | Validated email address |
+| `name / title` | Contact name and job title |
+| `company / domain` | Company and website |
+| `email_type` | `personal` / `role` / `department` / `admin` |
+| `contact_type` | `decision_maker` / `marketing` / `developer` / `sales` / `operations` / `unknown` |
+| `outreach_priority` | 1 (personal email + decision maker) → 4 (admin/unknown) |
+| `pipeline` | `site` or `lead` |
+| `status` | Current lifecycle state |
+| `template_key` | Mail template identifier |
+| `personalisation` | Pre-filled: `{{name}}` `{{company}}` `{{domain}}` `{{ai_summary}}` |
+
+### Architecture PDF
+
+A full architecture document is saved at `docs/BlueSearch_Outreach_Pipeline.pdf`.
+It covers all five stages, every script, the contact schema, and the status lifecycle.
+

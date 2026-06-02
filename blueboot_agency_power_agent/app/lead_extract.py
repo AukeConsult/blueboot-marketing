@@ -41,6 +41,9 @@ Function API:
 from __future__ import annotations
 
 import threading as _threading
+
+# Guards firebase_admin.initialize_app against concurrent init
+_local_fb_lock = _threading.Lock()
 import re
 import importlib.util
 import os
@@ -105,9 +108,8 @@ def _firestore_client(collection: str | None = None):
 
     col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
     with _local_fb_lock:
-        with _local_fb_lock:
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(cred)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
 
     db  = firestore.client()
     col = db.collection(col_name)

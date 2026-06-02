@@ -24,6 +24,9 @@ Usage:
 from __future__ import annotations
 
 import threading as _threading
+
+# Guards firebase_admin.initialize_app against concurrent init
+_local_fb_lock = _threading.Lock()
 import argparse
 import importlib.util
 import os
@@ -129,9 +132,8 @@ def _init_firestore(fb_key_dict):
             else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
                                                 "config/serviceAccountKey.json")))
     with _local_fb_lock:
-        with _local_fb_lock:
-            if not firebase_admin._apps:
-                firebase_admin.initialize_app(cred)
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
     return firestore.client()
 
 
@@ -486,180 +488,6 @@ def _build_xlsx(rows: list[dict], output_path: str, leads_index: dict | None = N
 # Campaign save
 # ---------------------------------------------------------------------------
 
-SITE_CAMPAIGNS_COLLECTION = "site_campaigns"
-
-def _load_taken_sites(db) -> dict[str, str]:
-    """Query site_campaign_sites collectionGroup to find all lead_ids already in a campaign.
-
-    Returns {lead_id: campaign_name} for every site already claimed.
-    One upfront scan — no per-site reads needed.
-    """
-    print("  [campaign] Scanning site_campaign_sites for already-claimed sites…", flush=True)
-    taken: dict[str, str] = {}
-    for doc in db.collection_group("site_campaign_sites").stream():
-        lead_id  = doc.id
-        campaign = doc.reference.parent.parent.id
-        taken[lead_id] = campaign
-    print(f"  [campaign] {len(taken)} sites already in campaigns", flush=True)
-    return taken
-
-
-def _save_campaign(
-    db,
-    campaign:        str,
-    rows:            list[dict],
-    used_leads:      dict,
-    countries:       list[str] | None = None,
-    sector:          str | None       = None,
-    category:        str | None       = None,
-    with_email_only: bool             = False,
-    limit:           int | None       = None,
-    force:           bool             = False,
-) -> None:
-    """Copy only the filtered sites and contacts into site_campaigns/{campaign}/.
-
-    Checks site_campaign_sites collectionGroup first — any site already in another
-    campaign is skipped (unless --force is set).
-
-    Structure:
-      site_campaigns/{campaign}/
-          site_campaign_sites/{lead_id}/
-              site_campaign_contacts/{contact_id}
-    """
-
-    total_sites    = len(used_leads)
-    total_contacts = len(rows)
-
-    print(
-        f"  [campaign] Saving '{campaign}' → "
-        f"{total_sites} sites  {total_contacts} contacts…",
-        flush=True,
-    )
-
-    # ── Check which sites are already claimed ────────────────────────────────
-    if not force:
-        taken = _load_taken_sites(db)
-        # Remove this campaign's own entries so re-runs don't self-block
-        taken = {lid: c for lid, c in taken.items() if c != campaign}
-    else:
-        taken = {}
-        print("  [campaign] --force: skipping duplicate check", flush=True)
-
-    # Build contact lookup: site_doc_id → [contact rows]
-    contacts_by_site: dict[str, list[dict]] = {}
-    for row in rows:
-        sid = row.get("_site_doc_id", "unknown")
-        contacts_by_site.setdefault(sid, []).append(row)
-
-    camp_ref = db.collection(SITE_CAMPAIGNS_COLLECTION).document(campaign)
-
-    # ── Campaign summary doc ─────────────────────────────────────────────────
-    camp_ref.set({
-        "campaign_id":    campaign,
-        "created_at":     datetime.now(timezone.utc).isoformat(),
-        "site_count":     total_sites,
-        "contact_count":  total_contacts,
-        "filters": {
-            "countries":       countries or [],
-            "sector":          sector or "",
-            "category":        category or "",
-            "with_email_only": with_email_only,
-            "limit":           limit,
-        },
-    }, merge=True)
-
-    # ── Write sites + contacts ───────────────────────────────────────────────
-    sites_written    = 0
-    sites_skipped    = 0
-    contacts_written = 0
-
-    for lead_id, lead in used_leads.items():
-        # Skip sites already in another campaign
-        if lead_id in taken:
-            sites_skipped += 1
-            continue
-
-        data = {k: v for k, v in lead.items() if not k.startswith("_")}
-        kw = data.get("ai_keywords")
-        if isinstance(kw, list):
-            data["ai_keywords"] = ", ".join(kw)
-
-        site_ref = camp_ref.collection("site_campaign_sites").document(lead_id)
-        site_ref.set(data, merge=True)
-        sites_written += 1
-
-        for row in contacts_by_site.get(lead_id, []):
-            contact_data = {k: v for k, v in row.items() if not k.startswith("_")}
-            doc_id = row.get("_doc_id") or "unknown"
-            site_ref.collection("site_campaign_contacts").document(doc_id).set(contact_data, merge=True)
-            contacts_written += 1
-
-        if sites_written % 50 == 0:
-            print(
-                f"  [campaign] sites {sites_written}/{total_sites - sites_skipped}  "
-                f"contacts {contacts_written}/{total_contacts}",
-                flush=True,
-            )
-
-    if sites_skipped:
-        # Summarise which campaigns the skipped sites belong to
-        from collections import Counter
-        skip_sources = Counter(
-            taken[lid] for lid in used_leads if lid in taken
-        )
-        skip_detail = "  ".join(f"{c}: {n}" for c, n in skip_sources.most_common())
-        print(
-            f"  [campaign] {sites_skipped} sites skipped (already in other campaigns): {skip_detail}",
-            flush=True,
-        )
-    print(
-        f"  [campaign] Done → site_campaigns/{campaign}  "
-        f"{sites_written} sites saved  {sites_skipped} skipped  {contacts_written} contacts",
-        flush=True,
-    )
-
-
-def _load_campaign_data(db, campaign: str) -> tuple[list[dict], dict]:
-    """Read sites and contacts back from a saved campaign.
-
-    Returns (rows, used_leads) in the same shape as _stream_contacts so
-    _build_xlsx can consume them directly.
-    """
-    print(f"  [campaign] Loading data from site_campaigns/{campaign}…", flush=True)
-
-    camp_ref   = db.collection(SITE_CAMPAIGNS_COLLECTION).document(campaign)
-    sites_col  = camp_ref.collection("site_campaign_sites")
-
-    used_leads: dict[str, dict] = {}
-    rows:       list[dict]      = []
-
-    for site_doc in sites_col.stream():
-        lead_id  = site_doc.id
-        lead     = site_doc.to_dict() or {}
-        used_leads[lead_id] = lead
-
-        for contact_doc in site_doc.reference.collection("site_campaign_contacts").stream():
-            contact = contact_doc.to_dict() or {}
-            # Re-attach internal keys so _build_xlsx columns resolve correctly
-            contact["_doc_id"]      = contact_doc.id
-            contact["_site_doc_id"] = lead_id
-            contact["_lead_id"]     = lead_id
-            # Ensure ai_country is present
-            if "ai_country" not in contact:
-                contact["ai_country"] = lead.get("ai_country", "")
-            rows.append(contact)
-
-    print(
-        f"  [campaign] Loaded {len(used_leads)} sites  {len(rows)} contacts "
-        f"from campaign '{campaign}'",
-        flush=True,
-    )
-    return rows, used_leads
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 def export_contacts(
     countries:       list[str] | None = None,
@@ -670,8 +498,6 @@ def export_contacts(
     with_email_only: bool             = False,
     limit:           int | None       = None,
     output_path:     str | None       = None,
-    campaign:        str | None       = None,
-    force:           bool             = False,
     page_count:       str | None       = None,
 ) -> str:
     fb_key = _load_secrets()
@@ -687,43 +513,22 @@ def export_contacts(
         print("  [contact-export] No contacts found matching filters.")
         return ""
 
-    # ── Step 2: if campaign set, save first then reload from campaign ─────────
-    if campaign:
-        _save_campaign(
-            db, campaign, rows, used_leads,
-            countries       = countries,
-            sector          = sector,
-            category        = category,
-            with_email_only = with_email_only,
-            limit           = limit,
-            force           = force,
-        )
-        # Reload rows and leads from what was actually saved to the campaign
-        # (some sites may have been skipped as duplicates)
-        rows, used_leads = _load_campaign_data(db, campaign)
-        if not rows:
-            print(f"  [contact-export] No data in campaign '{campaign}' to export.")
-            return ""
-
-    # ── Step 3: build output path ─────────────────────────────────────────────
+    # ── Step 2: build output path ─────────────────────────────────────────────
     if not output_path:
         ts      = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
         parts   = []
-        if campaign:
-            parts.append(campaign)
-        else:
-            if countries:
-                parts.append("_".join(c.upper() for c in countries))
-            if location:
-                parts.append(location.replace(" ", "_").replace(",", ""))
-            if sector:
-                parts.append(sector)
-            if category:
-                parts.append(category)
-            if page_count:
-                parts.append(page_count)
-            if with_email_only:
-                parts.append("email")
+        if countries:
+            parts.append("_".join(c.upper() for c in countries))
+        if location:
+            parts.append(location.replace(" ", "_").replace(",", ""))
+        if sector:
+            parts.append(sector)
+        if category:
+            parts.append(category)
+        if page_count:
+            parts.append(page_count)
+        if with_email_only:
+            parts.append("email")
         filter_str  = ("_" + "_".join(parts)) if parts else ""
         output_path = str(
             Path(__file__).parent.parent / "exports" / f"site_contacts{filter_str}_{ts}.xlsx"
@@ -767,10 +572,7 @@ def main(argv=None) -> None:
                    help="Max contacts to export")
     p.add_argument("--output",          default=None, metavar="FILE",
                    help="Output .xlsx path  (default: exports/contacts_<country>_<ts>.xlsx)")
-    p.add_argument("--campaign",        default=None, metavar="NAME",
-                   help="Save selection to site_campaigns/<NAME> in Firestore (sites + contacts)")
-    p.add_argument("--force",            action="store_true",
-                   help="Re-assign sites already in another campaign (skips duplicate check)")
+
     p.add_argument("--page-count",       default=None, metavar="BUCKET",
                    help="Filter by page count bucket: micro/small/medium/large/huge/ultra/unknown")
 
@@ -789,8 +591,6 @@ def main(argv=None) -> None:
         with_email_only = args.with_email_only,
         limit           = args.limit,
         output_path     = args.output,
-        campaign        = args.campaign,
-        force           = args.force,
         page_count       = args.page_count,
     )
     if path:
