@@ -139,16 +139,21 @@ _CONTENT_NEG_KWS: list[str] = _load_content_negative_keywords()
 def normalize_url(url: str, homepage_only: bool = True) -> str:
     """Normalize URL. When homepage_only=True (default), strip path to root domain.
 
-    Search engines often return inner page URLs; site_agent needs the homepage.
+    Also sanitises trailing punctuation (colons, dots, semicolons) that appear in
+    Bing/Brave search results and would produce malformed URLs.
     Pass homepage_only=False only when you explicitly want to preserve the path.
     """
-    url = url.strip()
+    url = url.strip().rstrip(":.;,")   # remove trailing punctuation first
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
     parsed = urlparse(url)
+    netloc = parsed.netloc.rstrip(":")  # strip dangling colon from netloc (no port)
+    if not netloc:
+        return ""
     if homepage_only:
-        return f"{parsed.scheme}://{parsed.netloc}/"
-    return f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
+        return f"{parsed.scheme}://{netloc}/"
+    path = parsed.path or "/"
+    return f"{parsed.scheme}://{netloc}{path}"
 
 
 def domain_of(url: str) -> str:

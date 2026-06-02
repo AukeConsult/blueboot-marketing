@@ -32,6 +32,7 @@ Options:
 """
 from __future__ import annotations
 
+import threading as _threading
 import asyncio
 import importlib.util
 import os
@@ -86,8 +87,10 @@ def _get_db(collection: str | None = None):
             else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
                                                 "config/serviceAccountKey.json")))
     col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _local_fb_lock:
+        with _local_fb_lock:
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
     db  = firestore.client()
     col = db.collection(col_name)
     return db, col, col_name
@@ -347,11 +350,19 @@ def fix_rescrape_contacts(
         connector = aiohttp.TCPConnector(limit=workers, limit_per_host=5, ssl=False)
         timeout   = aiohttp.ClientTimeout(total=30)
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-            tasks = [
-                _recrawl_one(session, semaphore, lead, configs,
-                             max_pages, delay, results, counters)
-                for lead in leads_to_fix
-            ]
+            async def _recrawl_one_guarded(lead):
+                # RULE 2: chained-await crawl needs a hard top-level ceiling,
+                # otherwise one stalled site freezes asyncio.gather forever.
+                try:
+                    await asyncio.wait_for(
+                        _recrawl_one(session, semaphore, lead, configs,
+                                     max_pages, delay, results, counters),
+                        timeout=120.0,
+                    )
+                except asyncio.TimeoutError:
+                    counters["errors"] += 1
+                    print(f"  [rescrape] timeout (>120s) on {lead.get('website') or lead.get('domain')}")
+            tasks = [_recrawl_one_guarded(lead) for lead in leads_to_fix]
             await asyncio.gather(*tasks, return_exceptions=True)
 
     print(f"\n[rescrape] Crawling {len(leads_to_fix)} sites…\n")

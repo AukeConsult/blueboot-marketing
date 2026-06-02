@@ -23,6 +23,7 @@ Usage:
 """
 from __future__ import annotations
 
+import threading as _threading
 import argparse
 import importlib.util
 import os
@@ -127,8 +128,10 @@ def _init_firestore(fb_key_dict):
     cred = (fb_creds.Certificate(fb_key_dict) if fb_key_dict
             else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
                                                 "config/serviceAccountKey.json")))
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _local_fb_lock:
+        with _local_fb_lock:
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
     return firestore.client()
 
 
@@ -159,6 +162,7 @@ def _stream_contacts(
     sector:          str | None,
     category:        str | None,
     location:        str | None,
+    outreach_priority: int | None,
     limit:           int | None,
     countries:       list[str] | None = None,
     page_count:       str | None       = None,
@@ -224,6 +228,13 @@ def _stream_contacts(
         if location:
             loc_full = (lead.get("location_full") or lead.get("location") or "").lower()
             if location.lower() not in loc_full:
+                skipped += 1
+                continue
+
+        # Outreach priority filter (on contact doc)
+        if outreach_priority is not None:
+            prio = contact.get("outreach_priority")
+            if prio is None or int(prio) > outreach_priority:
                 skipped += 1
                 continue
 
@@ -655,6 +666,7 @@ def export_contacts(
     sector:          str | None       = None,
     category:        str | None       = None,
     location:        str | None       = None,
+    outreach_priority: int | None     = None,
     with_email_only: bool             = False,
     limit:           int | None       = None,
     output_path:     str | None       = None,
@@ -668,7 +680,7 @@ def export_contacts(
     # ── Step 1: filter from site_leads + site_contacts ───────────────────────
     leads_index = _load_leads_index(db, countries)
     rows, used_leads = _stream_contacts(
-        db, leads_index, with_email_only, sector, category, location, limit,
+        db, leads_index, with_email_only, sector, category, location, outreach_priority, limit,
         countries=countries, page_count=page_count
     )
     if not rows:
@@ -747,6 +759,8 @@ def main(argv=None) -> None:
                    help="Filter by query_category  e.g. real_estate, healthcare")
     p.add_argument("--location",        default=None, metavar="TEXT",
                    help="Filter by location keyword e.g. London, Pune, Manchester")
+    p.add_argument("--outreach-priority", type=int, default=None, metavar="N",
+                   help="Max outreach_priority to include (1=best only, 2=1+2, etc.)")
     p.add_argument("--with-email-only", action="store_true",
                    help="Only include contacts that have an email address")
     p.add_argument("--limit",           type=int, default=None, metavar="N",
@@ -771,6 +785,7 @@ def main(argv=None) -> None:
         sector          = args.sector,
         category        = args.category,
         location        = args.location,
+        outreach_priority = args.outreach_priority,
         with_email_only = args.with_email_only,
         limit           = args.limit,
         output_path     = args.output,

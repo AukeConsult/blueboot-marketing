@@ -73,8 +73,9 @@ def load_leads_from_firebase(collection: str | None = None) -> set[str]:
         return set()
 
     col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _firebase_init_lock:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
 
     db  = firestore.client()
     col = db.collection(col_name)
@@ -119,8 +120,9 @@ def load_leads_excluded() -> set[str]:
 
     if cred is None and not firebase_admin._apps:
         return set()
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _firebase_init_lock:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
 
     db = firestore.client()
     excluded: set[str] = set()
@@ -167,8 +169,9 @@ def push_to_firebase(leads: list["Lead"], collection: str | None = None) -> None
     if cred is None and not firebase_admin._apps:
         print("  [firebase] no credentials found — skipping upload.")
         return
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _firebase_init_lock:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
 
     db  = firestore.client()
     col = db.collection(col_name)
@@ -385,8 +388,9 @@ def audit_tlds(collection: str | None = None, dry_run: bool = False) -> None:
         return
 
     col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _firebase_init_lock:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
 
     db  = _fs.client()
     col = db.collection(col_name)

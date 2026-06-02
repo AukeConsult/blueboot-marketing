@@ -901,14 +901,17 @@ def preload_seen_domains(collection: str = COLLECTION_DEFAULT) -> set[str]:
 
 def upsert_site_lead(lead: SiteLead, collection: str = COLLECTION_DEFAULT) -> None:
     try:
-        _, col = _get_db(collection)
+        db, col = _get_db(collection)
         doc = asdict(lead)
         doc.pop("contacts", None)
-        col.document(lead.lead_id).set(doc, merge=True)
+        # Use a Firestore batch to write lead + all contacts in one RPC round-trip
+        batch = db.batch()
+        batch.set(col.document(lead.lead_id), doc, merge=True)
         if lead.contacts:
             contacts_col = col.document(lead.lead_id).collection("site_contacts")
             for contact in lead.contacts:
-                contacts_col.document(contact.contact_id).set(asdict(contact), merge=True)
+                batch.set(contacts_col.document(contact.contact_id), asdict(contact), merge=True)
+        batch.commit()
     except Exception as exc:
         print(f"  [firebase] upsert error for {lead.domain}: {exc}")
 
@@ -1115,24 +1118,18 @@ async def _run_country_full_async(
                         n = counters["done"]
                         excl_reason = "error"
                         print(f"  [{n}/{counters['queued']}] [consumer] error on {url}: {exc}")
-                        _args = None
                         if not no_firebase and not dry_run:
+                            lead_id = lead_id_from_url(normalize_url(url))
+                            _args = (d, url, lead_id, eff_country,
+                                     excl_reason, 0, source_query, excl_collection,
+                                     query_category)
                             try:
-                                lead_id = lead_id_from_url(normalize_url(url))
-                                _args = (d, url, lead_id, eff_country,
-                                         excl_reason, 0, source_query, excl_collection,
-                                         query_category)
                                 await asyncio.wait_for(
-                                    loop.run_in_executor(
-                                        _write_exec, lambda a=_args: upsert_site_excluded(*a)
-                                    ),
-                                    timeout=12.0,
+                                    loop.run_in_executor(_write_exec, lambda a=_args: upsert_site_excluded(*a)),
+                                    timeout=20.0,
                                 )
-                            except (asyncio.TimeoutError, Exception) as exc:
-                                if _args is not None:
-                                    print(f"  [{n}] [excl-write] timeout/error — queued for retry")
-                                    if len(failed_excl_writes) < 500:
-                                        failed_excl_writes.append(_args)
+                            except Exception:
+                                pass
                         excluded_domains.add(d)
                         counters["excluded"] += 1
                         continue
@@ -1151,14 +1148,13 @@ async def _run_country_full_async(
                                         _write_exec,
                                         lambda _l=lead, _c=collection: upsert_site_lead(_l, _c),
                                     ),
-                                    timeout=12.0,
+                                    timeout=20.0,
                                 )
-                            except (asyncio.TimeoutError, Exception) as exc:
-                                print(f"  [{n}] [lead-write] timeout/error: {exc} — queued for retry")
+                            except Exception as exc:
+                                print(f"  [{n}] [lead-write] error: {exc} — queued")
                                 if len(failed_lead_writes) < 500:
                                     failed_lead_writes.append((lead, collection))
                     else:
-                        # Parse out real page_count if encoded in the reason string
                         stored_reason = excl_reason
                         stored_pages  = 0
                         if excl_reason.startswith("min_pages:"):
@@ -1166,25 +1162,19 @@ async def _run_country_full_async(
                             stored_reason = "min_pages"
                         print(f"  [{n}/{counters['queued']}] -- excluded ({stored_reason})  {url}")
                         if excl_reason != "url_error":
-                            _args = None
                             if not no_firebase and not dry_run:
+                                lead_id = lead_id_from_url(normalize_url(url))
+                                _args = (d, url, lead_id, eff_country,
+                                         stored_reason, stored_pages,
+                                         source_query, excl_collection,
+                                         query_category)
                                 try:
-                                    lead_id = lead_id_from_url(normalize_url(url))
-                                    _args = (d, url, lead_id, eff_country,
-                                             stored_reason, stored_pages,
-                                             source_query, excl_collection,
-                                             query_category)
                                     await asyncio.wait_for(
-                                        loop.run_in_executor(
-                                            _write_exec, lambda a=_args: upsert_site_excluded(*a)
-                                        ),
-                                        timeout=12.0,
+                                        loop.run_in_executor(_write_exec, lambda a=_args: upsert_site_excluded(*a)),
+                                        timeout=20.0,
                                     )
-                                except (asyncio.TimeoutError, Exception) as exc:
-                                    if _args is not None:
-                                        print(f"  [{n}] [excl-upsert] timeout/error — queued for retry")
-                                        if len(failed_excl_writes) < 500:
-                                            failed_excl_writes.append(_args)
+                                except Exception:
+                                    pass
                             excluded_domains.add(d)
                             counters["excluded"] += 1
 
@@ -1222,7 +1212,9 @@ async def _run_country_full_async(
             await queue.put(_QUEUE_SENTINEL)
         await asyncio.gather(*consumer_tasks)
 
-        _write_exec.shutdown(wait=True)
+        # Use wait=False — threads are daemons and finish on their own
+        # Calling shutdown(wait=True) synchronously blocks the event loop
+        _write_exec.shutdown(wait=False)
 
         # Flush any writes that timed out / errored during processing.
         # Runs synchronously so nothing is lost before we return.

@@ -21,6 +21,7 @@ Options:
 """
 from __future__ import annotations
 
+import threading as _threading
 import importlib.util
 import os
 from pathlib import Path
@@ -56,8 +57,10 @@ def _get_db(collection: str | None = None):
             else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
                                                 "config/serviceAccountKey.json")))
     col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _local_fb_lock:
+        with _local_fb_lock:
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
     db  = firestore.client()
     col = db.collection(col_name)
     return db, col, col_name

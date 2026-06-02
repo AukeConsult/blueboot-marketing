@@ -26,6 +26,7 @@ Options:
 """
 from __future__ import annotations
 
+import threading as _threading
 import asyncio
 import importlib.util
 import os
@@ -192,8 +193,10 @@ def _get_db(collection: str | None = None):
             else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
                                                 "config/serviceAccountKey.json")))
     col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _local_fb_lock:
+        with _local_fb_lock:
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
     db  = firestore.client()
     col = db.collection(col_name)
     return db, col
@@ -402,14 +405,22 @@ def enrich_contacts(
         connector = aiohttp.TCPConnector(limit=workers, ssl=False)
         timeout   = aiohttp.ClientTimeout(total=20)
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-            tasks = [
-                _enrich_one(
-                    session, semaphore, ref, c,
-                    platform_keys, do_whatsapp, delay,
-                    counters, pending, dry_run,
-                )
-                for ref, c in to_process
-            ]
+            async def _enrich_one_guarded(ref, c):
+                # RULE 2/3: the per-contact Bing loop chains several awaits with
+                # no inner ceiling on the whole chain. Bound it so one hung fetch
+                # cannot wedge asyncio.gather forever.
+                try:
+                    await asyncio.wait_for(
+                        _enrich_one(
+                            session, semaphore, ref, c,
+                            platform_keys, do_whatsapp, delay,
+                            counters, pending, dry_run,
+                        ),
+                        timeout=90.0,
+                    )
+                except asyncio.TimeoutError:
+                    print(f"  [enrich] timeout (>90s) on contact {c.get('email') or c.get('name')}")
+            tasks = [_enrich_one_guarded(ref, c) for ref, c in to_process]
             await asyncio.gather(*tasks, return_exceptions=True)
 
     asyncio.run(_run_all())

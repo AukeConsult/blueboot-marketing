@@ -40,11 +40,16 @@ Discovers content-heavy websites, measures them via sitemap, extracts and enrich
 
 ── Export ─────────────────────────────────────────────────────────────────────
 
-7. site_leads_export.py       Excel export — one row per lead
+7. site_email_check.py        AI classify each contact: email type + contact role
+                              → email_type, contact_type, outreach_priority (1–4)
+8. site_leads_export.py       Excel export — one row per lead
                               Filter flags: --sector --category --location
-8. site_contact_export.py     Excel export — one row per contact + site fields
+9. site_contact_export.py     Excel export — one row per contact + site fields
                               Filter flags: --sector --category --page-count
-                                            --location --with-email-only
+                                            --location --with-email-only --outreach-priority
+10. site_smart_export.py      Tiered prospect Excel (6 tiers by page size + signals)
+                              Filter flags: --min-pages --outreach-priority
+                              Sheets: Contacts (colour-coded), Summary, WP vs Others
 
 ── Campaign & Outreach ───────────────────────────────────────────────────────
 
@@ -63,8 +68,11 @@ python app\site_agent.py --countries NO
 python app\site_enrich_agent.py --countries NO
 python app\site_contact_enrich.py --countries NO
 python app\site_location_enrich.py --countries NO
+python app\site_email_check.py --countries NO
 python app\site_contact_export.py --countries NO --with-email-only
+python app\site_contact_export.py --countries NO --outreach-priority 2 --with-email-only
 python app\site_contact_export.py --countries NO --location Oslo --with-email-only
+python app\site_smart_export.py --countries NO
 python app\site_contact_export.py --countries NO --page-count small
 python app\site_contact_export.py --countries NO --campaign NO_jun01
 python app\site_campaign_mail_prepare.py --campaign NO_jun01 --prepare-contacts
@@ -171,13 +179,17 @@ REM 4. Infer city + location for each site (dry-run 20 first to verify)
 python app\site_location_enrich.py --countries IN --dry-run 20
 python app\site_location_enrich.py --countries IN
 
-REM 5a. Export contacts to Excel only
+REM 5. Classify email type and contact role (dry-run 20 to verify)
+python app\site_email_check.py --countries IN --dry-run 20
+python app\site_email_check.py --countries IN
+
+REM 6a. Export contacts to Excel only
 python app\site_contact_export.py --countries IN --with-email-only --page-count medium
 
-REM 5b. Export filtered by city (e.g. Pune only)
+REM 6b. Export filtered by city (e.g. Pune only)
 python app\site_contact_export.py --countries IN --location Pune --with-email-only
 
-REM 5c. Export and save as a campaign (for mail prep)
+REM 6c. Export and save as a campaign (for mail prep)
 python app\site_contact_export.py --countries IN --with-email-only --page-count medium --campaign IN_medium_jun01
 
 REM 5. Scaffold mail templates (creates mailing/IN_medium_jun01/ with example files)
@@ -325,6 +337,8 @@ Firestore
 | `app/site_campaign_mail_prepare.py` | Prepare outbound mail templates and per-contact docs for a campaign |
 | `app/site_excluded_recheck.py` | Re-checks `sites_excluded` and recovers passing sites |
 | `app/site_sitemap_backfill.py` | Backfills sitemap data for existing `site_leads` |
+| `app/site_email_check.py` | Classifies `site_contacts` by email type and contact role (OpenAI) |
+| `app/site_smart_export.py` | Tiered prospect Excel (6 tiers by page size + BlueSearch fit signals) |
 | `app/site_leads_export.py` | Exports `site_leads` + contacts to Excel (one row per lead) |
 | `site_scrape.bat` | Runs site_agent + site_enrich_agent for all countries |
 
@@ -1512,3 +1526,84 @@ Two collectionGroup scopes are managed — both work across all parent paths
 ```bat
 firebase deploy --only firestore:indexes
 ```
+
+---
+
+### CLI — site_email_check.py
+
+Classifies each `site_contact` that has an email address. Sends batches of 50 to OpenAI
+to determine the email type (personal vs role inbox) and the contact's likely role, then
+writes `email_type`, `contact_type`, `outreach_priority`, and `email_checked_at` back to
+the contact document.
+
+```bat
+REM Dry-run 20 UK contacts — print results, no writes
+python app\site_email_check.py --countries UK --dry-run 20
+
+REM Classify all UK contacts
+python app\site_email_check.py --countries UK
+
+REM Re-classify already-processed contacts
+python app\site_email_check.py --countries UK --force
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Country codes to process |
+| `--dry-run N` | off | Run on N contacts, print results, skip writes |
+| `--batch-size` | 50 | Contacts per OpenAI call |
+| `--concurrent` | 3 | Parallel OpenAI batches |
+| `--force` | off | Re-classify contacts already having `email_checked_at` |
+| `--limit N` | none | Max contacts to process |
+
+**Fields written to `site_contacts`:**
+
+| Field | Values | Meaning |
+|---|---|---|
+| `email_type` | `personal` / `role` / `department` / `admin` | What kind of inbox it is |
+| `contact_type` | `decision_maker` / `marketing` / `developer` / `sales` / `operations` / `unknown` | Likely role |
+| `outreach_priority` | `1` – `4` | 1=personal email + decision maker/marketing (best); 4=admin/unknown (skip) |
+| `email_checked_at` | ISO timestamp | When classified |
+
+**Outreach priority logic:**
+
+| Priority | Condition |
+|---|---|
+| 1 | Personal email + decision_maker or marketing role |
+| 2 | Personal email + other role  OR  role/dept email + decision_maker |
+| 3 | Role or department email + non-admin contact type |
+| 4 | Admin email OR unknown type with generic inbox |
+
+---
+
+### CLI — site_smart_export.py
+
+Tiered prospect export — reads `site_contacts` (collectionGroup) then batch-fetches parent
+`site_leads`, scores each site into 6 tiers, and exports a colour-coded Excel.
+
+```bat
+python app\site_smart_export.py --countries UK
+python app\site_smart_export.py --countries UK --outreach-priority 2
+python app\site_smart_export.py --countries IN --min-pages 50 --out exports\india.xlsx
+python app\site_smart_export.py --countries NO SE DK
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Country codes |
+| `--min-pages` | 0 | Minimum page count |
+| `--outreach-priority N` | all | Only include contacts with `outreach_priority` <= N |
+| `--out` | `exports/site_prospects_<cc>_<ts>.xlsx` | Output path |
+
+**Tier system (by page count + bonus signals):**
+
+| Tier | Pages | Colour | Bonus signals can lift tiers 3–6 |
+|---|---|---|---|
+| 1 — Ultra Enterprise | >100,000 | Purple | Immune |
+| 2 — Enterprise | >10,000 | Dark red | Immune |
+| 3 — Hot | 500–10,000 | Red | WordPress + hot sector + 3 emails |
+| 4 — Good | 100–500 | Orange | |
+| 5 — Warm | 50–100 | Yellow | |
+| 6 — Cold | <50 | Grey | |
+
+**Excel sheets:** Contacts (colour-coded, sorted tier→pages), Summary (tier/sector/platform counts), WordPress vs Others.

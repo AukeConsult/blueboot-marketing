@@ -27,6 +27,7 @@ Head document includes a by_priority summary across ALL countries:
 """
 from __future__ import annotations
 
+import threading as _threading
 import _pathsetup  # noqa: F401 — adds project root, app/, app/functions/, app/collect-functions/ to sys.path
 import os
 from collections import defaultdict
@@ -70,8 +71,9 @@ def _get_credentials():
 def _init_firebase():
     import firebase_admin
     from firebase_admin import firestore
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(_get_credentials())
+    with _local_fb_lock:
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(_get_credentials())
     return firestore.client()
 
 
@@ -604,8 +606,10 @@ def collection_overview(stats_collection: str = "statistics") -> dict:
         print("  [overview] no credentials — skipping")
         return {}
 
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _local_fb_lock:
+        with _local_fb_lock:
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
     db = firestore.client()
 
     now_ts = datetime.utcnow().isoformat() + "Z"

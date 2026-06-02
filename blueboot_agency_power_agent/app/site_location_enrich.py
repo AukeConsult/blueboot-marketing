@@ -20,6 +20,7 @@ Usage:
 """
 from __future__ import annotations
 
+import threading as _threading
 import argparse
 import asyncio
 import importlib.util
@@ -131,8 +132,10 @@ def _init_firestore(fb_key_dict):
     import firebase_admin.credentials as fb_creds
     cred = (fb_creds.Certificate(fb_key_dict) if fb_key_dict
             else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS", "config/serviceAccountKey.json")))
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _local_fb_lock:
+        with _local_fb_lock:
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
     return firestore.client()
 
 

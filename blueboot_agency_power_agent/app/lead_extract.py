@@ -40,6 +40,7 @@ Function API:
 """
 from __future__ import annotations
 
+import threading as _threading
 import re
 import importlib.util
 import os
@@ -103,8 +104,10 @@ def _firestore_client(collection: str | None = None):
         return None, None
 
     col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _local_fb_lock:
+        with _local_fb_lock:
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
 
     db  = firestore.client()
     col = db.collection(col_name)

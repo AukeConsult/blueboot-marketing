@@ -81,25 +81,48 @@ def _get_credentials():
     return None
 
 
+import threading as _threading
+_firebase_lock = _threading.Lock()
+_firebase_db   = None   # cached Firestore client — set once under lock
+
+
 def _get_db(collection: str | None = None):
-    """Return (db, col, col_name) — initialises Firebase lazily, cached after first call."""
+    """Return (db, col, col_name) — initialises Firebase lazily, cached after first call.
+
+    Thread-safe: uses double-checked locking so concurrent _write_exec threads
+    cannot race on initialize_app / firestore.client().
+    """
+    global _firebase_db
     try:
         import firebase_admin
         from firebase_admin import firestore
     except ImportError:
         return None, None, None
 
-    cred = _get_credentials()
-    if cred is None:
-        return None, None, None
-
     col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
 
-    db  = firestore.client()
-    col = db.collection(col_name)
-    return db, col, col_name
+    # Fast path — already initialised
+    db = _firebase_db
+    if db is not None:
+        return db, db.collection(col_name), col_name
+
+    with _firebase_lock:
+        # Re-check inside lock
+        db = _firebase_db
+        if db is not None:
+            return db, db.collection(col_name), col_name
+
+        cred = _get_credentials()
+        if cred is None:
+            return None, None, None
+
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app(cred)
+
+        _firebase_db = firestore.client()
+        db = _firebase_db
+
+    return db, db.collection(col_name), col_name
 
 
 
@@ -200,12 +223,9 @@ def sync_leads(leads: list["Lead"]) -> None:
     if cred is None:
         return
 
-    collection = os.getenv("FIRESTORE_COLLECTION", "leads")
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
-
-    db  = firestore.client()
-    col = db.collection(collection)
+    db, col, collection = _get_db()
+    if db is None:
+        return
     MAX_BATCH      = 400
     PROGRESS_EVERY = 100
     batch          = db.batch()

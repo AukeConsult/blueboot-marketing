@@ -7,6 +7,7 @@ Usage:
     python app\firestore_snapshot.py wordpress --country NO
 """
 from __future__ import annotations
+import threading as _threading
 import argparse, importlib.util, json, os, sys
 from pathlib import Path
 
@@ -28,8 +29,10 @@ def _get_db():
     cred = (fb_creds.Certificate(key_dict) if key_dict
             else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
                                                 "config/serviceAccountKey.json")))
-    if not firebase_admin._apps:
-        firebase_admin.initialize_app(cred)
+    with _local_fb_lock:
+        with _local_fb_lock:
+            if not firebase_admin._apps:
+                firebase_admin.initialize_app(cred)
     return firestore.client()
 
 

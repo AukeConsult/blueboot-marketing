@@ -131,138 +131,134 @@ Full India pipeline batch: discover → classify → contact enrich → location
 
 ## Coding Rules (from CLAUDE.md)
 
-### asyncio — MANDATORY
+### Thread Safety — MANDATORY
 
-Every `run_in_executor` MUST have `asyncio.wait_for(timeout=12.0)`:
+#### `firestore_client.py` — always use the lock
+
+`app/firestore_client.py` has a global `_db` singleton. When multiple `_write_exec`
+threads call `get_firestore()` simultaneously, a race condition causes double-init and
+connection pool corruption → hangs. The file already has a `threading.Lock()` fix.
+
+**NEVER** remove or bypass the lock. **NEVER** call `get_firestore()` without the
+double-checked locking pattern:
+```python
+_db = None
+_lock = threading.Lock()
+
+def get_firestore():
+    global _db
+    if _db is not None:        # fast path — no lock needed once initialised
+        return _db
+    with _lock:
+        if _db is not None:    # re-check inside lock
+            return _db
+        # ... initialise ...
+        _db = firestore.client()
+    return _db
+```
+
+#### Fire-and-forget with `_write_exec.submit()` — DO NOT USE
+
+**NEVER** do fire-and-forget writes in the site_agent consumer loop:
+```python
+# WRONG — no backpressure, floods pool when Firestore is slow
+_write_exec.submit(lambda: upsert_site_lead(lead, col))
+```
+
+**ALWAYS** await with timeout so the consumer stays bounded:
 ```python
 # CORRECT
 await asyncio.wait_for(
-    loop.run_in_executor(None, lambda: blocking_call(...)),
-    timeout=12.0,
-)
-# WRONG — can hang forever
-await loop.run_in_executor(None, lambda: blocking_call(...))
-```
-
-Every top-level coroutine chain MUST have a ceiling timeout:
-```python
-lead, reason = await asyncio.wait_for(
-    process_site_async(session, url, ...),
-    timeout=120.0,
+    loop.run_in_executor(_write_exec, lambda _l=lead: upsert_site_lead(_l, col)),
+    timeout=20.0,
 )
 ```
 
-Consumer loops MUST call `queue.task_done()` unconditionally in `finally`:
+#### `gather(*tasks)` fan-out helpers need per-worker `wait_for`
+
+The fix/enrich helpers (`fix_rescrape_contacts.py` `_recrawl_one`,
+`lead_enrich_contacts.py` `_enrich_one`) don't use the queue/consumer pattern — they build
+`tasks = [...]` and `await asyncio.gather(*tasks, return_exceptions=True)`. `return_exceptions=True`
+only catches *raised* exceptions; a worker whose chained awaits (crawl chain or per-item Bing
+loop) simply never return will hang `gather` forever — the run freezes after its last printed
+line. Wrap every worker:
 ```python
-while True:
-    item = await queue.get()
+async def _worker_guarded(item):
     try:
-        if item is SENTINEL:
-            break
-        # process...
-    except Exception as exc:
-        print(f"error: {exc}")
-    finally:
-        queue.task_done()   # ALWAYS — even on break/continue
+        await asyncio.wait_for(_worker(session, item, ...), timeout=120.0)
+    except asyncio.TimeoutError:
+        print(f"  timeout on {item}")
+tasks = [_worker_guarded(it) for it in items]
+await asyncio.gather(*tasks, return_exceptions=True)
 ```
+Audit: `grep -c wait_for` == 0 while `grep -c gather` >= 1 ⇒ hang candidate.
 
-### After EVERY code change — mandatory verification
+#### `_write_exec.shutdown(wait=True)` — blocks event loop
 
-After every code change, no matter how small, run all three checks before reporting done:
-
-```bash
-# 1. Syntax check
-python3 -m py_compile app/the_file.py && echo "OK"
-
-# 2. Tail check — confirm file is not truncated
-tail -5 app/the_file.py
-
-# 3. Line count — sanity check against previous known size
-wc -l app/the_file.py
-```
-
-The file is truncated if:
-- The last line is not `    main()` or `if __name__ == "__main__":` (for entry-point scripts)
-- The tail ends mid-string, mid-function, or with trailing whitespace only
-- Line count dropped unexpectedly
-
-If truncated: append the missing tail using `cat >>` (never Edit/Write to fix truncation —
-those tools are what cause it). Then re-verify.
-
-### Large Python files
-Never use Edit/Write tools directly on `site_agent.py` or other large files.
-Use bash Python replace scripts instead:
-```bash
-python3 << 'PYEOF'
-src = open(path).read()
-src = src.replace(old, new, 1)
-open(path, 'w').write(src)
-PYEOF
-```
-After any edit: `python3 -m py_compile app/site_agent.py && tail -5 app/site_agent.py`
-
-### ElementTree
-Never use `or` to chain `Element.find()` — falsy elements cause silent drops:
+**NEVER** call `shutdown(wait=True)` synchronously inside an `async def`:
 ```python
-# WRONG
-loc = sm.find(f"{{{ns}}}loc") or sm.find("loc")
-# CORRECT
-loc = sm.find(f"{{{ns}}}loc")
-if loc is None:
-    loc = sm.find("loc")
+# WRONG — freezes entire event loop if any write thread is still running
+_write_exec.shutdown(wait=True)
+
+# CORRECT — threads finish in background, event loop stays alive
+_write_exec.shutdown(wait=False)
 ```
 
-### Secrets
-Never modify `blueboot_secrets.py`. OpenAI key is at `openAiConfig.defaultProjectKey`.
-Firebase key is at `fireBaseAdminKey`.
+#### `_write_exec` thread pool size
 
----
-
-## Export Filters
-
-Both `site_contact_export.py` and `site_leads_export.py` support:
-
-| Flag | Filters on |
-|------|-----------|
-| `--countries IN` | `ai_country` field |
-| `--sector ecommerce` | `ai_sector` |
-| `--category pune` | `query_category` (set at crawl time) |
-| `--location Pune` | `location_full` substring match |
-| `--page-count medium` | page size bucket (micro/small/medium/large/huge/ultra) |
-| `--with-email-only` | contacts with email address |
-
-Page count buckets: micro=1-50, small=51-500, medium=501-3k, large=3k-10k, huge=10k-100k, ultra=100k+
-
----
-
-## Location Enrichment
-
-`site_location_enrich.py` uses GPT-5.4-mini in batches of 50, 3 parallel.
-
-Fields written to `site_leads`:
-- `location` / `location_full` — "London, England, United Kingdom"
-- `location_city`, `location_region`, `location_country` (ISO code: GB/IN/NO...)
-- `location_confidence` (1.0=address found, 0.3=TLD only)
-- `location_source` (address/phone/postcode/content/company_name/domain)
-
-```
-python app\site_location_enrich.py --countries UK --dry-run 20
-python app\site_location_enrich.py --countries IN
+Set `max_workers` equal to the number of consumer workers so every consumer
+can submit a write simultaneously without queueing:
+```python
+_write_exec = ThreadPoolExecutor(max_workers=max(workers, 8), ...)
 ```
 
----
+#### Thread locks on ALL shared mutable state
 
-## Country Codes Used Internally
+Any variable accessed by more than one thread MUST be protected by a `threading.Lock`.
+This applies to globals, module-level singletons, and any shared dict/list/counter.
 
-| Code | Country | TLD | tld_strict |
-|------|---------|-----|-----------|
-| UK | United Kingdom | .co.uk / .uk | true |
-| IN | India | .in / .co.in | true |
-| NO | Norway | .no | false |
-| SE | Sweden | .se | false |
-| DK | Denmark | .dk | false |
-| FI | Finland | .fi | false |
-| AU | Australia | .com.au / .au | true |
-| DE | Germany | .de | — |
+**Common shared variables that need locks in this project:**
 
-`tld_strict=false` means domain TLD is not filtered — search terms drive targeting.
+| Variable | File | Status |
+|----------|------|--------|
+| `_db` Firestore singleton | `firestore_client.py` | ✅ `threading.Lock()` double-checked locking |
+| `_firebase_db` + `initialize_app` | `functions/firebase_sync.py` | ✅ `_firebase_lock` wraps both |
+| `initialize_app` (×4) | `lead_agent.py` | ✅ `_firebase_init_lock` wraps all |
+| `initialize_app` in 21 other scripts | all `app/*.py` | ✅ `_local_fb_lock` added by audit pass |
+
+**Audit command** — run this after any new file is added to verify:
+```bash
+python3 -c "
+import os, re
+for root, dirs, files in os.walk('app'):
+    dirs[:] = [d for d in dirs if d != '__pycache__']
+    for f in files:
+        if not f.endswith('.py'): continue
+        src = open(os.path.join(root,f), errors='replace').read()
+        lines = src.splitlines()
+        for i, l in enumerate(lines):
+            if ('initialize_app' in l or 'firestore.client()' in l) and not l.strip().startswith('#'):
+                ctx = chr(10).join(lines[max(0,i-30):i])
+                if not re.search(r'with\s+_\w*lock\w*\s*:', ctx):
+                    print(f'UNPROTECTED {root}/{f}:{i+1}  {l.strip()[:70]}')
+"
+```
+
+**Pattern — always use double-checked locking for singletons:**
+```python
+_singleton = None
+_lock = threading.Lock()
+
+def get_singleton():
+    if _singleton is not None:   # fast path, no lock
+        return _singleton
+    with _lock:
+        if _singleton is not None:  # re-check inside lock
+            return _singleton
+        _singleton = create_it()
+    return _singleton
+```
+
+**asyncio counters are safe without locks** — asyncio is single-threaded so
+`counters["done"] += 1` inside a coroutine needs no lock. Only code running in
+`ThreadPoolExecutor` threads needs locks.
