@@ -136,11 +136,18 @@ _CONTENT_NEG_KWS: list[str] = _load_content_negative_keywords()
 # URL / domain helpers
 # ---------------------------------------------------------------------------
 
-def normalize_url(url: str) -> str:
+def normalize_url(url: str, homepage_only: bool = True) -> str:
+    """Normalize URL. When homepage_only=True (default), strip path to root domain.
+
+    Search engines often return inner page URLs; site_agent needs the homepage.
+    Pass homepage_only=False only when you explicitly want to preserve the path.
+    """
     url = url.strip()
     if not url.startswith(("http://", "https://")):
         url = "https://" + url
     parsed = urlparse(url)
+    if homepage_only:
+        return f"{parsed.scheme}://{parsed.netloc}/"
     return f"{parsed.scheme}://{parsed.netloc}{parsed.path or '/'}"
 
 

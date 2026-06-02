@@ -156,7 +156,14 @@ def _brave_search(query: str, country_code: str = "") -> list[dict]:
         print(f"      [brave] SKIP — BRAVE_API_KEY not set")
         return []
 
-    cc     = country_code.lower() if country_code else ""
+    # Map internal country codes to ISO 3166-1 alpha-2 for Brave API
+    _CC_MAP = {
+        "uk": "gb", "UK": "gb",
+        "en": "gb", "EN": "gb",
+        "qq": "",   "QQ": "",   # global — no country filter
+    }
+    cc = country_code.lower() if country_code else ""
+    cc = _CC_MAP.get(country_code, _CC_MAP.get(cc, cc))
     params = {
         "q":          query,
         "count":      SEARCH_RESULTS,
