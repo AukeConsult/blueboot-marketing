@@ -1,3 +1,5 @@
 *secrets.py
+.env
+!/env.example
 /exports/
 /output/
