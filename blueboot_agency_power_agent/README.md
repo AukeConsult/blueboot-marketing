@@ -829,7 +829,6 @@ After a run, the `output/` directory contains:
 | `agency_contacts.csv` | All contacts, one row per email address |
 | `agency_leads.json` | All leads as JSON |
 | `agency_contacts.json` | All contacts as JSON |
-| `extract_leads_*.xlsx` | Filtered extracts produced by `maint_lead_extract.py` |
 | `output/<campaign_id>/campaign.xlsx` | Campaign export (Summary + Leads + Contacts sheets) |
 | `output/<campaign_id>/campaign.json` | Same campaign data as JSON |
 
@@ -888,8 +887,6 @@ leads_extract/{extract_name}/leads_extracted/{lead_id}           — extracted l
 leads_extract/{extract_name}/leads_extracted/{lead_id}/
     contacts_extracted/{contact_id}                              — extracted contact snapshot
 ```
-
-The `leads_extract` collection is populated by `maint_lead_extract.py --save-extract`. A lead can belong to at most one extract; duplicates are detected via a `collectionGroup` query on `leads_extracted` before each run.
 
 Credentials are loaded from (in order):
 
@@ -1053,12 +1050,9 @@ site_campaigns/{campaign}/
 
 ---
 
-## `maint_lead_extract.py` — export a filtered extract from Firestore
-
 Reads lead documents and their contacts sub-collections directly from Firestore and writes a focused Excel file. No local CSV is required. Global leads (`country="*"`) are excluded from all extracts.
 
 ```bat
-python app\maint_lead_extract.py [options]
 ```
 
 ### Priority & Scoring
@@ -1111,7 +1105,6 @@ likely the agency is to become a BlueSearch reseller partner.
 
 Use both to build high-precision extracts:
 ```bat
-python app\maint_lead_extract.py --countries UK --min-score 55 --priority A --priority B --ai-potential high --auto-name --save-extract
 ```
 → Extract ID: `UK_score55_a_b_high_jun02`
 
@@ -1166,28 +1159,20 @@ leads_extract/
 
 ```bat
 REM A-priority Norwegian leads with email, score ≥ 70
-python app\maint_lead_extract.py --min-score 70 --countries NO --priority A --with-email
 
 REM Catalog-sourced leads across Norway and Sweden
-python app\maint_lead_extract.py --source catalog --countries NO SE
 
 REM All leads matching a specific query keyword
-python app\maint_lead_extract.py --query "webbyrå"
 
 REM Keyword search — WordPress or WooCommerce leads
-python app\maint_lead_extract.py --keywords wordpress,woocommerce
 
 REM Best leads — A/B priority + GPT high potential + email, auto-named extract
-python app\maint_lead_extract.py --countries UK --min-score 55 --priority A --priority B --ai-potential high --with-email --auto-name --save-extract
 
 REM High or medium AI potential from Norway and Sweden
-python app\maint_lead_extract.py --countries NO SE --ai-potential high --ai-potential medium --priority A --auto-name --save-extract
 
 REM India high-score WordPress agencies only
-python app\maint_lead_extract.py --countries IN --min-score 70 --ai-potential high --keywords wordpress,woocommerce --auto-name --save-extract
 
 REM Dry-run: preview what would be saved to Firestore
-python app\maint_lead_extract.py ^
   --keywords wordpress ^
   --countries NO SE ^
   --min-score 60 ^
@@ -1195,14 +1180,12 @@ python app\maint_lead_extract.py ^
   --extract-dry-run
 
 REM Live save — writes to leads_extract/wordpress_nordic_may26
-python app\maint_lead_extract.py ^
   --keywords wordpress ^
   --countries NO SE ^
   --min-score 60 ^
   --save-extract "wordpress_nordic_may26"
 
 REM Second extract — already-extracted leads are skipped automatically
-python app\maint_lead_extract.py ^
   --keywords shopify ^
   --countries NO SE ^
   --save-extract "shopify_nordic_jun01"
@@ -1257,8 +1240,6 @@ This script only needs to be run once on existing data. All new contacts written
 ---
 
 ## `campaign_exporter.py` — export a campaign to Excel + JSON
-
-Reads a named campaign from the `leads_extract` Firestore collection (populated by `maint_lead_extract.py --save-extract`) and writes two files to `output/<campaign_id>/`:
 
 | File | Contents |
 |---|---|
@@ -1561,7 +1542,6 @@ SITE PIPELINE                  LEAD PIPELINE
 
 A full architecture document is saved at `docs/BlueSearch_Outreach_Pipeline.pdf`.
 It covers all five stages, every script, the contact schema, and the status lifecycle.
-
 
 ---
 

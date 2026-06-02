@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import _pathsetup  # noqa: F401
+from functions.config import cfg
 
 # ---------------------------------------------------------------------------
 # Config
@@ -49,17 +50,11 @@ SITE_TIMEOUT        = 60.0    # hard ceiling per site
 # ---------------------------------------------------------------------------
 
 def _load_secrets():
-    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
-    if not secrets_path.exists():
-        return None
-    try:
-        spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-        mod  = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return getattr(mod, "fireBaseAdminKey", None)
-    except Exception as e:
-        print(f"  [recheck] could not load blueboot_secrets: {e}")
-        return None
+    """Load Firebase credentials from env (FIREBASE_KEY_JSON or FIREBASE_CREDENTIALS)."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    return get_firebase_cred()
 
 
 def _init_firestore(fb_key_dict):
@@ -70,9 +65,13 @@ def _init_firestore(fb_key_dict):
     except ImportError:
         raise RuntimeError("firebase-admin not installed — run: pip install firebase-admin")
 
-    cred = (fb_creds.Certificate(fb_key_dict) if fb_key_dict
-            else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
-                                                "config/serviceAccountKey.json")))
+    if isinstance(fb_key_dict, fb_creds.Certificate):
+        cred = fb_key_dict
+    elif fb_key_dict:
+        cred = fb_creds.Certificate(fb_key_dict)
+    else:
+        cred = fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
+                                              "config/serviceAccountKey.json"))
     with _local_fb_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)

@@ -119,7 +119,7 @@ def brave_search(query: str, max_results: int,
     country_code: ISO 2-letter code (e.g. "NO", "SE") — passed as Brave country + search_lang.
     Returns up to max_results URL strings.
     """
-    api_key = os.getenv("BRAVE_API_KEY", "")
+    api_key = cfg.BRAVE_API_KEY
     if not api_key:
         return []
 
@@ -196,7 +196,7 @@ def github_org_search(country_cfg: dict, country_code: str,
     """
     import time
 
-    token   = os.getenv("GITHUB_TOKEN", "")
+    token   = cfg.GITHUB_TOKEN
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
@@ -619,6 +619,7 @@ def load_queries_for_countries(countries: list[str],
 
 import threading
 import queue as _queue
+from functions.config import cfg
 
 class _BackgroundCrawler:
     """Runs crawl batches in a background thread so the search loop never blocks.

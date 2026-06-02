@@ -3,7 +3,9 @@ import threading
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-from blueboot_secrets import fireBaseAdminKey
+from dotenv import load_dotenv
+load_dotenv()
+from functions.firebase_cred import get_firebase_cred
 
 _db = None
 _lock = threading.Lock()   # protects _db initialisation across threads
@@ -22,7 +24,7 @@ def get_firestore():
             return _db
 
         if not firebase_admin._apps:
-            cred = credentials.Certificate(fireBaseAdminKey)
+            cred = get_firebase_cred()
             firebase_admin.initialize_app(cred)
 
         _db = firestore.client()

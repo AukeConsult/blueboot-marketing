@@ -41,6 +41,7 @@ from pathlib import Path
 import aiohttp
 
 import _pathsetup  # noqa: F401
+from functions.config import cfg
 
 # ---------------------------------------------------------------------------
 # Browser user-agent
@@ -181,21 +182,10 @@ def _get_db(collection: str | None = None):
         print("[enrich] firebase-admin not installed — run: pip install firebase-admin")
         return None, None
 
-    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
-    key_dict = None
-    if secrets_path.exists():
-        try:
-            spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-            mod  = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            key_dict = getattr(mod, "fireBaseAdminKey", None)
-        except Exception as e:
-            print(f"[enrich] could not load blueboot_secrets: {e}")
-
-    cred = (fb_creds.Certificate(key_dict) if key_dict
-            else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
-                                                "config/serviceAccountKey.json")))
-    col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
+    from dotenv import load_dotenv; load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    cred = get_firebase_cred()
+    col_name = collection or cfg.FIRESTORE_COLLECTION
     with _local_fb_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
@@ -337,7 +327,7 @@ def enrich_contacts(
     if col is None:
         raise RuntimeError("Could not connect to Firestore — check credentials.")
 
-    col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
+    col_name = collection or cfg.FIRESTORE_COLLECTION
 
     # Build normalised country filter — accept both ISO code ("NO") and full
     # name ("Norway") since contacts store country as the ISO code after the

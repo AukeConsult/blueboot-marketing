@@ -15,23 +15,16 @@ import argparse, importlib.util, json, os, sys
 from pathlib import Path
 
 import _pathsetup  # noqa: F401
+from functions.config import cfg
 
 
 def _get_db():
     import firebase_admin, firebase_admin.credentials as fb_creds
     from firebase_admin import firestore
 
-    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
-    key_dict = None
-    if secrets_path.exists():
-        spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-        mod  = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        key_dict = getattr(mod, "fireBaseAdminKey", None)
-
-    cred = (fb_creds.Certificate(key_dict) if key_dict
-            else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
-                                                "config/serviceAccountKey.json")))
+    from dotenv import load_dotenv; load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    cred = get_firebase_cred()
     with _local_fb_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
@@ -78,8 +71,20 @@ def search(keyword: str, field: str | None, country: str | None,
         query = col
         if country:
             query = col.where("country", "==", country.upper())
-        for doc in query.stream():
-            d = doc.to_dict()
+        gen = query.stream()
+        while True:
+            try:
+                doc = next(gen)
+            except StopIteration:
+                break
+            except (ValueError, AttributeError):
+                continue  # skip _rowy_ and unrelated collection docs
+            try:
+                d = doc.to_dict() or {}
+            except Exception:
+                continue
+            if not d:
+                continue
             haystack = " ".join(str(d.get(f) or "") for f in fields_to_check).lower()
             if keyword_l in haystack:
                 matches.append(d)
@@ -117,7 +122,7 @@ def main():
                    help="Firestore collection (default: leads / FIRESTORE_COLLECTION env)")
     args = p.parse_args()
 
-    collection = args.collection or os.getenv("FIRESTORE_COLLECTION", "leads")
+    collection = args.collection or cfg.FIRESTORE_COLLECTION
     search(args.keyword, args.field, args.country, args.limit, collection)
 
 

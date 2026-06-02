@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
 
 import threading as _threading
+from functions.config import cfg
 _firebase_init_lock = _threading.Lock()   # guards firebase_admin.initialize_app
 
 # ---------------------------------------------------------------------------
@@ -55,30 +56,16 @@ def load_leads_from_firebase(collection: str | None = None) -> set[str]:
         return set()
 
     # --- credentials (same logic as push_to_firebase) ---
-    cred = None
-    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
-    if secrets_path.exists():
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-            mod  = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            key_dict = getattr(mod, "fireBaseAdminKey", None)
-            if key_dict:
-                cred = fb_creds.Certificate(key_dict)
-        except Exception as exc:
-            print(f"  [firebase] could not load blueboot_secrets: {exc}")
-
-    if cred is None:
-        creds_path = os.getenv("FIREBASE_CREDENTIALS", "config/serviceAccountKey.json")
-        if Path(creds_path).exists():
-            cred = fb_creds.Certificate(creds_path)
+    from dotenv import load_dotenv
+    load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    cred = get_firebase_cred()
 
     if cred is None and not firebase_admin._apps:
         print("  [firebase] no credentials found — skipping preload.")
         return set()
 
-    col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
+    col_name = cfg.FIRESTORE_COLLECTION  # always use default for leads_excluded
     with _firebase_init_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
@@ -97,10 +84,16 @@ def load_leads_from_firebase(collection: str | None = None) -> set[str]:
 
     def _fetch_partition(q):
         result = set()
-        for doc in q.select(["domain"]).stream():
-            d = (doc.to_dict() or {}).get("domain", "")
-            if d:
-                result.add(d.strip().lower())
+        try:
+            for doc in q.select(["domain"]).stream():
+                try:
+                    d = (doc.to_dict() or {}).get("domain", "")
+                    if d:
+                        result.add(d.strip().lower())
+                except (ValueError, AttributeError):
+                    pass  # skip docs from unrelated collections (_rowy_ etc.)
+        except Exception:
+            pass
         return result
 
     domains: set[str] = set()
@@ -127,52 +120,32 @@ def load_leads_excluded() -> set[str]:
     except ImportError:
         return set()
 
-    cred = None
-    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
-    if secrets_path.exists():
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-            mod  = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            key_dict = getattr(mod, "fireBaseAdminKey", None)
-            if key_dict:
-                cred = fb_creds.Certificate(key_dict)
-        except Exception:
-            pass
+    from dotenv import load_dotenv
+    load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    cred = get_firebase_cred()
 
+    col_name = "leads_excluded"  # fixed — this function always reads leads_excluded
     if cred is None and not firebase_admin._apps:
-        return set()
+        print("  [firebase] no credentials found — skipping upload.")
+        return
     with _firebase_init_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
 
     db  = firestore.client()
-    col = db.collection("leads_excluded")
-
-    from concurrent.futures import ThreadPoolExecutor as _TPE
-
-    PARTITIONS = 8
-    try:
-        queries = [p.query() for p in col.get_partitions(PARTITIONS)]
-    except Exception:
-        queries = [col.order_by("__name__")]
-
-    def _fetch_excl(q):
-        result = set()
-        for doc in q.select(["domain"]).stream():
-            d = (doc.to_dict() or {}).get("domain", "")
-            if d:
-                result.add(d.strip().lower())
-        return result
+    col = db.collection(col_name)
 
     excluded: set[str] = set()
-    with _TPE(max_workers=PARTITIONS) as pool:
-        futures = list(pool.map(_fetch_excl, queries, timeout=30.0))
-    for partial in futures:
-        excluded |= partial   # merge in main thread after all workers done
+    for doc in col.select(["domain"]).stream():
+        try:
+            d = (doc.to_dict() or {}).get("domain", "")
+            if d:
+                excluded.add(d.strip().lower())
+        except (ValueError, AttributeError):
+            pass
 
-    print(f"  [firebase] {len(excluded)} excluded leads loaded ({len(queries)} partitions)")
+    print(f"  [firebase] {len(excluded)} excluded leads loaded")
     return excluded
 
 
@@ -186,29 +159,11 @@ def push_to_firebase(leads: list["Lead"], collection: str | None = None) -> None
         print("  [firebase] firebase-admin not installed — run: pip install firebase-admin")
         return
 
-    cred = None
-    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
-    if secrets_path.exists():
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-            mod  = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            key_dict = getattr(mod, "fireBaseAdminKey", None)
-            if key_dict:
-                cred = fb_creds.Certificate(key_dict)
-        except Exception as exc:
-            print(f"  [firebase] could not load blueboot_secrets: {exc}")
+    from dotenv import load_dotenv; load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    cred = get_firebase_cred()
 
-    if cred is None:
-        creds_path = os.getenv("FIREBASE_CREDENTIALS", "config/serviceAccountKey.json")
-        if Path(creds_path).exists():
-            cred = fb_creds.Certificate(creds_path)
-
-    col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
-    if cred is None and not firebase_admin._apps:
-        print("  [firebase] no credentials found — skipping upload.")
-        return
+    col_name = collection or cfg.FIRESTORE_COLLECTION
     with _firebase_init_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
@@ -232,7 +187,7 @@ def push_to_firebase(leads: list["Lead"], collection: str | None = None) -> None
                 "lead_id":  _lead_id(lead.website),
                 "company":  lead.company,
                 "domain":   lead.domain,
-                "website":  lead.website,
+                "website":  normalize_url(lead.website or '') ,
                 "country":  lead.country_name,
                 "phones":   lead.phones,
                 "linkedin": lead.linkedin,
@@ -240,12 +195,12 @@ def push_to_firebase(leads: list["Lead"], collection: str | None = None) -> None
             for i, email in enumerate(emails)
         ]
 
-    MAX_BATCH     = 400
+    MAX_BATCH      = 400
     PROGRESS_EVERY = 100
-    batch         = db.batch()
-    ops           = 0
-    lead_count    = 0
-    contact_count = 0
+    batch          = db.batch()
+    ops            = 0
+    lead_count     = 0
+    contact_count  = 0
 
     def _flush():
         nonlocal batch, ops
@@ -315,31 +270,31 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Output directory for the Excel file (default: <project_root>/output).",
     )
     parser.add_argument(
-        "--max-results", type=int, default=int(os.getenv("MAX_RESULTS", "200")),
+        "--max-results", type=int, default=cfg.MAX_RESULTS,
         help="Max search results per query.",
     )
     parser.add_argument(
-        "--min-score", type=int, default=int(os.getenv("MIN_SCORE", "50")),
+        "--min-score", type=int, default=cfg.MIN_SCORE,
         help="Minimum reseller score to store a lead (default: 50).",
     )
     parser.add_argument(
-        "--max-pages", type=int, default=int(os.getenv("MAX_PAGES", "6")),
+        "--max-pages", type=int, default=cfg.MAX_PAGES,
         help="Max pages to crawl per agency website.",
     )
     parser.add_argument(
-        "--max-country", type=int, default=int(os.getenv("MAX_COUNTRY", "1000")) or None,
+        "--max-country", type=int, default=cfg.MAX_COUNTRY,
         help="Stop a country after this many leads (0 = unlimited).",
     )
     parser.add_argument(
-        "--give-up-after", type=int, default=int(os.getenv("GIVE_UP_AFTER", "5")),
+        "--give-up-after", type=int, default=cfg.GIVE_UP_AFTER,
         help="Give up a country after this many consecutive empty queries.",
     )
     parser.add_argument(
-        "--delay", type=float, default=float(os.getenv("CRAWL_DELAY", "1.0")),
+        "--delay", type=float, default=cfg.CRAWL_DELAY,
         help="Seconds to wait between page fetches within one site.",
     )
     parser.add_argument(
-        "--workers", type=int, default=int(os.getenv("CRAWL_WORKERS", "20")),
+        "--workers", type=int, default=cfg.CRAWL_WORKERS,
         help="Parallel site-crawl workers / batch size.",
     )
     parser.add_argument(
@@ -404,30 +359,14 @@ def audit_tlds(collection: str | None = None, dry_run: bool = False) -> None:
         from functions.utils import load_country_configs, tld_accepted_for, country_for_domain
 
     # ---- Firebase init ----
-    cred = None
-    secrets_path = _Path(__file__).parent.parent / "blueboot_secrets.py"
-    if secrets_path.exists():
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-            mod  = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            key_dict = getattr(mod, "fireBaseAdminKey", None)
-            if key_dict:
-                cred = fb_creds.Certificate(key_dict)
-        except Exception as exc:
-            print(f"  [audit] could not load blueboot_secrets: {exc}")
-
-    if cred is None:
-        creds_path = os.getenv("FIREBASE_CREDENTIALS", "config/serviceAccountKey.json")
-        if _Path(creds_path).exists():
-            cred = fb_creds.Certificate(creds_path)
-
+    from dotenv import load_dotenv; load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    cred = get_firebase_cred()
     if cred is None:
         print("  [audit] no Firebase credentials found.")
         return
 
-    col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
+    col_name = collection or cfg.FIRESTORE_COLLECTION
     with _firebase_init_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
@@ -725,18 +664,13 @@ def audit_tlds(collection: str | None = None, dry_run: bool = False) -> None:
         if not dry_run:
             total_blocked = len(blocked_refs)
             print(f"\n[audit] Deleting {total_blocked} blocked lead(s)…")
-            del_leads    = 0
-            del_contacts = 0
-            PROGRESS_EVERY = 100
-            for ref, _domain, _reason in blocked_refs:
-                for cdoc in ref.collection("contacts").stream():
+            del_leads = 0
+            for _ref, domain, reason in blocked_refs:
+                for cdoc in _ref.collection("contacts").stream():
                     cdoc.reference.delete()
-                    del_contacts += 1
-                ref.delete()
+                _ref.delete()
                 del_leads += 1
-                if del_leads % PROGRESS_EVERY == 0:
-                    print(f"[audit] {del_leads}/{total_blocked} blocked leads deleted…")
-            print(f"[audit] Deleted {del_leads} lead(s) and {del_contacts} contact(s). ✓")
+            print(f"[audit] Deleted {del_leads} leads.")
         else:
             print(f"\n[audit] DRY RUN — would delete {len(blocked_refs)} blocked lead(s).")
 
@@ -746,10 +680,9 @@ def main() -> None:
     args = _build_parser().parse_args()
 
     if getattr(args, "force", False):
-        print("  [lead_agent] --force: skipping leads + leads_excluded preload — all sites will be re-crawled")
+        print("  [lead_agent] --force: skipping preload")
         args.preloaded_domains = set()
     else:
-        # Run both preloads in parallel — each is partitioned internally
         from concurrent.futures import ThreadPoolExecutor as _TPE
         print("  [lead_agent] preloading leads + leads_excluded in parallel…", flush=True)
         with _TPE(max_workers=2) as _pool:
@@ -769,7 +702,7 @@ def main() -> None:
         leads = catalog_run(args)
     elif args.mode == "search":
         leads = run(args)
-    else:  # "both"
+    else:
         print("\n" + "="*60)
         print("PHASE 1 — Catalog scrape")
         print("="*60)
@@ -787,7 +720,7 @@ def main() -> None:
     if args.no_firebase:
         print("  [firebase] skipped (--no-firebase).")
     elif leads:
-        print("  [firebase] running end-of-run sync to catch any missed leads...")
+        print("  [firebase] running end-of-run sync…")
         push_to_firebase(leads, collection=args.firebase_collection)
     else:
         print("  [firebase] no leads to upload.")

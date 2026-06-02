@@ -42,6 +42,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import _pathsetup  # noqa: F401
+from functions.config import cfg
 
 # ---------------------------------------------------------------------------
 # Config
@@ -49,7 +50,6 @@ import _pathsetup  # noqa: F401
 
 LEADS_COLLECTION    = "site_leads"
 CONTACTS_COLLECTION = "site_contacts"
-OPENAI_MODEL        = "gpt-4.1-mini"
 CONCURRENT_DEFAULT  = 15     # parallel Brave+GPT tasks
 CONTACT_TIMEOUT     = 45.0   # hard ceiling per contact
 RETRY_ATTEMPTS      = 2
@@ -60,20 +60,11 @@ SEARCH_RESULTS      = 5      # Brave results to fetch per contact query
 # ---------------------------------------------------------------------------
 
 def _load_secrets():
-    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
-    if not secrets_path.exists():
-        return None, None
-    try:
-        spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-        mod  = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        fb_key  = getattr(mod, "fireBaseAdminKey", None)
-        ai_cfg  = getattr(mod, "openAiConfig", {})
-        api_key = ai_cfg.get("defaultProjectKey") or ai_cfg.get("apiKey") or ""
-        return fb_key, api_key
-    except Exception as e:
-        print(f"  [contact-enrich] could not load blueboot_secrets: {e}")
-        return None, None
+    """Load Firebase credentials from env (FIREBASE_KEY_JSON or FIREBASE_CREDENTIALS)."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    return get_firebase_cred()
 
 
 def _init_firestore(fb_key_dict):
@@ -83,9 +74,13 @@ def _init_firestore(fb_key_dict):
         import firebase_admin.credentials as fb_creds
     except ImportError:
         raise RuntimeError("firebase-admin not installed — run: pip install firebase-admin")
-    cred = (fb_creds.Certificate(fb_key_dict) if fb_key_dict
-            else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
-                                                "config/serviceAccountKey.json")))
+    if isinstance(fb_key_dict, fb_creds.Certificate):
+        cred = fb_key_dict
+    elif fb_key_dict:
+        cred = fb_creds.Certificate(fb_key_dict)
+    else:
+        cred = fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
+                                              "config/serviceAccountKey.json"))
     with _local_fb_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
@@ -156,7 +151,7 @@ def _brave_search(query: str, country_code: str = "") -> list[dict]:
     """Search Brave and return result dicts with url/title/description."""
     import requests as _req
 
-    api_key = os.getenv("BRAVE_API_KEY", "")
+    api_key = cfg.BRAVE_API_KEY
     if not api_key:
         print(f"      [brave] SKIP — BRAVE_API_KEY not set")
         return []
@@ -284,7 +279,7 @@ async def _enrich_one(
             t0 = time.monotonic()
             response = await asyncio.wait_for(
                 client.chat.completions.create(
-                    model=OPENAI_MODEL,
+                    model=cfg.OPENAI_MODEL,
                     messages=[
                         {"role": "system", "content": _SYSTEM_PROMPT},
                         {"role": "user",   "content": _user_prompt(name, domain, title, results)},
@@ -389,10 +384,10 @@ def enrich_contacts(
     force:      bool             = False,
 ) -> None:
     fb_key, api_key = _load_secrets()
-    api_key = api_key or os.getenv("OPENAI_API_KEY", "")
+    api_key = api_key or cfg.OPENAI_API_KEY
     if not api_key:
         raise RuntimeError("No OpenAI API key found.")
-    if not os.getenv("BRAVE_API_KEY"):
+    if not cfg.BRAVE_API_KEY:
         print("  [contact-enrich] WARNING: BRAVE_API_KEY not set — Brave search will be skipped.")
 
     db     = _init_firestore(fb_key)

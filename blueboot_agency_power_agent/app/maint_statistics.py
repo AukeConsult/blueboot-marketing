@@ -36,6 +36,7 @@ import os
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+from functions.config import cfg
 
 
 # ---------------------------------------------------------------------------
@@ -48,27 +49,9 @@ def _get_credentials():
     except ImportError:
         raise SystemExit("firebase-admin not installed. Run: pip install firebase-admin")
 
-    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
-    if secrets_path.exists():
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-            mod  = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            key_dict = getattr(mod, "fireBaseAdminKey", None)
-            if key_dict:
-                return fb_creds.Certificate(key_dict)
-        except Exception as exc:
-            print(f"  [firebase] could not load blueboot_secrets: {exc}")
-
-    creds_path = os.getenv("FIREBASE_CREDENTIALS", "config/serviceAccountKey.json")
-    if Path(creds_path).exists():
-        return fb_creds.Certificate(creds_path)
-
-    raise SystemExit(
-        "No Firebase credentials found.\n"
-        "Set FIREBASE_CREDENTIALS or place blueboot_secrets.py in the project root."
-    )
+    from dotenv import load_dotenv; load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    return get_firebase_cred()
 
 
 def _init_firebase():
@@ -100,7 +83,7 @@ def summarise_country_pr_priority(
         "countries" -> {ISO_code: country_doc_dict}
     """
     db = _init_firebase()
-    col_name  = leads_collection or os.getenv("FIRESTORE_COLLECTION", "leads")
+    col_name  = leads_collection or cfg.FIRESTORE_COLLECTION
     leads_col = db.collection(col_name)
 
     # ------------------------------------------------------------------
@@ -109,8 +92,20 @@ def summarise_country_pr_priority(
     print(f"  [stats] streaming leads from '{col_name}' ...")
     lead_meta = {}
 
-    for doc in leads_col.select(["country", "country_name", "priority", "lead_id"]).stream():
-        data         = doc.to_dict()
+    gen = leads_col.select(["country", "country_name", "priority", "lead_id"]).stream()
+    while True:
+        try:
+            doc = next(gen)
+        except StopIteration:
+            break
+        except (ValueError, AttributeError):
+            continue
+        try:
+            data = doc.to_dict() or {}
+        except Exception:
+            continue
+        if not data:
+            continue
         lid          = data.get("lead_id") or doc.id
         country      = (data.get("country")      or "").strip().upper() or "XX"
         country_name = (data.get("country_name") or "").strip() or country
@@ -383,7 +378,7 @@ def summarise_reasons_count(
     dict with keys "head" and "countries".
     """
     db = _init_firebase()
-    col_name  = leads_collection or os.getenv("FIRESTORE_COLLECTION", "leads")
+    col_name  = leads_collection or cfg.FIRESTORE_COLLECTION
     leads_col = db.collection(col_name)
 
     print(f"  [reasons] streaming leads from '{col_name}' ...")

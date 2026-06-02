@@ -38,8 +38,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import _pathsetup  # noqa: F401
+from functions.config import cfg
 
-OPENAI_MODEL       = "gpt-5.4-mini"
 BATCH_SIZE         = 50
 CONCURRENT_BATCHES = 3
 RETRY_ATTEMPTS     = 3
@@ -101,20 +101,11 @@ def _user_prompt(batch: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 def _load_secrets():
-    p = Path(__file__).parent.parent / "blueboot_secrets.py"
-    if not p.exists():
-        return None, None
-    try:
-        spec = importlib.util.spec_from_file_location("blueboot_secrets", p)
-        mod  = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        fb_key  = getattr(mod, "fireBaseAdminKey", None)
-        cfg     = getattr(mod, "openAiConfig", {})
-        api_key = cfg.get("defaultProjectKey") if isinstance(cfg, dict) else None
-        return fb_key, api_key
-    except Exception as e:
-        print(f"  [email-check] secrets error: {e}")
-        return None, None
+    """Load Firebase credentials from env (FIREBASE_KEY_JSON or FIREBASE_CREDENTIALS)."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    return get_firebase_cred()
 
 
 def _init_firestore(fb_key):
@@ -122,7 +113,7 @@ def _init_firestore(fb_key):
     from firebase_admin import firestore
     import firebase_admin.credentials as creds
     cred = creds.Certificate(fb_key) if fb_key else creds.Certificate(
-        os.getenv("FIREBASE_CREDENTIALS", "config/serviceAccountKey.json"))
+        cfg.FIREBASE_CREDENTIALS or "config/serviceAccountKey.json")
     with _local_fb_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
@@ -290,7 +281,7 @@ async def _enrich_batch(client, loop, batch_refs, batch_data, counters, dry_run)
         try:
             response = await asyncio.wait_for(
                 client.chat.completions.create(
-                    model=OPENAI_MODEL,
+                    model=cfg.OPENAI_MODEL,
                     messages=[
                         {"role": "system", "content": _SYSTEM_PROMPT},
                         {"role": "user",   "content": _user_prompt(batch_data)},
@@ -442,7 +433,7 @@ def main(argv=None):
         countries = raw or None
 
     fb_key, api_key = _load_secrets()
-    api_key = api_key or os.getenv("OPENAI_API_KEY", "")
+    api_key = api_key or cfg.OPENAI_API_KEY
     if not api_key:
         raise RuntimeError("No OpenAI API key found.")
 

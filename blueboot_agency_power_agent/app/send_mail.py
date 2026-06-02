@@ -18,6 +18,7 @@ import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dataclasses import dataclass
+from functions.config import cfg
 
 
 # ---------------------------------------------------------------------------
@@ -67,12 +68,12 @@ class SmtpConfig:
         if missing:
             raise EnvironmentError(f"Missing required env vars for email: {', '.join(missing)}")
         return SmtpConfig(
-            host=os.environ["SMTP_HOST"],
-            port=int(os.getenv("SMTP_PORT", "587")),
-            user=os.environ["SMTP_USER"],
-            password=os.environ["SMTP_PASSWORD"],
-            mail_from=os.getenv("MAIL_FROM", os.environ["SMTP_USER"]),
-            reply_to=os.getenv("MAIL_REPLY_TO", ""),
+            host=cfg.SMTP_HOST,
+            port=cfg.SMTP_PORT,
+            user=cfg.SMTP_USER,
+            password=cfg.SMTP_PASSWORD,
+            mail_from=os.getenv("MAIL_FROM", cfg.SMTP_USER),
+            reply_to=cfg.MAIL_REPLY_TO,
         )
 
 

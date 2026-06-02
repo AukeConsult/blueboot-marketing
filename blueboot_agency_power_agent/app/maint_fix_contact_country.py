@@ -30,6 +30,7 @@ import os
 from pathlib import Path
 
 import _pathsetup  # noqa: F401
+from functions.config import cfg
 
 
 # ---------------------------------------------------------------------------
@@ -45,21 +46,10 @@ def _get_db(collection: str | None = None):
         print("[fix] firebase-admin not installed — run: pip install firebase-admin")
         return None, None, None
 
-    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
-    key_dict = None
-    if secrets_path.exists():
-        try:
-            spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-            mod  = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            key_dict = getattr(mod, "fireBaseAdminKey", None)
-        except Exception as e:
-            print(f"[fix] could not load blueboot_secrets: {e}")
-
-    cred = (fb_creds.Certificate(key_dict) if key_dict
-            else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
-                                                "config/serviceAccountKey.json")))
-    col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
+    from dotenv import load_dotenv; load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    cred = get_firebase_cred()
+    col_name = collection or cfg.FIRESTORE_COLLECTION
     with _local_fb_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)

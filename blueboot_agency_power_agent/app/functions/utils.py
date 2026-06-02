@@ -13,6 +13,7 @@ import phonenumbers
 import requests
 import tldextract
 from bs4 import BeautifulSoup
+from functions.config import cfg
 
 # ---------------------------------------------------------------------------
 # Constants

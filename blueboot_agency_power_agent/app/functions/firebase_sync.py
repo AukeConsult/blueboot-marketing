@@ -4,8 +4,7 @@ Structure:
   leads/{lead_id}                 — one doc per agency, merged on upsert
   leads/{lead_id}/contacts/{id}   — one doc per email address, merged on upsert
 
-Credentials: blueboot_secrets.fireBaseAdminKey (project root)
-  or FIREBASE_CREDENTIALS env var / config/serviceAccountKey.json fallback.
+Credentials: FIREBASE_KEY_JSON env var (inline JSON) or FIREBASE_CREDENTIALS env var / config/serviceAccountKey.json fallback.
 Collection root: 'leads' (override with FIRESTORE_COLLECTION env var).
 """
 from __future__ import annotations
@@ -58,30 +57,14 @@ def _get_credentials():
         print("  [firebase] firebase-admin not installed — run: pip install firebase-admin")
         return None
 
-    # 1. blueboot_secrets.py in project root
-    secrets_path = Path(__file__).parent.parent.parent / "blueboot_secrets.py"
-    if secrets_path.exists():
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-            mod  = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            key_dict = getattr(mod, "fireBaseAdminKey", None)
-            if key_dict:
-                return fb_creds.Certificate(key_dict)
-        except Exception as e:
-            print(f"  [firebase] could not load blueboot_secrets: {e}")
-
-    # 2. JSON file fallback
-    creds_path = os.getenv("FIREBASE_CREDENTIALS", "config/serviceAccountKey.json")
-    if Path(creds_path).exists():
-        return fb_creds.Certificate(creds_path)
-
-    print("  [firebase] no credentials found — skipping sync.")
-    return None
+    from dotenv import load_dotenv; load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    cred = get_firebase_cred()
+    return cred
 
 
 import threading as _threading
+from functions.config import cfg
 _firebase_lock = _threading.Lock()
 _firebase_db   = None   # cached Firestore client — set once under lock
 
@@ -99,7 +82,7 @@ def _get_db(collection: str | None = None):
     except ImportError:
         return None, None, None
 
-    col_name = collection or os.getenv("FIRESTORE_COLLECTION", "leads")
+    col_name = collection or cfg.FIRESTORE_COLLECTION
 
     # Fast path — already initialised
     db = _firebase_db

@@ -52,6 +52,7 @@ from functions.utils import (
     pair_phones_to_contacts,
     tld_accepted_for,
 )
+from functions.config import cfg
 from functions.models import lead_id_from_url
 
 # ---------------------------------------------------------------------------

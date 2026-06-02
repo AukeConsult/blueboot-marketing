@@ -35,6 +35,7 @@ from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).parent))  # make functions/ importable
 from functions.utils import clean_str, resolve_country, ISO_TO_CC, email_matches_name, normalize_url
 from functions.excel_builder import write_contacts_sheet, make_header_cell, save_workbook, TIER_COLORS, TIER_TEXT
+from functions.config import cfg
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -147,24 +148,25 @@ def _score_lead(lead: dict, email_count: int) -> tuple[int, str]:
 # ---------------------------------------------------------------------------
 
 def _load_secrets():
-    p = Path(__file__).parent.parent / 'blueboot_secrets.py'
-    if not p.exists():
-        return None
-    try:
-        spec = importlib.util.spec_from_file_location('blueboot_secrets', p)
-        mod  = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return getattr(mod, 'fireBaseAdminKey', None)
-    except Exception:
-        return None
+    """Load Firebase credentials from env (FIREBASE_KEY_JSON or FIREBASE_CREDENTIALS)."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    return get_firebase_cred()
 
 
 def _init_firestore(fb_key):
     import firebase_admin
     from firebase_admin import firestore
     import firebase_admin.credentials as creds
-    cred = creds.Certificate(fb_key) if fb_key else creds.Certificate(
-        os.getenv('FIREBASE_CREDENTIALS', 'config/serviceAccountKey.json'))
+    # fb_key may already be a Certificate object from get_firebase_cred()
+    if isinstance(fb_key, creds.Certificate):
+        cred = fb_key
+    elif fb_key:
+        cred = creds.Certificate(fb_key)
+    else:
+        cred = creds.Certificate(
+            cfg.FIREBASE_CREDENTIALS or "config/serviceAccountKey.json")
     with _local_fb_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)

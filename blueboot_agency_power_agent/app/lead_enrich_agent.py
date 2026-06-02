@@ -36,13 +36,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import _pathsetup  # noqa: F401
+from functions.config import cfg
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
 COLLECTION_DEFAULT  = "leads"
-OPENAI_MODEL        = "gpt-5.4-mini"
 BATCH_SIZE          = 10
 CONCURRENT_BATCHES  = 3
 RETRY_ATTEMPTS      = 3
@@ -167,20 +167,11 @@ def _user_prompt(batch: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 
 def _load_secrets():
-    secrets_path = Path(__file__).parent.parent / "blueboot_secrets.py"
-    if not secrets_path.exists():
-        return None, None
-    try:
-        spec = importlib.util.spec_from_file_location("blueboot_secrets", secrets_path)
-        mod  = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        fb_key  = getattr(mod, "fireBaseAdminKey", None)
-        ai_cfg  = getattr(mod, "openAiConfig", {})
-        api_key = ai_cfg.get("defaultProjectKey") or ai_cfg.get("apiKey") or ""
-        return fb_key, api_key
-    except Exception as e:
-        print(f"  [lead-enrich] could not load blueboot_secrets: {e}")
-        return None, None
+    """Load Firebase credentials from env (FIREBASE_KEY_JSON or FIREBASE_CREDENTIALS)."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    from functions.firebase_cred import get_firebase_cred
+    return get_firebase_cred()
 
 
 def _init_firestore(fb_key_dict):
@@ -190,9 +181,13 @@ def _init_firestore(fb_key_dict):
         import firebase_admin.credentials as fb_creds
     except ImportError:
         raise RuntimeError("firebase-admin not installed — run: pip install firebase-admin")
-    cred = (fb_creds.Certificate(fb_key_dict) if fb_key_dict
-            else fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
-                                                "config/serviceAccountKey.json")))
+    if isinstance(fb_key_dict, fb_creds.Certificate):
+        cred = fb_key_dict
+    elif fb_key_dict:
+        cred = fb_creds.Certificate(fb_key_dict)
+    else:
+        cred = fb_creds.Certificate(os.getenv("FIREBASE_CREDENTIALS",
+                                              "config/serviceAccountKey.json"))
     with _local_fb_lock:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
@@ -270,7 +265,7 @@ async def _classify_batch(
             print(f"  [lead-enrich] batch {batch_num}/{batch_tot}  ({len(batch_data)} leads) → GPT…")
             try:
                 response = await client.chat.completions.create(
-                    model=OPENAI_MODEL,
+                    model=cfg.OPENAI_MODEL,
                     messages=[
                         {"role": "system", "content": _system_prompt_for_batch(batch_data)},
                         {"role": "user",   "content": _user_prompt(batch_data)},
@@ -427,11 +422,11 @@ def enrich_leads(
     api_key:    str | None       = None,
 ) -> None:
     fb_key, secret_key = _load_secrets()
-    api_key = api_key or secret_key or os.getenv("OPENAI_API_KEY", "")
+    api_key = api_key or secret_key or cfg.OPENAI_API_KEY
     if not api_key:
         raise RuntimeError(
             "No OpenAI API key found. Set OPENAI_API_KEY or add defaultProjectKey "
-            "to blueboot_secrets.py openAiConfig."
+            "Set OPENAI_API_KEY in .env"
         )
 
     db     = _init_firestore(fb_key)
