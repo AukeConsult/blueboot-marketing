@@ -18,6 +18,9 @@ import _pathsetup  # noqa: F401 — adds project root, app/, app/functions/, app
 
 from catalog_scrapers import catalog_run          # noqa: E402
 from search_runner import run                     # noqa: E402
+
+from app.functions.utils import clean_str
+
 try:
     from app.functions.models import lead_id_from_url
 except ModuleNotFoundError:
@@ -26,6 +29,9 @@ except ModuleNotFoundError:
 if TYPE_CHECKING:
     from app.functions.models import Lead
 
+
+import threading as _threading
+_firebase_init_lock = _threading.Lock()   # guards firebase_admin.initialize_app
 
 # ---------------------------------------------------------------------------
 # Firebase upload
@@ -80,13 +86,30 @@ def load_leads_from_firebase(collection: str | None = None) -> set[str]:
     db  = firestore.client()
     col = db.collection(col_name)
 
-    domains: set[str] = set()
-    for doc in col.select(["domain"]).stream():
-        d = doc.to_dict().get("domain", "")
-        if d:
-            domains.add(d.strip().lower())
+    # Partition the collection for parallel fetching (significant speedup on large collections)
+    from concurrent.futures import ThreadPoolExecutor as _TPE
 
-    print(f"  [firebase] preloaded {len(domains)} existing domains from '{col_name}'")
+    PARTITIONS = 16
+    try:
+        queries = [p.query() for p in col.get_partitions(PARTITIONS)]
+    except Exception:
+        queries = [col.order_by("__name__")]
+
+    def _fetch_partition(q):
+        result = set()
+        for doc in q.select(["domain"]).stream():
+            d = (doc.to_dict() or {}).get("domain", "")
+            if d:
+                result.add(d.strip().lower())
+        return result
+
+    domains: set[str] = set()
+    with _TPE(max_workers=PARTITIONS) as pool:
+        futures = list(pool.map(_fetch_partition, queries, timeout=30.0))
+    for partial in futures:
+        domains |= partial   # merge in main thread after all workers done
+
+    print(f"  [firebase] preloaded {len(domains)} existing domains from '{col_name}' ({len(queries)} partitions)")
     return domains
 
 
@@ -124,15 +147,32 @@ def load_leads_excluded() -> set[str]:
         if not firebase_admin._apps:
             firebase_admin.initialize_app(cred)
 
-    db = firestore.client()
-    excluded: set[str] = set()
-    for doc in db.collection("leads_excluded").select([]).stream():
-        data = doc.to_dict() or {}
-        domain = data.get("domain", "")
-        if domain:
-            excluded.add(domain.strip().lower())
+    db  = firestore.client()
+    col = db.collection("leads_excluded")
 
-    print(f"  [firebase] {len(excluded)} excluded leads loaded")
+    from concurrent.futures import ThreadPoolExecutor as _TPE
+
+    PARTITIONS = 8
+    try:
+        queries = [p.query() for p in col.get_partitions(PARTITIONS)]
+    except Exception:
+        queries = [col.order_by("__name__")]
+
+    def _fetch_excl(q):
+        result = set()
+        for doc in q.select(["domain"]).stream():
+            d = (doc.to_dict() or {}).get("domain", "")
+            if d:
+                result.add(d.strip().lower())
+        return result
+
+    excluded: set[str] = set()
+    with _TPE(max_workers=PARTITIONS) as pool:
+        futures = list(pool.map(_fetch_excl, queries, timeout=30.0))
+    for partial in futures:
+        excluded |= partial   # merge in main thread after all workers done
+
+    print(f"  [firebase] {len(excluded)} excluded leads loaded ({len(queries)} partitions)")
     return excluded
 
 
@@ -709,13 +749,17 @@ def main() -> None:
         print("  [lead_agent] --force: skipping leads + leads_excluded preload — all sites will be re-crawled")
         args.preloaded_domains = set()
     else:
-        args.preloaded_domains = load_leads_from_firebase(collection=args.firebase_collection)
-
-        # Also preload leads_excluded so rejected sites are never re-crawled
-        _excluded = load_leads_excluded()
+        # Run both preloads in parallel — each is partitioned internally
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+        print("  [lead_agent] preloading leads + leads_excluded in parallel…", flush=True)
+        with _TPE(max_workers=2) as _pool:
+            _f_leads    = _pool.submit(load_leads_from_firebase, args.firebase_collection)
+            _f_excluded = _pool.submit(load_leads_excluded)
+            args.preloaded_domains = _f_leads.result()
+            _excluded              = _f_excluded.result()
         args.preloaded_domains |= _excluded
-        if _excluded:
-            print(f"  [firebase] {len(_excluded)} excluded leads merged into skip list")
+        print(f"  [firebase] {len(args.preloaded_domains)} total domains in skip list "
+              f"({len(_excluded)} excluded)", flush=True)
 
     if args.mode == "audit":
         audit_tlds(collection=args.firebase_collection, dry_run=args.audit_dry_run)
@@ -747,7 +791,3 @@ def main() -> None:
         push_to_firebase(leads, collection=args.firebase_collection)
     else:
         print("  [firebase] no leads to upload.")
-
-
-if __name__ == "__main__":
-    main()

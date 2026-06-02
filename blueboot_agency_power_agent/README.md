@@ -1554,3 +1554,177 @@ SITE PIPELINE                  LEAD PIPELINE
 A full architecture document is saved at `docs/BlueSearch_Outreach_Pipeline.pdf`.
 It covers all five stages, every script, the contact schema, and the status lifecycle.
 
+
+---
+
+## `config/catalogs.json` — Directory Catalog Sources
+
+Defines all agency directory sources scraped in `--mode catalog` and `--mode both`. Contains **952 entries** across **23 countries**.
+
+### Entry fields
+
+| Field | Description |
+|---|---|
+| `name` | Human-readable label for the source |
+| `type` | Scraper type — determines which scraper class handles it (see table below) |
+| `url` | URL template — `{page}` is replaced with the page number at runtime |
+| `pages` | Max pages to scrape. DesignRush: set high (50+), scraper stops on 404. Sortlist: always 1 (JS infinite-scroll). |
+| `__platform_added` | Annotation only — marks entries added as WordPress/WooCommerce platform sources |
+| `__new_dir` | Annotation only — marks entries added in a later expansion pass |
+
+### Scraper types
+
+| Type | Directory | Notes |
+|---|---|---|
+| `sortlist` | sortlist.com | JS infinite-scroll — `pages=1` scrapes ~20 top agencies only. Nordic countries use no URL prefix; UK/FR/DE use `/s/`; ES uses `/i/` for web-design, `/s/` for web-development. |
+| `designrush` | designrush.com | Supports `?page=N` pagination. Set `pages` high (e.g. 50) — scraper stops automatically on 404. |
+| `topdevelopers` | topdevelopers.co | Standard pagination with `?page=N`. |
+| `dan` | digitalagencynetwork.com | Single-page listings per country. `pages=1`. |
+| `proff` | proff.no / proff.se / proff.dk | Norwegian/Scandinavian business registry. Category + pagination in URL path. |
+| `gulesider` | gulesider.no | Norwegian yellow pages. Category + pagination in URL path. |
+| `pagesjaunes` | pagesjaunes.fr | French yellow pages. Search query + pagination in URL params. |
+| `paginasamarillas` | paginasamarillas.es | Spanish yellow pages. Category + pagination in URL path. |
+| `generic` | Various (Sitecore, Atlassian, HubSpot partner pages, etc.) | Catch-all scraper for partner directories. |
+
+### Known issues and WAF blocks
+
+| Directory | Status | Reason |
+|---|---|---|
+| **Clutch** | ❌ Removed | Cloudflare WAF returns 403 on all requests |
+| **GoodFirms** | ❌ Removed | WAF drops connection after ~20s timeout |
+| **Sortlist** | ⚠️ Limited | JS-rendered infinite scroll — only first ~20 agencies per category reachable |
+
+### Supported countries (23)
+
+| Code | Country | Primary sources |
+|---|---|---|
+| NO | Norway | sortlist, designrush, topdevelopers, dan, proff, gulesider |
+| SE | Sweden | sortlist, designrush, topdevelopers, dan, proff |
+| DK | Denmark | sortlist, designrush, topdevelopers, dan, proff |
+| FI | Finland | sortlist, designrush, topdevelopers, dan |
+| UK | United Kingdom | sortlist, designrush, topdevelopers, dan, generic (partner pages) |
+| DE | Germany | sortlist, designrush, topdevelopers, dan, generic |
+| FR | France | sortlist, designrush, topdevelopers, dan, pagesjaunes |
+| NL | Netherlands | sortlist, designrush, topdevelopers, dan |
+| BE | Belgium | sortlist, designrush, topdevelopers, dan |
+| IE | Ireland | sortlist, designrush, topdevelopers, dan |
+| ES | Spain | sortlist, designrush, topdevelopers, dan, paginasamarillas |
+| IT | Italy | sortlist, designrush, topdevelopers, dan |
+| PL | Poland | sortlist, designrush, topdevelopers, dan |
+| AT | Austria | sortlist, designrush, topdevelopers, dan |
+| IN | India | sortlist, designrush, topdevelopers, dan |
+| BR | Brazil | sortlist, designrush, topdevelopers, dan |
+| AR | Argentina | sortlist, designrush, topdevelopers |
+| HU | Hungary | sortlist, designrush, topdevelopers |
+| EE | Estonia | sortlist, designrush |
+| LV | Latvia | sortlist, designrush |
+| LT | Lithuania | sortlist, designrush |
+| TH | Thailand | designrush |
+| TN | Tunisia | sortlist, designrush |
+
+### Adding a new catalog source
+
+Add an entry to the relevant country array in `config/catalogs.json`:
+
+```json
+{
+  "name": "MyDirectory UK – web design",
+  "type": "designrush",
+  "url": "https://www.mydirectory.com/web-design/uk?page={page}",
+  "pages": 20
+}
+```
+
+Use `type: "generic"` for partner pages that list agency websites directly (no pagination needed, set `pages: 1`). Run with `--mode catalog --max-catalog-pages 2` to test before committing.
+
+---
+
+## `config/site_agent_queries.json` — Site Agent Search Configuration
+
+Drives `site_agent.py` — defines per-country search instructions for finding content-heavy websites that could benefit from BlueSearch AI search. Contains **1,996 queries** across **11 countries** and **37 categories**.
+
+> **Goal:** Find sites with lots of pages and content where visitors need to search and find information — municipalities, public sector, e-commerce, healthcare, media, education, finance, etc.
+
+### Country entry fields
+
+| Field | Description |
+|---|---|
+| `name` | Full country name |
+| `language` | Browser `Accept-Language` language code used in Bing search headers |
+| `accept_language` | Full `Accept-Language` header value sent with requests |
+| `description` | Human description of what kinds of sites to target in this country |
+| `min_pages` | Minimum page count for a site to be stored — lower = more inclusive |
+| `target_types` | List of site types the queries aim to find (used for scoring and keywords) |
+| `query_categories` | Map of `category → [query strings]` — the actual Bing search queries |
+
+### Per-country summary
+
+| Country | `min_pages` | Language | Categories | Queries |
+|---|---|---|---|---|
+| NO — Norway | 50 | no | 16 | 208 |
+| SE — Sweden | 50 | sv | 16 | 205 |
+| DK — Denmark | 50 | da | 16 | 200 |
+| FI — Finland | 50 | fi | 16 | 200 |
+| UK — United Kingdom | 100 | en | 16 | 204 |
+| DE — Germany | 50 | de | 16 | 203 |
+| FR — France | 20 | fr | 19 | 224 |
+| NL — Netherlands | 20 | nl | 19 | 222 |
+| BE — Belgium | 15 | fr,nl | 5 | 32 |
+| IN — India | 10 | en | 12 | 106 |
+| EU — European Union | 4 | en | 16 | 192 |
+
+`min_pages` reflects how content-heavy sites tend to be per market — UK/Nordic public sector sites are large, India and Belgium thresholds are lower to capture more results.
+
+### Query categories (37 total)
+
+| Category | Description |
+|---|---|
+| `municipality` | Local government, kommune, council websites |
+| `public` / `public_sector` | Government agencies, public bodies, national institutions |
+| `healthcare` | Hospitals, health trusts, clinic networks, patient information sites |
+| `education` | Universities, schools, educational institutions |
+| `media` | News sites, broadcasters, online publications |
+| `company` | General businesses, manufacturers, B2B companies |
+| `ecommerce` / `shop` | Online shops, retailers |
+| `technology` / `tech` | SaaS, IT companies, tech platforms |
+| `finance` | Banks, insurance, financial services |
+| `real_estate` | Property portals, housing associations |
+| `legal` | Law firms, legal information sites |
+| `logistics` | Shipping, transport, logistics operators |
+| `construction` | Building, infrastructure, engineering |
+| `hospitality` | Hotels, tourism, restaurants |
+| `hr` | HR platforms, recruitment, staffing |
+| `association` | Industry associations, NGOs, member organisations |
+| `company_cities` | City-specific company queries (NO/SE/DK) |
+| `company_fr` / `company_nl` / `company_paris` | Country-specific company variants |
+| `ecommerce_fr` / `ecommerce_nl` / `ecommerce_be` | Country-specific ecommerce variants |
+| `saas_tech_fr` / `saas_tech_nl` / `tech_be` | Country-specific tech variants |
+| `pune` / `mumbai` / `delhi` / `bangalore` / `chennai` / `hyderabad` / `ahmedabad` | India city-specific queries |
+| `other_cities` | Non-capital city queries |
+
+### How queries are used
+
+`site_agent.py` iterates query categories round-robin across all countries. Each query string is sent to Bing search, results are deduplicated against already-seen domains, and new sites are crawled for sitemap + contacts.
+
+Filter by category at export time:
+```bat
+python app\site_smart_export.py --countries NO --category municipality
+python app\site_smart_export.py --countries NO --category ecommerce
+```
+
+Run only a specific category during discovery:
+```bat
+python app\site_agent.py --countries NO --category real_estate
+```
+
+### Adding new queries
+
+Add entries to the `query_categories` dict for the relevant country:
+```json
+"healthcare": [
+  "norsk helseforetak pasientinformasjon nettside",
+  "sykehus norsk pasientportal"
+]
+```
+
+Or add a new category entirely — it will be picked up automatically in the round-robin. Keep queries in the target language and include site-structure terms (`nettside`, `portal`, `informasjon`) to bias toward large content sites rather than landing pages.

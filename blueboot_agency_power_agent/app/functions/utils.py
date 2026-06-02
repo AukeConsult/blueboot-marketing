@@ -24,7 +24,7 @@ EMAIL_RE        = re.compile(r"[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-
 
 # Characters that signal a JSON-artifact or label suffix in a title/name field
 # Straight quote, curly/smart quotes (“”‘’), JSON chars, operator chars
-_CLEAN_BAD_CHARS = frozenset('()&:\\/<>+=,|"\u201c\u201d\u2018\u2019{}')
+_CLEAN_BAD_CHARS = frozenset(';«_()&:\\/<>+=,|"\u201c\u201d\u2018\u2019{}')
 # Scandinavian email-label prefixes: ' E-post', ' E ', ' E:', space-padded dash ' - '
 _CLEAN_LABEL_RE  = re.compile(
     r'\s+[Ee]-[Pp]ost\b'          # E-post / e-post (Norwegian/Danish/Swedish)
@@ -40,14 +40,16 @@ _CLEAN_LABEL_RE  = re.compile(
     r'|\s+[Mm]ob\.?(?=[\s:+\d]|$)'  # Mob / Mob. (mobile, universal)
     r'|\s+[Mm]obil\b'             # Mobil (NO/SE/DK)
     r'|\s+[Tt]él\.?(?=[\s:+\d]|$)'  # Tél / Tel. (FR)
-    r'|\s+[Gg][Ss][Mm](?=[\s:+\d]|$)',  # GSM (universal)
+    r'|\s+[Gg][Ss][Mm](?=[\s:+\d]|$)'
+    r'|\s+[Mm]ailto:?'          # mailto: link artifact
+    r'|-(?!(?-i:[A-Z])[a-zA-Z]{2,})',  # only keep hyphen if 3+ letter proper name follows (Anne-Sofie)  # GSM (universal)
     re.IGNORECASE,
 )
 
 # If the truncated result is itself just a label word, discard it entirely
 _BARE_LABEL_RE = re.compile(
     r'^(?:[Tt][Ll][Ff]|[Tt][Ee][Ll]|[Gg][Ss][Mm]|[Mm]ob|[Mm]obil'
-    r'|[Pp]uh|[Tt]él|[Pp]hone|[Tt]elefon|[Tt]elephone|[Ee])\.?$',
+    r'|[Pp]uh|[Tt]él|[Pp]hone|[Tt]elefon|[Tt]elephone|[Mm]ailto|[Ee])\.?$',
     re.IGNORECASE,
 )
 
@@ -791,6 +793,75 @@ _GENERIC_LOCALS = re.compile(
     r'e-post|booking|post|redaksjon|redaction|service|team|web|digital)$',
     re.IGNORECASE,
 )
+
+
+def email_matches_name(email: str, name: str) -> bool:
+    """Check if the name field is consistent with the email local part.
+
+    Returns True if:
+    - Name is empty (cannot check — benefit of doubt)
+    - Email local part is generic/role (info@, sales@, etc.) — cannot check
+    - Email local part is a hex/numeric hash — cannot check
+    - At least one email token matches a name token (exact, initial, or substring)
+
+    Returns False only when the email looks personal AND no name token
+    aligns with any email token.
+
+    Examples:
+      john.smith@co.no  + "John Smith"       → True  (both tokens match)
+      j.smith@co.no     + "John Smith"       → True  (j = initial of John)
+      jsmith@co.no      + "John Smith"       → True  (jsmith contains smith)
+      a.rolfsjord@co.no + "Anne-Sofie R."    → True  (a = initial, rolfsjord matches)
+      john@co.no        + "Jane Doe"         → False (john ≠ jane/doe)
+      info@co.no        + "John Smith"       → True  (generic — skip)
+      12a3f9@co.no      + "John Smith"       → True  (hash — skip)
+    """
+    # Empty name — cannot validate
+    if not name or not name.strip():
+        return True
+
+    if not email or "@" not in email:
+        return True
+
+    local = email.split("@")[0].lower().strip()
+
+    # Generic / role email — cannot validate against a person name
+    if _GENERIC_LOCALS.match(local):
+        return True
+
+    # Hash / numeric local part — cannot validate
+    if re.fullmatch(r"[0-9a-f\-]{8,}", local) or re.fullmatch(r"[0-9]+", local):
+        return True
+
+    # Tokenise local part: split on . _ - and drop pure-digit tokens
+    email_tokens = [t for t in re.split(r"[._\-]", local) if t and not t.isdigit()]
+    if not email_tokens:
+        return True
+
+    # Tokenise name: split on space, hyphen, dot; lowercase; min 2 chars
+    name_tokens = [t.lower() for t in re.split(r"[\s\-\.]+", name) if len(t) >= 2]
+    if not name_tokens:
+        return True
+
+    # Check each email token against all name tokens
+    for et in email_tokens:
+        for nt in name_tokens:
+            # Exact match
+            if et == nt:
+                return True
+            # et is a single initial matching start of name token (e.g. j → john)
+            if len(et) == 1 and nt.startswith(et):
+                return True
+            # et is multiple initials (e.g. as → anne-sofie — checks first letter of each token)
+            if len(et) >= 2 and all(c == name_tokens[i][0] for i, c in enumerate(et)
+                                    if i < len(name_tokens) and name_tokens[i]):
+                return True
+            # et is contained in nt or nt is contained in et (min 4 chars to avoid false positives)
+            if len(et) >= 4 and (et in nt or nt in et):
+                return True
+
+    return False
+
 
 
 def clean_contact_name(name: str, email: str) -> str:

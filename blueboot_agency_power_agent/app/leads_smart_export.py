@@ -33,7 +33,7 @@ import os
 import re
 from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).parent))  # make functions/ importable
-from functions.utils import clean_str, resolve_country, ISO_TO_CC
+from functions.utils import clean_str, resolve_country, ISO_TO_CC, email_matches_name
 from functions.excel_builder import write_contacts_sheet, make_header_cell, save_workbook, TIER_COLORS, TIER_TEXT
 from functions.excel_builder import write_contacts_sheet, make_header_cell, save_workbook, TIER_COLORS, TIER_TEXT
 from collections import Counter
@@ -217,6 +217,10 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
         if not email:
             continue
         name = clean_str((row.get('name') or '').strip())
+        # Clear name if it doesn't correspond to the email address
+        if name and not email_matches_name(email, name):
+            name = ''
+        # For personal emails with no known name, derive from email local part
         if not name and (row.get('email_type') or '') == 'personal':
             first, name = _derive_name_from_email(email)
         else:
@@ -275,7 +279,7 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
             'linkedin':          row.get('linkedin', ''),
             # Source agency
             'domain':            row.get('domain', ''),
-            'website':           row.get('website', ''),
+            'website':           normalize_url(row.get('website', '') or ''),
             'company':           row.get('company', ''),
             'country':           resolve_country(row),
             # Classification
@@ -452,7 +456,7 @@ def _load_data(db, countries: list[str] | None, min_score: int,
             'tier':           tier,
             'tier_label':     tier_label,
             'domain':         lead.get('domain', ''),
-            'website':        lead.get('website', ''),
+            'website':        normalize_url(lead.get('website', '') or ''),
             'company':        lead.get('company', ''),
             'country':        resolve_country(lead),
             'reseller_score': score,
@@ -474,7 +478,8 @@ def _load_data(db, countries: list[str] | None, min_score: int,
                 **base,
                 'lead_id_leads':     lead_id,
                 'email':             contact.get('email', ''),
-                'name':              clean_str(contact.get('name', '')),
+                'name':              clean_str(contact.get('name', ''))
+                                     if email_matches_name(contact.get('email',''), clean_str(contact.get('name',''))) else '',
                 'title':             clean_str(contact.get('title', '')),
                 'phone':             contact.get('phone', ''),
                 'linkedin':          contact.get('linkedin', ''),
@@ -517,6 +522,8 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
         ('Domain',         'domain',         28),
         ('Company',        'company',        24),
         ('Email',          'email',          30),
+        ('Website',       'website',        35),
+        ('Website',       'website',           35),
         ('Name',           'name',           22),
         ('Title',          'title',          20),
         ('Phone',          'phone',          14),

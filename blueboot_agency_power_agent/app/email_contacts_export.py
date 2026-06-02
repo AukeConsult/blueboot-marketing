@@ -27,7 +27,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).parent))
-from functions.utils import clean_str, resolve_country
+from functions.utils import clean_str, resolve_country, email_matches_name, normalize_url
 from functions.excel_builder import write_contacts_sheet, make_header_cell, save_workbook, TIER_COLORS, TIER_TEXT
 from pathlib import Path
 
@@ -110,6 +110,16 @@ def _load_data(db,
                 skipped += 1
                 continue
 
+        # Clear name if it doesn't match the email address
+        email = (d.get('email') or '').strip()
+        name  = (d.get('name')  or '').strip()
+        if name and not email_matches_name(email, name):
+            d = dict(d)   # don't mutate the original
+            d['name'] = ''
+        # Normalise website to base URL (strip deep paths)
+        if d.get('website'):
+            d = dict(d)
+            d['website'] = normalize_url(d['website'] or '')
         rows.append(d)
 
     print(f'[ec-export] {len(rows)} rows after filters  ({skipped} skipped)', flush=True)
@@ -126,6 +136,7 @@ COLS = [
     ('Outreach P',      'outreach_priority',  9),
     ('Status',          'status',            12),
     ('Email',           'email',             32),
+        ('Website',       'website',           35),
     ('Name',            'name',              22),
     ('Title',           'title',             22),
     ('Phone',           'phone',             16),
@@ -134,18 +145,23 @@ COLS = [
     ('Contact Role',    'contact_type',      16),
     # Source
     ('Domain',          'domain',            28),
-    ('Website',         'website',           35),
     ('Company',         'company',           26),
     ('Country',         'country',            8),
     ('Location',        'location',          30),
     ('City',            'location_city',     18),
     ('Region',          'location_region',   16),
+    ('Loc Country',     'location_country',  12),
+    ('Loc Confidence',  'location_confidence', 12),
+    ('Loc Source',      'location_source',   12),
     # Classification
     ('Platform',        'ai_platform',       16),
     ('Sector',          'ai_sector',         16),
     ('Potential',       'ai_potential',      14),
     ('Client Base',     'ai_client_base',    14),
     ('Company Type',    'ai_company_type',   14),
+    ('Pages',           'page_count',        10),
+    ('Sitemap',         'sitemap_type',      12),
+    ('Site Since',      'sitemap_oldest',    14),
     ('Confidence',      'ai_confidence',      9),
     ('Summary',         'ai_summary',        55),
     ('Keywords',        'keywords',          35),
@@ -191,7 +207,7 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
 
 
     # By tier
-    make_header_cell(ws2, 1, 1, 'Tier');  _hdr2(1, 2, 'Domains');  _hdr2(1, 3, 'Contacts')
+    make_header_cell(ws2, 1, 1, 'Tier');  make_header_cell(ws2, 1, 2, 'Domains');  make_header_cell(ws2, 1, 3, 'Contacts')
     tier_domains  = {}
     tier_contacts = Counter()
     for r in rows:
@@ -204,14 +220,14 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
         ws2.cell(ri2, 3, tier_contacts[t])
 
     # By country
-    make_header_cell(ws2, 1, 5, 'Country');  _hdr2(1, 6, 'Contacts')
+    make_header_cell(ws2, 1, 5, 'Country');  make_header_cell(ws2, 1, 6, 'Contacts')
     cc = Counter(r.get('country', '') for r in rows)
     for ri2, (country, cnt) in enumerate(cc.most_common(), 2):
         ws2.cell(ri2, 5, country)
         ws2.cell(ri2, 6, cnt)
 
     # By pipeline mark
-    make_header_cell(ws2, 1, 8,  'Pipeline');  _hdr2(1, 9, 'Contacts')
+    make_header_cell(ws2, 1, 8,  'Pipeline');  make_header_cell(ws2, 1, 9, 'Contacts')
     site_only  = sum(1 for r in rows if r.get('mark_site_leads') and not r.get('mark_leads'))
     leads_only = sum(1 for r in rows if r.get('mark_leads') and not r.get('mark_site_leads'))
     both_mark  = sum(1 for r in rows if r.get('mark_site_leads') and r.get('mark_leads'))
@@ -222,11 +238,101 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
         ws2.cell(ri2, 9,  cnt)
 
     # Status breakdown
-    make_header_cell(ws2, 1, 11, 'Status');  _hdr2(1, 12, 'Contacts')
+    make_header_cell(ws2, 1, 11, 'Status');  make_header_cell(ws2, 1, 12, 'Contacts')
     sc = Counter(r.get('status', '') for r in rows)
     for ri2, (s, cnt) in enumerate(sc.most_common(), 2):
         ws2.cell(ri2, 11, s)
         ws2.cell(ri2, 12, cnt)
+
+
+    # ── Sheet 3: Sites ────────────────────────────────────────────────────
+    ws3 = wb.create_sheet('Sites')
+
+    SITE_COLS = [
+        ('Domain',          'domain',            28),
+        ('Website',         'website',           35),
+        ('Company',         'company',           26),
+        ('Country',         'country',            8),
+        ('Location',        'location',          30),
+        ('City',            'location_city',     18),
+        ('Region',          'location_region',   16),
+        ('Loc Country',     'location_country',  12),
+        ('Loc Confidence',  'location_confidence', 12),
+        ('Loc Source',      'location_source',   12),
+        ('Sector',          'ai_sector',         16),
+        ('Platform',        'ai_platform',       16),
+        ('Company Type',    'ai_company_type',   14),
+        ('Potential',       'ai_potential',      14),
+        ('Client Base',     'ai_client_base',    14),
+        ('Confidence',      'ai_confidence',      9),
+        ('Pages',           'page_count',        10),
+        ('Sitemap',         'sitemap_type',      12),
+        ('Site Since',      'sitemap_oldest',    14),
+        ('Summary',         'ai_summary',        55),
+        ('Keywords',        'keywords',          35),
+        ('Category Site',   'category_site',     18),
+        ('Category Leads',  'category_leads',    14),
+        ('Site Mark',       'mark_site_leads',   10),
+        ('Leads Mark',      'mark_leads',        10),
+        ('Lead ID Site',    'lead_id_site',      28),
+        ('Lead ID Leads',   'lead_id_leads',     28),
+        ('Contacts',        '_contact_count',    10),
+    ]
+
+    # Build one row per unique domain — take first occurrence for site fields,
+    # accumulate contact count
+    from openpyxl.styles import Font as _Font, PatternFill as _PF, Alignment as _Align, Border as _Border, Side as _Side
+    from openpyxl.utils import get_column_letter as _gcl
+
+    _THIN  = _Side(style='thin', color='CCCCCC')
+    _BDR   = _Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
+    HDR_FILL3 = _PF('solid', start_color='1F497D')
+    HDR_FONT3 = _Font(name='Arial', bold=True, color='FFFFFF', size=10)
+    DATA_FONT3 = _Font(name='Arial', size=10)
+    WRAP3 = _Align(wrap_text=True, vertical='top')
+    NOWRAP3 = _Align(vertical='top')
+
+    site_map = {}
+    for r in rows:
+        domain = r.get('domain', '') or ''
+        if domain not in site_map:
+            site_map[domain] = dict(r)
+            site_map[domain]['_contact_count'] = 1
+        else:
+            site_map[domain]['_contact_count'] = site_map[domain].get('_contact_count', 0) + 1
+
+    # Header
+    for ci, (hdr, _, w) in enumerate(SITE_COLS, 1):
+        cell = ws3.cell(row=1, column=ci, value=hdr)
+        cell.font = HDR_FONT3
+        cell.fill = HDR_FILL3
+        cell.alignment = _Align(horizontal='center', vertical='center')
+        cell.border = _BDR
+        ws3.column_dimensions[_gcl(ci)].width = w
+    ws3.row_dimensions[1].height = 22
+    ws3.freeze_panes = 'A2'
+
+    # Data rows sorted by domain
+    for ri, (domain, site) in enumerate(sorted(site_map.items()), 2):
+        for ci, (_, key, _) in enumerate(SITE_COLS, 1):
+            val = site.get(key, '')
+            if val is None:
+                val = ''
+            elif isinstance(val, bool):
+                val = 'YES' if val else ''
+            elif isinstance(val, list):
+                val = ', '.join(str(v) for v in val if v not in (None, ''))
+            elif isinstance(val, dict):
+                val = '; '.join(f'{k}={v}' for k, v in val.items() if v not in (None, ''))
+            elif not isinstance(val, (str, int, float)):
+                val = str(val)
+            cell = ws3.cell(row=ri, column=ci, value=val)
+            cell.border = _BDR
+            cell.font = DATA_FONT3
+            cell.alignment = WRAP3 if key in ('ai_summary', 'keywords') else NOWRAP3
+        ws3.row_dimensions[ri].height = 18
+
+    ws3.auto_filter.ref = f'A1:{_gcl(len(SITE_COLS))}1'
 
     save_workbook(wb, out_path, '[ec-export]')
 

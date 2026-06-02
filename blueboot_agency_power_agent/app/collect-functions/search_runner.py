@@ -600,9 +600,16 @@ def load_queries_for_countries(countries: list[str],
         for q in load_lines(Path(explicit_queries)):
             pairs.append((q, "AUTO"))
         return pairs
+    # Queries are stored in config/countries.json under each country's "queries" list
+    configs = load_country_configs()
     for code in countries:
-        for q in load_lines(Path(f"config/queries_{code}.txt")):
-            pairs.append((q, code))
+        country_cfg = configs.get(code, {})
+        queries = country_cfg.get("queries", [])
+        if not queries:
+            print(f"  [queries] WARNING: no queries found for {code} in countries.json")
+        for q in queries:
+            if q and not q.startswith("#"):
+                pairs.append((q, code))
     return pairs
 
 
@@ -816,7 +823,8 @@ def run(args) -> None:
                 print(f"  No new URLs (streak={country_streak[code]}/{args.give_up_after})")
                 if args.give_up_after and country_streak[code] >= args.give_up_after:
                     _flush(code, f"Final batch of {len(pending[code])} sites")
-                    _bg_crawler.wait()
+                    # Do NOT wait here — final _bg_crawler.wait() at end of run() drains all queued sites.
+                    # Waiting here blocked the search loop for minutes on slow connections.
                     print(f"\n[{code}] {args.give_up_after} consecutive empty queries — giving up.")
                     country_done.add(code)
                     continue

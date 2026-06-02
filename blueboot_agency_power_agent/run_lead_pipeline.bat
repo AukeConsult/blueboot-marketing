@@ -42,14 +42,19 @@ if %errorlevel% neq 0 ( echo ERROR in leads_email_check.py & pause & exit /b 1 )
 
 REM ── Step 5: Export to Excel and write to email_contacts ──────
 echo.
-echo [5/5] Exporting and writing to email_contacts...
+echo [5/6] Exporting and writing to email_contacts...
 python app\leads_smart_export.py --countries %COUNTRIES% --write-contacts --campaign %CAMPAIGN%
 if %errorlevel% neq 0 ( echo ERROR in leads_smart_export.py & pause & exit /b 1 )
+
+REM ── Step 6: Export unified review Excel ──────────────────────
+echo.
+echo [6/6] Exporting unified review Excel...
+python app\email_contacts_export.py --countries %COUNTRIES% --campaign %CAMPAIGN% --status pending
+if %errorlevel% neq 0 ( echo ERROR in email_contacts_export.py & pause & exit /b 1 )
 
 echo.
 echo ============================================================
 echo  LEAD PIPELINE DONE
-echo  Run email_contacts_export to review:
-echo    python app\email_contacts_export.py --countries %COUNTRIES% --campaign %CAMPAIGN% --status pending
+echo  Review Excel saved to exports\email_contacts_%COUNTRIES%_%CAMPAIGN%_pending_*.xlsx
 echo ============================================================
 pause

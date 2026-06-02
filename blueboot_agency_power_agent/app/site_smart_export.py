@@ -33,7 +33,7 @@ import os
 import re
 from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).parent))  # make functions/ importable
-from functions.utils import clean_str, resolve_country, ISO_TO_CC
+from functions.utils import clean_str, resolve_country, ISO_TO_CC, email_matches_name
 from functions.excel_builder import write_contacts_sheet, make_header_cell, save_workbook, TIER_COLORS, TIER_TEXT
 from datetime import datetime, timezone
 from pathlib import Path
@@ -299,7 +299,7 @@ def _load_data(db, countries: list[str] | None, min_pages: int,
             'tier':         tier,
             'tier_label':   tier_label,
             'domain':       lead.get('domain', ''),
-            'website':      lead.get('website', ''),
+            'website':      normalize_url(lead.get('website', '') or ''),
             'country':      (lead.get('ai_country') or lead.get('country') or '').upper(),
             'ai_country':   (lead.get('ai_country') or '').upper(),
             'raw_country':  (lead.get('country') or '').upper(),
@@ -310,9 +310,12 @@ def _load_data(db, countries: list[str] | None, min_pages: int,
             'ai_confidence':   lead.get('ai_confidence') or 0,
             'ai_summary':      (lead.get('ai_summary') or '')[:200],
             'keywords':        lead.get('ai_keywords') or lead.get('keywords') or [],
-            'location':        lead.get('location') or lead.get('location_full') or '',
-            'location_city':   lead.get('location_city') or '',
-            'location_region': lead.get('location_region') or '',
+            'location':             lead.get('location') or lead.get('location_full') or '',
+            'location_city':        lead.get('location_city') or '',
+            'location_region':      lead.get('location_region') or '',
+            'location_country':     lead.get('location_country') or '',
+            'location_confidence':  lead.get('location_confidence') or '',
+            'location_source':      lead.get('location_source') or '',
             'email_count':     len(contacts),
             'sitemap_type':    lead.get('sitemap_type') or '',
             'sitemap_oldest':  lead.get('sitemap_oldest_date') or '',
@@ -325,7 +328,8 @@ def _load_data(db, countries: list[str] | None, min_pages: int,
                 'mark_site_leads':        True,
                 'contact_id':         contact.get('contact_id', ''),
                 'email':              contact.get('email', ''),
-                'name':               clean_str(contact.get('name', '')),
+                'name':               clean_str(contact.get('name', ''))
+                                      if email_matches_name(contact.get('email',''), clean_str(contact.get('name',''))) else '',
                 'title':              clean_str(contact.get('title', '') or contact.get('occupation', '')),
                 'phone':              contact.get('phone', ''),
                 'linkedin':           contact.get('linkedin', ''),
@@ -356,8 +360,11 @@ TIER_TEXT = {1: 'FFFFFF', 2: 'FFFFFF', 3: 'FFFFFF', 4: '000000', 5: '000000', 6:
 
 def _build_excel(rows: list[dict], out_path: Path) -> None:
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
+
+    _THIN  = Side(style='thin', color='CCCCCC')
+    BORDER = Border(left=_THIN, right=_THIN, top=_THIN, bottom=_THIN)
 
     wb = Workbook()
     ws = wb.active
@@ -369,6 +376,7 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
         ('Tier',          'tier_label',        20),
         ('Outreach P',    'outreach_priority',  9),
         ('Email',         'email',             32),
+        ('Website',       'website',           35),
         ('Name',          'name',              22),
         ('Title',         'title',             22),
         ('Phone',         'phone',             16),
@@ -377,7 +385,6 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
         ('Contact Role',  'contact_type',      16),
         # Site
         ('Domain',        'domain',            28),
-        ('Website',       'website',           35),
         ('Company',       'company',           26),
         ('Country',       'country',            8),
         ('AI Country',    'ai_country',         10),
@@ -551,6 +558,9 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
         if not email:
             continue
         name  = clean_str((row.get('name') or '').strip())
+        # Clear name if it doesn't correspond to the email address
+        if name and not email_matches_name(email, name):
+            name = ''
         # For personal emails with no known name, derive from email local part
         if not name and (row.get('email_type') or '') == 'personal':
             first, name = _derive_name_from_email(email)
@@ -612,12 +622,15 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
             'linkedin':           row.get('linkedin', ''),
             # Source site
             'domain':             row.get('domain', ''),
-            'website':            row.get('website', ''),
+            'website':            normalize_url(row.get('website', '') or ''),
             'company':            row.get('company', ''),
             'country':            resolve_country(row),
-            'location':           row.get('location', ''),
-            'location_city':      row.get('location_city', ''),
-            'location_region':    row.get('location_region', ''),
+            'location':             row.get('location', ''),
+            'location_city':        row.get('location_city', ''),
+            'location_region':      row.get('location_region', ''),
+            'location_country':     row.get('location_country', ''),
+            'location_confidence':  row.get('location_confidence', ''),
+            'location_source':      row.get('location_source', ''),
             # Classification
             'ai_sector':          row.get('sector', ''),
             'ai_company_type':    row.get('ai_company_type', ''),

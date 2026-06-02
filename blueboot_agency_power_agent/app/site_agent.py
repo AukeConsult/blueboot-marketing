@@ -767,7 +767,7 @@ async def scrape_contacts_async(
     if not homepage_html:
         return []
 
-    contact_links = _find_contact_links(homepage_html, website, domain)
+    contact_links = _find_contact_links(homepage_html, website, domain)[:8]  # cap: max 8 contact pages to avoid slow sequential fetches
     all_html = homepage_html
     page_html_map: dict[str, str] = {website: homepage_html}
     for link in contact_links:
@@ -848,8 +848,14 @@ async def process_site_async(
 
     contacts: list[SiteContact] = []
     if sitemap_type != "none" and homepage_html:
-        contacts = await scrape_contacts_async(
-            session, website, domain, country, country_name, lead_id)
+        try:
+            contacts = await asyncio.wait_for(
+                scrape_contacts_async(
+                    session, website, domain, country, country_name, lead_id),
+                timeout=30.0,  # cap contact scraping — 8 links × ~3s avg = comfortable budget
+            )
+        except asyncio.TimeoutError:
+            contacts = []
 
     company  = company_from_domain(domain)
     ttypes   = target_types or []
