@@ -128,12 +128,14 @@ def extract_leads(
     source: str | None = None,
     query: str | None = None,
     priorities: list[str] | None = None,
+    ai_potentials: list[str] | None = None,
     with_email: bool = False,
     out_file: str | None = None,
     collection: str | None = None,
     keywords: list[str] | None = None,
     save_extract: str | None = None,
     extract_dry_run: bool = False,
+    allow_reextract: bool = False,
     limit: int | None = None,
 ) -> Path | None:
     """Filter leads from Firestore and write a focused Excel extract.
@@ -199,13 +201,22 @@ def extract_leads(
     if save_extract and not extract_dry_run:
         existing = db.collection("leads_extract").document(_extract_file_stem).get()
         if existing.exists:
-            print(f"[extract_leads] Extract '{_extract_file_stem}' already exists — reading from Firestore and writing Excel only.")
-            return _excel_from_existing_extract(
-                db=db,
-                extract_id=_extract_file_stem,
-                output_dir=output_dir,
-                out_file=out_file,
-            )
+            if allow_reextract:
+                print(f"[extract_leads] Extract '{_extract_file_stem}' already exists — overwriting (--allow-reextract).")
+                # Delete existing subcollection docs so we start fresh
+                for old_doc in db.collection("leads_extract").document(_extract_file_stem).collection("leads_extracted").stream():
+                    old_doc.reference.delete()
+                db.collection("leads_extract").document(_extract_file_stem).delete()
+                print(f"[extract_leads] Old extract deleted — will recreate with fresh leads.")
+            else:
+                print(f"[extract_leads] Extract '{_extract_file_stem}' already exists — reading from Firestore and writing Excel only.")
+                print(f"[extract_leads] Tip: use --allow-reextract to overwrite with fresh leads.")
+                return _excel_from_existing_extract(
+                    db=db,
+                    extract_id=_extract_file_stem,
+                    output_dir=output_dir,
+                    out_file=out_file,
+                )
 
     # ------------------------------------------------------------------
     # Pre-load already-extracted lead IDs via collectionGroup
@@ -216,7 +227,7 @@ def extract_leads(
     already_extracted_ids: set[str] = set()
     already_extracted: list[dict] = []
 
-    if save_extract:
+    if save_extract and not allow_reextract:
         print("[extract_leads] Checking leads_extracted collectionGroup for already-extracted leads…")
         PROGRESS_EVERY = 100
         for xdoc in db.collection_group("leads_extracted").stream():
@@ -224,6 +235,8 @@ def extract_leads(
             if len(already_extracted_ids) % PROGRESS_EVERY == 0:
                 print(f"[extract_leads] {len(already_extracted_ids)} already-extracted leads scanned…")
         print(f"[extract_leads] {len(already_extracted_ids)} lead(s) already in an extract.")
+    elif save_extract and allow_reextract:
+        print("[extract_leads] --allow-reextract: skipping already-extracted check — leads may appear in multiple extracts.")
 
     # ------------------------------------------------------------------
     # Load all lead documents
@@ -231,11 +244,34 @@ def extract_leads(
     country_upper = [c.upper() for c in countries] if countries else None
     priority_upper = [p.upper() for p in priorities] if priorities else None
 
+    # Quick diagnostic: show sample of leads with the requested country
+    if country_upper:
+        _diag = list(col.where("country", "in", list(country_upper)).limit(5).stream()) if len(country_upper) <= 10 else []
+        print(f"[extract_leads] Quick check — found {len(_diag)} sample lead(s) with country in {country_upper}:")
+        for _d in _diag:
+            _dd = _d.to_dict() or {}
+            print(f"  {_dd.get('domain','?'):40s}  country={_dd.get('country','?')}  score={_dd.get('reseller_score','?')}  priority={(_dd.get('priority') or '?')[:12]}")
+        if not _diag:
+            print("[extract_leads]  → 0 found — leads may be stored with a different country value")
+
     lead_rows: list[dict] = []
     skipped = 0
-    _country_sample: list[str] = []   # for diagnostics
+    _skip_reasons: dict[str, int] = {}   # filter breakdown for diagnostics
+    _country_sample: list[str] = []
 
-    for doc in col.stream():
+    def _skip(reason: str):
+        nonlocal skipped
+        skipped += 1
+        _skip_reasons[reason] = _skip_reasons.get(reason, 0) + 1
+
+    # Use Firestore country filter to avoid scanning all docs
+    if country_upper and len(country_upper) <= 10:
+        _stream = col.where("country", "in", list(country_upper)).stream()
+        print(f"[extract_leads] Using Firestore query for country={list(country_upper)}", flush=True)
+    else:
+        _stream = col.stream()
+
+    for doc in _stream:
         d = doc.to_dict()
         if not d:
             continue
@@ -244,18 +280,16 @@ def extract_leads(
 
         # --- global leads (country="*") are excluded from extract ---
         if raw_country == "*":
-            skipped += 1
+            _skip("global(*)")
             continue
 
-        # --- already claimed by another extract ---
-        if save_extract:
-            lid = d.get("lead_id") or d.get("domain", "")
-            if lid and lid in already_extracted_ids:
-                already_extracted.append({
-                    "domain": d.get("domain", ""),
-                    "lead_id": lid,
-                })
-                skipped += 1
+        # --- country filter (also catches any that slipped through the query) ---
+        raw_country_upper = raw_country.upper()
+        if len(_country_sample) < 10 and raw_country_upper:
+            _country_sample.append(raw_country_upper)
+        if country_upper:
+            if raw_country_upper not in country_upper:
+                _skip(f"country({raw_country_upper})")
                 continue
 
         # --- score ---
@@ -265,44 +299,55 @@ def extract_leads(
         except (ValueError, TypeError):
             pass
         if score < min_score or score > max_score:
-            skipped += 1
+            _skip(f"score({score})<{min_score}" if score < min_score else f"score({score})>{max_score}")
             continue
 
-        # --- country ---
-        raw_country_upper = raw_country.upper()
-        if len(_country_sample) < 10 and raw_country_upper:
-            _country_sample.append(raw_country_upper)
-        if country_upper:
-            if raw_country_upper not in country_upper:
-                skipped += 1
+        # --- already claimed by another extract (checked after country filter) ---
+        if save_extract and already_extracted_ids:
+            lid = d.get("lead_id") or d.get("domain", "")
+            if lid and lid in already_extracted_ids:
+                already_extracted.append({
+                    "domain": d.get("domain", ""),
+                    "lead_id": lid,
+                })
+                _skip("already_extracted")
                 continue
 
         # --- source ---
         if source == "search":
             if (d.get("found_by_search") or "").lower() != "yes":
-                skipped += 1
+                _skip("source(not_search)")
                 continue
         elif source == "catalog":
             if (d.get("found_by_catalog") or "").lower() != "yes":
-                skipped += 1
+                _skip("source(not_catalog)")
                 continue
         elif source == "both":
             if not ((d.get("found_by_search") or "").lower() == "yes" and
                     (d.get("found_by_catalog") or "").lower() == "yes"):
-                skipped += 1
+                _skip("source(not_both)")
                 continue
 
         # --- query substring ---
         if query:
             sq = (d.get("source_query") or "").lower()
             if query.lower() not in sq:
-                skipped += 1
+                _skip("query_mismatch")
                 continue
 
         # --- priority ---
         if priority_upper:
-            if (d.get("priority") or "").upper() not in priority_upper:
-                skipped += 1
+            # priority field is like "A - High fit" — match on leading letter only
+            lead_priority = (d.get("priority") or "").upper().strip()
+            if not any(lead_priority == p or lead_priority.startswith(p + " ") or lead_priority.startswith(p + "-") for p in priority_upper):
+                _skip(f"priority({lead_priority or 'none'})")
+                continue
+
+        # --- ai_reseller_potential ---
+        if ai_potentials:
+            pot = (d.get("ai_reseller_potential") or "").lower()
+            if pot not in [p.lower() for p in ai_potentials]:
+                _skip(f"ai_potential({pot or 'none'})")
                 continue
 
         # --- keywords (OR logic across multiple fields) ---
@@ -311,7 +356,7 @@ def extract_leads(
                 str(d.get(f) or "") for f in _KEYWORD_SEARCH_FIELDS
             ).lower()
             if not any(kw.lower() in haystack for kw in keywords):
-                skipped += 1
+                _skip("keyword_mismatch")
                 continue
 
         lead_rows.append(d)
@@ -321,6 +366,19 @@ def extract_leads(
     if country_upper and _country_sample:
         print(f"[extract_leads] Sample 'country' values in Firestore: {sorted(set(_country_sample))}")
     print(f"[extract_leads] {len(lead_rows)} leads matched, {skipped} filtered out")
+    if _skip_reasons:
+        # Only print filters that are meaningful — skip the country/global noise
+        # when a country filter is active (those are expected and high-volume)
+        meaningful = {k: v for k, v in _skip_reasons.items()
+                      if not k.startswith("country(") and k != "global(*)"}
+        country_skipped = sum(v for k, v in _skip_reasons.items()
+                              if k.startswith("country(") or k == "global(*)")
+        if country_skipped:
+            print(f"[extract_leads]   {country_skipped:>6}  other countries / global (filtered by --country)")
+        if meaningful:
+            print("[extract_leads] Filter breakdown:")
+            for reason, count in sorted(meaningful.items(), key=lambda x: -x[1]):
+                print(f"[extract_leads]   {count:>6}  {reason}")
     if already_extracted:
         print(f"[extract_leads] {len(already_extracted)} lead(s) skipped — already in another extract:")
         for ae in already_extracted[:20]:
@@ -532,13 +590,14 @@ def extract_leads(
             lead_rows=lead_rows,
             contact_rows=contact_rows,
             filters={
-                "min_score":  min_score,
-                "max_score":  max_score,
-                "countries":  countries or [],
-                "source":     source or "",
-                "query":      query or "",
-                "priorities": priorities or [],
-                "keywords":   keywords or [],
+                "min_score":     min_score,
+                "max_score":     max_score,
+                "countries":     countries or [],
+                "source":        source or "",
+                "query":         query or "",
+                "priorities":    priorities or [],
+                "ai_potentials": ai_potentials or [],
+                "keywords":      keywords or [],
             },
             dry_run=extract_dry_run,
         )
@@ -859,6 +918,8 @@ def _parse_args(argv=None):
                    help="Substring match on source_query (case-insensitive)")
     p.add_argument("--priority",  action="append", dest="priorities", metavar="P",
                    help="Priority label (repeatable, e.g. --priority A --priority B)")
+    p.add_argument("--ai-potential", action="append", dest="ai_potentials", metavar="LEVEL",
+                   help="Filter by ai_reseller_potential: high, medium, low (repeatable)")
     p.add_argument("--with-email", action="store_true",
                    help="Only include leads with at least one contact email")
     p.add_argument("--keywords",  metavar="KW",
@@ -874,8 +935,14 @@ def _parse_args(argv=None):
                         "If NAME is omitted the flag acts as a dry-run preview only — "
                         "nothing is written to Firestore. "
                         "Leads already claimed by another extract are skipped.")
+    p.add_argument("--allow-reextract", action="store_true",
+                   help="Skip the already-extracted check — allow leads to appear in multiple extracts. "
+                        "Use when re-running QQ or force-recrawled leads.")
     p.add_argument("--extract-dry-run", action="store_true",
                    help="Preview what --save-extract would write without touching Firestore.")
+    p.add_argument("--auto-name", action="store_true",
+                   help="Auto-generate --save-extract name from filters: "
+                        "e.g. UK_score70_high_jun01. Overrides --save-extract name.")
     return p.parse_args(argv)
 
 
@@ -901,6 +968,12 @@ def main(argv=None):
             expanded.extend(x.strip().upper() for x in p.split(",") if x.strip())
         priorities = expanded or None
 
+    # Parse --ai-potential
+    ai_potentials = None
+    if getattr(args, "ai_potentials", None):
+        ai_potentials = [p.strip().lower() for p in args.ai_potentials if p.strip()]
+        ai_potentials = ai_potentials or None
+
     # Parse --keywords: accept both comma-separated and repeated --keywords flags
     keywords = None
     if args.keywords:
@@ -913,6 +986,27 @@ def main(argv=None):
         print(f"[extract_leads] Priority filter: {priorities}")
     if keywords:
         print(f"[extract_leads] Keyword filter (OR): {keywords}")
+
+    # Build auto-name from active filters when --auto-name is set
+    save_extract = None if args.save_extract == "__dry_run__" else args.save_extract
+    if getattr(args, "auto_name", False):
+        from datetime import datetime as _dt
+        parts = []
+        if countries:
+            parts.append("_".join(countries))
+        if args.min_score and args.min_score > 0:
+            parts.append(f"score{args.min_score}")
+        if args.max_score and args.max_score < 100:
+            parts.append(f"max{args.max_score}")
+        if priorities:
+            parts.append("_".join(p.lower() for p in priorities))
+        if ai_potentials:
+            parts.append("_".join(p.lower() for p in ai_potentials))
+        if args.source:
+            parts.append(args.source)
+        parts.append(_dt.now().strftime("%b%d").lower())  # e.g. jun02
+        save_extract = "_".join(parts) if parts else f"extract_{_dt.now().strftime('%b%d').lower()}"
+        print(f"[extract_leads] Auto-name: {save_extract!r}")
 
     try:
         path = extract_leads(
@@ -927,8 +1021,10 @@ def main(argv=None):
             out_file=args.out,
             collection=args.collection,
             keywords=keywords,
-            save_extract=None if args.save_extract == "__dry_run__" else args.save_extract,
-            extract_dry_run=args.extract_dry_run or (args.save_extract == "__dry_run__"),
+            ai_potentials=ai_potentials,
+            allow_reextract=getattr(args, "allow_reextract", False),
+            save_extract=save_extract,
+            extract_dry_run=args.extract_dry_run or (save_extract is None and args.save_extract == "__dry_run__"),
             limit=args.limit,
         )
         if path:

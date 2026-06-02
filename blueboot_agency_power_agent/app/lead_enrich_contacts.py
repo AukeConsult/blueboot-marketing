@@ -388,7 +388,7 @@ def enrich_contacts(
                 )
                 for ref, c in to_process
             ]
-            await asyncio.gather(*tasks)
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     asyncio.run(_run_all())
 

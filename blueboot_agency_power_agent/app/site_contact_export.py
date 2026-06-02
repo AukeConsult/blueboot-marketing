@@ -701,18 +701,21 @@ def export_contacts(
             parts.append(campaign)
         else:
             if countries:
-                parts.append("_".join(countries))
+                parts.append("_".join(c.upper() for c in countries))
+            if location:
+                parts.append(location.replace(" ", "_").replace(",", ""))
             if sector:
                 parts.append(sector)
             if category:
                 parts.append(category)
+            if page_count:
+                parts.append(page_count)
             if with_email_only:
                 parts.append("email")
         filter_str  = ("_" + "_".join(parts)) if parts else ""
         output_path = str(
             Path(__file__).parent.parent / "exports" / f"site_contacts{filter_str}_{ts}.xlsx"
         )
-
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
     # ── Step 4: export to Excel ───────────────────────────────────────────────

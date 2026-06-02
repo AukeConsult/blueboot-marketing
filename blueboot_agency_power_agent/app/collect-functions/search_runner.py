@@ -125,7 +125,7 @@ def brave_search(query: str, max_results: int,
 
     # Brave expects lowercase 2-letter country code, e.g. "no", "se", "dk"
     # Map internal country codes to ISO 3166-1 alpha-2 for Brave API
-    _BRAVE_CC_MAP = {"uk": "gb", "en": "gb"}
+    _BRAVE_CC_MAP = {"uk": "gb", "en": "gb", "qq": ""}  # QQ = global, no country filter
     cc = country_code.lower() if country_code else ""
     cc = _BRAVE_CC_MAP.get(cc, cc)
 
@@ -485,19 +485,30 @@ async def _run_batch_async(
         )
         return dom, result
 
+    # Dedicated 3-thread executor for Firestore writes — kept small so it never
+    # exhausts the default executor that the crawl coroutines use.
+    _write_exec = __import__("concurrent.futures", fromlist=["ThreadPoolExecutor"]).ThreadPoolExecutor(max_workers=3)
+
     async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
         min_score = getattr(args, "min_score", 50)
-        # Blocklist filtering is search-mode only — catalog sources are curated
-        # agency directories that already list web companies.
+        force     = getattr(args, "force", False)
+        no_fb     = getattr(args, "no_firebase", False)
+        fb_col    = getattr(args, "firebase_collection", None)
+
         if source == "catalog":
             _blocklist: set[str] = set()
         else:
             _blocklist = set(load_lines(Path("config/blocklist_domains.txt")))
+
         tasks = [
             asyncio.create_task(asyncio.wait_for(_crawl_with_dom(session, url, query), timeout=120.0))
             for url, query in batch
             if not is_blocked(domain_of(url), _blocklist)
         ]
+
+        # Pending Firestore writes — collected during crawl, flushed after
+        pending_writes: list = []   # list of (fn, *args) tuples
+
         for coro in asyncio.as_completed(tasks):
             try:
                 dom, lead = await coro
@@ -507,27 +518,60 @@ async def _run_batch_async(
             except Exception as exc:
                 print(f"    [crawl error]: {exc}")
                 continue
+
             if not lead:
-                # Crawl returned nothing (score==0 or fetch failed) — remember domain
                 if rejected_domains is not None:
                     rejected_domains.add(dom)
-                upsert_lead_excluded(dom, reason="crawl_failed_or_score_zero", website=f"https://{dom}/")
+                if not force and not no_fb:
+                    pending_writes.append((upsert_lead_excluded, dom,
+                                           "crawl_failed_or_score_zero", f"https://{dom}/"))
                 continue
+
             has_email = "yes" if lead.emails else "no"
             print(f"    -> {lead.priority} score={lead.reseller_score} email={has_email}  {lead.website}")
+
             if lead.reseller_score < min_score:
                 print(f"       [skip] score {lead.reseller_score} < {min_score} threshold")
                 if rejected_domains is not None:
                     rejected_domains.add(dom)
-                upsert_lead_excluded(dom, reason=f"score {lead.reseller_score} < {min_score}", website=lead.website)
+                if not force and not no_fb:
+                    pending_writes.append((upsert_lead_excluded, dom,
+                                           f"score {lead.reseller_score} < {min_score}", lead.website))
                 continue
+
             all_leads.append(lead)
             country_leads[code] = country_leads.get(code, 0) + 1
             new_count += 1
-            if not getattr(args, "no_firebase", False):
-                upsert_lead(lead, collection=getattr(args, "firebase_collection", None))
-            if not getattr(args, "no_output", False):
-                export(dedupe_leads(all_leads), export_path)
+            if not no_fb:
+                pending_writes.append((upsert_lead, lead, fb_col))
+
+        # Flush Firestore writes sequentially after crawl batch — no thread contention
+        if pending_writes:
+            print(f"    [firebase] writing {len(pending_writes)} records…", flush=True)
+            loop = asyncio.get_running_loop()
+            for pw in pending_writes:
+                fn, *pw_args = pw
+                if fn is upsert_lead:
+                    _lead, _col = pw_args[0], pw_args[1] if len(pw_args) > 1 else None
+                    try:
+                        await asyncio.wait_for(
+                            loop.run_in_executor(_write_exec, lambda l=_lead, c=_col: upsert_lead(l, collection=c)),
+                            timeout=15.0,
+                        )
+                    except Exception as exc:
+                        print(f"    [firebase] lead write error: {exc}")
+                else:
+                    # upsert_lead_excluded(domain, reason, website)
+                    try:
+                        await asyncio.wait_for(
+                            loop.run_in_executor(_write_exec, lambda a=pw_args: fn(*a)),
+                            timeout=15.0,
+                        )
+                    except Exception:
+                        pass
+        _write_exec.shutdown(wait=False)
+        if not getattr(args, "no_output", False):
+            export(dedupe_leads(all_leads), export_path)
     return new_count
 
 
@@ -600,11 +644,27 @@ class _BackgroundCrawler:
     def submit(self, fn, *args):
         self._queue.put((fn, args))
 
-    def wait(self):
-        """Block until all queued batches are done."""
-        self._queue.join()
-        self._queue.put(None)   # shutdown
-        self._thread.join()
+    def wait(self, timeout: float = 300.0):
+        """Block until all queued batches are done, or timeout (seconds) elapses.
+
+        Uses a polling loop so the main thread stays responsive and can be
+        interrupted with Ctrl-C. Default timeout = 300 s (5 min) per wait call.
+        """
+        import time as _time
+        deadline = _time.monotonic() + timeout
+        while not self._queue.empty() or self._thread.is_alive():
+            if _time.monotonic() > deadline:
+                print(f"  [bg-crawl] wait() timed out after {timeout:.0f}s — "
+                      f"background thread may still be running a slow site",
+                      flush=True)
+                break
+            _time.sleep(0.5)
+        # Send shutdown sentinel (idempotent — ignored after thread exits)
+        try:
+            self._queue.put_nowait(None)
+        except Exception:
+            pass
+        self._thread.join(timeout=10.0)
         if self._error:
             raise self._error
 

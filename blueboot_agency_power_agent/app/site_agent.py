@@ -729,8 +729,15 @@ def _extract_meta(html: str) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 
 _CONTACT_WORDS = [
-    "contact", "kontakt", "kontakta", "about", "om-oss", "om oss",
-    "team", "ansatte", "people", "staff", "company", "selskapet",
+    # English / global
+    "contact", "about", "team", "people", "staff", "company",
+    "reach", "connect", "enquiry", "inquiry", "get-in-touch",
+    "reach-us", "our-team", "about-us", "meet-the-team",
+    "support", "hello", "hire-us", "work-with-us",
+    # Scandinavian
+    "kontakt", "kontakta", "om-oss", "om oss", "ansatte", "selskapet",
+    # Indian context
+    "sampark", "hamare", "humse", "hum-se",
 ]
 _HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
 
@@ -747,7 +754,7 @@ def _find_contact_links(html: str, base_url: str, domain: str) -> list[str]:
         path = urlparse(full).path.lower()
         if any(w in path for w in _CONTACT_WORDS) and full not in links:
             links.append(full)
-        if len(links) >= 3:
+        if len(links) >= 5:
             break
     return links
 

@@ -806,7 +806,8 @@ def categorize(text: str, html: str, country_cfg: dict) -> tuple[set[str], list[
     cats, reasons = set(), []
     score = 0
     weights = {"web_agency": 25, "wordpress": 25, "seo": 18,
-               "communication": 18, "public_sector": 10, "ai_interest": 8}
+               "communication": 15, "public_sector": 8, "ai_interest": 8,
+               "smb_focus": 12, "care_plan": 15}
     for cat, kws in country_cfg.get("keywords", {}).items():
         hits = [kw for kw in kws if kw.lower() in hay]
         if hits:

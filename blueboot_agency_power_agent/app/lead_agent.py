@@ -327,6 +327,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--audit-dry-run", action="store_true", default=False,
         help="With --mode audit: print mismatches but do NOT delete anything.",
     )
+    parser.add_argument(
+        "--force", action="store_true", default=False,
+        help="Re-crawl all sites — skip loading leads and leads_excluded from Firestore. "
+             "Useful to rescan QQ or other global groups without the history filter.",
+    )
     return parser
 
 
@@ -695,13 +700,17 @@ def main() -> None:
     load_dotenv()
     args = _build_parser().parse_args()
 
-    args.preloaded_domains = load_leads_from_firebase(collection=args.firebase_collection)
+    if getattr(args, "force", False):
+        print("  [lead_agent] --force: skipping leads + leads_excluded preload — all sites will be re-crawled")
+        args.preloaded_domains = set()
+    else:
+        args.preloaded_domains = load_leads_from_firebase(collection=args.firebase_collection)
 
-    # Also preload leads_excluded so rejected sites are never re-crawled
-    _excluded = load_leads_excluded()
-    args.preloaded_domains |= _excluded
-    if _excluded:
-        print(f"  [firebase] {len(_excluded)} excluded leads merged into skip list")
+        # Also preload leads_excluded so rejected sites are never re-crawled
+        _excluded = load_leads_excluded()
+        args.preloaded_domains |= _excluded
+        if _excluded:
+            print(f"  [firebase] {len(_excluded)} excluded leads merged into skip list")
 
     if args.mode == "audit":
         audit_tlds(collection=args.firebase_collection, dry_run=args.audit_dry_run)

@@ -858,6 +858,60 @@ Reads lead documents and their contacts sub-collections directly from Firestore 
 python app\lead_extract.py [options]
 ```
 
+### Priority & Scoring
+
+Every lead receives a `reseller_score` (0–100) and a `priority` label when it is crawled.
+The score is built from keyword signals found on the agency's website:
+
+| Signal | Points | What it detects |
+|--------|--------|----------------|
+| `web_agency` keyword | +25 | "web agency", "web design", "wordpress agency", "shopify developer", etc. |
+| `wordpress` keyword | +25 | WordPress/WooCommerce/Elementor detected on site or in content |
+| `care_plan` keyword | +15 | "care plan", "managed wordpress", "maintenance plan", "monthly retainer" |
+| `seo` keyword | +18 | SEO services mentioned |
+| `smb_focus` keyword | +12 | "small business", "local business", "SMB", "independent businesses" |
+| `communication` keyword | +15 | PR/comms/social services |
+| Agency language | up to +20 | "we build", "our portfolio", "get a quote", "our clients" |
+| Services/clients/cases language | +8 | "services", "case studies", "portfolio" |
+| Maintenance/support language | +6 | "maintenance", "hosting", "support", "SLA" |
+| No `web_agency` keyword + no agency language | cap at 35 | Core-signal gate — prevents banks/telcos from scoring high |
+| Negative keyword (≥2 occurrences) | −30 each, max −90 | Restaurant, salon, clinic, etc. |
+| Adult content | −90 | Instant near-zero score |
+
+**Priority bands:**
+
+| Priority | Score | Meaning |
+|----------|-------|---------|
+| **A — High fit** | ≥ 75 | WordPress/WooCommerce agency with SMB clients, care plans, or maintenance retainers |
+| **B — Good fit** | 55–74 | Digital/SEO agency with web capability, mixed client base |
+| **C — Maybe** | 35–54 | Web-adjacent but unclear specialisation or client base |
+| **D — Low fit** | < 35 | Enterprise-only, non-web sector, or insufficient signals |
+
+A WordPress agency with SMB clients and a care plan will typically score 85–95 (A).
+
+### AI Reseller Potential
+
+After crawl scoring, `lead_enrich_agent.py` sends each lead to GPT for a second-pass
+classification. This produces `ai_reseller_potential` — a qualitative judgement of how
+likely the agency is to become a BlueSearch reseller partner.
+
+| Value | Meaning |
+|-------|---------|
+| `high` | WordPress/WooCommerce agency with SMB/local clients, ongoing hosting or maintenance services. Ideal reseller target. |
+| `medium` | Digital or SEO agency with web capability but unclear client base or mixed specialisation. Worth contacting. |
+| `low` | Enterprise-only firm, pure brand/advertising agency, app-only developer, or unrelated sector. Skip or deprioritise. |
+
+**Two scoring systems work together:**
+
+- `reseller_score` + `priority` (A/B/C/D) — set at crawl time by keyword matching. Fast and deterministic.
+- `ai_reseller_potential` — set by GPT after enrichment. Slower but reads actual site content for nuance.
+
+Use both to build high-precision extracts:
+```bat
+python app\lead_extract.py --country UK --min-score 55 --priority A --priority B --ai-potential high --auto-name --save-extract
+```
+→ Extract ID: `UK_score55_a_b_high_jun02`
+
 ### Filter parameters
 
 | Parameter | Default | Description |
@@ -870,18 +924,20 @@ python app\lead_extract.py [options]
 | `--source` | all | `search` / `catalog` / `both` — filter by discovery mode |
 | `--query TEXT` | _(none)_ | Substring match on `source_query` (case-insensitive) |
 | `--priority P` | all | Priority label(s), repeatable: `--priority A --priority B` |
+| `--ai-potential LEVEL` | all | Filter by `ai_reseller_potential`: `high`, `medium`, `low` (repeatable: `--ai-potential high --ai-potential medium`) |
 | `--with-email` | off | Only include leads with at least one contact email |
 | `--keywords KW` | _(none)_ | Comma-separated keywords (OR logic). A lead matches if **any** keyword appears in `source_query`, `title`, `description`, `company`, `domain`, `website`, `keywords`, or `reasons`. E.g. `--keywords wordpress,woocommerce` |
-| `--limit N` | _(none)_ | Maximum number of leads to include. Applied after all other filters; stops the Firestore stream early once reached. |
+| `--limit N` | _(none)_ | Maximum number of leads to include. Applied after all other filters. |
 | `--out FILE` | auto-timestamped | Output filename |
 
 ### Save-extract parameters
 
-Saving an extract persists the filtered leads to a dedicated `leads_extract` Firestore collection. A lead can only belong to **one** extract — any lead already in a previous extract is automatically skipped (detected via a `collectionGroup` query on `leads_extracted`, no fields are written back to the main `leads` collection).
+Saving an extract persists the filtered leads to a dedicated `leads_extract` Firestore collection. A lead can only belong to **one** extract — any lead already in a previous extract is automatically skipped.
 
 | Parameter | Default | Description |
 |---|---|---|
 | `--save-extract NAME` | _(none)_ | Save extract to `leads_extract/<NAME>` in Firestore |
+| `--auto-name` | off | Auto-generate the extract ID from active filters. Overrides `--save-extract` name. Pattern: `{countries}_{score}_{priorities}_{ai_potentials}_{source}_{date}` e.g. `UK_score70_A_B_high_jun02` |
 | `--extract-dry-run` | off | Preview what `--save-extract` would write without touching Firestore |
 
 ### Firestore structure written by `--save-extract`
@@ -917,6 +973,15 @@ python app\lead_extract.py --query "webbyrå"
 
 REM Keyword search — WordPress or WooCommerce leads
 python app\lead_extract.py --keywords wordpress,woocommerce
+
+REM Best leads — A/B priority + GPT high potential + email, auto-named extract
+python app\lead_extract.py --country UK --min-score 55 --priority A --priority B --ai-potential high --with-email --auto-name --save-extract
+
+REM High or medium AI potential from Norway and Sweden
+python app\lead_extract.py --country NO,SE --ai-potential high --ai-potential medium --priority A --auto-name --save-extract
+
+REM India high-score WordPress agencies only
+python app\lead_extract.py --country IN --min-score 70 --ai-potential high --keywords wordpress,woocommerce --auto-name --save-extract
 
 REM Dry-run: preview what would be saved to Firestore
 python app\lead_extract.py ^

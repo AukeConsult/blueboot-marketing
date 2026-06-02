@@ -795,7 +795,7 @@
     "language": "de",
     "accept_language": "de,en;q=0.8",
     "description": "German content-heavy sites — municipalities, federal agencies, universities, large e-commerce, media and healthcare.",
-    "min_pages": 100,
+    "min_pages": 50,
     "target_types": [
       "municipality",
       "public_sector",
@@ -1579,7 +1579,7 @@
     "language": "nl",
     "accept_language": "nl,en;q=0.8",
     "description": "Dutch content-heavy sites — municipalities, public sector, universities, large e-commerce and media.",
-    "min_pages": 50,
+    "min_pages": 20,
     "target_types": [
       "municipality",
       "public_sector",
@@ -1830,6 +1830,34 @@
         "Dutch kuuroord wellness gezondheid diensten",
         "Nederlands beursorganisator tentoonstellingen congressen",
         "Nederlandse veerdienst routes passagiers vracht"
+      ],
+      "ecommerce_nl": [
+        "webshop nederland producten",
+        "online winkel nederland kleding mode",
+        "webshop nederland elektronica",
+        "online winkel nederland wonen",
+        "webshop nederland gezondheid schoonheid",
+        "online winkel nederland sport",
+        "webshop nederland boeken",
+        "online winkel nederland sieraden"
+      ],
+      "company_cities": [
+        "bedrijf amsterdam website diensten",
+        "bedrijf rotterdam website diensten",
+        "bedrijf den haag website services",
+        "bedrijf utrecht website",
+        "startup amsterdam website producten",
+        "mkb nederland website diensten",
+        "b2b bedrijf nederland website",
+        "technologie bedrijf nederland website"
+      ],
+      "saas_tech_nl": [
+        "software bedrijf nederland saas",
+        "cloud oplossing nederland b2b",
+        "fintech nederland website",
+        "healthtech nederland website",
+        "startup tech nederland website",
+        "marketplace nederland b2b website"
       ]
     }
   },
@@ -1838,7 +1866,7 @@
     "language": "fr",
     "accept_language": "fr,en;q=0.8",
     "description": "French content-heavy sites — municipalities, public sector, universities, large e-commerce and media.",
-    "min_pages": 100,
+    "min_pages": 20,
     "target_types": [
       "municipality",
       "public_sector",
@@ -2089,6 +2117,36 @@
         "établissement thermal spa santé bien-être services",
         "organisateur salon foire congrès expositions",
         "compagnie ferries routes passagers fret français"
+      ],
+      "ecommerce_fr": [
+        "boutique en ligne france produits",
+        "shop en ligne français mode vêtements",
+        "commerce en ligne france électronique",
+        "vente en ligne france décoration maison",
+        "épicerie en ligne livraison france",
+        "pharmacie en ligne france",
+        "librairie en ligne france",
+        "mobilier en ligne france boutique"
+      ],
+      "company_paris": [
+        "entreprise paris website services",
+        "startup paris website produits",
+        "société paris services B2B",
+        "PME paris site web services",
+        "entreprise lyon services website",
+        "entreprise marseille services website",
+        "entreprise bordeaux website",
+        "entreprise toulouse website services"
+      ],
+      "saas_tech_fr": [
+        "logiciel SaaS français entreprise",
+        "solution cloud française B2B",
+        "startup tech française website",
+        "fintech française website",
+        "healthtech française website",
+        "edtech française website",
+        "marketplace B2B france website",
+        "application mobile française entreprise"
       ]
     }
   },
@@ -2347,7 +2405,7 @@
     "name": "India",
     "language": "en",
     "accept_language": "en-IN,en;q=0.9",
-    "min_pages": 30,
+    "min_pages": 10,
     "target_types": [
       "company",
       "technology",
@@ -2363,91 +2421,197 @@
     ],
     "query_categories": {
       "company": [
-        "web design agency india",
-        "web development company india",
-        "digital agency india",
-        "website development company india",
-        "it company website india",
-        "creative agency india",
-        "software company website india"
+        "manufacturing company india website",
+        "b2b company india product catalogue",
+        "software product company india",
+        "logistics company india website",
+        "pharmaceutical company india website",
+        "food company india website",
+        "textile company india website",
+        "engineering company india website",
+        "startup india product website",
+        "fintech company india website",
+        "healthtech company india website",
+        "edtech company india website",
+        "saas product company india",
+        "b2b marketplace india website"
       ],
       "technology": [
-        "saas company india website",
-        "fintech website india",
-        "healthtech website india",
-        "edtech website india",
-        "b2b software company india website",
-        "it services company india",
-        "software agency hyderabad",
-        "it company website bangalore"
+        "saas software company india",
+        "it product company india website",
+        "cloud software company india",
+        "cybersecurity company india website",
+        "data analytics company india",
+        "ai ml startup india website",
+        "iot company india website",
+        "erp software company india",
+        "hr software company india",
+        "accounting software india website",
+        "crm software company india",
+        "project management software india"
       ],
       "ecommerce": [
-        "ecommerce website development india",
-        "woocommerce developer india",
-        "wordpress agency india",
-        "wordpress development company india",
-        "wordpress website design india",
-        "ecommerce agency india",
-        "shopify agency india"
+        "online shop india products",
+        "indian ecommerce store website",
+        "fashion online shop india",
+        "electronics online store india",
+        "home decor online shop india",
+        "food delivery company india website",
+        "grocery delivery india website",
+        "health beauty shop india",
+        "jewellery online store india",
+        "furniture shop india website",
+        "books online store india",
+        "sports equipment india website"
       ],
       "media": [
-        "digital marketing agency india",
-        "seo company india website",
-        "content marketing agency india",
-        "social media agency india"
+        "news portal india website",
+        "magazine india website",
+        "blog india content website",
+        "video streaming company india",
+        "podcast company india website",
+        "events company india website",
+        "entertainment company india website",
+        "travel blog india website"
       ],
       "bangalore": [
-        "web agency bangalore",
-        "digital agency bangalore",
-        "wordpress agency bangalore",
-        "it company bangalore website"
+        "company bangalore website",
+        "startup bangalore website",
+        "business bangalore website",
+        "manufacturing company bangalore",
+        "retail company bangalore website"
       ],
       "mumbai": [
-        "web agency mumbai",
-        "digital agency mumbai",
-        "wordpress agency mumbai",
-        "ecommerce agency mumbai"
+        "company mumbai website",
+        "startup mumbai website",
+        "business mumbai website",
+        "manufacturing company mumbai",
+        "retail company mumbai website"
       ],
       "delhi": [
-        "web agency delhi",
-        "digital agency delhi",
-        "wordpress agency delhi",
-        "it company delhi website"
+        "company delhi website",
+        "startup delhi website",
+        "business delhi website",
+        "manufacturing company delhi",
+        "retail company delhi website"
       ],
       "hyderabad": [
-        "web agency hyderabad",
-        "software agency hyderabad",
-        "wordpress agency hyderabad",
-        "digital agency hyderabad"
+        "company hyderabad website",
+        "startup hyderabad website",
+        "business hyderabad website",
+        "manufacturing company hyderabad",
+        "retail company hyderabad website"
       ],
       "pune": [
-        "web design agency pune",
-        "web development company pune",
-        "digital agency pune",
-        "website development pune",
-        "it company pune website",
-        "software company pune website",
-        "digital marketing agency pune",
-        "seo agency pune",
-        "wordpress agency pune",
-        "wordpress development pune",
-        "shopify agency pune",
-        "ecommerce agency pune",
-        "ui ux design agency pune",
-        "mobile app development pune website",
-        "b2b software company pune"
+        "company pune website",
+        "startup pune website",
+        "manufacturing company pune",
+        "it company pune product",
+        "saas company pune website",
+        "engineering company pune website",
+        "pharmaceutical company pune website",
+        "logistics company pune website",
+        "retail company pune website",
+        "food company pune website",
+        "software product company pune",
+        "b2b company pune website"
       ],
       "other_cities": [
-        "web agency chennai",
-        "web agency ahmedabad",
-        "web agency kolkata",
-        "web agency jaipur",
-        "web agency kochi",
-        "web agency noida",
-        "web agency coimbatore",
-        "web agency surat",
-        "digital agency kolkata",
-        "digital agency jaipur"
+        "company kolkata website",
+        "company jaipur website",
+        "company indore website",
+        "company nagpur website",
+        "company coimbatore website",
+        "company surat website",
+        "company kochi website",
+        "manufacturing company noida website",
+        "startup chandigarh website",
+        "company bhubaneswar website",
+        "company visakhapatnam website",
+        "company vadodara website",
+        "b2b company ludhiana website",
+        "company mysore website"
+      ],
+      "ahmedabad": [
+        "company ahmedabad website",
+        "manufacturing company ahmedabad",
+        "textile company ahmedabad website",
+        "startup ahmedabad website",
+        "b2b company ahmedabad",
+        "retail company ahmedabad website",
+        "pharmaceutical company ahmedabad"
+      ],
+      "chennai": [
+        "company chennai website",
+        "manufacturing company chennai",
+        "startup chennai website",
+        "it product company chennai",
+        "logistics company chennai website",
+        "automotive company chennai website",
+        "saas company chennai website"
+      ]
+    }
+  },
+  "BE": {
+    "name": "Belgium",
+    "language": "fr,nl",
+    "accept_language": "fr-BE,nl-BE,fr;q=0.9,nl;q=0.8,en;q=0.7",
+    "min_pages": 15,
+    "target_types": [
+      "company",
+      "ecommerce",
+      "technology",
+      "healthcare",
+      "education",
+      "media",
+      "finance",
+      "real_estate",
+      "logistics",
+      "construction",
+      "hospitality"
+    ],
+    "query_categories": {
+      "company_fr": [
+        "entreprise belge website services produits",
+        "société belgique services B2B website",
+        "PME belge website services",
+        "entreprise bruxelles website services",
+        "entreprise liège website",
+        "startup belge website produits",
+        "b2b entreprise belgique website"
+      ],
+      "company_nl": [
+        "belgisch bedrijf website diensten",
+        "bedrijf antwerpen website diensten",
+        "bedrijf gent website services",
+        "bedrijf brussel website",
+        "mkb belgie website diensten",
+        "startup belgie website producten",
+        "b2b bedrijf belgie website"
+      ],
+      "ecommerce_be": [
+        "boutique en ligne belgique produits",
+        "webshop belgie producten online",
+        "online winkel belgie kleding",
+        "shop en ligne belgique mode",
+        "webshop belgie elektronica",
+        "boutique belge livraison website"
+      ],
+      "tech_be": [
+        "logiciel SaaS belge entreprise",
+        "software bedrijf belgie saas",
+        "startup tech belge website",
+        "fintech belge website",
+        "cloud oplossing belgie b2b",
+        "solution cloud belge B2B website"
+      ],
+      "hospitality_be": [
+        "hôtel belgique website reservations",
+        "restaurant bruxelles website menu",
+        "hotel belgie website boeken",
+        "restaurant antwerpen website",
+        "toerisme belgie website",
+        "tourisme belgique website"
       ]
     }
   }

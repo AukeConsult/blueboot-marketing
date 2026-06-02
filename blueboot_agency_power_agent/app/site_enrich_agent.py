@@ -329,7 +329,7 @@ async def _run_sitemaps_async(
             asyncio.create_task(_fetch_one(session, ref, data))
             for ref, data in to_process
         ]
-        await asyncio.gather(*tasks)
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     return counters
 
@@ -522,7 +522,7 @@ async def _run_async(
             )
         )
 
-    await asyncio.gather(*tasks)
+    await asyncio.gather(*tasks, return_exceptions=True)
     return counters
 
 

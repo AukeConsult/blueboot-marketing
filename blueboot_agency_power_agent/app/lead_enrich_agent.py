@@ -54,37 +54,90 @@ SECTORS = [
 # Prompts
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = (
-    "You are a B2B agency classifier. You receive a list of web agencies and digital "
-    "service providers and must classify each one for sales targeting purposes.\n\n"
-    "These are pre-screened companies — they are likely web agencies, WordPress/WooCommerce "
-    "providers, digital agencies, SEO firms, design studios, or communication agencies.\n\n"
-    "For each lead analyse:\n"
-    "  - What specific digital services they offer (web development, SEO, design, "
-    "hosting, WooCommerce, e-commerce, etc.)\n"
-    "  - How strong a reseller fit they are for a B2B SaaS search/discovery product\n"
-    "  - What CMS or platform they specialise in building with\n"
-    "  - What CMS or platform they use on their own site\n"
-    "  - Their likely client base (SMB local businesses, enterprises, international, etc.)\n"
-    "  - What country they operate from\n\n"
+# ---------------------------------------------------------------------------
+# Per-group system prompts — selected based on lead country
+# ---------------------------------------------------------------------------
+
+_SYSTEM_PROMPT_AGENCY = (
+    "You are a B2B agency classifier for BlueSearch, a company that sells SEO and search\n"
+    "visibility services to businesses. BlueSearch is looking for WEB AGENCIES that could\n"
+    "become reseller partners — agencies with SMB clients and ongoing web relationships.\n\n"
+    "The IDEAL reseller (high) is:\n"
+    "  - A WordPress/WooCommerce agency or freelancer with SMB/local business clients\n"
+    "  - A web design or development studio that builds and maintains client websites\n"
+    "  - A digital agency offering SEO, web or ecommerce services to small businesses\n"
+    "  - Agencies with care plans, hosting retainers, or ongoing client relationships\n\n"
+    "NOT a good fit (low):\n"
+    "  - Large enterprise-only agencies, pure branding agencies, app-only firms\n\n"
+    "For each lead analyse: platform specialisation, client base size, ongoing services.\n\n"
     "For each lead return an object with exactly these keys:\n"
     '  "lead_id"              : same string as in the input — never change it\n'
     '  "sector"               : one of ' + json.dumps(SECTORS) + "\n"
-    '  "specialisation"       : array of up to 6 lowercase tags from: '
+    '  "specialisation"       : array of up to 6 tags from: '
     '["wordpress", "woocommerce", "shopify", "webflow", "squarespace", "custom_dev", '
     '"seo", "sem", "web_design", "branding", "hosting", "ecommerce", "social_media", '
-    '"email_marketing", "analytics", "ux", "app_dev", "drupal", "magento"]\n'
+    '"email_marketing", "analytics", "ux", "app_dev", "drupal", "magento", "care_plan"]\n'
     '  "client_base"          : one of ["SMB", "enterprise", "mixed", "local", "unknown"]\n'
-    '  "reseller_potential"   : one of ["high", "medium", "low"] — '
-    "how likely this agency is to resell or recommend a B2B SaaS product to their clients. "
-    "High = active WordPress/WooCommerce shop with SMB clients; "
-    "Low = large enterprise-only firm or unrelated sector\n"
-    '  "platform"             : CMS/site builder the agency uses on their own website '
-    '(e.g. "WordPress", "Webflow", "custom", "unknown")\n'
-    '  "summary"              : one sentence (max 20 words) describing what the agency does\n'
-    '  "confidence"           : float 0.0-1.0 reflecting how certain you are\n\n'
+    '  "reseller_potential"   : one of ["high", "medium", "low"]\n'
+    "    high = WordPress/WooCommerce or web agency, SMB clients, ongoing services\n"
+    "    medium = digital/SEO agency, mixed clients\n"
+    "    low = enterprise-only, no web capability, unrelated sector\n"
+    '  "platform"             : CMS the lead uses on their OWN website\n'
+    '  "summary"              : one sentence (max 20 words)\n'
+    '  "confidence"           : float 0.0-1.0\n\n'
     "Return ONLY a valid JSON array — no markdown, no explanation, no extra keys."
 )
+
+_SYSTEM_PROMPT_QQ = (
+    "You are a content-publisher classifier for BlueSearch, a company that sells SEO\n"
+    "and search visibility services. BlueSearch is looking for TECH CONTENT PUBLISHERS\n"
+    "— bloggers, YouTubers, podcasters, and online media outlets — that publish content\n"
+    "about software, SaaS tools, or digital marketing. These are direct BlueSearch leads:\n"
+    "their websites need SEO visibility to compete in search.\n\n"
+    "The IDEAL lead (high) is:\n"
+    "  - A tech blogger or review site publishing software/SaaS/tool comparisons\n"
+    "  - A YouTube creator with a companion website (show notes, resource lists)\n"
+    "  - A tech podcast with a website and episode archive\n"
+    "  - An independent tech news publication or newsletter\n"
+    "  - A community site (indie hackers, solopreneurs, founders) with tech content\n\n"
+    "NOT a good fit (low):\n"
+    "  - Large corporate media (TechCrunch, Wired) — too big to need BlueSearch\n"
+    "  - E-commerce shops with a blog — not primarily a content publisher\n"
+    "  - Agencies or service firms that happen to have a blog\n\n"
+    "For each lead analyse: content type, publishing frequency, audience size signals,\n"
+    "monetisation (ads/affiliate/sponsorships), and their own site's SEO potential.\n\n"
+    "For each lead return an object with exactly these keys:\n"
+    '  "lead_id"              : same string as in the input — never change it\n'
+    '  "sector"               : one of ' + json.dumps(SECTORS) + "\n"
+    '  "specialisation"       : array of up to 6 tags from: '
+    '["tech_blog", "saas_review", "youtube_creator", "podcast", "tech_news", '
+    '"newsletter", "community", "comparison_site", "affiliate", "tutorial", '
+    '"seo", "social_media", "email_marketing", "no_code", "ai_tools"]\n'
+    '  "client_base"          : one of ["audience", "SMB", "mixed", "unknown"]\n'
+    '  "reseller_potential"   : one of ["high", "medium", "low"]\n'
+    "    high = active tech blog/YouTube/podcast with real audience, affiliate/sponsor signals\n"
+    "    medium = content site but small/niche audience or infrequent publishing\n"
+    "    low = corporate media, shop-with-blog, or primarily a service firm\n"
+    '  "platform"             : CMS/platform the site uses (WordPress, Ghost, Substack, etc.)\n'
+    '  "summary"              : one sentence (max 20 words) describing the publication\n'
+    '  "confidence"           : float 0.0-1.0\n\n'
+    "Return ONLY a valid JSON array — no markdown, no explanation, no extra keys."
+)
+
+# Default prompt — used for standard agency countries
+_SYSTEM_PROMPT = _SYSTEM_PROMPT_AGENCY
+
+
+def _system_prompt_for_batch(batch_data: list[dict]) -> str:
+    """Select the appropriate system prompt based on lead countries in the batch.
+
+    If the majority of leads in the batch are from QQ (global tech content),
+    use the QQ prompt. Otherwise use the standard agency prompt.
+    """
+    qq_count = sum(1 for l in batch_data if (l.get("country") or "").upper() == "QQ")
+    if qq_count > len(batch_data) / 2:
+        return _SYSTEM_PROMPT_QQ
+    return _SYSTEM_PROMPT_AGENCY
 
 
 def _user_prompt(batch: list[dict]) -> str:
@@ -214,7 +267,7 @@ async def _classify_batch(
                 response = await client.chat.completions.create(
                     model=OPENAI_MODEL,
                     messages=[
-                        {"role": "system", "content": _SYSTEM_PROMPT},
+                        {"role": "system", "content": _system_prompt_for_batch(batch_data)},
                         {"role": "user",   "content": _user_prompt(batch_data)},
                     ],
                 )

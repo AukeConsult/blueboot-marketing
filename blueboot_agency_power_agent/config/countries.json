@@ -21,7 +21,22 @@
         "hjemmeside",
         "digitalbyrå",
         "web design",
-        "website"
+        "website",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -59,6 +74,34 @@
         "kunstig intelligens",
         "chatgpt",
         "automatisering"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -73,7 +116,14 @@
       "drift",
       "vedlikehold",
       "support",
-      "hosting"
+      "hosting",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "kontakt",
@@ -97,7 +147,20 @@
       "partner",
       "vi hjelper bedrifter",
       "portefølje",
-      "oppdrag"
+      "oppdrag",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".no",
@@ -147,7 +210,22 @@
         "hemsidor",
         "digitalbyrå",
         "web design",
-        "website"
+        "website",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -184,6 +262,34 @@
         "artificiell intelligens",
         "chatgpt",
         "automatisering"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -198,7 +304,14 @@
       "drift",
       "underhåll",
       "support",
-      "hosting"
+      "hosting",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "kontakt",
@@ -222,7 +335,20 @@
       "partner",
       "vi hjälper företag",
       "portfölj",
-      "uppdrag"
+      "uppdrag",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".se",
@@ -272,7 +398,22 @@
         "hjemmesider",
         "digitalbureau",
         "web design",
-        "website"
+        "website",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -309,6 +450,34 @@
         "kunstig intelligens",
         "chatgpt",
         "automatisering"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -323,7 +492,14 @@
       "drift",
       "vedligeholdelse",
       "support",
-      "hosting"
+      "hosting",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "kontakt",
@@ -347,7 +523,20 @@
       "partner",
       "vi hjælper virksomheder",
       "portefølje",
-      "opgave"
+      "opgave",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".dk",
@@ -397,7 +586,22 @@
         "web-kehitys",
         "digitoimisto",
         "web design",
-        "website"
+        "website",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -435,6 +639,34 @@
         "chatgpt",
         "automaatio",
         "keinoäly"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -450,7 +682,14 @@
       "ylläpito",
       "tuki",
       "hosting",
-      "huolto"
+      "huolto",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "yhteystiedot",
@@ -473,7 +712,20 @@
       "kumppani",
       "autamme yrityksiä",
       "portfolio",
-      "toimeksianto"
+      "toimeksianto",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".fi",
@@ -522,7 +774,22 @@
         "website",
         "digitaal bureau",
         "web design",
-        "website bouwen"
+        "website bouwen",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -558,6 +825,34 @@
         "kunstmatige intelligentie",
         "chatgpt",
         "automatisering"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -572,7 +867,14 @@
       "beheer",
       "onderhoud",
       "support",
-      "hosting"
+      "hosting",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contact",
@@ -593,7 +895,20 @@
       "partner",
       "wij helpen bedrijven",
       "portfolio",
-      "opdracht"
+      "opdracht",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".nl",
@@ -643,7 +958,22 @@
         "digitaal bureau",
         "agence digitale",
         "website",
-        "web design"
+        "web design",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -682,6 +1012,34 @@
         "intelligence artificielle",
         "chatgpt",
         "automatisering"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -697,7 +1055,14 @@
       "beheer",
       "maintenance",
       "support",
-      "hosting"
+      "hosting",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contact",
@@ -716,7 +1081,20 @@
       "onze klanten",
       "nos clients",
       "partner",
-      "portfolio"
+      "portfolio",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".be",
@@ -766,7 +1144,22 @@
         "homepage",
         "internetagentur",
         "digitalagentur",
-        "web design"
+        "web design",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -804,6 +1197,34 @@
         "ai",
         "chatgpt",
         "automatisierung"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -819,7 +1240,14 @@
       "support",
       "hosting",
       "betreuung",
-      "pflege"
+      "pflege",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "kontakt",
@@ -843,7 +1271,20 @@
       "partner",
       "wir helfen unternehmen",
       "portfolio",
-      "auftrag"
+      "auftrag",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".de",
@@ -893,7 +1334,22 @@
         "homepage",
         "digitalagentur",
         "web design",
-        "internetagentur"
+        "internetagentur",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -931,6 +1387,34 @@
         "ai",
         "chatgpt",
         "automatisierung"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -946,7 +1430,14 @@
       "support",
       "hosting",
       "betreuung",
-      "pflege"
+      "pflege",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "kontakt",
@@ -967,7 +1458,20 @@
       "partner",
       "wir helfen unternehmen",
       "portfolio",
-      "auftrag"
+      "auftrag",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".at",
@@ -1016,7 +1520,22 @@
         "web development",
         "website design",
         "digital agency",
-        "website build"
+        "website build",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -1052,6 +1571,34 @@
         "artificial intelligence",
         "chatgpt",
         "automation"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -1066,7 +1613,13 @@
       "maintenance",
       "support",
       "hosting",
-      "care plan"
+      "care plan",
+      "managed",
+      "retainer",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contact",
@@ -1087,7 +1640,18 @@
       "partner",
       "we help businesses",
       "portfolio",
-      "projects"
+      "projects",
+      "we build",
+      "we design",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects"
     ],
     "accepted_tlds": [
       ".co.uk",
@@ -1136,7 +1700,22 @@
         "web development",
         "website design",
         "digital agency",
-        "website build"
+        "website build",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -1172,6 +1751,34 @@
         "artificial intelligence",
         "chatgpt",
         "automation"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -1186,7 +1793,13 @@
       "maintenance",
       "support",
       "hosting",
-      "care plan"
+      "care plan",
+      "managed",
+      "retainer",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contact",
@@ -1207,7 +1820,18 @@
       "partner",
       "we help businesses",
       "portfolio",
-      "projects"
+      "projects",
+      "we build",
+      "we design",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects"
     ],
     "accepted_tlds": [
       ".ie",
@@ -1257,7 +1881,22 @@
         "sites web",
         "agence digitale",
         "web design",
-        "website"
+        "website",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -1296,6 +1935,34 @@
         "ai",
         "chatgpt",
         "automatisation"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -1311,7 +1978,14 @@
       "maintenance",
       "support",
       "hébergement",
-      "infogérance"
+      "infogérance",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contact",
@@ -1332,7 +2006,20 @@
       "partenaire",
       "nous aidons les entreprises",
       "portfolio",
-      "missions"
+      "missions",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".fr",
@@ -1382,7 +2069,22 @@
         "sitio web",
         "agencia digital",
         "web design",
-        "website"
+        "website",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -1421,6 +2123,34 @@
         "ai",
         "chatgpt",
         "automatización"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -1436,7 +2166,14 @@
       "mantenimiento",
       "soporte",
       "alojamiento",
-      "hosting"
+      "hosting",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contacto",
@@ -1457,7 +2194,20 @@
       "partner",
       "ayudamos a empresas",
       "portfolio",
-      "proyectos"
+      "proyectos",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".es",
@@ -1507,7 +2257,22 @@
         "siti web",
         "agenzia digitale",
         "creazione siti",
-        "web agency"
+        "web agency",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -1546,6 +2311,34 @@
         "ai",
         "chatgpt",
         "automazione"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -1561,7 +2354,14 @@
       "manutenzione",
       "supporto",
       "hosting",
-      "assistenza"
+      "assistenza",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contatti",
@@ -1583,7 +2383,20 @@
       "partner",
       "aiutiamo le aziende",
       "portfolio",
-      "progetti"
+      "progetti",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".it",
@@ -1632,7 +2445,22 @@
         "tworzenie stron",
         "strony internetowe",
         "agencja cyfrowa",
-        "web agency"
+        "web agency",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -1670,6 +2498,34 @@
         "ai",
         "chatgpt",
         "automatyzacja"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -1685,7 +2541,14 @@
       "utrzymanie",
       "wsparcie",
       "hosting",
-      "obsługa"
+      "obsługa",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "kontakt",
@@ -1707,7 +2570,20 @@
       "partner",
       "pomagamy firmom",
       "portfolio",
-      "projekty"
+      "projekty",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".pl",
@@ -1756,7 +2632,22 @@
         "weboldal",
         "digitális ügynökség",
         "web design",
-        "honlap készítés"
+        "honlap készítés",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -1793,6 +2684,34 @@
         "ai",
         "chatgpt",
         "automatizálás"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -1807,7 +2726,14 @@
       "karbantartás",
       "támogatás",
       "hosting",
-      "üzemeltetés"
+      "üzemeltetés",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "kapcsolat",
@@ -1826,7 +2752,20 @@
       "digitális megoldások",
       "partner",
       "segítünk vállalkozásoknak",
-      "portfólió"
+      "portfólió",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".hu",
@@ -1875,7 +2814,22 @@
         "veebileht",
         "digitaalbüroo",
         "web design",
-        "website"
+        "website",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -1912,6 +2866,34 @@
         "ai",
         "chatgpt",
         "automatiseerimine"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -1926,7 +2908,14 @@
       "hooldus",
       "tugi",
       "hosting",
-      "administreerimine"
+      "administreerimine",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "kontakt",
@@ -1945,7 +2934,20 @@
       "digitaalsed lahendused",
       "partner",
       "aitame ettevõtteid",
-      "portfoolio"
+      "portfoolio",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".ee",
@@ -1994,7 +2996,22 @@
         "mājaslapa",
         "digitālā aģentūra",
         "web design",
-        "website"
+        "website",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -2031,6 +3048,34 @@
         "ai",
         "chatgpt",
         "automatizācija"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -2045,7 +3090,14 @@
       "uzturēšana",
       "atbalsts",
       "hosting",
-      "administrēšana"
+      "administrēšana",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "kontakti",
@@ -2064,7 +3116,20 @@
       "digitāli risinājumi",
       "partneris",
       "palīdzam uzņēmumiem",
-      "portfolio"
+      "portfolio",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".lv",
@@ -2113,7 +3178,22 @@
         "svetainė",
         "skaitmeninė agentūra",
         "web design",
-        "website kūrimas"
+        "website kūrimas",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -2150,6 +3230,34 @@
         "ai",
         "chatgpt",
         "automatizavimas"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -2164,7 +3272,14 @@
       "priežiūra",
       "palaikymas",
       "hosting",
-      "administravimas"
+      "administravimas",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "kontaktai",
@@ -2183,7 +3298,20 @@
       "skaitmeniniai sprendimai",
       "partneris",
       "padedame įmonėms",
-      "portfolio"
+      "portfolio",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".lt",
@@ -2233,7 +3361,22 @@
         "website design",
         "digital agency",
         "website development company",
-        "it company"
+        "it company",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -2271,6 +3414,34 @@
         "chatgpt",
         "automation",
         "machine learning"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -2287,7 +3458,14 @@
       "support",
       "hosting",
       "amc",
-      "annual maintenance"
+      "annual maintenance",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contact",
@@ -2309,7 +3487,18 @@
       "we help businesses",
       "portfolio",
       "projects",
-      "offshore development"
+      "offshore development",
+      "we build",
+      "we design",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects"
     ],
     "accepted_tlds": [
       ".in",
@@ -2359,7 +3548,22 @@
         "site web",
         "agence digitale",
         "création site",
-        "web agency"
+        "web agency",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -2398,6 +3602,34 @@
         "ai",
         "chatgpt",
         "automatisation"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -2413,7 +3645,14 @@
       "maintenance",
       "support",
       "hébergement",
-      "infogérance"
+      "infogérance",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contact",
@@ -2434,7 +3673,20 @@
       "partenaire",
       "nous aidons les entreprises",
       "portfolio",
-      "missions"
+      "missions",
+      "we build",
+      "we design",
+      "we develop",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".tn",
@@ -2487,7 +3739,22 @@
         "เว็บดีไซน์",
         "พัฒนาเว็บ",
         "ออกแบบเว็บ",
-        "บริษัทเว็บ"
+        "บริษัทเว็บ",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -2524,6 +3791,34 @@
         "automation",
         "chatgpt",
         "machine learning"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -2541,7 +3836,14 @@
       "maintenance",
       "support",
       "hosting",
-      "บำรุงรักษา"
+      "บำรุงรักษา",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contact",
@@ -2565,7 +3867,18 @@
       "we help businesses",
       "offshore development",
       "รับพัฒนา",
-      "เราช่วย"
+      "เราช่วย",
+      "we build",
+      "we design",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects"
     ],
     "accepted_tlds": [
       ".th",
@@ -2620,7 +3933,22 @@
         "web design",
         "desenvolvimento de sites",
         "agência digital",
-        "agencia digital"
+        "agencia digital",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -2661,6 +3989,34 @@
         "chatgpt",
         "machine learning",
         "artificial intelligence"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -2677,7 +4033,14 @@
       "manutenção",
       "suporte",
       "hospedagem",
-      "sustentação"
+      "sustentação",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contato",
@@ -2702,7 +4065,18 @@
       "portfólio",
       "projetos realizados",
       "we build",
-      "we develop"
+      "we develop",
+      "we design",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".br",
@@ -2756,7 +4130,22 @@
         "agencia digital",
         "web design",
         "desarrollo de sitios web",
-        "empresa de desarrollo web"
+        "empresa de desarrollo web",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -2797,6 +4186,34 @@
         "chatgpt",
         "machine learning",
         "artificial intelligence"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -2813,7 +4230,14 @@
       "mantenimiento",
       "soporte",
       "hosting",
-      "alojamiento"
+      "alojamiento",
+      "managed",
+      "retainer",
+      "care plan",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contacto",
@@ -2837,7 +4261,18 @@
       "portafolio",
       "proyectos realizados",
       "we build",
-      "we develop"
+      "we develop",
+      "we design",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects",
+      "our clients"
     ],
     "accepted_tlds": [
       ".ar",
@@ -3012,7 +4447,22 @@
         "web development",
         "website design",
         "digital agency",
-        "website build"
+        "website build",
+        "wordpress developer",
+        "wordpress specialist",
+        "woocommerce specialist",
+        "woocommerce developer",
+        "wordpress agency",
+        "shopify agency",
+        "shopify developer",
+        "webflow agency",
+        "ecommerce agency",
+        "ecommerce developer",
+        "website agency",
+        "web studio",
+        "wordpress consultant",
+        "wordpress freelancer",
+        "wp developer"
       ],
       "wordpress": [
         "wordpress",
@@ -3048,6 +4498,34 @@
         "artificial intelligence",
         "chatgpt",
         "automation"
+      ],
+      "smb_focus": [
+        "small business",
+        "local business",
+        "sme",
+        "smb",
+        "small businesses",
+        "local businesses",
+        "independent business",
+        "local companies",
+        "small company",
+        "startup clients",
+        "growing businesses"
+      ],
+      "care_plan": [
+        "care plan",
+        "website care",
+        "maintenance plan",
+        "hosting plan",
+        "managed hosting",
+        "website management",
+        "monthly retainer",
+        "ongoing support",
+        "website support plan",
+        "managed wordpress",
+        "wordpress maintenance",
+        "site maintenance",
+        "web care"
       ]
     },
     "service_words": [
@@ -3062,7 +4540,13 @@
       "maintenance",
       "support",
       "hosting",
-      "care plan"
+      "care plan",
+      "managed",
+      "retainer",
+      "website care",
+      "sla",
+      "monthly plan",
+      "managed wordpress"
     ],
     "contact_words": [
       "contact",
@@ -3083,7 +4567,18 @@
       "partner",
       "we help businesses",
       "portfolio",
-      "projects"
+      "projects",
+      "we build",
+      "we design",
+      "we create websites",
+      "get a quote",
+      "free consultation",
+      "request a quote",
+      "let's work together",
+      "view our work",
+      "see our work",
+      "our portfolio",
+      "our projects"
     ],
     "accepted_tlds": [
       ".co.uk",
@@ -3117,5 +4612,242 @@
       ".me",
       ".farm"
     ]
+  },
+  "QQ": {
+    "name": "Global (Tech Content)",
+    "tlds": [],
+    "phone_region": "",
+    "accept_language": "en;q=1.0",
+    "keywords": {
+      "web_agency": [
+        "tech blog",
+        "technology blog",
+        "software blog",
+        "saas blog",
+        "tech review",
+        "software review",
+        "saas review",
+        "app review",
+        "tech reviews",
+        "software reviews",
+        "product review",
+        "tool review",
+        "plugin review",
+        "hosting review",
+        "theme review",
+        "youtube channel",
+        "youtube creator",
+        "video tutorial",
+        "tech youtube",
+        "watch our video",
+        "subscribe to our channel",
+        "watch on youtube",
+        "youtube playlist",
+        "our channel",
+        "tech news",
+        "technology news",
+        "tech publication",
+        "tech magazine",
+        "tech newsletter",
+        "editorial",
+        "tech journalist",
+        "tech media",
+        "martech",
+        "wordpress news",
+        "web industry",
+        "tech tutorial",
+        "software tutorial",
+        "how to guide",
+        "tech guide",
+        "step by step",
+        "beginner guide",
+        "ultimate guide",
+        "tech podcast",
+        "software podcast",
+        "startup podcast",
+        "saas podcast",
+        "podcast episode",
+        "show notes",
+        "listen now",
+        "new episode",
+        "tech community",
+        "developer forum",
+        "indie hacker",
+        "solopreneur",
+        "founder community",
+        "freelancer tips"
+      ],
+      "wordpress": [
+        "subscribers",
+        "readers",
+        "monthly readers",
+        "weekly readers",
+        "newsletter subscribers",
+        "youtube subscribers",
+        "followers",
+        "our audience",
+        "our community",
+        "content creator",
+        "published articles",
+        "posts published",
+        "tutorials written",
+        "episodes",
+        "podcast listeners",
+        "media kit",
+        "advertise with us",
+        "sponsored",
+        "affiliate",
+        "mailing list",
+        "rss feed",
+        "weekly digest"
+      ],
+      "seo": [
+        "sponsored content",
+        "sponsored post",
+        "affiliate disclosure",
+        "affiliate links",
+        "press release",
+        "press coverage",
+        "content partnership",
+        "brand partnership",
+        "collaboration",
+        "newsletter sponsorship",
+        "display advertising",
+        "promoted content",
+        "partner with us"
+      ],
+      "communication": [
+        "we publish",
+        "we write about",
+        "we cover",
+        "we review",
+        "we test",
+        "we compare",
+        "in-depth review",
+        "hands-on review",
+        "our editorial",
+        "independent review",
+        "unbiased review",
+        "roundup",
+        "best of",
+        "top tools",
+        "comparison guide",
+        "weekly roundup",
+        "monthly roundup",
+        "tool comparison",
+        "vs ",
+        "alternatives"
+      ],
+      "smb_focus": [
+        "best software",
+        "software comparison",
+        "saas comparison",
+        "best saas",
+        "software recommendations",
+        "tool reviews",
+        "app reviews",
+        "best tools",
+        "top software",
+        "software guide",
+        "product comparison",
+        "alternatives to",
+        "best plugins",
+        "best themes",
+        "best hosting",
+        "best apps"
+      ],
+      "care_plan": [
+        "podcast",
+        "episodes",
+        "listen now",
+        "rss",
+        "mailing list",
+        "weekly digest",
+        "daily digest",
+        "press inquiries",
+        "unique visitors",
+        "page views",
+        "monthly views",
+        "traffic",
+        "readership",
+        "join our community",
+        "become a member",
+        "forum"
+      ],
+      "ai_interest": [
+        "artificial intelligence",
+        "machine learning",
+        "chatgpt",
+        "ai tools",
+        "automation",
+        "no-code",
+        "low-code",
+        "developer tools",
+        "open source",
+        "startup tools",
+        "productivity tools",
+        "martech",
+        "growthtech",
+        "techstack"
+      ]
+    },
+    "service_words": [
+      "articles",
+      "reviews",
+      "tutorials",
+      "guides",
+      "videos",
+      "podcast",
+      "newsletter",
+      "subscribers",
+      "readers"
+    ],
+    "support_words": [
+      "membership",
+      "premium",
+      "sponsor",
+      "advertise",
+      "affiliate",
+      "patreon",
+      "substack"
+    ],
+    "contact_words": [
+      "contact",
+      "about",
+      "team",
+      "press",
+      "advertise",
+      "partner"
+    ],
+    "agency_words": [
+      "we publish",
+      "we review",
+      "we cover",
+      "we write",
+      "we test",
+      "our editorial",
+      "our readers",
+      "our audience",
+      "our community",
+      "media kit",
+      "advertise with us",
+      "sponsored",
+      "subscribe",
+      "newsletter",
+      "podcast",
+      "tutorial",
+      "in-depth",
+      "hands-on",
+      "comparison",
+      "roundup",
+      "vs ",
+      "alternatives",
+      "best of",
+      "top tools",
+      "indie hacker",
+      "solopreneur",
+      "founder"
+    ],
+    "accepted_tlds": []
   }
 }

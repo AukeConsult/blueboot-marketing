@@ -909,7 +909,6 @@ excl. gst
 stock
 salon
 clinic
-real estate
 insurance
 ca firm
 chartered accountant

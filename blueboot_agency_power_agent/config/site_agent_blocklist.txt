@@ -304,9 +304,6 @@ elisa.fi
 telia.fi
 dna.fi
 moi.fi
-# Real-estate portals
-etuovi.com
-kiinteistomaailma.fi
 
 # --- Netherlands (NL) ---
 # Classifieds
@@ -317,10 +314,6 @@ autotrack.nl
 indeed.nl
 monsterboard.nl
 nationalevacaturebank.nl
-# Real-estate portals
-funda.nl
-jaap.nl
-huislijn.nl
 # Large national retailers
 bol.com
 coolblue.nl

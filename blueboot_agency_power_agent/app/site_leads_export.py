@@ -391,10 +391,11 @@ def export_site_leads(
     # ── default output path ─────────────────────────────────────────────────
     if not output:
         ts         = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M")
-        suffix     = f"_{countries[0]}" if countries and len(countries) == 1 else ""
-        suffix    += f"_{category}"     if category else ""
-        suffix    += f"_{sector}"       if sector   else ""
-        suffix    += f"_{location}"     if location else ""
+        suffix     = ("_" + "_".join(c.upper() for c in countries)) if countries else ""
+        suffix    += ("_" + location.replace(" ", "_").replace(",", "")) if location else ""
+        suffix    += ("_" + category)      if category           else ""
+        suffix    += ("_" + sector)        if sector             else ""
+        suffix    += "_contacts_only"      if with_contacts_only else ""
         out_dir    = Path(__file__).parent.parent / "exports"
         out_dir.mkdir(exist_ok=True)
         output     = str(out_dir / f"site_leads{suffix}_{ts}.xlsx")

@@ -352,7 +352,7 @@ def fix_rescrape_contacts(
                              max_pages, delay, results, counters)
                 for lead in leads_to_fix
             ]
-            await asyncio.gather(*tasks)
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     print(f"\n[rescrape] Crawling {len(leads_to_fix)} sites…\n")
     asyncio.run(_run_all())
