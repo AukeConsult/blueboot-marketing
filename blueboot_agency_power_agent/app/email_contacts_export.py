@@ -249,6 +249,7 @@ def _build_excel(rows: list[dict], out_path: Path) -> None:
     ws3 = wb.create_sheet('Sites')
 
     SITE_COLS = [
+        ('Manual Campaign',  'manual_campaign',   20),
         ('Domain',          'domain',            28),
         ('Website',         'website',           35),
         ('Company',         'company',           26),

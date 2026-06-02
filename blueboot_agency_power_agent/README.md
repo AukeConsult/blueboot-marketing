@@ -804,7 +804,15 @@ python app\email_contacts_export.py --mark site --countries UK
 
 `--mark both` is client-side because Firestore requires a composite index to AND two boolean fields. For large collections, adding a `(mark_site_leads, mark_leads)` composite index would push this server-side.
 
-**Excel sheets:** Contacts (all fields, sorted tier→company), Summary (tier/country/pipeline mark/status breakdowns).
+**Excel sheets:** Contacts (all fields, sorted tier→company), Summary (tier/country/pipeline mark/status breakdowns), Sites (one row per unique domain).
+
+**The `Approved` column (Contacts sheet, col 1):**
+Always exported empty. Fill in `YES` to approve a contact for outreach. Blank = pending (untouched by import). Import script reads this column and sets `status=approved` in Firestore.
+
+**The `Manual Campaign` column (Sites sheet, col 1):**
+Always exported empty. Fill in a campaign name to tag a group of sites for targeted follow-up (e.g. `NO_healthcare_q3`, `UK_premium`). Allows sub-campaigns beyond the original `--campaign` filter.
+
+For full column reference and review workflow see `docs/email_contacts_field_reference.docx`.
 
 ---
 
