@@ -273,6 +273,28 @@ async def _enrich_one(
 _VALID_EMAIL_RE = re.compile(
     r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+$'
 )
+_PLACEHOLDER_EMAIL_RE = re.compile(
+    r'(example|test|noemail|noreply|no-reply|donotreply|invalid|'
+    r'localhost|placeholder|dummy|sample|fake|info@example|'
+    r'user@example|admin@example|[0-9a-f]{16,}@)',
+    re.IGNORECASE,
+)
+
+def _is_valid_email(email: str) -> bool:
+    """Return True if email looks like a real, reachable address."""
+    if not email or "@" not in email:
+        return False
+    local, _, domain = email.partition("@")
+    if not local or not domain or "." not in domain:
+        return False
+    if not _VALID_EMAIL_RE.match(email):
+        return False
+    if _PLACEHOLDER_EMAIL_RE.search(email):
+        return False
+    # Reject suspiciously long hex local parts (automated/hash addresses)
+    if len(local) >= 16 and re.fullmatch(r'[0-9a-f\-]+', local):
+        return False
+    return True
 
 
 def enrich_contacts(
@@ -336,7 +358,7 @@ def enrich_contacts(
         c = cdoc.to_dict() or {}
 
         email = (c.get("email") or "").strip()
-        if not email or not _VALID_EMAIL_RE.match(email):
+        if not _is_valid_email(email):
             no_email += 1
             continue
 
@@ -439,6 +461,8 @@ def _parse_args(argv=None):
                    help="Firestore leads collection (default: leads)")
     p.add_argument("--country",       metavar="CODE", action="append", dest="countries",
                    help="Country code(s) to filter on (repeatable or comma-separated)")
+    p.add_argument("--countries",     metavar="CODES", default=None, dest="countries_alias",
+                   help="Comma-separated country codes, e.g. --countries NO,SE,QQ")
     p.add_argument("--limit",         metavar="N", type=int, default=None,
                    help="Maximum number of contacts to process")
     p.add_argument("--workers",       metavar="N", type=int, default=50,
@@ -459,9 +483,13 @@ def main(argv=None):
     args = _parse_args(argv)
 
     countries = None
-    if args.countries:
+    raw_countries = list(args.countries or [])
+    # Also accept --countries NO,SE,QQ (alias)
+    if getattr(args, "countries_alias", None):
+        raw_countries.extend(args.countries_alias.split(","))
+    if raw_countries:
         expanded = []
-        for c in args.countries:
+        for c in raw_countries:
             expanded.extend(x.strip().upper() for x in c.split(",") if x.strip())
         countries = expanded or None
 
