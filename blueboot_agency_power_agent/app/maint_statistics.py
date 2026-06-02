@@ -34,7 +34,7 @@ _local_fb_lock = _threading.Lock()
 import _pathsetup  # noqa: F401 — adds project root, app/, app/functions/, app/collect-functions/ to sys.path
 import os
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from functions.config import cfg
 
@@ -158,7 +158,7 @@ def summarise_country_pr_priority(
     # ------------------------------------------------------------------
     # Write to Firestore
     # ------------------------------------------------------------------
-    generated_at  = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    generated_at  = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z")
     head_ref      = db.collection(stats_collection).document(head_doc_id)
     countries_col = head_ref.collection("countries")
 
@@ -463,7 +463,7 @@ def summarise_reasons_count(
     # ------------------------------------------------------------------
     # Write to Firestore
     # ------------------------------------------------------------------
-    generated_at  = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    generated_at  = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z")
     head_ref      = db.collection(stats_collection).document(head_doc_id)
     countries_col = head_ref.collection("countries")
 
@@ -574,11 +574,9 @@ def export_reasons_to_excel(results, outdir=None):
 OVERVIEW_COLLECTIONS = [
     # (collection_name, display_label, subcollections_to_count)
     ("leads",           "Leads (legacy)",        [("contacts", "contacts")]),
-    ("leads_extract",   "Lead Extracts",          [("leads_extracted", "extracted leads"), ("out_mail_contacts", "mail contacts")]),
     ("leads_excluded",  "Leads Excluded",         []),
     ("site_leads",      "Site Leads",             [("site_contacts", "contacts")]),
     ("sites_excluded",  "Sites Excluded",         []),
-    ("site_campaigns",  "Site Campaigns",         [("site_campaign_sites", "sites"), ("out_mail_contacts", "mail contacts")]),
     ("statistics",      "Statistics",             []),
 ]
 
@@ -592,6 +590,71 @@ def _count_by_field(db, col_name: str, field: str, limit: int = 5000) -> dict[st
             val = val.strip().upper() or "?"
         counts[str(val)] = counts.get(str(val), 0) + 1
     return dict(sorted(counts.items(), key=lambda x: -x[1]))
+
+
+
+def _stream_safe(query):
+    """Stream a Firestore query, skipping docs that raise ValueError (e.g. _rowy_)."""
+    gen = query.stream()
+    while True:
+        try:
+            doc = next(gen)
+        except StopIteration:
+            break
+        except (ValueError, AttributeError):
+            continue
+        try:
+            yield doc.to_dict() or {}, doc
+        except Exception:
+            continue
+
+
+def _stream_partitioned(query, partitions: int = 16, workers: int = 16):
+    """Stream a collection/query using parallel partitions for speed.
+
+    Falls back to single sequential stream if partitioning is unavailable.
+    Returns an iterable of (dict, doc) tuples — same as _stream_safe.
+    Uses the same pattern as load_leads_from_firebase in lead_agent.py.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    try:
+        partition_queries = [p.query() for p in query.get_partitions(partitions)]
+    except Exception:
+        partition_queries = [query]
+
+    def _fetch(q):
+        results = []
+        for d, doc in _stream_safe(q):
+            results.append((d, doc))
+        return results
+
+    all_results = []
+    with ThreadPoolExecutor(max_workers=min(workers, len(partition_queries))) as pool:
+        for batch in pool.map(_fetch, partition_queries):
+            all_results.extend(batch)
+    return all_results
+
+
+def _parallel_stream(queries: list, workers: int = 2) -> list:
+    """Run multiple Firestore streams in parallel, return list of (results_per_query).
+    Each query is a tuple (label, query_obj, process_fn) where process_fn(d, doc) -> partial_result.
+    Returns list of results in same order as queries.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    def _run(item):
+        label, q, process_fn = item
+        print(f"  [parallel] streaming {label}…", flush=True)
+        result = process_fn(q)
+        return result
+
+    results = [None] * len(queries)
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(_run, q): i for i, q in enumerate(queries)}
+        for fut in as_completed(futures):
+            results[futures[fut]] = fut.result()
+    return results
 
 
 def collection_overview(stats_collection: str = "statistics") -> dict:
@@ -609,7 +672,7 @@ def collection_overview(stats_collection: str = "statistics") -> dict:
             firebase_admin.initialize_app(cred)
     db = firestore.client()
 
-    now_ts = datetime.utcnow().isoformat() + "Z"
+    now_ts = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z")
     results = {"generated_at": now_ts, "collections": {}}
 
     print("\n--- Collection Overview ---")
@@ -629,25 +692,23 @@ def collection_overview(stats_collection: str = "statistics") -> dict:
 
     # ── leads_excluded ──────────────────────────────────────────────────────
     def _leads_excluded_stats():
-        count = sum(1 for _ in db.collection("leads_excluded").select([]).stream())
-        by_country = _count_by_field(db, "leads_excluded", "country") if count else {}
-        by_reason  = _count_by_field(db, "leads_excluded", "reason")  if count else {}
+        by_country: dict[str, int] = {}
+        by_reason:  dict[str, int] = {}
+        count = 0
+        for d, _ in _stream_partitioned(
+                db.collection("leads_excluded").select(["country","reason"])):
+            count += 1
+            c = (d.get("country") or "?").strip().upper() or "?"
+            r = (d.get("reason")  or "?").strip()         or "?"
+            by_country[c] = by_country.get(c, 0) + 1
+            by_reason[r]  = by_reason.get(r, 0)  + 1
+        by_country = dict(sorted(by_country.items(), key=lambda x: -x[1]))
+        by_reason  = dict(sorted(by_reason.items(),  key=lambda x: -x[1]))
         top_c = "  ".join(f"{k}:{v}" for k, v in list(by_country.items())[:5])
         top_r = "  ".join(f"{k}:{v}" for k, v in list(by_reason.items())[:3])
         print(f"  {'Leads Excluded':<30} {count:>7}  country: {top_c or '—'}")
-        print(f"  {'':30}         reason: {top_r or '—'}")
+        print(f"  {'':<30}         reason: {top_r or '—'}")
         return {"count": count, "by_country": by_country, "by_reason": by_reason}
-
-    # ── leads_extract ───────────────────────────────────────────────────────
-    def _leads_extract_stats():
-        extracts = list(db.collection("leads_extract").stream())
-        count = len(extracts)
-        details = []
-        for ex in extracts:
-            sub = sum(1 for _ in ex.reference.collection("leads_extracted").select([]).stream())
-            details.append(f"{ex.id}({sub})")
-        print(f"  {'Lead Extracts':<30} {count:>7}  {',  '.join(details[:5])}")
-        return {"count": count, "extracts": [{"id": e.id} for e in extracts]}
 
     # ── site_leads ──────────────────────────────────────────────────────────
     def _site_leads_stats():
@@ -701,33 +762,29 @@ def collection_overview(stats_collection: str = "statistics") -> dict:
 
     # ── sites_excluded ──────────────────────────────────────────────────────
     def _sites_excluded_stats():
-        count = sum(1 for _ in db.collection("sites_excluded").select([]).stream())
-        by_country = _count_by_field(db, "sites_excluded", "country") if count else {}
-        by_reason  = _count_by_field(db, "sites_excluded", "reason")  if count else {}
+        by_country: dict[str, int] = {}
+        by_reason:  dict[str, int] = {}
+        count = 0
+        for d, _ in _stream_partitioned(
+                db.collection("sites_excluded").select(["country","reason"])):
+            count += 1
+            c = (d.get("country") or "?").strip().upper() or "?"
+            r = (d.get("reason")  or "?").strip()         or "?"
+            by_country[c] = by_country.get(c, 0) + 1
+            by_reason[r]  = by_reason.get(r, 0)  + 1
+        by_country = dict(sorted(by_country.items(), key=lambda x: -x[1]))
+        by_reason  = dict(sorted(by_reason.items(),  key=lambda x: -x[1]))
         top_c = "  ".join(f"{k}:{v}" for k, v in list(by_country.items())[:5])
         top_r = "  ".join(f"{k}:{v}" for k, v in list(by_reason.items())[:3])
         print(f"  {'Sites Excluded':<30} {count:>7}  country: {top_c or '—'}")
-        print(f"  {'':30}         reason: {top_r or '—'}")
+        print(f"  {'':<30}         reason: {top_r or '—'}")
         return {"count": count, "by_country": by_country, "by_reason": by_reason}
-
-    # ── site_campaigns ──────────────────────────────────────────────────────
-    def _site_campaigns_stats():
-        camps = list(db.collection("site_campaigns").stream())
-        count = len(camps)
-        details = []
-        for c in camps:
-            d = c.to_dict() or {}
-            details.append(f"{c.id}(sites:{d.get('site_count','?')} contacts:{d.get('contact_count','?')})")
-        print(f"  {'Site Campaigns':<30} {count:>7}  {',  '.join(details[:4])}")
-        return {"count": count, "campaigns": [{"id": c.id, **(c.to_dict() or {})} for c in camps]}
 
     runners = [
         ("leads",          _leads_stats),
         ("leads_excluded", _leads_excluded_stats),
-        ("leads_extract",  _leads_extract_stats),
         ("site_leads",     _site_leads_stats),
         ("sites_excluded", _sites_excluded_stats),
-        ("site_campaigns", _site_campaigns_stats),
     ]
 
     for col_name, fn in runners:
@@ -736,6 +793,21 @@ def collection_overview(stats_collection: str = "statistics") -> dict:
         except Exception as exc:
             print(f"  {col_name:<30} ERROR: {exc}")
             results["collections"][col_name] = {"error": str(exc)}
+
+    # ── Exclusion rates ─────────────────────────────────────────────────────
+    print("\n  EXCLUSION RATES")
+    cols = results["collections"]
+    for stored, excl, label in [
+        ("leads",      "leads_excluded",  "Lead pipeline"),
+        ("site_leads", "sites_excluded",  "Site pipeline"),
+    ]:
+        n_stored = cols.get(stored, {}).get("count", 0)
+        n_excl   = cols.get(excl,   {}).get("count", 0)
+        total    = n_stored + n_excl
+        excl_pct = int(100 * n_excl / total) if total else 0
+        print(f"  {label:<20} stored={n_stored:>6}  excluded={n_excl:>6}  "
+              f"rejection rate={excl_pct}%")
+        results[f"{excl}_rate"] = excl_pct
 
     # Write to Firestore
     try:
@@ -787,76 +859,510 @@ def export_overview_to_excel(results: dict, outdir: str | None = None) -> str:
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# A. Site pipeline enrichment funnel
+# ---------------------------------------------------------------------------
+
+def site_pipeline_enrichment_funnel(stats_collection: str = "statistics") -> dict:
+    """Report enrichment completion for site_leads and site_contacts — runs both streams in parallel."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    db = _init_firebase()
+
+    def _scan_leads():
+        r = {"total":0,"ai":0,"loc":0,"both":0}
+        for d, _ in _stream_partitioned(
+                db.collection("site_leads")
+                  .select(["ai_classified_at","location_enriched_at"])):
+            r["total"] += 1
+            ai  = bool((d.get("ai_classified_at")     or "").strip())
+            loc = bool((d.get("location_enriched_at") or "").strip())
+            if ai:       r["ai"]   += 1
+            if loc:      r["loc"]  += 1
+            if ai and loc: r["both"] += 1
+        return r
+
+    def _scan_contacts():
+        r = {"total":0,"brave":0,"checked":0,"both":0,"no_name":0,"no_email":0}
+        for d, _ in _stream_partitioned(
+                db.collection_group("site_contacts")
+                  .select(["brave_enriched_at","email_checked_at","name","email"])):
+            r["total"] += 1
+            brave = bool((d.get("brave_enriched_at") or "").strip())
+            chkd  = bool((d.get("email_checked_at")  or "").strip())
+            if brave:         r["brave"]   += 1
+            if chkd:          r["checked"] += 1
+            if brave and chkd: r["both"]   += 1
+            if not (d.get("name")  or "").strip(): r["no_name"]  += 1
+            if not (d.get("email") or "").strip(): r["no_email"] += 1
+        return r
+
+    print("  [funnel] streaming site_leads + site_contacts in parallel…")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_leads    = pool.submit(_scan_leads)
+        f_contacts = pool.submit(_scan_contacts)
+        L = f_leads.result()
+        C = f_contacts.result()
+
+    leads_total            = L["total"]
+    leads_ai_classified    = L["ai"]
+    leads_location_enriched= L["loc"]
+    leads_both             = L["both"]
+    contacts_total         = C["total"]
+    contacts_brave         = C["brave"]
+    contacts_email_checked = C["checked"]
+    contacts_both          = C["both"]
+    contacts_no_name       = C["no_name"]
+    contacts_no_email      = C["no_email"]
+
+    def pct(n, total):
+        return f"{n:>6}  ({100*n//total if total else 0}%)"
+
+    print(f"\n  SITE LEADS ({leads_total} total)")
+    print(f"    AI classified:       {pct(leads_ai_classified, leads_total)}")
+    print(f"    Location enriched:   {pct(leads_location_enriched, leads_total)}")
+    print(f"    Fully enriched:      {pct(leads_both, leads_total)}")
+    print(f"\n  SITE CONTACTS ({contacts_total} total)")
+    print(f"    Brave enriched:      {pct(contacts_brave, contacts_total)}")
+    print(f"    Email checked:       {pct(contacts_email_checked, contacts_total)}")
+    print(f"    Fully ready:         {pct(contacts_both, contacts_total)}")
+    print(f"    Missing name:        {pct(contacts_no_name, contacts_total)}")
+    print(f"    Missing email:       {pct(contacts_no_email, contacts_total)}")
+
+    result = {
+        "leads_total": leads_total,
+        "leads_ai_classified": leads_ai_classified,
+        "leads_location_enriched": leads_location_enriched,
+        "leads_both_enriched": leads_both,
+        "contacts_total": contacts_total,
+        "contacts_brave_enriched": contacts_brave,
+        "contacts_email_checked": contacts_email_checked,
+        "contacts_fully_ready": contacts_both,
+        "contacts_no_name": contacts_no_name,
+        "contacts_no_email": contacts_no_email,
+    }
+    db.collection(stats_collection).document("site-enrichment-funnel").set(
+        {**result, "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z")}, merge=True)
+    return result
+
+
+def lead_pipeline_enrichment_funnel(leads_collection=None, stats_collection="statistics"):
+    from concurrent.futures import ThreadPoolExecutor
+    db = _init_firebase()
+    col_name = leads_collection or cfg.FIRESTORE_COLLECTION
+
+    def _scan_leads():
+        r = {"total":0,"ai":0,"no_email":0}
+        for d, _ in _stream_partitioned(
+                db.collection(col_name).select(["ai_classified_at","emails"])):
+            r["total"] += 1
+            if (d.get("ai_classified_at") or "").strip(): r["ai"] += 1
+            if not (d.get("emails") or "").strip():       r["no_email"] += 1
+        return r
+
+    def _scan_contacts():
+        r = {"total":0,"social":0,"checked":0,"both":0}
+        for d, _ in _stream_partitioned(
+                db.collection_group("contacts")
+                  .select(["social_enriched_at","email_checked_at"])):
+            r["total"] += 1
+            s = bool((d.get("social_enriched_at") or "").strip())
+            c = bool((d.get("email_checked_at")   or "").strip())
+            if s: r["social"]  += 1
+            if c: r["checked"] += 1
+            if s and c: r["both"] += 1
+        return r
+
+    print(f"  [funnel] streaming {col_name} + contacts in parallel…")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_leads    = pool.submit(_scan_leads)
+        f_contacts = pool.submit(_scan_contacts)
+        L = f_leads.result()
+        C = f_contacts.result()
+
+    leads_total = L["total"]; leads_ai = L["ai"]; leads_no_email = L["no_email"]
+    ct = C["total"]; cs = C["social"]; cc = C["checked"]; cb = C["both"]
+
+    def pct(n, t): return f"{n:>6}  ({100*n//t if t else 0}%)"
+    print(f"\n  LEADS ({leads_total}) | AI classified: {pct(leads_ai,leads_total)} | No email: {pct(leads_no_email,leads_total)}")
+    print(f"  LEAD CONTACTS ({ct}) | Social: {pct(cs,ct)} | Email-checked: {pct(cc,ct)} | Both: {pct(cb,ct)}")
+    result = {"leads_total":leads_total,"leads_ai_classified":leads_ai,"leads_no_email":leads_no_email,
+              "contacts_total":ct,"contacts_social":cs,"contacts_email_checked":cc,"contacts_both":cb}
+    db.collection(stats_collection).document("lead-enrichment-funnel").set(
+        {**result,"generated_at":datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z")}, merge=True)
+    return result
+
+
+def data_quality_report(stats_collection="statistics"):
+    from concurrent.futures import ThreadPoolExecutor
+    from functions.utils import email_matches_name
+    db = _init_firebase()
+
+    def _scan_leads():
+        r = {"total":0,"no_sitemap":0,"zero_pages":0,"not_classified":0}
+        for d, _ in _stream_partitioned(
+                db.collection("site_leads")
+                  .select(["sitemap_type","page_count","ai_classified_at"])):
+            r["total"] += 1
+            if (d.get("sitemap_type") or "") in ("none",""): r["no_sitemap"]      += 1
+            if int(d.get("page_count") or 0) == 0:           r["zero_pages"]      += 1
+            if not (d.get("ai_classified_at") or "").strip(): r["not_classified"]  += 1
+        return r
+
+    def _scan_contacts():
+        r = {"total":0,"no_name":0,"mismatch":0}
+        for d, _ in _stream_partitioned(
+                db.collection_group("site_contacts").select(["email","name"])):
+            r["total"] += 1
+            name  = (d.get("name")  or "").strip()
+            email = (d.get("email") or "").strip()
+            if not name: r["no_name"] += 1
+            elif not email_matches_name(email, name): r["mismatch"] += 1
+        return r
+
+    print("  [quality] scanning site_leads + site_contacts in parallel…")
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_leads    = pool.submit(_scan_leads)
+        f_contacts = pool.submit(_scan_contacts)
+        L = f_leads.result()
+        C = f_contacts.result()
+
+    lt = L["total"]; lns = L["no_sitemap"]; lzp = L["zero_pages"]; lna = L["not_classified"]
+    ct = C["total"]; cnn = C["no_name"]; cnm = C["mismatch"]
+
+    def pct(n, t): return f"{n:>6}  ({100*n//t if t else 0}%)"
+    print(f"\n  SITE LEADS quality ({lt}) | No sitemap: {pct(lns,lt)} | Zero pages: {pct(lzp,lt)} | Not classified: {pct(lna,lt)}")
+    print(f"  SITE CONTACTS quality ({ct}) | No name: {pct(cnn,ct)} | Name mismatch: {pct(cnm,ct)}")
+    result = {"leads_total":lt,"leads_no_sitemap":lns,"leads_zero_pages":lzp,"leads_not_classified":lna,
+              "contacts_total":ct,"contacts_no_name":cnn,"contacts_name_mismatch":cnm}
+    db.collection(stats_collection).document("data-quality").set(
+        {**result,"generated_at":datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z")}, merge=True)
+    return result
+
+
+def email_contacts_funnel(stats_collection="statistics"):
+    db = _init_firebase()
+    print("  [funnel] streaming email_contacts...")
+    total = 0
+    by_status = {}; by_pipeline = {"site_only":0,"leads_only":0,"both":0}
+    by_email_type = {}; by_priority = {}; by_country = {}
+    gen = db.collection("email_contacts").stream()
+    while True:
+        try: doc = next(gen)
+        except StopIteration: break
+        except (ValueError, AttributeError): continue
+        try: d = doc.to_dict() or {}
+        except Exception: continue
+        total += 1
+        st = (d.get("status") or "pending").strip()
+        by_status[st] = by_status.get(st, 0) + 1
+        site = bool(d.get("mark_site_leads")); leads = bool(d.get("mark_leads"))
+        if site and leads: by_pipeline["both"] += 1
+        elif site: by_pipeline["site_only"] += 1
+        elif leads: by_pipeline["leads_only"] += 1
+        et = (d.get("email_type") or "?").strip()
+        by_email_type[et] = by_email_type.get(et, 0) + 1
+        pr = str(d.get("outreach_priority") or "?")
+        by_priority[pr] = by_priority.get(pr, 0) + 1
+        cc = (d.get("country") or "?").strip().upper() or "?"
+        by_country[cc] = by_country.get(cc, 0) + 1
+
+    def pct(n): return f"{n:>6}  ({100*n//total if total else 0}%)"
+    print(f"\n  EMAIL CONTACTS ({total} total)")
+    print("  Status: " + "  ".join(f"{k}={v}" for k,v in sorted(by_status.items(),key=lambda x:-x[1])))
+    print("  Pipeline: " + "  ".join(f"{k}={v}" for k,v in by_pipeline.items()))
+    print("  Email type: " + "  ".join(f"{k}={v}" for k,v in sorted(by_email_type.items(),key=lambda x:-x[1])))
+    print("  Priority: " + "  ".join(f"p{k}={v}" for k,v in sorted(by_priority.items())))
+    result = {"total":total,"by_status":by_status,"by_pipeline":by_pipeline,
+              "by_email_type":by_email_type,"by_priority":by_priority,
+              "top_countries":dict(sorted(by_country.items(),key=lambda x:-x[1])[:20])}
+    db.collection(stats_collection).document("email-contacts-funnel").set(
+        {**result,"generated_at":datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z")}, merge=True)
+    return result
+
+
+def pipeline_coverage(stats_collection="statistics"):
+    db = _init_firebase()
+    print("  [coverage] streaming email_contacts...")
+    total = site_only = leads_only = both = 0
+    by_country = {}
+    gen = db.collection("email_contacts").select(["mark_site_leads","mark_leads","country"]).stream()
+    while True:
+        try: doc = next(gen)
+        except StopIteration: break
+        except (ValueError, AttributeError): continue
+        try: d = doc.to_dict() or {}
+        except Exception: continue
+        total += 1
+        site = bool(d.get("mark_site_leads")); leads = bool(d.get("mark_leads"))
+        cc = (d.get("country") or "?").strip().upper() or "?"
+        if cc not in by_country: by_country[cc] = {"total":0,"site":0,"leads":0,"both":0}
+        by_country[cc]["total"] += 1
+        if site and leads: both += 1; by_country[cc]["both"] += 1
+        elif site: site_only += 1; by_country[cc]["site"] += 1
+        elif leads: leads_only += 1; by_country[cc]["leads"] += 1
+
+    def pct(n,t): return f"({100*n//t if t else 0}%)"
+    print(f"\n  PIPELINE COVERAGE ({total}) | Site only:{site_only} {pct(site_only,total)} | Leads only:{leads_only} {pct(leads_only,total)} | Both:{both} {pct(both,total)}")
+    for cc, c in sorted(by_country.items(), key=lambda x:-x[1]["total"])[:10]:
+        print(f"    {cc:<5} total={c['total']:>5}  site={c['site']:>5}  leads={c['leads']:>5}  both={c['both']:>5}")
+    result = {"total":total,"site_only":site_only,"leads_only":leads_only,"both_pipelines":both,"by_country":by_country}
+    db.collection(stats_collection).document("pipeline-coverage").set(
+        {**result,"generated_at":datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z")}, merge=True)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
+def export_full_statistics(all_results: dict, outdir=None) -> str:
+    """Write all statistics to a single Excel workbook with one sheet per aggregation.
+
+    Parameters
+    ----------
+    all_results : dict   Keys: priority, reasons, overview, site_funnel, lead_funnel,
+                               quality, email_funnel, coverage
+    outdir      : path   Output directory (default: <root>/output)
+
+    Returns path to written file.
+    """
+    import pandas as pd
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    outdir = Path(outdir) if outdir else Path(__file__).parent.parent / "output"
+    outdir.mkdir(parents=True, exist_ok=True)
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    out_path = outdir / f"statistics_{date_str}.xlsx"
+
+    HDR_FILL = PatternFill("solid", start_color="1F497D")
+    HDR_FONT = Font(name="Arial", bold=True, color="FFFFFF", size=10)
+    DATA_FONT = Font(name="Arial", size=10)
+
+    def _style_sheet(ws):
+        for cell in ws[1]:
+            cell.font = HDR_FONT
+            cell.fill = HDR_FILL
+            cell.alignment = Alignment(horizontal="center")
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                cell.font = DATA_FONT
+        for col in ws.columns:
+            w = max(len(str(c.value or "")) for c in col)
+            ws.column_dimensions[get_column_letter(col[0].column)].width = min(w + 3, 55)
+
+    def _df_to_sheet(writer, df, sheet_name):
+        if df is None or df.empty: return
+        df.to_excel(writer, sheet_name=sheet_name, index=False)
+        _style_sheet(writer.book[sheet_name])
+
+    with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
+
+        # ── Sheet 1: Priority × Country ──────────────────────────────────
+        r = all_results.get("priority")
+        if r:
+            rows = []
+            for data in r.get("countries", {}).values():
+                for prio, counts in data.get("by_priority", {}).items():
+                    rows.append({"country": data["country"],
+                                 "country_name": data["country_name"],
+                                 "priority": prio,
+                                 "leads": counts["leads"],
+                                 "contacts": counts["contacts"]})
+            _df_to_sheet(writer, pd.DataFrame(rows), "Priority × Country")
+
+        # ── Sheet 2: Reasons ─────────────────────────────────────────────
+        r = all_results.get("reasons")
+        if r:
+            rows = [{"reason": k, "count": v}
+                    for k, v in sorted((r.get("reasons") or {}).items(), key=lambda x: -x[1])]
+            _df_to_sheet(writer, pd.DataFrame(rows), "Reasons")
+
+        # ── Sheet 3: Collection Overview ─────────────────────────────────
+        r = all_results.get("overview")
+        if r:
+            rows = []
+            for col_name, data in (r.get("collections") or {}).items():
+                rows.append({"collection": col_name,
+                             "count": data.get("count", 0),
+                             "top_countries": ", ".join(
+                                 f"{k}:{v}" for k,v in list(
+                                     (data.get("by_country") or data.get("by_ai_country") or {})
+                                     .items())[:5])})
+            rows.append({"collection": "--- Exclusion rates ---", "count": "",
+                         "top_countries": ""})
+            rows.append({"collection": "Lead rejection rate",
+                         "count": f"{r.get('leads_excluded_rate',0)}%", "top_countries": ""})
+            rows.append({"collection": "Site rejection rate",
+                         "count": f"{r.get('sites_excluded_rate',0)}%", "top_countries": ""})
+            _df_to_sheet(writer, pd.DataFrame(rows), "Collection Overview")
+
+        # ── Sheet 4: Site Enrichment Funnel ──────────────────────────────
+        r = all_results.get("site_funnel")
+        if r:
+            lt = r.get("leads_total",0); ct = r.get("contacts_total",0)
+            def pct(n,t): return f"{n} ({100*n//t if t else 0}%)"
+            rows = [
+                {"metric": "Site Leads — total",            "value": lt},
+                {"metric": "  AI classified",               "value": pct(r.get("leads_ai_classified",0),lt)},
+                {"metric": "  Location enriched",           "value": pct(r.get("leads_location_enriched",0),lt)},
+                {"metric": "  Fully enriched (both)",       "value": pct(r.get("leads_both_enriched",0),lt)},
+                {"metric": "", "value": ""},
+                {"metric": "Site Contacts — total",         "value": ct},
+                {"metric": "  Brave enriched",              "value": pct(r.get("contacts_brave_enriched",0),ct)},
+                {"metric": "  Email checked",               "value": pct(r.get("contacts_email_checked",0),ct)},
+                {"metric": "  Fully ready (both)",          "value": pct(r.get("contacts_fully_ready",0),ct)},
+                {"metric": "  Missing name",                "value": pct(r.get("contacts_no_name",0),ct)},
+                {"metric": "  Missing email",               "value": pct(r.get("contacts_no_email",0),ct)},
+            ]
+            _df_to_sheet(writer, pd.DataFrame(rows), "Site Enrichment")
+
+        # ── Sheet 5: Lead Enrichment Funnel ──────────────────────────────
+        r = all_results.get("lead_funnel")
+        if r:
+            lt = r.get("leads_total",0); ct = r.get("contacts_total",0)
+            def pct(n,t): return f"{n} ({100*n//t if t else 0}%)"
+            rows = [
+                {"metric": "Leads — total",                "value": lt},
+                {"metric": "  AI classified",              "value": pct(r.get("leads_ai_classified",0),lt)},
+                {"metric": "  No email/contacts",          "value": pct(r.get("leads_no_email",0),lt)},
+                {"metric": "", "value": ""},
+                {"metric": "Lead Contacts — total",        "value": ct},
+                {"metric": "  Social enriched",            "value": pct(r.get("contacts_social_enriched",0),ct)},
+                {"metric": "  Email checked",              "value": pct(r.get("contacts_email_checked",0),ct)},
+                {"metric": "  Fully ready (both)",         "value": pct(r.get("contacts_fully_ready",0),ct)},
+            ]
+            _df_to_sheet(writer, pd.DataFrame(rows), "Lead Enrichment")
+
+        # ── Sheet 6: Data Quality ─────────────────────────────────────────
+        r = all_results.get("quality")
+        if r:
+            lt = r.get("leads_total",0); ct = r.get("contacts_total",0)
+            def pct(n,t): return f"{n} ({100*n//t if t else 0}%)"
+            rows = [
+                {"metric": "Site Leads — total",           "value": lt},
+                {"metric": "  No sitemap found",           "value": pct(r.get("leads_no_sitemap",0),lt)},
+                {"metric": "  Zero page count",            "value": pct(r.get("leads_zero_pages",0),lt)},
+                {"metric": "  Not AI classified",          "value": pct(r.get("leads_not_classified",0),lt)},
+                {"metric": "", "value": ""},
+                {"metric": "Site Contacts — total",        "value": ct},
+                {"metric": "  No name scraped",            "value": pct(r.get("contacts_no_name",0),ct)},
+                {"metric": "  Name/email mismatch",        "value": pct(r.get("contacts_name_mismatch",0),ct)},
+            ]
+            _df_to_sheet(writer, pd.DataFrame(rows), "Data Quality")
+
+        # ── Sheet 7: email_contacts Funnel ────────────────────────────────
+        r = all_results.get("email_funnel")
+        if r:
+            total = r.get("total", 0)
+            def pct(n): return f"{n} ({100*n//total if total else 0}%)"
+            rows = [{"section":"Total","key":"","value":total}]
+            for k,v in sorted((r.get("by_status") or {}).items(), key=lambda x:-x[1]):
+                rows.append({"section":"Status","key":k,"value":pct(v)})
+            for k,v in (r.get("by_pipeline") or {}).items():
+                rows.append({"section":"Pipeline","key":k,"value":pct(v)})
+            for k,v in sorted((r.get("by_email_type") or {}).items(), key=lambda x:-x[1]):
+                rows.append({"section":"Email Type","key":k,"value":pct(v)})
+            for k,v in sorted((r.get("by_priority") or {}).items()):
+                rows.append({"section":"Priority","key":f"priority {k}","value":pct(v)})
+            _df_to_sheet(writer, pd.DataFrame(rows), "email_contacts Funnel")
+
+        # ── Sheet 8: Pipeline Coverage ────────────────────────────────────
+        r = all_results.get("coverage")
+        if r:
+            total = r.get("total", 0)
+            def pct(n): return f"{n} ({100*n//total if total else 0}%)"
+            rows = [
+                {"segment": "Total contacts",    "count": total,                         "pct": ""},
+                {"segment": "Site only",         "count": r.get("site_only",0),          "pct": pct(r.get("site_only",0))},
+                {"segment": "Leads only",        "count": r.get("leads_only",0),         "pct": pct(r.get("leads_only",0))},
+                {"segment": "Both pipelines",    "count": r.get("both_pipelines",0),     "pct": pct(r.get("both_pipelines",0))},
+            ]
+            for cc, c in sorted((r.get("by_country") or {}).items(), key=lambda x:-x[1].get("total",0))[:15]:
+                rows.append({"segment": f"  {cc}", "count": c["total"],
+                             "pct": f"site={c['site']} leads={c['leads']} both={c['both']}"})
+            _df_to_sheet(writer, pd.DataFrame(rows), "Pipeline Coverage")
+
+    print(f"  [stats] Combined Excel → {out_path}")
+    return str(out_path)
+
+
+def _write_summary_doc(all_results: dict, stats_collection: str = "statistics") -> None:
+    """Write all statistics to a single Firestore document statistics/summary-YYYY-MM-DD."""
+    db = _init_firebase()
+    date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    doc_id   = f"summary-{date_str}"
+    doc = {
+        "generated_at":   datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00","Z"),
+        "date":           date_str,
+        "priority":       all_results.get("priority",  {}).get("head", {}),
+        "reasons":        all_results.get("reasons",   {}),
+        "overview":       all_results.get("overview",  {}),
+        "site_funnel":    all_results.get("site_funnel",  {}),
+        "lead_funnel":    all_results.get("lead_funnel",  {}),
+        "data_quality":   all_results.get("quality",      {}),
+        "email_funnel":   all_results.get("email_funnel", {}),
+        "coverage":       all_results.get("coverage",     {}),
+    }
+    db.collection(stats_collection).document(doc_id).set(doc, merge=True)
+    print(f"  [stats] Summary doc → {stats_collection}/{doc_id}")
+
 
 def main():
     from dotenv import load_dotenv
     load_dotenv()
-
     import argparse
     parser = argparse.ArgumentParser(
-        description="Aggregate lead statistics (priority + reasons), write to Firestore and Excel.",
+        description="Aggregate statistics across both pipelines.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument(
-        "--leads-collection", default=None,
-        help="Firestore leads collection (default: FIRESTORE_COLLECTION env var or 'leads').",
-    )
-    parser.add_argument(
-        "--stats-collection", default="statistics",
-        help="Firestore collection for output documents.",
-    )
-    parser.add_argument(
-        "--output", default=None,
-        help="Directory for Excel files (default: <project_root>/output).",
-    )
-    parser.add_argument(
-        "--no-excel", action="store_true",
-        help="Skip writing Excel files.",
-    )
-    parser.add_argument(
-        "--no-writeback", action="store_true",
-        help="Skip writing reasons-list back to each lead document.",
-    )
-    parser.add_argument(
-        "--only", choices=["priority", "reasons", "overview"], default=None,
-        help="Run only one aggregation (default: run both + overview).",
-    )
-    parser.add_argument(
-        "--no-overview", action="store_true",
-        help="Skip collection overview statistics.",
-    )
+    parser.add_argument("--leads-collection", default=None)
+    parser.add_argument("--stats-collection", default="statistics")
+    parser.add_argument("--output", default=None)
+    parser.add_argument("--no-excel", action="store_true")
+    parser.add_argument("--no-writeback", action="store_true")
+    parser.add_argument("--no-overview", action="store_true")
+    parser.add_argument("--only", default=None,
+        choices=["priority","reasons","overview","site-funnel","lead-funnel",
+                 "quality","email-funnel","coverage"])
     args = parser.parse_args()
 
-    run_priority = args.only in (None, "priority")
-    run_reasons  = args.only in (None, "reasons")
-    run_overview = args.only in (None, "overview") and not getattr(args, "no_overview", False)
+    run_all = args.only is None
+    all_results: dict = {}
 
-    if run_priority:
+    if run_all or args.only == "priority":
         print("\n--- Priority x Country ---")
-        prio_results = summarise_country_pr_priority(
-            leads_collection=args.leads_collection,
-            stats_collection=args.stats_collection,
-        )
-        _print_summary(prio_results)
-        if not args.no_excel:
-            export_to_excel(prio_results, outdir=args.output)
-
-    if run_reasons:
+        r = summarise_country_pr_priority(args.leads_collection, args.stats_collection)
+        _print_summary(r); all_results["priority"] = r
+    if run_all or args.only == "reasons":
         print("\n--- Reasons Count ---")
-        reason_results = summarise_reasons_count(
-            leads_collection=args.leads_collection,
-            stats_collection=args.stats_collection,
-            writeback=not args.no_writeback,
-        )
-        if not args.no_excel:
-            export_reasons_to_excel(reason_results, outdir=args.output)
+        r = summarise_reasons_count(args.leads_collection, args.stats_collection, writeback=not args.no_writeback)
+        all_results["reasons"] = r
+    if (run_all or args.only == "overview") and not args.no_overview:
+        print("\n--- Collection Overview ---")
+        r = collection_overview(args.stats_collection); all_results["overview"] = r
+    if run_all or args.only == "site-funnel":
+        print("\n--- Site Pipeline Enrichment Funnel ---")
+        all_results["site_funnel"] = site_pipeline_enrichment_funnel(args.stats_collection)
+    if run_all or args.only == "lead-funnel":
+        print("\n--- Lead Pipeline Enrichment Funnel ---")
+        all_results["lead_funnel"] = lead_pipeline_enrichment_funnel(args.leads_collection, args.stats_collection)
+    if run_all or args.only == "quality":
+        print("\n--- Data Quality Report ---")
+        all_results["quality"] = data_quality_report(args.stats_collection)
+    if run_all or args.only == "email-funnel":
+        print("\n--- email_contacts Outreach Funnel ---")
+        all_results["email_funnel"] = email_contacts_funnel(args.stats_collection)
+    if run_all or args.only == "coverage":
+        print("\n--- Pipeline Cross-Coverage ---")
+        all_results["coverage"] = pipeline_coverage(args.stats_collection)
 
-    if run_overview:
-        overview_results = collection_overview(stats_collection=args.stats_collection)
-        if not args.no_excel and overview_results:
-            export_overview_to_excel(overview_results, outdir=args.output)
+    # ── Combined outputs ──────────────────────────────────────────────────
+    if all_results:
+        if not args.no_excel:
+            export_full_statistics(all_results, outdir=args.output)
+        _write_summary_doc(all_results, stats_collection=args.stats_collection)
 
 
 if __name__ == "__main__":
