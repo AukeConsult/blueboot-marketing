@@ -262,3 +262,58 @@ def get_singleton():
 **asyncio counters are safe without locks** — asyncio is single-threaded so
 `counters["done"] += 1` inside a coroutine needs no lock. Only code running in
 `ThreadPoolExecutor` threads needs locks.
+
+---
+
+## MANDATORY: After every code change — run this health check
+
+After editing ANY .py file anywhere in this project, always run:
+
+```bash
+python3 -c "
+import os, subprocess, ast
+issues = []
+for root, dirs, files in os.walk('.'):
+    dirs[:] = [d for d in dirs if d not in ('__pycache__', '.venv', 'venv', '.git', 'node_modules')]
+    for f in sorted(files):
+        if not f.endswith('.py'): continue
+        path = os.path.join(root, f)
+        src  = open(path, errors='replace').read()
+        if len(src) < 100: continue
+        # 1. Compile
+        r = subprocess.run(['python3','-W','error','-m','py_compile', path], capture_output=True)
+        if r.returncode != 0:
+            issues.append(f'COMPILE  {path}')
+            continue
+        # 2. Any file with main() must have if __name__ == '__main__': main()
+        try:
+            tree = ast.parse(src)
+            has_main = any(isinstance(n, ast.FunctionDef) and n.name == 'main' for n in ast.walk(tree))
+            if has_main and 'if __name__' not in src:
+                issues.append(f'NO_ENTRY {path}')
+        except: pass
+        # 3. Missing trailing newline = file was truncated
+        if not src.endswith('\n'):
+            issues.append(f'NO_NL    {path}')
+print('ALL OK' if not issues else '\n'.join(issues))
+"
+```
+
+**What each failure means:**
+- `COMPILE` — syntax error or bad import — fix immediately
+- `NO_ENTRY` — `main()` defined but no `if __name__ == '__main__': main()` → script runs silently and exits with code 0 without doing anything
+- `NO_NL` — file truncated mid-write (Edit/Write tool byte limit hit) → may cause runtime errors
+
+**Fix `NO_ENTRY`:**
+```python
+src = open(path).read()
+src = src.rstrip() + '\n\n\nif __name__ == "__main__":\n    main()\n'
+open(path, 'w').write(src)
+```
+
+**Fix `NO_NL`:**
+```python
+content = open(path, 'rb').read()
+if not content.endswith(b'\n'):
+    open(path, 'ab').write(b'\n')
+```
