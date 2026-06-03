@@ -1,0 +1,3 @@
+# CRM configuration
+
+CRM_TEMPLATE_ID = "1b1kGKIldeawESH3RYiYjOqRFXRR5kG_81qYRFZI1gSY"

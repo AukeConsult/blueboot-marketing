@@ -3,3 +3,5 @@
 !/env.example
 /exports/
 /output/
+/config/google_oauth_client.json
+/config/google_token.json
