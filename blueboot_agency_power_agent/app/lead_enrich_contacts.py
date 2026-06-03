@@ -343,9 +343,9 @@ def enrich_contacts(
         for c_raw in countries:
             c_up = c_raw.strip().upper()
             country_filter.add(c_up)
-            for cfg_code, cfg in configs.items():
-                if cfg_code.upper() == c_up and isinstance(cfg, dict) and cfg.get("name"):
-                    country_filter.add(cfg["name"].upper())
+            for cfg_code, cc_cfg in configs.items():
+                if cfg_code.upper() == c_up and isinstance(cc_cfg, dict) and cc_cfg.get("name"):
+                    country_filter.add(cc_cfg["name"].upper())
 
     print(f"[enrich] Collection : {col_name}")
     print(f"[enrich] Platforms  : {', '.join(active_platforms)}")
