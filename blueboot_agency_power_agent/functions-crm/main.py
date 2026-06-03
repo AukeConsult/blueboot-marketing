@@ -58,39 +58,42 @@ def _sheets_service():
     return build("sheets", "v4", credentials=creds)
 
 
-# -- Job tracker --------------------------------------------------------------
-_jobs: dict[str, dict] = {}
-_jobs_lock = threading.Lock()
+# -- Job tracker (Firestore-backed) ------------------------------------------
+JOBS_COLLECTION = "crm_jobs"
+
+
+def _jobs_col():
+    return _get_db().collection(JOBS_COLLECTION)
 
 
 def _new_job(name: str) -> str:
     job_id = str(uuid.uuid4())[:8]
-    with _jobs_lock:
-        _jobs[job_id] = {
-            "id":         job_id,
-            "name":       name,
-            "status":     "running",
-            "started_at": datetime.now(timezone.utc).isoformat(),
-            "result":     None,
-            "error":      None,
-        }
+    _jobs_col().document(job_id).set({
+        "id":          job_id,
+        "name":        name,
+        "status":      "running",
+        "started_at":  datetime.now(timezone.utc).isoformat(),
+        "result":      None,
+        "error":       None,
+        "finished_at": None,
+    })
     return job_id
 
 
 def _finish_job(job_id: str, result: dict):
-    with _jobs_lock:
-        if job_id in _jobs:
-            _jobs[job_id]["status"]      = "done"
-            _jobs[job_id]["result"]      = result
-            _jobs[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+    _jobs_col().document(job_id).update({
+        "status":      "done",
+        "result":      result,
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+    })
 
 
 def _fail_job(job_id: str, error: str):
-    with _jobs_lock:
-        if job_id in _jobs:
-            _jobs[job_id]["status"]      = "error"
-            _jobs[job_id]["error"]       = error
-            _jobs[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+    _jobs_col().document(job_id).update({
+        "status":      "error",
+        "error":       error,
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+    })
 
 
 def _run_async(job_id: str, fn, *args, **kwargs):
@@ -138,84 +141,4 @@ def whoami():
         return _err(str(exc), 500)
 
 
-# -- Status -------------------------------------------------------------------
-
-@app.route("/api/crm/status/<job_id>", methods=["GET"])
-def job_status(job_id):
-    with _jobs_lock:
-        job = _jobs.get(job_id)
-    if not job:
-        return _err(f"Job '{job_id}' not found", 404)
-    return jsonify(job)
-
-
-@app.route("/api/crm/jobs", methods=["GET"])
-def list_jobs():
-    with _jobs_lock:
-        jobs = list(_jobs.values())
-    jobs.sort(key=lambda j: j["started_at"], reverse=True)
-    return jsonify({"jobs": jobs[:20]})
-
-
-# -- Endpoints ----------------------------------------------------------------
-
-@app.route("/api/crm/contact-sync", methods=["GET"])
-def contact_sync():
-    """Export email_contacts -> contact sheet + crm/contact_select."""
-    countries_raw = request.args.get("countries", "NO")
-    countries     = [c.strip().upper() for c in countries_raw.split(",") if c.strip()]
-    max_rows      = request.args.get("max", type=int)
-    status        = request.args.get("status")
-    campaign      = request.args.get("campaign")
-
-    from crm.contact_sync_lib import run_contact_sync
-
-    def _run():
-        added = run_contact_sync(
-            db=_get_db(), svc=_sheets_service(),
-            countries=countries, status=status,
-            campaign=campaign, max_rows=max_rows,
-        )
-        return {"added": added, "countries": countries}
-
-    job_id = _new_job("contact-sync")
-    _run_async(job_id, _run)
-    return _accepted(job_id, "contact-sync")
-
-
-@app.route("/api/crm/push-and-sync", methods=["GET"])
-def push_and_sync():
-    """Push selected contacts -> CRM template + sync site_leads."""
-    from crm.push_and_sync_lib import run_push_and_sync
-
-    def _run():
-        return run_push_and_sync(db=_get_db(), svc=_sheets_service())
-
-    job_id = _new_job("push-and-sync")
-    _run_async(job_id, _run)
-    return _accepted(job_id, "push-and-sync")
-
-
-@app.route("/api/crm/template-sync", methods=["GET"])
-def template_sync():
-    """Sync CRM template sheet -> Firestore + update site_leads CRM fields."""
-    from crm.crm_template_sync_lib import run_template_sync
-
-    def _run():
-        count = run_template_sync(db=_get_db(), svc=_sheets_service())
-        return {"synced": count}
-
-    job_id = _new_job("template-sync")
-    _run_async(job_id, _run)
-    return _accepted(job_id, "template-sync")
-
-
-# -- Cloud Function entry point -----------------------------------------------
-
-@https_fn.on_request(region="us-central1", timeout_sec=540)
-def crmApi(req: https_fn.Request) -> https_fn.Response:
-    with app.request_context(req.environ):
-        try:
-            return app.full_dispatch_request()
-        except Exception as exc:
-            return _err(str(exc), 500)
+# -- Status ----------------------------------------------------------------
