@@ -367,7 +367,10 @@ async def _async_fetch(session: aiohttp.ClientSession, url: str,
         ct = resp.headers.get("content-type", "")
         if "text" not in ct and "html" not in ct:
             return ""
-        return (await resp.text(errors="replace"))[:2_000_000]
+        # Bounded read — decoding/parsing a huge body synchronously would block
+        # this batch's event loop (wait_for cannot cancel sync CPU work).
+        raw = await resp.content.read(2_000_001)
+        return raw[:2_000_000].decode("utf-8", errors="replace")
 
 
 async def _async_crawl_site(

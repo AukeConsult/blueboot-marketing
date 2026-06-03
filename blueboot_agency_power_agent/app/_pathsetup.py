@@ -23,3 +23,17 @@ for _p in [
 ]:
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+# ---------------------------------------------------------------------------
+# Windows asyncio: use the Selector event loop, not the default Proactor.
+# The Proactor loop raises a noisy, harmless ConnectionResetError from
+# `_ProactorBasePipeTransport._call_connection_lost` (socket.shutdown) when
+# aiohttp closes sessions. The Selector loop avoids it and works fine for
+# aiohttp/HTTP workloads. Done here so every `import _pathsetup` script gets it.
+# ---------------------------------------------------------------------------
+if sys.platform.startswith("win"):
+    import asyncio as _asyncio
+    try:
+        _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception:
+        pass

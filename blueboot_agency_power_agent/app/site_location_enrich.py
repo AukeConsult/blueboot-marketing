@@ -126,7 +126,7 @@ def _init_firestore(fb_key_dict):
     if isinstance(fb_key_dict, fb_creds.Certificate):
         cred = fb_key_dict
     elif fb_key_dict:
-        cred = fb_creds.Certificate(fb_key_dict)
+        cred = (fb_key_dict if isinstance(fb_key_dict, fb_creds.Base) else fb_creds.Certificate(fb_key_dict))
     else:
         cred = fb_creds.Certificate(cfg.FIREBASE_CREDENTIALS or "config/serviceAccountKey.json")
     with _local_fb_lock:

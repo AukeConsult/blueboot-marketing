@@ -268,13 +268,22 @@ async def _async_get(session: aiohttp.ClientSession, url: str,
             final_url = str(resp.url)
             if resp.status != 200:
                 return ("", url) if return_final_url else ""
-            raw = await resp.read()
+            # Hard byte cap on the body. Without it a huge page or a gzipped
+            # sitemap bomb is read + decoded + parsed SYNCHRONOUSLY on the event
+            # loop thread, blocking every consumer (wait_for cannot cancel sync
+            # CPU work). 8 MB is far more than any real sitemap/contact page needs.
+            _MAX_BODY = 8_000_000
+            raw = await resp.content.read(_MAX_BODY + 1)
+            if len(raw) > _MAX_BODY:
+                raw = raw[:_MAX_BODY]
             # Decompress if the server sent gzip without Content-Encoding header
-            # (some hosts serve sitemap.xml.gz as application/xml without announcing it)
+            # (some hosts serve sitemap.xml.gz as application/xml without announcing it).
+            # Cap the DECOMPRESSED size too — a gzip bomb expands far beyond _MAX_BODY.
             if raw[:2] == b"\x1f\x8b":
                 try:
-                    import gzip as _gzip
-                    raw = _gzip.decompress(raw)
+                    import gzip as _gzip, io as _io
+                    with _gzip.GzipFile(fileobj=_io.BytesIO(raw)) as _gz:
+                        raw = _gz.read(_MAX_BODY)
                 except Exception:
                     return ("", url) if return_final_url else ""
             text = raw.decode("utf-8", errors="replace")[:3_000_000]
@@ -1201,7 +1210,7 @@ async def _run_country_full_async(
                 query_category=cat,
             )
             for q, cat in queries
-        ])
+        ], return_exceptions=True)
 
         deep_msg  = f", {counters['deep_link']} deep-links" if main_page_only else ""
         excl_msg  = f", {counters['excl_skip']} pre-excluded" if counters["excl_skip"] else ""
@@ -1217,7 +1226,7 @@ async def _run_country_full_async(
         )
         for _ in range(workers):
             await queue.put(_QUEUE_SENTINEL)
-        await asyncio.gather(*consumer_tasks)
+        await asyncio.gather(*consumer_tasks, return_exceptions=True)
 
         # Use wait=False — threads are daemons and finish on their own
         # Calling shutdown(wait=True) synchronously blocks the event loop

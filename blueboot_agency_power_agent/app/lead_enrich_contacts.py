@@ -83,7 +83,10 @@ async def _bing_search_async(
             },
             timeout=aiohttp.ClientTimeout(total=15),
         ) as resp:
-            text = await resp.text()
+            # bounded read — RSS is small; guards against a huge/hostile body
+            # blocking the loop in ET.fromstring (sync parse)
+            raw = await resp.content.read(2_000_001)
+        text = raw[:2_000_000].decode("utf-8", errors="replace")
         root = ET.fromstring(text)
         urls = []
         for item in root.findall(".//item"):

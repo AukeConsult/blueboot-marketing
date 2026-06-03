@@ -166,7 +166,7 @@ def _init_firestore(fb_key):
     if isinstance(fb_key, creds.Certificate):
         cred = fb_key
     elif fb_key:
-        cred = creds.Certificate(fb_key)
+        cred = (fb_key if isinstance(fb_key, creds.Base) else creds.Certificate(fb_key))
     else:
         cred = creds.Certificate(
             cfg.FIREBASE_CREDENTIALS or "config/serviceAccountKey.json")

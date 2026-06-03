@@ -112,7 +112,7 @@ def _init_firestore(fb_key):
     import firebase_admin
     from firebase_admin import firestore
     import firebase_admin.credentials as creds
-    cred = creds.Certificate(fb_key) if fb_key else creds.Certificate(
+    cred = (fb_key if isinstance(fb_key, creds.Base) else creds.Certificate(fb_key)) if fb_key else creds.Certificate(
         cfg.FIREBASE_CREDENTIALS or "config/serviceAccountKey.json")
     with _local_fb_lock:
         if not firebase_admin._apps:

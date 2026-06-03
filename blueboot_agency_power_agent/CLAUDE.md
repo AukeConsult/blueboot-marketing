@@ -381,3 +381,83 @@ After editing any `_load_secrets()` or its caller, grep both ends and confirm th
 grep -n "= _load_secrets()" app/*.py        # caller unpack arity
 grep -n "return .*get_firebase_cred"  app/*.py   # definition return arity
 ```
+
+### RULE: `_init_firestore` must accept an already-built credential — never re-wrap
+
+`_load_secrets()` returns `get_firebase_cred()`, which is already a
+`firebase_admin.credentials.Certificate` object. Passing it back into
+`creds.Certificate(fb_key)` raises at runtime:
+`ValueError: Invalid certificate argument ... must be a file path, or a dict`.
+
+`_init_firestore` must handle both a ready credential object and a dict/path:
+```python
+import firebase_admin.credentials as creds   # or 'as fb_creds'
+cred = fb_key if isinstance(fb_key, creds.Base) else creds.Certificate(fb_key)
+# else / default branch may still build from a path:
+#   creds.Certificate(cfg.FIREBASE_CREDENTIALS or "config/serviceAccountKey.json")
+```
+`Certificate` subclasses `credentials.Base`, so the `isinstance(..., creds.Base)`
+guard accepts any credential object while still wrapping a raw dict/path.
+`py_compile` and `pyflakes` do NOT catch this — it only fails at run time.
+
+---
+
+## Windows asyncio event loop
+
+### RULE: keep the Windows Selector event-loop policy in `_pathsetup.py`
+
+On Windows the default Proactor event loop raises a noisy but harmless
+`ConnectionResetError` from `_ProactorBasePipeTransport._call_connection_lost`
+(socket.shutdown) when aiohttp closes sessions:
+
+```
+File ".../asyncio/proactor_events.py", line 165, in _call_connection_lost
+    self._sock.shutdown(socket.SHUT_RDWR)
+```
+
+`app/_pathsetup.py` switches Windows to the Selector loop (works fine for
+aiohttp/HTTP) so the traceback never appears:
+
+```python
+if sys.platform.startswith("win"):
+    import asyncio as _asyncio
+    _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
+```
+
+This MUST run before any event loop is created — it lives in `_pathsetup`, which
+every script imports first (`import _pathsetup` at the top). Never remove it, and
+never create/run an event loop before `import _pathsetup`.
+
+---
+
+## Async CPU-bound work / response size caps
+
+### RULE: `asyncio.wait_for` cannot cancel synchronous CPU work on the loop thread
+
+`wait_for(coro, timeout)` only fires at `await` points. If a coroutine runs a long
+**synchronous** operation (huge regex, `ElementTree` parse, `gzip.decompress`, decoding
+a giant body), the single event-loop thread is busy in C code and never returns to the
+scheduler — so the timeout never triggers and **every** consumer/producer on that loop
+freezes at once. Symptom: the last line prints, then total silence (no per-site timeout
+error after N seconds).
+
+This froze `site_agent.py` at `[1325/4231]` on a dealer site that served a gzipped
+sitemap: `resp.read()` + `gzip.decompress()` expanded to hundreds of MB and the decode +
+parse blocked the loop.
+
+### RULE: always cap response body size — never read/decompress/parse an unbounded body
+
+```python
+_MAX_BODY = 8_000_000
+raw = await resp.content.read(_MAX_BODY + 1)     # bounded read, NOT resp.read()
+if len(raw) > _MAX_BODY:
+    raw = raw[:_MAX_BODY]
+if raw[:2] == b"\x1f\x8b":                        # gzip — cap the DECOMPRESSED size too
+    import gzip as _gzip, io as _io
+    with _gzip.GzipFile(fileobj=_io.BytesIO(raw)) as _gz:
+        raw = _gz.read(_MAX_BODY)                  # NOT gzip.decompress(raw) — bomb risk
+text = raw.decode("utf-8", errors="replace")[:3_000_000]
+```
+
+If genuinely heavy parsing is unavoidable, move it off the loop with
+`run_in_executor` (wrapped in `wait_for`) so a slow parse can't block other coroutines.
