@@ -9,31 +9,34 @@ Google Sheets + Firestore CRM pipeline for outreach tracking.
 ```
 blueboot_agency_power_agent/
   crm/                         <- CLI wrappers (run locally)
-    contact_sync.py
-    push_and_sync.py
-    template_sync.py
+    contact_sync.py            <- import contacts to contact sheet
+    push_and_sync.py           <- push selected -> CRM template + sync
+    template_sync.py           <- sync CRM template -> Leads Database
 
   functions-crm/               <- Firebase Cloud Functions (deployed to GCP)
     main.py                    <- Flask app + 2 Cloud Function entry points
     requirements.txt
     crm/
-      contact_sync_lib.py      <- single source of truth for all logic
-      push_and_sync_lib.py
-      crm_template_sync_lib.py
-      push_and_sync_lib.py
-      sheets_config.py
+      contact_sync_lib.py      <- single source of truth: import contacts
+      push_and_sync_lib.py     <- single source of truth: push + sync
+      crm_template_sync_lib.py <- single source of truth: template sync
+      sheets_config.py         <- shared sheet IDs and Firestore paths
 
-  setup_gcp.sh                 <- one-time GCP setup
-  deploy_crm.sh                <- deploy to Firebase
+  public/
+    index.html                 <- CRM dashboard (Bootstrap, hosted on Firebase)
+
+  setup_gcp.sh / setup_gcp.bat <- one-time GCP setup
+  deploy_crm.sh / deploy_crm.bat <- deploy functions + hosting
+  deploy_hosting.sh / deploy_hosting.bat <- deploy hosting only
   test_crm_api.sh              <- test all API endpoints
+  test_pages_filter.sh         <- test min/max pages filter
 ```
 
 ### Single source of truth
 
-All business logic lives in `functions-crm/crm/` lib files. The local CLI scripts
-in `crm/` are thin wrappers that set up local OAuth2 auth and call the same libs.
-When you deploy, all of `functions-crm/` is uploaded to Cloud Run — the libs are
-already on the server and just get called at runtime.
+All business logic lives in `functions-crm/crm/` lib files. Local CLI scripts
+in `crm/` set up OAuth2 auth and call the same libs. When deployed, all of
+`functions-crm/` is uploaded to Cloud Run — the libs are already on the server.
 
 ---
 
@@ -48,7 +51,7 @@ Share both with: `77823673522-compute@developer.gserviceaccount.com` (Editor)
 
 ---
 
-## Firestore Structure
+## Leads Database (Firestore) Structure
 
 ```
 crm/
@@ -76,31 +79,62 @@ site_leads/ {site_lead_id}
 ## Workflow
 
 ```
-1. contact-sync      fill contact sheet from email_contacts (default: NO)
-2. (manual)          fill Select column in contact sheet
-3. push-and-sync     push selected -> CRM template + sync to Firestore + update site_leads
-4. (manual)          fill Status and Selger in CRM template
-5. template-sync     sync CRM template -> Firestore + push crm_status/crm_sales_person back
+1. Import contacts     fill contact sheet from email_contacts (default: NO)
+2. (manual)            fill Select column in contact sheet
+3. Push selected       push selected -> CRM template + sync to Leads Database
+4. (manual)            fill Status and Selger in CRM template
+5. Sync CRM            sync CRM template -> Leads Database + push crm fields back
 ```
 
 ---
 
-## CLI Commands (local)
+## CLI Commands
 
-### 1. contact-sync
+### 1. Import contacts
+Copies contacts from `email_contacts` to the contact sheet. Skips existing. Upserts to `crm/contact_select/items`.
+
 ```bash
 python crm\contact_sync.py --countries NO
-python crm\contact_sync.py --countries NO UK --max 500
+python crm\contact_sync.py --countries NO --max 500
+python crm\contact_sync.py --countries NO --min-pages 500
+python crm\contact_sync.py --countries NO --min-pages 1000 --max-pages 5000
+python crm\contact_sync.py --countries NO --status pending --campaign NO_jun
 python crm\contact_sync.py --sync-back
 ```
 
-### 2. push-and-sync
+| Flag | Default | Description |
+|---|---|---|
+| `--countries` | all | Country codes e.g. `NO UK` |
+| `--max` | — | Cap new rows added |
+| `--min-pages` | — | Min page count (site size filter) |
+| `--max-pages` | — | Max page count |
+| `--status` | — | Filter by status |
+| `--campaign` | — | Filter by campaign |
+| `--sync-back` | — | Re-fetch + merge with sheet overrides |
+
+### Page count size guide
+
+| page_count | Size label |
+|---|---|
+| < 500 | Liten |
+| 500 – 1 999 | Mellomstor |
+| 2 000 – 4 999 | Stor |
+| 5 000 – 24 999 | Enterprise |
+| ≥ 25 000 | Ultra Enterprise |
+
+### 2. Push selected to CRM
+Reads contact sheet (Select != blank), pushes new sites to CRM template,
+upserts to `crm/crm_template/items`, syncs CRM fields back to `site_leads`.
+
 ```bash
 python crm\push_and_sync.py
 python crm\push_and_sync.py --dry-run
 ```
 
-### 3. template-sync
+### 3. Sync CRM to Leads Database
+Syncs CRM template sheet to `crm/crm_template/items`. Pushes
+`crm_status`, `crm_sales_person`, `crm_date` back to `site_leads`.
+
 ```bash
 python crm\template_sync.py
 python crm\template_sync.py --tab Outreach
@@ -110,10 +144,9 @@ python crm\template_sync.py --tab Outreach
 
 ## API (Firebase Cloud Functions)
 
-### Two Cloud Functions, one Flask app
+Base URL: `https://us-central1-blueboot-market.cloudfunctions.net/crmApi`
 
-Both `crmApi` and `crmWorker` run the same Flask app but with different resource limits.
-The URL determines which Cloud Run service handles the request:
+### Architecture — two Cloud Functions, one Flask app
 
 | Function | URL | Timeout | Memory | Purpose |
 |---|---|---|---|---|
@@ -121,132 +154,117 @@ The URL determines which Cloud Run service handles the request:
 | `crmWorker` | `.../crmWorker/...` | 15 min | 1GB | Run the actual job |
 
 ### How async jobs work
-
 ```
-1. Client calls GET /api/crm/contact-sync   (hits crmApi)
-2. crmApi creates job doc in crm_jobs/       (Firestore)
-3. crmApi enqueues a Cloud Task pointing to crmWorker URL
-4. crmApi returns job_id immediately         (202 Accepted)
-
-5. Cloud Tasks calls POST /api/crm/worker/contact-sync/{job_id}  (hits crmWorker)
-6. crmWorker runs the actual job (up to 15 min, 1GB RAM)
-7. crmWorker updates job status in crm_jobs/ when done
-
-8. Client polls GET /api/crm/status/{job_id} anytime
+1. Client calls GET /api/crm/contact-sync  (hits crmApi)
+2. crmApi creates job in crm_jobs/          (Leads Database)
+3. crmApi enqueues a Cloud Task -> crmWorker URL
+4. Returns job_id immediately               (202 Accepted)
+5. Cloud Tasks calls crmWorker -> runs job (up to 15 min)
+6. crmWorker updates job status in crm_jobs/
+7. Client polls GET /api/crm/status/{job_id}
 ```
-
-### Parallelism
-
-`crmWorker` has `max_instances=3` — up to 3 jobs run simultaneously.
-Cloud Tasks queues extras and retries when a slot opens.
-
-**Warning:** avoid running `contact-sync` and `push-and-sync` in parallel —
-both touch the contact sheet and may conflict.
 
 ### Endpoints
 
-Base URL: `https://us-central1-blueboot-market.cloudfunctions.net/crmApi`
-
 ```bash
-# Trigger contact-sync
+# Import contacts
 GET /api/crm/contact-sync?countries=NO&max=500
-GET /api/crm/contact-sync?countries=NO,UK&status=pending&campaign=NO_jun
+GET /api/crm/contact-sync?countries=NO&min_pages=1000&max_pages=5000
+GET /api/crm/contact-sync?countries=NO&status=pending&campaign=NO_jun
 
-# Trigger push-and-sync
+# Push selected to CRM
 GET /api/crm/push-and-sync
 
-# Trigger template-sync
+# Sync CRM to Leads Database
 GET /api/crm/template-sync
 
 # Poll job status
 GET /api/crm/status/{job_id}
 
-# List last 20 jobs
-GET /api/crm/jobs
+# List last 10 jobs
+GET /api/crm/jobs?limit=10
 
-# Debug: show service account
+# Debug
 GET /api/crm/whoami
 ```
 
-### Example responses
+### contact-sync query parameters
 
-Trigger:
-```json
-{
-  "status": "queued",
-  "job_id": "a3f2c1b8",
-  "name": "contact-sync",
-  "poll": "/api/crm/status/a3f2c1b8",
-  "message": "Job queued. Poll /api/crm/status/a3f2c1b8 for result."
-}
-```
-
-Status (done):
-```json
-{
-  "id": "a3f2c1b8",
-  "name": "contact-sync",
-  "status": "done",
-  "result": {"added": 42, "countries": ["NO"]},
-  "queued_at": "2026-06-03T17:49:09Z",
-  "started_at": "2026-06-03T17:49:12Z",
-  "finished_at": "2026-06-03T17:51:44Z"
-}
-```
+| Param | Example | Description |
+|---|---|---|
+| `countries` | `NO` | Country code (one at a time) |
+| `max` | `500` | Max rows to import |
+| `min_pages` | `500` | Min site page count |
+| `max_pages` | `5000` | Max site page count |
+| `status` | `pending` | Filter by contact status |
+| `campaign` | `NO_jun` | Filter by campaign tag |
 
 ---
 
-## Setup & Deploy
+## Dashboard
+
+URL: `https://blueboot-market.web.app/`
+
+Bootstrap single-page app. Features:
+- Collapsible import form with all parameters
+- Trigger buttons for all 3 operations
+- Job list (last 10) with status badges and expandable details
+- Auto-refreshes every 5 seconds
+- Links to both Google Sheets
+
+---
+
+## Deploy
 
 ### One-time GCP setup
 ```bash
 bash setup_gcp.sh
 ```
-This enables Cloud Tasks API, creates the `crm-queue`, and grants the service account the required roles.
+Enables Cloud Tasks API, creates `crm-queue`, grants service account roles.
 
-### Deploy
+### Deploy everything
 ```bash
 bash deploy_crm.sh
 ```
-Creates `functions-crm/venv`, installs requirements, deploys both `crmApi` and `crmWorker`.
+Recreates venv, installs requirements, deploys functions + hosting.
 
-### Test
+### Deploy hosting only
 ```bash
-bash test_crm_api.sh
+bash deploy_hosting.sh
 ```
 
-### Cloud Tasks queue config
-Queue name: `crm-queue` (us-central1)
-```bash
-gcloud tasks queues describe crm-queue --location=us-central1
-```
-
-### crmWorker Cloud Run config
-All in `functions-crm/main.py`:
+### crmWorker config (in `functions-crm/main.py`)
 ```python
 @https_fn.on_request(
     region="us-central1",
     timeout_sec=900,                      # 15 minutes
     memory=fn_options.MemoryOption.GB_1,  # 1GB RAM
     max_instances=3,                      # max parallel jobs
-    concurrency=1,                        # one job per instance
 )
 def crmWorker(...):
 ```
 
 ---
 
-## Local Setup
+## Testing
 
+### Test all API endpoints
 ```bash
-# Install dependencies
-pip install google-api-python-client google-auth-oauthlib flask firebase-functions
+bash test_crm_api.sh
+```
 
-# OAuth2 setup (one time — opens browser)
-python crm\contact_sync.py --countries NO --max 1
+### Test pages filter
+```bash
+bash test_pages_filter.sh
+```
+Runs 5 tests with different page count ranges and verifies the `added` count
+decreases as `min_pages` increases.
 
-# Token cached at: config/google_token.json
-# Client secret:   config/google_oauth_client.json
+### CLI test for pages filter
+```bash
+python crm\contact_sync.py --countries NO --max 5 --min-pages 1000
+python crm\contact_sync.py --countries NO --max 5 --max-pages 500
+python crm\contact_sync.py --countries NO --max 5 --min-pages 500 --max-pages 5000
 ```
 
 ---
@@ -274,16 +292,6 @@ python crm\contact_sync.py --countries NO --max 1
 | 17 | Kommentar | — | manual |
 | 18 | Tilbud | — | manual |
 | 19 | site_lead_id | normalized website | deduplication key |
-| 20 | ai_sector | `site_leads.ai_sector` | raw |
-| 21 | ai_company_type | `site_leads.ai_company_type` | raw |
-| 22 | ai_platform | `site_leads.ai_platform` | raw |
-
-### Størrelse mapping
-
-| page_count | Label |
-|---|---|
-| < 500 | Liten |
-| 500 – 1 999 | Mellomstor |
-| 2 000 – 4 999 | Stor |
-| 5 000 – 24 999 | Enterprise |
-| ≥ 25 000 | Ultra Enterprise |
+| 20 | ai_sector | `site_leads.ai_sector` | |
+| 21 | ai_company_type | `site_leads.ai_company_type` | |
+| 22 | ai_platform | `site_leads.ai_platform` | |

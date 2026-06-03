@@ -127,7 +127,7 @@ def _enqueue_task(name: str, job_id: str, params: dict):
 
 # -- Flask app ----------------------------------------------------------------
 app = Flask(__name__)
-CORS(app, origins=['https://blueboot-market.web.app', 'http://localhost', 'http://127.0.0.1'])
+CORS(app)  # allow all origins
 
 
 def _accepted(job_id: str, name: str):
@@ -148,17 +148,52 @@ def _err(message: str, code: int = 400):
     return jsonify({"status": "error", "message": message}), code
 
 
+# -- Root --------------------------------------------------------------------
+
+@app.route("/", methods=["GET"])
+def index():
+    return jsonify({
+        "service": "CRM API",
+        "endpoints": [
+            "GET /api/crm/contact-sync?countries=NO&max=500",
+            "GET /api/crm/push-and-sync",
+            "GET /api/crm/template-sync",
+            "GET /api/crm/status/<job_id>",
+            "GET /api/crm/jobs",
+            "GET /api/crm/whoami",
+        ],
+        "dashboard": "https://blueboot-market.web.app/",
+    })
+
+
+# -- Debug --------------------------------------------------------------------
+
+@app.route("/api/crm/whoami", methods=["GET"])
+def whoami():
+    try:
+        import google.auth
+        creds, project = google.auth.default()
+        return jsonify({
+            "status":          "ok",
+            "project":         project,
+            "service_account": getattr(creds, "service_account_email", str(type(creds))),
+        })
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 # -- Trigger endpoints --------------------------------------------------------
 
 @app.route("/api/crm/contact-sync", methods=["GET"])
 def contact_sync():
-    """Enqueue contact-sync job."""
     countries_raw = request.args.get("countries", "NO")
     params = {
         "countries": [c.strip().upper() for c in countries_raw.split(",") if c.strip()],
         "max_rows":  request.args.get("max", type=int),
         "status":    request.args.get("status"),
         "campaign":  request.args.get("campaign"),
+        "min_pages": request.args.get("min_pages", type=int),
+        "max_pages": request.args.get("max_pages", type=int),
     }
     try:
         job_id = _new_job("contact-sync", params)
@@ -170,7 +205,6 @@ def contact_sync():
 
 @app.route("/api/crm/push-and-sync", methods=["GET"])
 def push_and_sync():
-    """Enqueue push-and-sync job."""
     try:
         job_id = _new_job("push-and-sync", {})
         _enqueue_task("push-and-sync", job_id, {})
@@ -181,7 +215,6 @@ def push_and_sync():
 
 @app.route("/api/crm/template-sync", methods=["GET"])
 def template_sync():
-    """Enqueue template-sync job."""
     try:
         job_id = _new_job("template-sync", {})
         _enqueue_task("template-sync", job_id, {})
@@ -190,19 +223,17 @@ def template_sync():
         return _err(str(exc), 500)
 
 
-# -- Worker endpoint (called by Cloud Tasks) ----------------------------------
+# -- Worker endpoint ----------------------------------------------------------
 
 @app.route("/api/crm/worker/<name>/<job_id>", methods=["POST"])
 def worker(name, job_id):
-    """Long-running worker called by Cloud Tasks. Runs up to 60 min."""
     try:
         _update_job(job_id,
                     status="running",
                     started_at=datetime.now(timezone.utc).isoformat())
-
-        body   = request.get_json(silent=True) or {}
-        db     = _get_db()
-        svc    = _sheets_service()
+        body = request.get_json(silent=True) or {}
+        db   = _get_db()
+        svc  = _sheets_service()
 
         if name == "contact-sync":
             from crm.contact_sync_lib import run_contact_sync
@@ -212,6 +243,8 @@ def worker(name, job_id):
                 status=body.get("status"),
                 campaign=body.get("campaign"),
                 max_rows=body.get("max_rows"),
+                min_pages=body.get("min_pages"),
+                max_pages=body.get("max_pages"),
             )
             result = {"added": added, "countries": body.get("countries", ["NO"])}
 
@@ -256,25 +289,11 @@ def job_status(job_id):
 
 @app.route("/api/crm/jobs", methods=["GET"])
 def list_jobs():
+    limit = min(int(request.args.get("limit", 20)), 50)
     docs = _jobs_col().order_by(
         "queued_at", direction="DESCENDING"
-    ).limit(20).stream()
+    ).limit(limit).stream()
     return jsonify({"jobs": [d.to_dict() for d in docs]})
-
-
-@app.route("/api/crm/whoami", methods=["GET"])
-def whoami():
-    try:
-        import google.auth
-        creds, project = google.auth.default()
-        return jsonify({
-            "status":          "ok",
-            "project":         project,
-            "service_account": getattr(creds, "service_account_email",
-                                       str(type(creds))),
-        })
-    except Exception as exc:
-        return _err(str(exc), 500)
 
 
 # -- Cloud Function entry points ----------------------------------------------
@@ -293,7 +312,7 @@ def crmApi(req: https_fn.Request) -> https_fn.Response:
                      memory=fn_options.MemoryOption.GB_1,
                      max_instances=3)
 def crmWorker(req: https_fn.Request) -> https_fn.Response:
-    """Worker endpoint — called by Cloud Tasks, runs up to 60 min."""
+    """Worker endpoint — called by Cloud Tasks, runs up to 15 min."""
     with app.request_context(req.environ):
         try:
             return app.full_dispatch_request()

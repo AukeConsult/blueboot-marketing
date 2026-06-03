@@ -63,6 +63,7 @@ def _val(v, field=""):
 
 
 def _load_contacts(db, countries=None, campaign=None, status=None,
+                   min_pages=None, max_pages=None,
                    collection="email_contacts"):
     col   = db.collection(collection)
     query = col.where(filter=FieldFilter("mark_site_leads", "==", True))
@@ -81,6 +82,18 @@ def _load_contacts(db, countries=None, campaign=None, status=None,
             cc = (d.get("country") or d.get("ai_country") or "").upper()
             if cc not in countries:
                 skipped += 1; continue
+        if min_pages is not None:
+            try:
+                if int(d.get("page_count") or 0) < min_pages:
+                    skipped += 1; continue
+            except (ValueError, TypeError):
+                skipped += 1; continue
+        if max_pages is not None:
+            try:
+                if int(d.get("page_count") or 0) > max_pages:
+                    skipped += 1; continue
+            except (ValueError, TypeError):
+                pass
         rows.append(d)
     print(f"[lib] {len(rows)} contacts loaded ({skipped} skipped)", flush=True)
     return rows
@@ -124,13 +137,15 @@ def _upsert_to_crm(db, rows):
 
 
 def run_contact_sync(db, svc, countries=None, status=None, campaign=None,
-                     max_rows=None, tab=CONTACT_TAB) -> int:
+                     max_rows=None, min_pages=None, max_pages=None,
+                     tab=CONTACT_TAB) -> int:
     """Append new contacts to contact sheet + upsert to Firestore."""
     existing = _read_existing_doc_ids(svc, CONTACT_SHEET_ID, tab)
     existing_ids = set(existing.keys())
     print(f"[lib] {len(existing_ids)} rows already in sheet", flush=True)
 
-    rows = _load_contacts(db, countries=countries, campaign=campaign, status=status)
+    rows = _load_contacts(db, countries=countries, campaign=campaign, status=status,
+                          min_pages=min_pages, max_pages=max_pages)
     new_rows = [r for r in rows if (r.get("doc_id") or "").strip() not in existing_ids]
     new_rows.sort(key=lambda r: (int(r.get("tier") or 9), (r.get("company") or "").lower()))
     if max_rows:

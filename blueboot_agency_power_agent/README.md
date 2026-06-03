@@ -8,6 +8,85 @@ remains fully operational.
 
 ---
 
+## CRM — Outreach Pipeline
+
+The CRM module manages the outreach workflow from contact selection to Leads Database sync.
+See **[crm/README.md](crm/README.md)** for the full reference.
+
+### Key URLs
+
+| Resource | URL |
+|---|---|
+| Dashboard | https://blueboot-market.web.app/ |
+| API base | https://us-central1-blueboot-market.cloudfunctions.net/crmApi |
+| Contact sheet | https://docs.google.com/spreadsheets/d/1aMglV53NiMEArjld37HN5cxliyNRGzIP2mrM4kwlupA |
+| CRM template | https://docs.google.com/spreadsheets/d/1b1kGKIldeawESH3RYiYjOqRFXRR5kG_81qYRFZI1gSY |
+
+### Project structure
+
+```
+crm/                         <- CLI wrappers (local)
+  contact_sync.py            <- import contacts to contact sheet
+  push_and_sync.py           <- push selected -> CRM template + sync
+  template_sync.py           <- sync CRM template -> Leads Database
+
+functions-crm/               <- Firebase Cloud Functions (GCP)
+  main.py                    <- 2 Cloud Run functions: crmApi + crmWorker
+  crm/
+    contact_sync_lib.py      <- business logic (single source of truth)
+    push_and_sync_lib.py
+    crm_template_sync_lib.py
+
+public/
+  index.html                 <- Bootstrap dashboard
+
+firebase.json                <- Firebase hosting + functions config
+.firebaserc                  <- Firebase project: blueboot-market
+setup_gcp.sh                 <- one-time GCP setup
+deploy_crm.sh                <- deploy functions + hosting
+deploy_hosting.sh            <- deploy hosting only
+```
+
+### Workflow
+
+```
+1. Import contacts    python crm\contact_sync.py --countries NO --min-pages 500
+2. Review & select    open contact sheet, fill Select column
+3. Push to CRM        python crm\push_and_sync.py
+4. Work the CRM       fill Status + Selger in CRM template
+5. Sync to DB         python crm\template_sync.py
+```
+
+### API endpoints
+
+```bash
+GET /api/crm/contact-sync?countries=NO&max=500&min_pages=500
+GET /api/crm/push-and-sync
+GET /api/crm/template-sync
+GET /api/crm/status/{job_id}
+GET /api/crm/jobs?limit=10
+```
+
+### Cloud Run functions
+
+| Function | Timeout | Memory | Purpose |
+|---|---|---|---|
+| `crmApi` | 30 sec | 256MB | Trigger jobs, poll status |
+| `crmWorker` | 15 min | 1GB | Run the actual job (via Cloud Tasks) |
+
+### Deploy
+
+```bash
+bash setup_gcp.sh        # one time
+bash deploy_crm.sh       # deploy everything
+bash deploy_hosting.sh   # hosting only
+```
+
+---
+
+
+---
+
 ### Site Pipeline (Section 1 — current)
 
 Discovers content-heavy websites, measures them via sitemap, extracts and enriches contacts.

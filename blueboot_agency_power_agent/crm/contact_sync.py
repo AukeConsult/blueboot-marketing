@@ -80,6 +80,8 @@ def main():
     p.add_argument("--collection", default="email_contacts")
     p.add_argument("--tab",        default=CONTACT_TAB)
     p.add_argument("--max",        default=None, type=int)
+    p.add_argument("--min-pages",  default=None, type=int, help="Min page count")
+    p.add_argument("--max-pages",  default=None, type=int, help="Max page count")
     p.add_argument("--sync-back",  action="store_true",
                    help="Full sync: sheet -> merge with Firestore -> write back")
     args = p.parse_args()
@@ -104,6 +106,8 @@ def main():
             status=args.status,
             campaign=args.campaign,
             max_rows=args.max,
+            min_pages=args.min_pages,
+            max_pages=args.max_pages,
             tab=args.tab,
         )
         print(f"[contact-sync] Done -- {added} new rows added.")
