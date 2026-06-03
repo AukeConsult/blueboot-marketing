@@ -1,35 +1,48 @@
 """
-functions-crm/main.py -- CRM API as a Python Firebase Cloud Function (2nd gen).
+functions-crm/main.py -- CRM API with Cloud Tasks for long-running jobs.
 
-All endpoints are GET. Jobs run async in a background thread and return a job_id.
-Poll GET /api/crm/status/<job_id> for progress and result.
+Trigger endpoints return job_id immediately.
+Cloud Tasks calls crmWorker which runs up to 60 minutes.
+Poll GET /api/crm/status/<job_id> for result.
 
-Endpoints:
-  GET /api/crm/contact-sync              Export email_contacts -> contact sheet
-  GET /api/crm/push-and-sync             Push selected -> CRM template + sync site_leads
-  GET /api/crm/template-sync             CRM template -> Firestore + update site_leads
-  GET /api/crm/status/<job_id>           Poll job status
-  GET /api/crm/whoami                    Debug: show service account
+Endpoints (crmApi - short timeout):
+  GET  /api/crm/contact-sync          Trigger job  ?countries=NO,UK &max=500
+  GET  /api/crm/push-and-sync         Trigger job
+  GET  /api/crm/template-sync         Trigger job
+  GET  /api/crm/status/<job_id>       Poll result
+  GET  /api/crm/jobs                  List recent jobs
+  GET  /api/crm/whoami                Debug
 
-Query params for contact-sync:
-  ?countries=NO,UK  &max=500  &status=pending  &campaign=NO_jun
+Endpoints (crmWorker - 60 min timeout, called by Cloud Tasks):
+  POST /api/crm/worker/<name>/<job_id>
 
 Deploy:
   firebase deploy --only functions:crm
 
-Share both Google Sheets with: blueboot-market@appspot.gserviceaccount.com
+One-time GCP setup:
+  run setup_gcp.bat
 """
 from __future__ import annotations
 
+import json
 import threading
 import uuid
-import time
 from datetime import datetime, timezone
-from firebase_functions import https_fn
+from firebase_functions import https_fn, options as fn_options
 from flask import Flask, request, jsonify
 
 import firebase_admin
 from firebase_admin import credentials, firestore as fs
+
+# -- Config -------------------------------------------------------------------
+GCP_PROJECT     = "blueboot-market"
+GCP_LOCATION    = "us-central1"
+TASKS_QUEUE     = "crm-queue"
+WORKER_BASE_URL = (
+    "https://us-central1-blueboot-market.cloudfunctions.net"
+    "/crmWorker/api/crm/worker"
+)
+JOBS_COLLECTION = "crm_jobs"
 
 # -- Bootstrap ----------------------------------------------------------------
 _fb_lock = threading.Lock()
@@ -45,7 +58,7 @@ def _get_db():
             return _db
         if not firebase_admin._apps:
             cred = credentials.ApplicationDefault()
-            firebase_admin.initialize_app(cred, {"projectId": "blueboot-market"})
+            firebase_admin.initialize_app(cred, {"projectId": GCP_PROJECT})
         _db = fs.client()
     return _db
 
@@ -53,58 +66,58 @@ def _get_db():
 def _sheets_service():
     import google.auth
     from googleapiclient.discovery import build
-    SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds, _ = google.auth.default(scopes=SCOPES)
+    creds, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
     return build("sheets", "v4", credentials=creds)
 
 
-# -- Job tracker (Firestore-backed) ------------------------------------------
-JOBS_COLLECTION = "crm_jobs"
-
+# -- Job store (Firestore) ----------------------------------------------------
 
 def _jobs_col():
     return _get_db().collection(JOBS_COLLECTION)
 
 
-def _new_job(name: str) -> str:
+def _new_job(name: str, params: dict) -> str:
     job_id = str(uuid.uuid4())[:8]
     _jobs_col().document(job_id).set({
         "id":          job_id,
         "name":        name,
-        "status":      "running",
-        "started_at":  datetime.now(timezone.utc).isoformat(),
+        "params":      params,
+        "status":      "queued",
+        "queued_at":   datetime.now(timezone.utc).isoformat(),
+        "started_at":  None,
+        "finished_at": None,
         "result":      None,
         "error":       None,
-        "finished_at": None,
     })
     return job_id
 
 
-def _finish_job(job_id: str, result: dict):
-    _jobs_col().document(job_id).update({
-        "status":      "done",
-        "result":      result,
-        "finished_at": datetime.now(timezone.utc).isoformat(),
-    })
+def _update_job(job_id: str, **kwargs):
+    _jobs_col().document(job_id).update(kwargs)
 
 
-def _fail_job(job_id: str, error: str):
-    _jobs_col().document(job_id).update({
-        "status":      "error",
-        "error":       error,
-        "finished_at": datetime.now(timezone.utc).isoformat(),
-    })
+# -- Cloud Tasks enqueue ------------------------------------------------------
 
-
-def _run_async(job_id: str, fn, *args, **kwargs):
-    def _worker():
-        try:
-            result = fn(*args, **kwargs)
-            _finish_job(job_id, result)
-        except Exception as exc:
-            _fail_job(job_id, str(exc))
-    t = threading.Thread(target=_worker, daemon=True)
-    t.start()
+def _enqueue_task(name: str, job_id: str, params: dict):
+    from google.cloud import tasks_v2
+    client = tasks_v2.CloudTasksClient()
+    queue  = client.queue_path(GCP_PROJECT, GCP_LOCATION, TASKS_QUEUE)
+    url    = f"{WORKER_BASE_URL}/{name}/{job_id}"
+    task   = {
+        "http_request": {
+            "http_method": tasks_v2.HttpMethod.POST,
+            "url":         url,
+            "headers":     {"Content-Type": "application/json"},
+            "body":        json.dumps(params).encode(),
+            "oidc_token":  {
+                "service_account_email":
+                    f"{GCP_PROJECT}@appspot.gserviceaccount.com"
+            },
+        }
+    }
+    client.create_task(request={"parent": queue, "task": task})
 
 
 # -- Flask app ----------------------------------------------------------------
@@ -113,19 +126,135 @@ app = Flask(__name__)
 
 def _accepted(job_id: str, name: str):
     return jsonify({
-        "status":   "accepted",
-        "job_id":   job_id,
-        "name":     name,
-        "poll":     f"/api/crm/status/{job_id}",
-        "message":  f"Job '{name}' started. Poll /api/crm/status/{job_id} for result.",
+        "status":  "queued",
+        "job_id":  job_id,
+        "name":    name,
+        "poll":    f"/api/crm/status/{job_id}",
+        "message": f"Job queued. Poll /api/crm/status/{job_id} for result.",
     }), 202
+
+
+def _ok(message: str, **kwargs):
+    return jsonify({"status": "ok", "message": message, **kwargs})
 
 
 def _err(message: str, code: int = 400):
     return jsonify({"status": "error", "message": message}), code
 
 
-# -- Debug --------------------------------------------------------------------
+# -- Trigger endpoints --------------------------------------------------------
+
+@app.route("/api/crm/contact-sync", methods=["GET"])
+def contact_sync():
+    """Enqueue contact-sync job."""
+    countries_raw = request.args.get("countries", "NO")
+    params = {
+        "countries": [c.strip().upper() for c in countries_raw.split(",") if c.strip()],
+        "max_rows":  request.args.get("max", type=int),
+        "status":    request.args.get("status"),
+        "campaign":  request.args.get("campaign"),
+    }
+    try:
+        job_id = _new_job("contact-sync", params)
+        _enqueue_task("contact-sync", job_id, params)
+        return _accepted(job_id, "contact-sync")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/push-and-sync", methods=["GET"])
+def push_and_sync():
+    """Enqueue push-and-sync job."""
+    try:
+        job_id = _new_job("push-and-sync", {})
+        _enqueue_task("push-and-sync", job_id, {})
+        return _accepted(job_id, "push-and-sync")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/template-sync", methods=["GET"])
+def template_sync():
+    """Enqueue template-sync job."""
+    try:
+        job_id = _new_job("template-sync", {})
+        _enqueue_task("template-sync", job_id, {})
+        return _accepted(job_id, "template-sync")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+# -- Worker endpoint (called by Cloud Tasks) ----------------------------------
+
+@app.route("/api/crm/worker/<name>/<job_id>", methods=["POST"])
+def worker(name, job_id):
+    """Long-running worker called by Cloud Tasks. Runs up to 60 min."""
+    try:
+        _update_job(job_id,
+                    status="running",
+                    started_at=datetime.now(timezone.utc).isoformat())
+
+        body   = request.get_json(silent=True) or {}
+        db     = _get_db()
+        svc    = _sheets_service()
+
+        if name == "contact-sync":
+            from crm.contact_sync_lib import run_contact_sync
+            added  = run_contact_sync(
+                db=db, svc=svc,
+                countries=body.get("countries", ["NO"]),
+                status=body.get("status"),
+                campaign=body.get("campaign"),
+                max_rows=body.get("max_rows"),
+            )
+            result = {"added": added, "countries": body.get("countries", ["NO"])}
+
+        elif name == "push-and-sync":
+            from crm.push_and_sync_lib import run_push_and_sync
+            result = run_push_and_sync(db=db, svc=svc)
+
+        elif name == "template-sync":
+            from crm.crm_template_sync_lib import run_template_sync
+            count  = run_template_sync(db=db, svc=svc)
+            result = {"synced": count}
+
+        else:
+            _update_job(job_id, status="error",
+                        error=f"Unknown job: {name}",
+                        finished_at=datetime.now(timezone.utc).isoformat())
+            return _err(f"Unknown job: {name}", 400)
+
+        _update_job(job_id,
+                    status="done",
+                    result=result,
+                    finished_at=datetime.now(timezone.utc).isoformat())
+        return _ok(f"Job {job_id} done", **result)
+
+    except Exception as exc:
+        _update_job(job_id,
+                    status="error",
+                    error=str(exc),
+                    finished_at=datetime.now(timezone.utc).isoformat())
+        return _err(str(exc), 500)
+
+
+# -- Status endpoints ---------------------------------------------------------
+
+@app.route("/api/crm/status/<job_id>", methods=["GET"])
+def job_status(job_id):
+    doc = _jobs_col().document(job_id).get()
+    if not doc.exists:
+        return _err(f"Job '{job_id}' not found", 404)
+    return jsonify(doc.to_dict())
+
+
+@app.route("/api/crm/jobs", methods=["GET"])
+def list_jobs():
+    docs = _jobs_col().order_by(
+        "queued_at", direction="DESCENDING"
+    ).limit(20).stream()
+    return jsonify({"jobs": [d.to_dict() for d in docs]})
+
 
 @app.route("/api/crm/whoami", methods=["GET"])
 def whoami():
@@ -135,10 +264,32 @@ def whoami():
         return jsonify({
             "status":          "ok",
             "project":         project,
-            "service_account": getattr(creds, "service_account_email", str(type(creds))),
+            "service_account": getattr(creds, "service_account_email",
+                                       str(type(creds))),
         })
     except Exception as exc:
         return _err(str(exc), 500)
 
 
-# -- Status ----------------------------------------------------------------
+# -- Cloud Function entry points ----------------------------------------------
+
+@https_fn.on_request(region="us-central1", timeout_sec=30)
+def crmApi(req: https_fn.Request) -> https_fn.Response:
+    """Trigger + status endpoints — returns quickly."""
+    with app.request_context(req.environ):
+        try:
+            return app.full_dispatch_request()
+        except Exception as exc:
+            return _err(str(exc), 500)
+
+
+@https_fn.on_request(region="us-central1", timeout_sec=900,
+                     memory=fn_options.MemoryOption.GB_1,
+                     max_instances=3)
+def crmWorker(req: https_fn.Request) -> https_fn.Response:
+    """Worker endpoint — called by Cloud Tasks, runs up to 60 min."""
+    with app.request_context(req.environ):
+        try:
+            return app.full_dispatch_request()
+        except Exception as exc:
+            return _err(str(exc), 500)
