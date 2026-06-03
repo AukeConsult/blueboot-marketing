@@ -54,6 +54,7 @@ from functions.utils import (
 )
 from functions.config import cfg
 from functions.models import lead_id_from_url
+from functions.async_worker import BoundedFetcher, Worker, WorkerResult
 
 # ---------------------------------------------------------------------------
 # Config
@@ -255,49 +256,15 @@ _BOT_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.ht
 async def _async_get(session: aiohttp.ClientSession, url: str,
                      timeout: int = 15, xml: bool = False,
                      return_final_url: bool = False):
-    headers = dict(_HTTP_HEADERS)
-    if xml:
-        headers["Accept"] = "application/xml,text/xml,*/*;q=0.8"
-        headers["User-Agent"] = _BOT_UA
-    try:
-        async with session.get(
-            url, headers=headers,
-            timeout=aiohttp.ClientTimeout(total=timeout),
-            allow_redirects=True, ssl=False,
-        ) as resp:
-            final_url = str(resp.url)
-            if resp.status != 200:
-                return ("", url) if return_final_url else ""
-            # Hard byte cap on the body. Without it a huge page or a gzipped
-            # sitemap bomb is read + decoded + parsed SYNCHRONOUSLY on the event
-            # loop thread, blocking every consumer (wait_for cannot cancel sync
-            # CPU work). 8 MB is far more than any real sitemap/contact page needs.
-            _MAX_BODY = 8_000_000
-            raw = await resp.content.read(_MAX_BODY + 1)
-            if len(raw) > _MAX_BODY:
-                raw = raw[:_MAX_BODY]
-            # Decompress if the server sent gzip without Content-Encoding header
-            # (some hosts serve sitemap.xml.gz as application/xml without announcing it).
-            # Cap the DECOMPRESSED size too — a gzip bomb expands far beyond _MAX_BODY.
-            if raw[:2] == b"\x1f\x8b":
-                try:
-                    import gzip as _gzip, io as _io
-                    with _gzip.GzipFile(fileobj=_io.BytesIO(raw)) as _gz:
-                        raw = _gz.read(_MAX_BODY)
-                except Exception:
-                    return ("", url) if return_final_url else ""
-            text = raw.decode("utf-8", errors="replace")[:3_000_000]
-            if xml:
-                # Ignore Content-Type — many servers send text/html for valid XML.
-                # Strip BOM (\ufeff) before checking, as lstrip() does not strip it.
-                stripped = text.lstrip("\ufeff").lstrip()
-                if not (stripped.startswith("<?xml")
-                        or stripped.startswith("<sitemapindex")
-                        or stripped.startswith("<urlset")):
-                    return ("", url) if return_final_url else ""
-            return (text, final_url) if return_final_url else text
-    except Exception:
-        return ("", url) if return_final_url else ""
+    """Thin adapter over the single, capped read path in BoundedFetcher
+    (functions/async_worker.py). All HTTP body reads go through one class."""
+    fetcher = BoundedFetcher(
+        session,
+        headers=_HTTP_HEADERS,
+        xml_headers={**_HTTP_HEADERS, "User-Agent": _BOT_UA},
+    )
+    return await fetcher.get(url, timeout=timeout, xml=xml,
+                             return_final_url=return_final_url)
 
 
 # ---------------------------------------------------------------------------
@@ -471,245 +438,249 @@ def _detect_platform_from_html(html: str) -> str:
     return ""
 
 
-async def read_sitemap_async(session: aiohttp.ClientSession,
-                             base_url: str,
-                             debug: bool = False) -> tuple[int, str, str, list[dict], str, str, str]:
-    """Return (total_url_count, first_sitemap_url, sitemap_type).
+class SitemapReader:
+    """Isolated per-site sitemap reader.
 
-    Handles arbitrarily nested sitemap structures (index → sub-index → urlset):
-    - Tries every candidate entry point (robots.txt + well-known paths)
-    - Recurses into sub-sitemaps at any depth (capped at MAX_DEPTH=4)
-    - Shared fetch budget (MAX_FETCHES=150) across ALL levels to prevent runaway
-    - When budget is exhausted mid-index, extrapolates from the sample collected so far
-    - Skips Google News sitemaps (only cover the last 2 days, not the full archive)
-    - visited-URL set prevents any file being counted twice across all entry points
+    Each instance owns ALL crawl state (visited set, fetch budget, discovered
+    sitemaps, found_url/type), so concurrent site reads never share mutable
+    state and one site can never corrupt or stall another's sitemap pass.
     """
-    _MAX_FETCHES   = 150   # total HTTP fetches across all levels combined
-    _MAX_DEPTH     = 4     # maximum sitemap nesting depth
-    _SAMPLE_PER_LEVEL = 30 # max children fetched per index before extrapolating
 
-    base = base_url.rstrip("/")
-    visited: set[str]  = set()
-    budget:       list[int] = [_MAX_FETCHES]  # mutable so nested closure can decrement it
-    found_url:    str = ""
-    found_type:   str = "none"
-    all_sitemaps: list[dict] = []  # {url, filename, lastmod} per sitemap successfully fetched
+    def __init__(self, session: aiohttp.ClientSession, base_url: str,
+                 *, debug: bool = False):
+        self.session = session
+        self.base_url = base_url
+        self.debug = debug
 
-    # Discover entry points from robots.txt — collect ALL Sitemap: lines.
-    # News sites (e.g. vg.no) list the Google News sitemap first and the real
-    # archive sitemap index on a later line; stopping at the first line misses it.
-    robots_sitemaps: list[str] = []
-    robots_text = await _async_get(session, f"{base}/robots.txt", timeout=10)
-    for line in robots_text.splitlines():
-        if line.strip().lower().startswith("sitemap:"):
-            url = line.split(":", 1)[1].strip()
-            if url and url not in robots_sitemaps:
-                robots_sitemaps.append(url)
+    async def read(self) -> tuple[int, str, str, list[dict], str, str, str]:
+        session  = self.session
+        base_url = self.base_url
+        debug    = self.debug
+        _MAX_FETCHES   = 150   # total HTTP fetches across all levels combined
+        _MAX_DEPTH     = 4     # maximum sitemap nesting depth
+        _SAMPLE_PER_LEVEL = 30 # max children fetched per index before extrapolating
 
-    # For each robots.txt sitemap URL that lives deep in a subdirectory
-    # (e.g. /sitemaps/files/articles-48hrs.xml), also probe its parent and
-    # grandparent directories for a sitemap index.  This catches sites like
-    # vg.no whose archive index is at /sitemaps/sitemap_index.xml but whose
-    # robots.txt only advertises the 48-hour news feed under /sitemaps/files/.
-    _INDEX_NAMES = ("sitemap_index.xml", "sitemap-index.xml", "sitemap.xml")
-    extra_from_robots: list[str] = []
-    for _sm_url in robots_sitemaps:
-        try:
-            from urllib.parse import urlparse as _urlparse
-            _path = _urlparse(_sm_url).path          # /sitemaps/files/articles-48hrs.xml
-            _parent      = _path.rsplit("/", 1)[0]   # /sitemaps/files
-            _grandparent = _parent.rsplit("/", 1)[0] # /sitemaps
-            for _dir in (_parent, _grandparent):
-                if _dir and _dir != "/":
-                    for _name in _INDEX_NAMES:
-                        _c = f"{base}{_dir}/{_name}"
-                        if _c not in extra_from_robots and _c not in robots_sitemaps:
-                            extra_from_robots.append(_c)
-        except Exception:
-            pass
+        base = base_url.rstrip("/")
+        visited: set[str]  = set()
+        budget:       list[int] = [_MAX_FETCHES]  # mutable so nested closure can decrement it
+        found_url:    str = ""
+        found_type:   str = "none"
+        all_sitemaps: list[dict] = []  # {url, filename, lastmod} per sitemap successfully fetched
 
-    # robots.txt entries first (preserve order), then parent-dir guesses, then
-    # well-known fallback paths.
-    # (dedup: _count_sitemap will skip any URL already in visited)
-    candidates = robots_sitemaps + extra_from_robots + [base + p for p in _SITEMAP_PATHS]
+        # Discover entry points from robots.txt — collect ALL Sitemap: lines.
+        # News sites (e.g. vg.no) list the Google News sitemap first and the real
+        # archive sitemap index on a later line; stopping at the first line misses it.
+        robots_sitemaps: list[str] = []
+        robots_text = await _async_get(session, f"{base}/robots.txt", timeout=10)
+        for line in robots_text.splitlines():
+            if line.strip().lower().startswith("sitemap:"):
+                url = line.split(":", 1)[1].strip()
+                if url and url not in robots_sitemaps:
+                    robots_sitemaps.append(url)
 
-    def _dbg(msg: str) -> None:
-        if debug:
-            print(f"    [sitemap-dbg] {msg}")
+        # For each robots.txt sitemap URL that lives deep in a subdirectory
+        # (e.g. /sitemaps/files/articles-48hrs.xml), also probe its parent and
+        # grandparent directories for a sitemap index.  This catches sites like
+        # vg.no whose archive index is at /sitemaps/sitemap_index.xml but whose
+        # robots.txt only advertises the 48-hour news feed under /sitemaps/files/.
+        _INDEX_NAMES = ("sitemap_index.xml", "sitemap-index.xml", "sitemap.xml")
+        extra_from_robots: list[str] = []
+        for _sm_url in robots_sitemaps:
+            try:
+                from urllib.parse import urlparse as _urlparse
+                _path = _urlparse(_sm_url).path          # /sitemaps/files/articles-48hrs.xml
+                _parent      = _path.rsplit("/", 1)[0]   # /sitemaps/files
+                _grandparent = _parent.rsplit("/", 1)[0] # /sitemaps
+                for _dir in (_parent, _grandparent):
+                    if _dir and _dir != "/":
+                        for _name in _INDEX_NAMES:
+                            _c = f"{base}{_dir}/{_name}"
+                            if _c not in extra_from_robots and _c not in robots_sitemaps:
+                                extra_from_robots.append(_c)
+            except Exception:
+                pass
 
-    async def _count_sitemap(url: str, depth: int = 0, parent_lastmod: str = "") -> int:
-        nonlocal found_url, found_type
-        indent = "  " * depth
-        if not url or url in visited:
-            _dbg(f"{indent}SKIP (visited)  {url}")
-            return 0
-        if depth > _MAX_DEPTH or budget[0] <= 0:
-            _dbg(f"{indent}SKIP (budget={budget[0]} depth={depth})  {url}")
-            return 0
+        # robots.txt entries first (preserve order), then parent-dir guesses, then
+        # well-known fallback paths.
+        # (dedup: _count_sitemap will skip any URL already in visited)
+        candidates = robots_sitemaps + extra_from_robots + [base + p for p in _SITEMAP_PATHS]
 
-        visited.add(url)
-        budget[0] -= 1
+        def _dbg(msg: str) -> None:
+            if debug:
+                print(f"    [sitemap-dbg] {msg}")
 
-        text, final_url = await _async_get(session, url, timeout=15, xml=True, return_final_url=True)
-        # If the server redirected us to a URL we already visited, it's a cycle — skip.
-        if final_url != url:
-            if final_url in visited:
-                _dbg(f"{indent}REDIRECT-CYCLE  {url} -> {final_url} (already visited)")
+        async def _count_sitemap(url: str, depth: int = 0, parent_lastmod: str = "") -> int:
+            nonlocal found_url, found_type
+            indent = "  " * depth
+            if not url or url in visited:
+                _dbg(f"{indent}SKIP (visited)  {url}")
                 return 0
-            visited.add(final_url)
-        if not text:
-            # Some CMS platforms (Episerver, Yoast) serve /sitemap.xml as a
-            # human-readable HTML page that *lists* the real child XML sitemaps.
-            # Fetch again without xml=True and extract <a href> links to .xml files.
-            html = await _async_get(session, url, timeout=15, xml=False)
-            _dbg(f"{indent}HTML-fallback: html_len={len(html)} for {url}")
-            if html:
-                import re as _re
+            if depth > _MAX_DEPTH or budget[0] <= 0:
+                _dbg(f"{indent}SKIP (budget={budget[0]} depth={depth})  {url}")
+                return 0
+
+            visited.add(url)
+            budget[0] -= 1
+
+            text, final_url = await _async_get(session, url, timeout=15, xml=True, return_final_url=True)
+            # If the server redirected us to a URL we already visited, it's a cycle — skip.
+            if final_url != url:
+                if final_url in visited:
+                    _dbg(f"{indent}REDIRECT-CYCLE  {url} -> {final_url} (already visited)")
+                    return 0
+                visited.add(final_url)
+            if not text:
+                # Some CMS platforms (Episerver, Yoast) serve /sitemap.xml as a
+                # human-readable HTML page that *lists* the real child XML sitemaps.
+                # Fetch again without xml=True and extract <a href> links to .xml files.
+                html = await _async_get(session, url, timeout=15, xml=False)
+                _dbg(f"{indent}HTML-fallback: html_len={len(html)} for {url}")
+                if html:
+                    import re as _re
+                    child_urls = []
+                    for m in _re.finditer(r"""href=["']((?:https?://[^"']*|/[^"']*)\.xml(?:\?[^"']*)?)["']""", html, _re.I):
+                        child_url = m.group(1)
+                        if not child_url.startswith("http"):
+                            child_url = base + ("" if child_url.startswith("/") else "/") + child_url
+                        if child_url not in visited and child_url not in child_urls:
+                            child_urls.append(child_url)
+                    _dbg(f"{indent}HTML-fallback: found {len(child_urls)} .xml hrefs in {len(html)}-char HTML")
+                    if child_urls:
+                        _dbg(f"{indent}HTML-sitemap-index: found {len(child_urls)} .xml links in HTML at {url}")
+                        if not found_url:
+                            found_url, found_type = url, "index"
+                        sample_count = await _count_children([(u, "") for u in child_urls], depth)
+                        all_sitemaps.append({"url": url, "filename": _sm_filename(url),
+                                             "lastmod": "", "lastmod_newest": "",
+                                             "page_count": sample_count})
+                        return sample_count
+
+                    # No .xml child links found — this HTML is likely a Yoast-rendered
+                    # urlset page showing actual page URLs (not sub-sitemap links).
+                    # Count distinct same-domain page hrefs as a proxy for page count.
+                    from urllib.parse import urlparse as _up
+                    _domain = _up(base).netloc
+                    _skip_ext = ('.xml', '.css', '.js', '.png', '.jpg', '.jpeg',
+                                 '.gif', '.svg', '.ico', '.pdf', '.woff', '.woff2')
+                    _skip_paths = ('#', 'mailto:', 'tel:', 'javascript:')
+                    page_links: set[str] = set()
+                    for m in _re.finditer(r'href=["\'](' + 'https?://' + _re.escape(_domain) + r'/[^"\']*)["\']', html, _re.I):
+                        href = m.group(1).split('#')[0].rstrip('/')
+                        if href and not any(href.endswith(e) for e in _skip_ext)                             and not any(p in href for p in _skip_paths)                             and href != base:
+                            page_links.add(href)
+                    if page_links:
+                        count = len(page_links)
+                        _dbg(f"{indent}HTML-urlset: counted {count} page links at {url}")
+                        if not found_url:
+                            found_url, found_type = url, "urlset"
+                        all_sitemaps.append({"url": url, "filename": _sm_filename(url),
+                                             "lastmod": "", "lastmod_newest": "",
+                                             "page_count": count})
+                        return count
+
+                _dbg(f"{indent}EMPTY (fetch returned nothing)  {url}")
+                return 0
+            root = _parse_xml_safe(text)
+            if root is None:
+                _dbg(f"{indent}PARSE-FAIL (trying HTML fallback)  {url}  peek={repr(text[:80])}")
+                # text is non-empty but not valid XML — likely an HTML page (e.g. Yoast XSLT
+                # rendered with browser UA, or a CMS that always serves HTML for sitemap URLs).
+                # Try extracting <a href="*.xml"> links from the content we already have.
+                import re as _re2
                 child_urls = []
-                for m in _re.finditer(r"""href=["']((?:https?://[^"']*|/[^"']*)\.xml(?:\?[^"']*)?)["']""", html, _re.I):
+                for m in _re2.finditer(r"""href=["']((?:https?://[^"']*|/[^"']*)\.xml(?:\?[^"']*)?)["']""", text, _re2.I):
                     child_url = m.group(1)
                     if not child_url.startswith("http"):
                         child_url = base + ("" if child_url.startswith("/") else "/") + child_url
                     if child_url not in visited and child_url not in child_urls:
                         child_urls.append(child_url)
-                _dbg(f"{indent}HTML-fallback: found {len(child_urls)} .xml hrefs in {len(html)}-char HTML")
+                _dbg(f"{indent}HTML-from-xml-fetch: found {len(child_urls)} .xml hrefs")
                 if child_urls:
-                    _dbg(f"{indent}HTML-sitemap-index: found {len(child_urls)} .xml links in HTML at {url}")
                     if not found_url:
                         found_url, found_type = url, "index"
-                    sample_count = sampled = 0
-                    for child_url in child_urls:
-                        if sampled >= _SAMPLE_PER_LEVEL or budget[0] <= 0:
-                            if sampled > 0:
-                                sample_count = int((sample_count / sampled) * len(child_urls))
-                            break
-                        n = await _count_sitemap(child_url, depth + 1)
-                        sample_count += n
-                        sampled += 1
+                    sample_count = await _count_children([(u, "") for u in child_urls], depth)
                     all_sitemaps.append({"url": url, "filename": _sm_filename(url),
                                          "lastmod": "", "lastmod_newest": "",
                                          "page_count": sample_count})
                     return sample_count
+                return 0
+            tag = root.tag.lower()
+            _dbg(f"{indent}FETCH OK  tag={tag!r}  {url}")
 
-                # No .xml child links found — this HTML is likely a Yoast-rendered
-                # urlset page showing actual page URLs (not sub-sitemap links).
-                # Count distinct same-domain page hrefs as a proxy for page count.
-                from urllib.parse import urlparse as _up
-                _domain = _up(base).netloc
-                _skip_ext = ('.xml', '.css', '.js', '.png', '.jpg', '.jpeg',
-                             '.gif', '.svg', '.ico', '.pdf', '.woff', '.woff2')
-                _skip_paths = ('#', 'mailto:', 'tel:', 'javascript:')
-                page_links: set[str] = set()
-                for m in _re.finditer(r'href=["\'](' + 'https?://' + _re.escape(_domain) + r'/[^"\']*)["\']', html, _re.I):
-                    href = m.group(1).split('#')[0].rstrip('/')
-                    if href and not any(href.endswith(e) for e in _skip_ext)                             and not any(p in href for p in _skip_paths)                             and href != base:
-                        page_links.add(href)
-                if page_links:
-                    count = len(page_links)
-                    _dbg(f"{indent}HTML-urlset: counted {count} page links at {url}")
-                    if not found_url:
-                        found_url, found_type = url, "urlset"
-                    all_sitemaps.append({"url": url, "filename": _sm_filename(url),
-                                         "lastmod": "", "lastmod_newest": "",
-                                         "page_count": count})
-                    return count
-
-            _dbg(f"{indent}EMPTY (fetch returned nothing)  {url}")
-            return 0
-        root = _parse_xml_safe(text)
-        if root is None:
-            _dbg(f"{indent}PARSE-FAIL (trying HTML fallback)  {url}  peek={repr(text[:80])}")
-            # text is non-empty but not valid XML — likely an HTML page (e.g. Yoast XSLT
-            # rendered with browser UA, or a CMS that always serves HTML for sitemap URLs).
-            # Try extracting <a href="*.xml"> links from the content we already have.
-            import re as _re2
-            child_urls = []
-            for m in _re2.finditer(r"""href=["']((?:https?://[^"']*|/[^"']*)\.xml(?:\?[^"']*)?)["']""", text, _re2.I):
-                child_url = m.group(1)
-                if not child_url.startswith("http"):
-                    child_url = base + ("" if child_url.startswith("/") else "/") + child_url
-                if child_url not in visited and child_url not in child_urls:
-                    child_urls.append(child_url)
-            _dbg(f"{indent}HTML-from-xml-fetch: found {len(child_urls)} .xml hrefs")
-            if child_urls:
+            if "sitemapindex" in tag:
+                # This is an index — could be root, sub-index, or archive index.
+                # Recurse into every child (subject to budget + depth cap).
                 if not found_url:
                     found_url, found_type = url, "index"
-                sample_count = sampled = 0
-                for child_url in child_urls:
-                    if sampled >= _SAMPLE_PER_LEVEL or budget[0] <= 0:
-                        if sampled > 0:
-                            sample_count = int((sample_count / sampled) * len(child_urls))
-                        break
-                    n = await _count_sitemap(child_url, depth + 1)
-                    sample_count += n
-                    sampled += 1
+                entries  = _index_entries(root)
+                children = [(u, lm) for u, lm in entries if u not in visited]
+                _dbg(f"{indent}  index: {len(entries)} entries, {len(children)} unvisited children")
+                sample_count = await _count_children(children, depth)
+                # Append AFTER count is known so page_count is accurate
                 all_sitemaps.append({"url": url, "filename": _sm_filename(url),
-                                     "lastmod": "", "lastmod_newest": "",
+                                     "lastmod": parent_lastmod, "lastmod_newest": parent_lastmod,
                                      "page_count": sample_count})
+                _dbg(f"{indent}  index total={sample_count:,}")
                 return sample_count
+
+            if "urlset" in tag:
+                olm    = _urlset_oldest_lastmod(root) or parent_lastmod
+                newest = _urlset_newest_lastmod(root) or parent_lastmod
+                count  = _count_urls(root)
+                all_sitemaps.append({"url": url, "filename": _sm_filename(url),
+                                     "lastmod": olm, "lastmod_newest": newest,
+                                     "page_count": count})
+                if not found_url:
+                    found_url, found_type = url, "urlset"
+                _dbg(f"{indent}urlset  count={count:,}  {url}")
+                return count
+
+            _dbg(f"{indent}UNKNOWN tag={tag!r}  {url}")
             return 0
-        tag = root.tag.lower()
-        _dbg(f"{indent}FETCH OK  tag={tag!r}  {url}")
 
-        if "sitemapindex" in tag:
-            # This is an index — could be root, sub-index, or archive index.
-            # Recurse into every child (subject to budget + depth cap).
-            if not found_url:
-                found_url, found_type = url, "index"
-            entries  = _index_entries(root)
-            children = [(u, lm) for u, lm in entries if u not in visited]
-            _dbg(f"{indent}  index: {len(entries)} entries, {len(children)} unvisited children")
-            sample_count = sampled = 0
-            for child_url, child_lm in children:
-                if sampled >= _SAMPLE_PER_LEVEL or budget[0] <= 0:
-                    # Extrapolate remaining children from the sample we have
-                    if sampled > 0:
-                        sample_count = int((sample_count / sampled) * len(children))
-                    _dbg(f"{indent}  extrapolated → {sample_count:,} (sampled {sampled}/{len(children)})")
-                    break
-                n = await _count_sitemap(child_url, depth + 1, parent_lastmod=child_lm)
-                sample_count += n
-                sampled += 1
-            # Append AFTER count is known so page_count is accurate
-            all_sitemaps.append({"url": url, "filename": _sm_filename(url),
-                                 "lastmod": parent_lastmod, "lastmod_newest": parent_lastmod,
-                                 "page_count": sample_count})
-            _dbg(f"{indent}  index total={sample_count:,}")
-            return sample_count
+        async def _count_children(children, depth: int) -> int:
+            """Fetch a sample of child sitemaps CONCURRENTLY (bounded by the connector's
+            per-host limit) and extrapolate the remainder, preserving the old
+            sample-then-estimate semantics."""
+            sample = list(children)[:_SAMPLE_PER_LEVEL]
+            if not sample:
+                return 0
+            results = await asyncio.gather(
+                *[_count_sitemap(u, depth + 1, parent_lastmod=lm) for (u, lm) in sample],
+                return_exceptions=True,
+            )
+            nums = [r for r in results if isinstance(r, int)]
+            total = sum(nums)
+            sampled = len(sample)
+            if len(children) > sampled and sampled > 0:
+                total = int((total / sampled) * len(children))
+            return total
 
-        if "urlset" in tag:
-            olm    = _urlset_oldest_lastmod(root) or parent_lastmod
-            newest = _urlset_newest_lastmod(root) or parent_lastmod
-            count  = _count_urls(root)
-            all_sitemaps.append({"url": url, "filename": _sm_filename(url),
-                                 "lastmod": olm, "lastmod_newest": newest,
-                                 "page_count": count})
-            if not found_url:
-                found_url, found_type = url, "urlset"
-            _dbg(f"{indent}urlset  count={count:,}  {url}")
-            return count
+        # Process every candidate entry point.
+        # visited set ensures the same sitemap file is never counted twice even if
+        # multiple entry points (robots.txt + /sitemap_index.xml) point to the same file.
+        total = 0
+        for candidate in candidates:
+            total += await _count_sitemap(candidate)
 
-        _dbg(f"{indent}UNKNOWN tag={tag!r}  {url}")
-        return 0
+        # Deduplicate by URL while preserving order
+        seen_urls: set[str] = set()
+        deduped = []
+        for s in all_sitemaps:
+            if s["url"] not in seen_urls:
+                seen_urls.add(s["url"])
+                deduped.append(s)
+        oldest_date = min((s["lastmod"]        for s in deduped if s.get("lastmod")),        default="")
+        newest_date = max((s["lastmod_newest"]  for s in deduped if s.get("lastmod_newest")), default="")
+        platform    = _detect_platform(found_url, deduped)
+        return total, found_url, found_type, deduped, oldest_date, newest_date, platform
 
-    # Process every candidate entry point.
-    # visited set ensures the same sitemap file is never counted twice even if
-    # multiple entry points (robots.txt + /sitemap_index.xml) point to the same file.
-    total = 0
-    for candidate in candidates:
-        total += await _count_sitemap(candidate)
 
-    # Deduplicate by URL while preserving order
-    seen_urls: set[str] = set()
-    deduped = []
-    for s in all_sitemaps:
-        if s["url"] not in seen_urls:
-            seen_urls.add(s["url"])
-            deduped.append(s)
-    oldest_date = min((s["lastmod"]        for s in deduped if s.get("lastmod")),        default="")
-    newest_date = max((s["lastmod_newest"]  for s in deduped if s.get("lastmod_newest")), default="")
-    platform    = _detect_platform(found_url, deduped)
-    return total, found_url, found_type, deduped, oldest_date, newest_date, platform
+async def read_sitemap_async(session: aiohttp.ClientSession,
+                             base_url: str,
+                             debug: bool = False) -> tuple[int, str, str, list[dict], str, str, str]:
+    """Backwards-compatible wrapper around the isolated SitemapReader class."""
+    return await SitemapReader(session, base_url, debug=debug).read()
 
 
 # ---------------------------------------------------------------------------
@@ -988,6 +959,35 @@ BING_WORKERS    = 10
 _QUEUE_SENTINEL = None
 
 
+class SiteWorker(Worker):
+    """One isolated site crawl. Inherited run() guarantees it never hangs the loop
+    past `timeout` nor crashes sibling consumers — it always returns a WorkerResult
+    ("ok" with the Lead, "excluded" with a reason, or "timeout"/"error")."""
+
+    def __init__(self, session, url, source_query, eff_country, eff_country_name,
+                 min_pages, target_types, query_category, *, timeout: float = 120.0):
+        super().__init__(worker_id=url, timeout=timeout)
+        self._session = session
+        self._url = url
+        self._source_query = source_query
+        self._eff_country = eff_country
+        self._eff_country_name = eff_country_name
+        self._min_pages = min_pages
+        self._target_types = target_types
+        self._query_category = query_category
+
+    async def process(self) -> WorkerResult:
+        lead, excl_reason = await process_site_async(
+            self._session, self._url, self._source_query,
+            self._eff_country, self._eff_country_name,
+            self._min_pages, self._target_types,
+            query_category=self._query_category,
+        )
+        if lead:
+            return WorkerResult(self._url, "ok", value=lead)
+        return WorkerResult(self._url, "excluded", reason=excl_reason or "")
+
+
 async def _bing_query_async(
     semaphore:        asyncio.Semaphore,
     query:            str,
@@ -1090,7 +1090,7 @@ async def _run_country_full_async(
     failed_lead_writes: list[tuple]  = []   # (lead, collection) — retry after consumers drain
     failed_excl_writes: list[tuple]  = []   # upsert_site_excluded *args — retry after consumers drain
 
-    connector = aiohttp.TCPConnector(limit=workers, limit_per_host=3, ssl=False)
+    connector = aiohttp.TCPConnector(limit=workers, limit_per_host=cfg.LIMIT_PER_HOST, ssl=False)
     timeout   = aiohttp.ClientTimeout(total=30, connect=8)
 
     # Dedicated small executor for Firestore writes — prevents thread pool exhaustion
@@ -1118,26 +1118,25 @@ async def _run_country_full_async(
                         print(f"  [excl] skip {d}  (previously excluded)")
                         continue
 
-                    excl_reason = ""
-                    try:
-                        lead, excl_reason = await asyncio.wait_for(
-                            process_site_async(
-                                session, url, source_query,
-                                eff_country, eff_country_name,
-                                min_pages, target_types,
-                                query_category=query_category,
-                            ),
-                            timeout=120.0,
-                        )
-                    except Exception as exc:
+                    # Each site is an isolated SiteWorker: run() never raises and
+                    # never hangs past its timeout, so one bad site cannot stall
+                    # or crash the other consumers.
+                    worker = SiteWorker(
+                        session, url, source_query,
+                        eff_country, eff_country_name,
+                        min_pages, target_types, query_category,
+                        timeout=120.0,
+                    )
+                    res = await worker.run()
+                    if res.status in ("timeout", "error"):
                         counters["done"] += 1
                         n = counters["done"]
-                        excl_reason = "error"
-                        print(f"  [{n}/{counters['queued']}] [consumer] error on {url}: {exc}")
+                        detail = res.error or res.reason
+                        print(f"  [{n}/{counters['queued']}] [consumer] {res.status} on {url}: {detail}")
                         if not no_firebase and not dry_run:
                             lead_id = lead_id_from_url(normalize_url(url))
                             _args = (d, url, lead_id, eff_country,
-                                     excl_reason, 0, source_query, excl_collection,
+                                     "error", 0, source_query, excl_collection,
                                      query_category)
                             try:
                                 await asyncio.wait_for(
@@ -1149,6 +1148,9 @@ async def _run_country_full_async(
                         excluded_domains.add(d)
                         counters["excluded"] += 1
                         continue
+
+                    lead        = res.value if res.status == "ok" else None
+                    excl_reason = res.reason if res.status == "excluded" else ""
 
                     counters["done"] += 1
                     n = counters["done"]

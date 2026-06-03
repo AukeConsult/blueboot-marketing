@@ -26,6 +26,7 @@ from app.functions.utils import (
 )
 from app.functions.firebase_sync import upsert_lead, upsert_lead_excluded, load_leads_excluded
 from app.functions.models import Lead, dedupe_leads, export
+from app.functions.async_worker import Worker, WorkerResult
 
 
 # ---------------------------------------------------------------------------
@@ -465,6 +466,34 @@ async def _async_crawl_site(
 # Batch crawl helpers
 # ---------------------------------------------------------------------------
 
+class LeadWorker(Worker):
+    """Isolated per-site agency crawl. Inherited run() never raises and never runs
+    past its timeout, so one bad site cannot stall or crash the rest of the batch.
+    Returns WorkerResult("ok", value=(domain, lead-or-None))."""
+
+    def __init__(self, session, url, query, args, code, configs, source,
+                 *, timeout: float = 120.0):
+        super().__init__(worker_id=url, timeout=timeout)
+        self._session = session
+        self._url = url
+        self._query = query
+        self._args = args
+        self._code = code
+        self._configs = configs
+        self._source = source
+
+    async def process(self) -> WorkerResult:
+        dom = domain_of(self._url)
+        lead = await _async_crawl_site(
+            self._session, self._url, self._query,
+            self._args.max_pages, self._args.delay,
+            self._code, self._configs.get(self._code, {}),
+            min_score=getattr(self._args, "min_score", 50),
+            source=self._source,
+        )
+        return WorkerResult(dom, "ok", value=(dom, lead))
+
+
 async def _run_batch_async(
     batch: list[tuple[str, str]], args, code: str, configs: dict,
     all_leads: list[Lead], export_path: Path, country_leads: dict,
@@ -474,19 +503,8 @@ async def _run_batch_async(
     n = len(batch)
     print(f"\n  >>> Crawling {n} site{'s' if n > 1 else ''} in parallel <<<")
     timeout   = aiohttp.ClientTimeout(total=60, connect=10)
-    connector = aiohttp.TCPConnector(limit=n, ssl=False)
+    connector = aiohttp.TCPConnector(limit=n, limit_per_host=cfg.LIMIT_PER_HOST, ssl=False)
     new_count = 0
-
-    async def _crawl_with_dom(s, url, query):
-        """Wrapper that returns (domain, lead) so rejected sites can be tracked."""
-        dom = domain_of(url)
-        result = await _async_crawl_site(
-            s, url, query, args.max_pages, args.delay,
-            code, configs.get(code, {}),
-            min_score=getattr(args, "min_score", 50),
-            source=source,
-        )
-        return dom, result
 
     # Dedicated 3-thread executor for Firestore writes — kept small so it never
     # exhausts the default executor that the crawl coroutines use.
@@ -503,8 +521,9 @@ async def _run_batch_async(
         else:
             _blocklist = set(load_lines(Path(__file__).parent.parent.parent / "config" / "blocklist_domains.txt"))
 
-        tasks = [
-            asyncio.create_task(asyncio.wait_for(_crawl_with_dom(session, url, query), timeout=120.0))
+        # Each site is an isolated LeadWorker (see class above).
+        workers = [
+            LeadWorker(session, url, query, args, code, configs, source, timeout=120.0)
             for url, query in batch
             if not is_blocked(domain_of(url), _blocklist)
         ]
@@ -512,15 +531,15 @@ async def _run_batch_async(
         # Pending Firestore writes — collected during crawl, flushed after
         pending_writes: list = []   # list of (fn, *args) tuples
 
-        for coro in asyncio.as_completed(tasks):
-            try:
-                dom, lead = await coro
-            except asyncio.TimeoutError:
-                print(f"    [crawl timeout] site took >120s — skipping")
+        for fut in asyncio.as_completed([w.run() for w in workers]):
+            res = await fut          # WorkerResult — never raises
+            if res.status != "ok":
+                if res.status == "timeout":
+                    print(f"    [crawl timeout] {res.worker_id} took >120s — skipping")
+                elif res.status == "error":
+                    print(f"    [crawl error] {res.worker_id}: {res.error}")
                 continue
-            except Exception as exc:
-                print(f"    [crawl error]: {exc}")
-                continue
+            dom, lead = res.value
 
             if not lead:
                 if rejected_domains is not None:

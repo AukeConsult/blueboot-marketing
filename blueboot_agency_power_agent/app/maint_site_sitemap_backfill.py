@@ -24,6 +24,7 @@ import threading as _threading
 # Guards firebase_admin.initialize_app against concurrent init
 _local_fb_lock = _threading.Lock()
 import argparse
+from functions.config import cfg
 import asyncio
 import importlib.util
 import os
@@ -155,7 +156,7 @@ async def _run_async(
     loop     = asyncio.get_running_loop()
     counters = {"total": total, "done": 0, "updated": 0, "failed": 0, "none": 0}
 
-    connector       = _aiohttp.TCPConnector(ssl=False, limit=concurrent + 5)
+    connector       = _aiohttp.TCPConnector(ssl=False, limit=concurrent + 5, limit_per_host=cfg.LIMIT_PER_HOST)
     session_timeout = _aiohttp.ClientTimeout(total=45, connect=8)
 
     async def _fetch_one(session, doc_ref, data: dict) -> None:

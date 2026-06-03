@@ -342,7 +342,7 @@ def fix_rescrape_contacts(
 
     async def _run_all():
         semaphore = asyncio.Semaphore(workers)
-        connector = aiohttp.TCPConnector(limit=workers, limit_per_host=5, ssl=False)
+        connector = aiohttp.TCPConnector(limit=workers, limit_per_host=cfg.LIMIT_PER_HOST, ssl=False)
         timeout   = aiohttp.ClientTimeout(total=30)
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
             async def _recrawl_one_guarded(lead):

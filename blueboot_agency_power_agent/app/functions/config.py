@@ -35,9 +35,10 @@ class _Config:
     MIN_SCORE:     int         = int(os.getenv("MIN_SCORE",     "50"))
     MAX_PAGES:     int         = int(os.getenv("MAX_PAGES",     "6"))
     MAX_COUNTRY:   int | None  = int(os.getenv("MAX_COUNTRY",   "1000")) or None
-    GIVE_UP_AFTER: int         = int(os.getenv("GIVE_UP_AFTER", "5"))
+    GIVE_UP_AFTER: int         = int(os.getenv("GIVE_UP_AFTER", "15"))
     CRAWL_DELAY:   float       = float(os.getenv("CRAWL_DELAY", "1.0"))
     CRAWL_WORKERS: int         = int(os.getenv("CRAWL_WORKERS", "20"))
+    LIMIT_PER_HOST: int        = int(os.getenv("LIMIT_PER_HOST", "3"))
 
     # ── SMTP / mail ────────────────────────────────────────────────────────
     SMTP_HOST:     str = os.getenv("SMTP_HOST",     "smtp.gmail.com")

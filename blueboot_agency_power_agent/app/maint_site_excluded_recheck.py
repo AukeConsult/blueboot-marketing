@@ -180,7 +180,7 @@ async def _run_async(
     loop        = asyncio.get_running_loop()
     counters    = {"total": total, "done": 0, "recovered": 0, "still_excluded": 0, "failed": 0, "blocked": 0, "duplicate": 0}
 
-    connector       = _aiohttp.TCPConnector(ssl=False, limit=concurrent + 10)
+    connector       = _aiohttp.TCPConnector(ssl=False, limit=concurrent + 10, limit_per_host=cfg.LIMIT_PER_HOST)
     session_timeout = _aiohttp.ClientTimeout(total=45, connect=8)
 
     async def _recheck_one(session, doc_ref, data: dict) -> None:

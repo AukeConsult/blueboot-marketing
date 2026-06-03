@@ -1,5 +1,26 @@
 # Coding Rules for this Project
 
+## THE OVERARCHING RULE: parallel work → isolated classes
+
+Whenever you create parallel processes — whether with `asyncio` (gather, queues,
+producer/consumer) or with multiple threads (`ThreadPoolExecutor`, `threading.Thread`)
+— ALWAYS wrap each unit of work in its own isolated class.
+
+Each such class must:
+
+- own all of its mutable state (no shared globals/dicts/sets/counters across units),
+- never raise out of its public entry point (catch-all → return a result object),
+- never run past a hard timeout (`asyncio.wait_for` for coroutines; bounded waits for
+  threads),
+- route every I/O / body read through a single shared, capped, never-raising helper
+  class (e.g. `BoundedFetcher`).
+
+The goal: one unit failing, hanging, or timing out can NEVER stall, crash, or corrupt
+any sibling. The reference implementation lives in `app/functions/async_worker.py`
+(`BoundedFetcher`, `Worker`/`WorkerResult`) with `site_agent.py`
+(`SiteWorker`, `SitemapReader`) as the worked example. Every rule below is a concrete
+consequence of this one.
+
 ## Async / asyncio
 
 ### RULE: Every `run_in_executor` call for I/O MUST have an `asyncio.wait_for` timeout
@@ -461,3 +482,43 @@ text = raw.decode("utf-8", errors="replace")[:3_000_000]
 
 If genuinely heavy parsing is unavoidable, move it off the loop with
 `run_in_executor` (wrapped in `wait_for`) so a slow parse can't block other coroutines.
+
+---
+
+## Per-process isolation: classes, not single-point functions
+
+The pipelines must be built from small isolated classes so one unit of work can
+never hang the loop, crash siblings, or share mutable state. Shared building blocks
+live in `app/functions/async_worker.py`.
+
+### RULE: all HTTP body reads go through `BoundedFetcher` — never ad-hoc read functions
+
+`BoundedFetcher` is the ONE place a response body is read. It caps the raw body and
+the decompressed gzip, time-bounds the request, and NEVER raises (returns "" on any
+failure). Do not write per-module read helpers that call `resp.read()` /
+`resp.text()` directly — route them through `BoundedFetcher` (or a thin adapter over
+it, like `site_agent._async_get`). This keeps the size caps from drifting and removes
+single points of failure.
+
+### RULE: each unit of work is an isolated `Worker` subclass
+
+Wrap each per-item process (one site, one contact, one batch) in a `Worker` subclass
+implementing `process() -> WorkerResult`. Call `run()` — it wraps `process()` in a
+hard `asyncio.wait_for` plus a catch-all, so it NEVER raises and NEVER runs past its
+timeout. One worker failing or timing out therefore cannot affect any sibling.
+
+```python
+worker = SiteWorker(session, url, ..., timeout=120.0)
+res = await worker.run()          # -> WorkerResult: ok | excluded | timeout | error
+```
+
+`site_agent.py` is the reference: `SiteWorker(Worker)` per site, and `SitemapReader`
+(a per-site class that owns its own visited set / fetch budget / discovered sitemaps)
+so concurrent site reads share no mutable state.
+
+### RULE: parallelise per-site child-sitemap reads, bounded by the connector
+
+Child sitemaps within a site are fetched concurrently via `asyncio.gather`
+(`SitemapReader._count_children`), throttled by the aiohttp connector's
+`limit_per_host` (3) so it speeds up sitemap-heavy sites without hammering the server.
+Keep `return_exceptions=True` on that gather so one bad child can't abort the level.
