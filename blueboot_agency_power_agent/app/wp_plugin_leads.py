@@ -49,7 +49,7 @@ import requests
 # Config loading
 # ---------------------------------------------------------------------------
 
-DEFAULT_CONFIG_PATH = Path("config/wp_plugin_queries.json")
+DEFAULT_CONFIG_PATH = Path("../config/wp_plugin_queries.json")
 
 _FALLBACK_TERMS = [
     "wordpress agency", "woocommerce", "wordpress development",

@@ -1,2 +1,0 @@
-python app\extract_leads.py --country NO --min-score 90 --with-email --save-extract "NO_high_score_may26"
-python app\extract_leads.py --keywords wordpress --country DE --min-score 90 --limit 50 --save-extract "DE_high_score_may26"
