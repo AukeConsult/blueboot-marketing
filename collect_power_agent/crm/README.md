@@ -56,9 +56,13 @@ Dashboard: https://blueboot-market.web.app/
 ```
 blueboot_agency_power_agent/
   crm/                         <- CLI wrappers (run locally)
+    config.py                  <- sheet IDs and Firestore paths
     contact_sync.py            <- import contacts to contact sheet
-    push_and_sync.py           <- push selected -> CRM template + sync
+    contact_to_template.py     <- push selected to CRM template (no sync back)
+    crm_template_sync.py       <- sync CRM template + optional --enrich
+    push_and_sync.py           <- push selected -> CRM template + sync (combined)
     template_sync.py           <- sync CRM template -> Leads Database
+    setup_outreach_sheet.py    <- one-time: create the CRM Google Sheet
 
   functions-crm/               <- Firebase Cloud Functions (deployed to GCP)
     main.py                    <- Flask app + 2 Cloud Function entry points
@@ -186,6 +190,48 @@ Syncs CRM template sheet to `crm/crm_template/items`. Pushes
 python crm\template_sync.py
 python crm\template_sync.py --tab Outreach
 ```
+
+
+### `contact_to_template.py` — push selected (no sync)
+
+Earlier version of push — reads Contact Sheet (Select != blank), groups by site,
+pushes to CRM Template. Does **not** sync crm_status/crm_sales_person back to
+site_leads. Use `push_and_sync.py` for the full combined operation.
+
+```bash
+python crm\contact_to_template.py
+python crm\contact_to_template.py --dry-run
+```
+
+### `crm_template_sync.py` — template sync with enrich option
+
+Extended version of template sync that also supports `--enrich` to match CRM
+template items to site_leads by website URL and merge enriched data.
+
+```bash
+python crm\crm_template_sync.py
+python crm\crm_template_sync.py --enrich --dry-run
+python crm\crm_template_sync.py --enrich
+```
+
+### `config.py` — shared configuration
+
+Stores the Google Sheet IDs used by all CRM scripts:
+
+```python
+CRM_TEMPLATE_ID = "1b1kGKIldeawESH3RYiYjOqRFXRR5kG_81qYRFZI1gSY"
+```
+
+### `setup_outreach_sheet.py` — one-time sheet creation
+
+Creates a new Google Sheet with the CRM outreach structure — headers, frozen row,
+Status dropdown with colour coding, auto-filter. Run once when setting up a new sheet.
+
+```bash
+python crm\setup_outreach_sheet.py
+python crm\setup_outreach_sheet.py --title "My Outreach Sheet"
+```
+
 
 ---
 
