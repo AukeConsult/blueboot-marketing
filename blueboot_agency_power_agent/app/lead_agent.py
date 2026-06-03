@@ -205,7 +205,15 @@ def push_to_firebase(leads: list["Lead"], collection: str | None = None) -> None
     def _flush():
         nonlocal batch, ops
         if ops:
-            batch.commit()
+            from concurrent.futures import ThreadPoolExecutor as _FT, TimeoutError as _TE
+            with _FT(max_workers=1) as _p:
+                f = _p.submit(batch.commit)
+                try:
+                    f.result(timeout=30.0)
+                except _TE:
+                    print("  [firebase] batch.commit() timed out after 30s — continuing")
+                except Exception as exc:
+                    print(f"  [firebase] batch.commit() error: {exc}")
         batch = db.batch()
         ops = 0
 
