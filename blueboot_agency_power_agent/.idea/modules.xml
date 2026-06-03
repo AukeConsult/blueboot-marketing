@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/blueboot_agency_power_agent.iml" filepath="$PROJECT_DIR$/.idea/blueboot_agency_power_agent.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/collect_power_agent.iml" filepath="$PROJECT_DIR$/.idea/collect_power_agent.iml" />
     </modules>
   </component>
 </project>
