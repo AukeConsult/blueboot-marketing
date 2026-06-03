@@ -1,8 +1,11 @@
 {
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+  },
   "functions": [
     {
       "source": "functions-crm",
-      "codebase": "crm",
       "runtime": "python312",
       "ignore": ["venv", ".venv", "**/__pycache__/**"]
     }

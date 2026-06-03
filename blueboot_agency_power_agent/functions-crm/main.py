@@ -24,12 +24,17 @@ One-time GCP setup:
 """
 from __future__ import annotations
 
+import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+
 import json
 import threading
 import uuid
 from datetime import datetime, timezone
 from firebase_functions import https_fn, options as fn_options
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 
 import firebase_admin
 from firebase_admin import credentials, firestore as fs
@@ -122,6 +127,7 @@ def _enqueue_task(name: str, job_id: str, params: dict):
 
 # -- Flask app ----------------------------------------------------------------
 app = Flask(__name__)
+CORS(app, origins=['https://blueboot-market.web.app', 'http://localhost', 'http://127.0.0.1'])
 
 
 def _accepted(job_id: str, name: str):

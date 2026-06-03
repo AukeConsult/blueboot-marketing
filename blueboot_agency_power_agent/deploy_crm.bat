@@ -14,15 +14,17 @@ REM Step 2: install/update requirements
 echo [2/3] Installing requirements...
 functions-crm\venv\Scripts\pip.exe install -r functions-crm\requirements.txt -q
 
-REM Step 3: deploy both functions
-echo [3/3] Deploying to Firebase...
-firebase deploy --only functions:crm
+REM Step 3: deploy functions
+echo [3/4] Deploying functions to Firebase...
+firebase deploy --only functions
+
+REM Step 4: deploy hosting
+echo [4/4] Deploying hosting (CRM dashboard)...
+firebase deploy --only hosting
 
 echo.
 echo === Deploy Complete ===
 echo.
-echo Endpoints:
+echo API endpoints:
 echo   Trigger: https://us-central1-blueboot-market.cloudfunctions.net/crmApi/api/crm/contact-sync?countries=NO
-echo   Status:  https://us-central1-blueboot-market.cloudfunctions.net/crmApi/api/crm/status/JOB_ID
-echo   Jobs:    https://us-central1-blueboot-market.cloudfunctions.net/crmApi/api/crm/jobs
-echo.
+echo   Status:  https://us-central1-blueboot-market.cloudfunctions.net/crmApi/api
