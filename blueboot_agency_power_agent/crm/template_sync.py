@@ -1,11 +1,10 @@
 """
-contact_to_template.py -- CLI wrapper for contact_to_template_lib.
-
-Logic lives in functions-crm/crm/contact_to_template_lib.py.
+template_sync.py -- Sync CRM template sheet -> Firestore + update site_leads.
 
 Usage:
-    python crm/contact_to_template.py
-    python crm/contact_to_template.py --dry-run
+    python crm/template_sync.py
+    python crm/template_sync.py --dry-run
+    python crm/template_sync.py --tab Outreach
 """
 from __future__ import annotations
 
@@ -36,8 +35,8 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from crm.contact_to_template_lib import run_push_selected
-from crm.sheets_config import CONTACT_TAB, TEMPLATE_TAB
+from crm.crm_template_sync_lib import run_template_sync
+from crm.sheets_config import TEMPLATE_TAB
 
 SCOPES        = ["https://www.googleapis.com/auth/spreadsheets"]
 TOKEN_PATH    = str(_root / "config" / "google_token.json")
@@ -70,20 +69,17 @@ def _sheets_service():
 
 
 def main():
-    p = argparse.ArgumentParser(description="Push selected contacts -> CRM template")
-    p.add_argument("--contact-tab",  default=CONTACT_TAB)
-    p.add_argument("--template-tab", default=TEMPLATE_TAB)
+    p = argparse.ArgumentParser(
+        description="Sync CRM template sheet -> Firestore + update site_leads")
+    p.add_argument("--tab",     default=TEMPLATE_TAB)
     p.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
 
     db  = _init_firestore()
     svc = _sheets_service()
 
-    added = run_push_selected(db=db, svc=svc,
-                              contact_tab=args.contact_tab,
-                              template_tab=args.template_tab,
-                              dry_run=args.dry_run)
-    print(f"[c2t] Done -- {added} sites added to CRM template.")
+    count = run_template_sync(db=db, svc=svc, tab=args.tab)
+    print(f"[template-sync] Done -- {count} docs synced.")
 
 
 if __name__ == "__main__":

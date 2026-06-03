@@ -160,3 +160,48 @@ def run_contact_sync(db, svc, countries=None, status=None, campaign=None,
     _upsert_to_crm(db, new_rows)
     print(f"[lib] contact_sync: {len(new_rows)} rows added", flush=True)
     return len(new_rows)
+
+
+def run_sync_back(db, svc, tab=CONTACT_TAB) -> None:
+    """Full sync: read sheet overrides, re-fetch Firestore data, merge, write back."""
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    overrides = _read_existing_doc_ids(svc, CONTACT_SHEET_ID, tab)
+    if not overrides:
+        print("[lib] Sheet is empty -- nothing to sync back")
+        return
+    doc_ids  = list(overrides.keys())
+    col      = db.collection("email_contacts")
+    fs_rows  = {}
+    for i in range(0, len(doc_ids), 30):
+        batch = doc_ids[i:i+30]
+        for doc in col.where(filter=FieldFilter("doc_id", "in", batch)).stream():
+            d = doc.to_dict() or {}
+            fs_rows[d.get("doc_id") or doc.id] = d
+
+    merged = []
+    for doc_id, overrides_vals in overrides.items():
+        row = dict(fs_rows.get(doc_id, {"doc_id": doc_id}))
+        for field in ("select", "campaign"):
+            if overrides_vals.get(field):
+                row[field] = overrides_vals[field]
+        merged.append(row)
+
+    merged.sort(key=lambda r: (int(r.get("tier") or 9), (r.get("company") or "").lower()))
+    headers  = [h for h, _ in COLS]
+    rows_out = [headers]
+    for r in merged:
+        rows_out.append([("" if f is None else _val(r.get(f), f)) for _, f in COLS])
+
+    CHUNK = 200
+    svc.spreadsheets().values().clear(
+        spreadsheetId=CONTACT_SHEET_ID, range=f"{tab}!A:ZZ"
+    ).execute()
+    for start in range(0, len(rows_out), CHUNK):
+        svc.spreadsheets().values().update(
+            spreadsheetId=CONTACT_SHEET_ID,
+            range=f"{tab}!A{start+1}",
+            valueInputOption="USER_ENTERED",
+            body={"values": rows_out[start:start+CHUNK]},
+        ).execute()
+    _upsert_to_crm(db, merged)
+    print(f"[lib] sync_back: {len(merged)} rows written", flush=True)

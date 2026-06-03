@@ -174,7 +174,8 @@ def _build_row(site_id, contacts, site_data, headers):
     return [field_map.get(h.lower().strip(), "") for h in headers]
 
 
-def run_push_selected(db, svc, contact_tab=CONTACT_TAB, template_tab=TEMPLATE_TAB) -> int:
+def run_push_selected(db, svc, contact_tab=CONTACT_TAB, template_tab=TEMPLATE_TAB,
+                      dry_run: bool = False) -> int:
     contacts = _read_selected_contacts(svc, contact_tab)
     if not contacts:
         return 0
@@ -192,6 +193,13 @@ def run_push_selected(db, svc, contact_tab=CONTACT_TAB, template_tab=TEMPLATE_TA
     if not new_rows:
         print("[lib] Nothing new to push", flush=True)
         return 0
+
+    if dry_run:
+        print(f"[lib] DRY RUN -- {len(new_rows)} new sites would be added:")
+        for row in new_rows:
+            rec = dict(zip(headers, row))
+            print(f"  {rec.get('site_lead_id','?')} | {rec.get('bedrift') or rec.get('nettside','?')} | {rec.get('bransje','')}")
+        return len(new_rows)
 
     svc.spreadsheets().values().append(
         spreadsheetId=TEMPLATE_SHEET_ID, range=f"{template_tab}!A1",

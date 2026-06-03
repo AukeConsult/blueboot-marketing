@@ -1,11 +1,10 @@
 """
-contact_to_template.py -- CLI wrapper for contact_to_template_lib.
-
-Logic lives in functions-crm/crm/contact_to_template_lib.py.
+push_and_sync.py -- Push selected contacts -> CRM template + sync site_leads.
 
 Usage:
-    python crm/contact_to_template.py
-    python crm/contact_to_template.py --dry-run
+    python crm/push_and_sync.py
+    python crm/push_and_sync.py --dry-run
+    python crm/push_and_sync.py --contact-tab contacts --template-tab Outreach
 """
 from __future__ import annotations
 
@@ -36,7 +35,7 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-from crm.contact_to_template_lib import run_push_selected
+from crm.push_and_sync_lib import run_push_and_sync
 from crm.sheets_config import CONTACT_TAB, TEMPLATE_TAB
 
 SCOPES        = ["https://www.googleapis.com/auth/spreadsheets"]
@@ -70,20 +69,24 @@ def _sheets_service():
 
 
 def main():
-    p = argparse.ArgumentParser(description="Push selected contacts -> CRM template")
+    p = argparse.ArgumentParser(
+        description="Push selected contacts -> CRM template + sync site_leads")
     p.add_argument("--contact-tab",  default=CONTACT_TAB)
     p.add_argument("--template-tab", default=TEMPLATE_TAB)
-    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Show what would be pushed without writing")
     args = p.parse_args()
 
     db  = _init_firestore()
     svc = _sheets_service()
 
-    added = run_push_selected(db=db, svc=svc,
-                              contact_tab=args.contact_tab,
-                              template_tab=args.template_tab,
-                              dry_run=args.dry_run)
-    print(f"[c2t] Done -- {added} sites added to CRM template.")
+    result = run_push_and_sync(
+        db=db, svc=svc,
+        contact_tab=args.contact_tab,
+        template_tab=args.template_tab,
+        dry_run=args.dry_run,
+    )
+    print(f"[push-sync] selected={result['selected']} pushed={result['pushed']} synced={result['synced']}")
 
 
 if __name__ == "__main__":

@@ -1,27 +1,31 @@
 """
 functions-crm/main.py -- CRM API as a Python Firebase Cloud Function (2nd gen).
 
-Endpoints (all under /api/crm/):
-  POST /api/crm/contact-sync        Export email_contacts -> contact sheet
-  POST /api/crm/push-selected       Push selected contacts -> CRM template sheet
-  POST /api/crm/template-sync       Sync CRM template sheet -> Firestore + update site_leads
-  POST /api/crm/template-enrich     Enrich CRM template from site_leads
+All endpoints are GET. Jobs run async in a background thread and return a job_id.
+Poll GET /api/crm/status/<job_id> for progress and result.
 
-Auth:
-  Uses the Firebase service account (ADC / GOOGLE_APPLICATION_CREDENTIALS).
-  Share both Google Sheets with the service account email:
-    <project-id>@appspot.gserviceaccount.com
-  No OAuth2 browser flow needed on the server.
+Endpoints:
+  GET /api/crm/contact-sync              Export email_contacts -> contact sheet
+  GET /api/crm/push-and-sync             Push selected -> CRM template + sync site_leads
+  GET /api/crm/template-sync             CRM template -> Firestore + update site_leads
+  GET /api/crm/status/<job_id>           Poll job status
+  GET /api/crm/whoami                    Debug: show service account
+
+Query params for contact-sync:
+  ?countries=NO,UK  &max=500  &status=pending  &campaign=NO_jun
 
 Deploy:
-  firebase deploy --only functions:crmApi
+  firebase deploy --only functions:crm
+
+Share both Google Sheets with: blueboot-market@appspot.gserviceaccount.com
 """
 from __future__ import annotations
 
-import os
-import sys
 import threading
-import functions_framework
+import uuid
+import time
+from datetime import datetime, timezone
+from firebase_functions import https_fn
 from flask import Flask, request, jsonify
 
 import firebase_admin
@@ -40,8 +44,6 @@ def _get_db():
         if _db is not None:
             return _db
         if not firebase_admin._apps:
-            # On Cloud Functions: ADC picks up the service account automatically.
-            # Locally: set GOOGLE_APPLICATION_CREDENTIALS=path/to/serviceAccountKey.json
             cred = credentials.ApplicationDefault()
             firebase_admin.initialize_app(cred, {"projectId": "blueboot-market"})
         _db = fs.client()
@@ -49,104 +51,171 @@ def _get_db():
 
 
 def _sheets_service():
-    """Build a Sheets API client using Application Default Credentials."""
-    from google.oauth2 import service_account
-    from googleapiclient.discovery import build
     import google.auth
-
+    from googleapiclient.discovery import build
     SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
     creds, _ = google.auth.default(scopes=SCOPES)
     return build("sheets", "v4", credentials=creds)
 
 
-# -- Config -------------------------------------------------------------------
-CONTACT_SHEET_ID  = "1aMglV53NiMEArjld37HN5cxliyNRGzIP2mrM4kwlupA"
-TEMPLATE_SHEET_ID = "1b1kGKIldeawESH3RYiYjOqRFXRR5kG_81qYRFZI1gSY"
-CONTACT_TAB       = "contacts"
-TEMPLATE_TAB      = "Outreach"
+# -- Job tracker --------------------------------------------------------------
+_jobs: dict[str, dict] = {}
+_jobs_lock = threading.Lock()
+
+
+def _new_job(name: str) -> str:
+    job_id = str(uuid.uuid4())[:8]
+    with _jobs_lock:
+        _jobs[job_id] = {
+            "id":         job_id,
+            "name":       name,
+            "status":     "running",
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "result":     None,
+            "error":      None,
+        }
+    return job_id
+
+
+def _finish_job(job_id: str, result: dict):
+    with _jobs_lock:
+        if job_id in _jobs:
+            _jobs[job_id]["status"]      = "done"
+            _jobs[job_id]["result"]      = result
+            _jobs[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def _fail_job(job_id: str, error: str):
+    with _jobs_lock:
+        if job_id in _jobs:
+            _jobs[job_id]["status"]      = "error"
+            _jobs[job_id]["error"]       = error
+            _jobs[job_id]["finished_at"] = datetime.now(timezone.utc).isoformat()
+
+
+def _run_async(job_id: str, fn, *args, **kwargs):
+    def _worker():
+        try:
+            result = fn(*args, **kwargs)
+            _finish_job(job_id, result)
+        except Exception as exc:
+            _fail_job(job_id, str(exc))
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
 
 # -- Flask app ----------------------------------------------------------------
 app = Flask(__name__)
 
 
-def _ok(message: str, **kwargs):
-    return jsonify({"status": "ok", "message": message, **kwargs})
+def _accepted(job_id: str, name: str):
+    return jsonify({
+        "status":   "accepted",
+        "job_id":   job_id,
+        "name":     name,
+        "poll":     f"/api/crm/status/{job_id}",
+        "message":  f"Job '{name}' started. Poll /api/crm/status/{job_id} for result.",
+    }), 202
 
 
 def _err(message: str, code: int = 400):
     return jsonify({"status": "error", "message": message}), code
 
 
+# -- Debug --------------------------------------------------------------------
+
+@app.route("/api/crm/whoami", methods=["GET"])
+def whoami():
+    try:
+        import google.auth
+        creds, project = google.auth.default()
+        return jsonify({
+            "status":          "ok",
+            "project":         project,
+            "service_account": getattr(creds, "service_account_email", str(type(creds))),
+        })
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+# -- Status -------------------------------------------------------------------
+
+@app.route("/api/crm/status/<job_id>", methods=["GET"])
+def job_status(job_id):
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if not job:
+        return _err(f"Job '{job_id}' not found", 404)
+    return jsonify(job)
+
+
+@app.route("/api/crm/jobs", methods=["GET"])
+def list_jobs():
+    with _jobs_lock:
+        jobs = list(_jobs.values())
+    jobs.sort(key=lambda j: j["started_at"], reverse=True)
+    return jsonify({"jobs": jobs[:20]})
+
+
 # -- Endpoints ----------------------------------------------------------------
 
-@app.route("/api/crm/contact-sync", methods=["POST"])
+@app.route("/api/crm/contact-sync", methods=["GET"])
 def contact_sync():
-    """Export email_contacts (filtered by country) -> contact sheet."""
-    body      = request.get_json(silent=True) or {}
-    countries = body.get("countries")   # list of CC strings e.g. ["NO"]
-    max_rows  = body.get("max")         # optional int
-    status    = body.get("status")      # optional string
-    campaign  = body.get("campaign")    # optional string
+    """Export email_contacts -> contact sheet + crm/contact_select."""
+    countries_raw = request.args.get("countries", "NO")
+    countries     = [c.strip().upper() for c in countries_raw.split(",") if c.strip()]
+    max_rows      = request.args.get("max", type=int)
+    status        = request.args.get("status")
+    campaign      = request.args.get("campaign")
 
-    try:
-        from crm.contact_sync_lib import run_contact_sync
+    from crm.contact_sync_lib import run_contact_sync
+
+    def _run():
         added = run_contact_sync(
-            db=_get_db(),
-            svc=_sheets_service(),
-            countries=countries,
-            status=status,
-            campaign=campaign,
-            max_rows=max_rows,
+            db=_get_db(), svc=_sheets_service(),
+            countries=countries, status=status,
+            campaign=campaign, max_rows=max_rows,
         )
-        return _ok(f"Contact sync complete — {added} rows added")
-    except Exception as exc:
-        return _err(str(exc), 500)
+        return {"added": added, "countries": countries}
+
+    job_id = _new_job("contact-sync")
+    _run_async(job_id, _run)
+    return _accepted(job_id, "contact-sync")
 
 
-@app.route("/api/crm/push-selected", methods=["POST"])
-def push_selected():
-    """Push selected contacts from contact sheet -> CRM template sheet."""
-    try:
-        from crm.contact_to_template_lib import run_push_selected
-        added = run_push_selected(
-            db=_get_db(),
-            svc=_sheets_service(),
-        )
-        return _ok(f"Push complete — {added} sites added to CRM template")
-    except Exception as exc:
-        return _err(str(exc), 500)
+@app.route("/api/crm/push-and-sync", methods=["GET"])
+def push_and_sync():
+    """Push selected contacts -> CRM template + sync site_leads."""
+    from crm.push_and_sync_lib import run_push_and_sync
+
+    def _run():
+        return run_push_and_sync(db=_get_db(), svc=_sheets_service())
+
+    job_id = _new_job("push-and-sync")
+    _run_async(job_id, _run)
+    return _accepted(job_id, "push-and-sync")
 
 
-@app.route("/api/crm/template-sync", methods=["POST"])
+@app.route("/api/crm/template-sync", methods=["GET"])
 def template_sync():
     """Sync CRM template sheet -> Firestore + update site_leads CRM fields."""
-    try:
-        from crm.crm_template_sync_lib import run_template_sync
+    from crm.crm_template_sync_lib import run_template_sync
+
+    def _run():
         count = run_template_sync(db=_get_db(), svc=_sheets_service())
-        return _ok(f"Template sync complete — {count} docs upserted")
-    except Exception as exc:
-        return _err(str(exc), 500)
+        return {"synced": count}
 
-
-@app.route("/api/crm/template-enrich", methods=["POST"])
-def template_enrich():
-    """Enrich CRM template from site_leads by website URL."""
-    try:
-        from crm.crm_template_sync_lib import run_template_enrich
-        count = run_template_enrich(db=_get_db(), svc=_sheets_service())
-        return _ok(f"Enrich complete — {count} items matched")
-    except Exception as exc:
-        return _err(str(exc), 500)
+    job_id = _new_job("template-sync")
+    _run_async(job_id, _run)
+    return _accepted(job_id, "template-sync")
 
 
 # -- Cloud Function entry point -----------------------------------------------
 
-@functions_framework.http
-def crmApi(request):
-    """Firebase Cloud Function entry point — delegates to Flask app."""
-    with app.request_context(request.environ):
+@https_fn.on_request(region="us-central1", timeout_sec=540)
+def crmApi(req: https_fn.Request) -> https_fn.Response:
+    with app.request_context(req.environ):
         try:
-            rv = app.full_dispatch_request()
-            return rv
+            return app.full_dispatch_request()
         except Exception as exc:
             return _err(str(exc), 500)
