@@ -1,0 +1,10 @@
+{
+  "functions": [
+    {
+      "source": "functions-crm",
+      "codebase": "crm",
+      "runtime": "python312",
+      "ignore": ["venv", ".venv", "**/__pycache__/**"]
+    }
+  ]
+}
