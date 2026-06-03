@@ -21,7 +21,7 @@ load_dotenv()
 
 # -- Path setup ---------------------------------------------------------------
 _here = Path(__file__).resolve().parent          # crm/
-_root = _here.parent                             # blueboot_agency_power_agent/
+_root = _here.parent                             # collect_power_agent/
 _lib  = _root / "functions-crm"                  # functions-crm/
 
 sys.path.insert(0, str(_root / "app"))           # app/ for _pathsetup, firebase_cred etc.
