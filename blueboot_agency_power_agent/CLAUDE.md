@@ -522,3 +522,29 @@ Child sitemaps within a site are fetched concurrently via `asyncio.gather`
 (`SitemapReader._count_children`), throttled by the aiohttp connector's
 `limit_per_host` (3) so it speeds up sitemap-heavy sites without hammering the server.
 Keep `return_exceptions=True` on that gather so one bad child can't abort the level.
+
+---
+
+## README requirements
+
+### RULE: README.md must always contain the Outreach Pipeline Architecture figure
+
+The `README.md` must always contain the ASCII architecture diagram showing the full
+pipeline from discovery to outreach sender. It lives under the heading
+`## Outreach Pipeline Architecture` near the top of the file, before the detailed
+pipeline sections.
+
+If the diagram is missing, restore it — it should show:
+- SITE PIPELINE and LEAD PIPELINE converging into `email_contacts`
+- CRM Pipeline step (crm/ folder)
+- Excel Export + Import Back step
+- Automated Outreach Sender
+
+Also ensure `README.md` always references `crm/README.md` for the CRM module and
+includes the CRM section with key URLs (dashboard, API, sheets) and project structure.
+
+Also ensure `crm/README.md` always contains the CRM pipeline flow figure at the top,
+showing:
+- email_contacts → Contact Sheet → CRM Template → Firestore + site_leads
+- API flow: crmApi → Cloud Tasks → crmWorker → crm_jobs
+- Dashboard URL: https://blueboot-market.web.app/

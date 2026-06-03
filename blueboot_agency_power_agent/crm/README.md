@@ -1,6 +1,53 @@
 # CRM
 
-Google Sheets + Firestore CRM pipeline for outreach tracking.
+## CRM Pipeline Flow
+
+```
+Leads Database (Firestore)
+  email_contacts collection
+        │
+        │  python crm\contact_sync.py --countries NO --min-pages 500
+        ▼
+┌─────────────────────────┐
+│     Contact Sheet        │  ← Google Sheet (contacts tab)
+│  (imported contacts)     │     review list, fill Select column
+└────────────┬────────────┘
+             │  Select != blank
+             │  python crm\push_and_sync.py
+             ▼
+┌─────────────────────────┐
+│     CRM Template         │  ← Google Sheet (Outreach tab)
+│  (one row per site)      │     fill Status + Selger per lead
+└────────────┬────────────┘
+             │
+             │  python crm\template_sync.py
+             ▼
+┌─────────────────────────┐    ┌──────────────────────────┐
+│  crm/crm_template        │    │  site_leads collection   │
+│  (Firestore)             │───▶│  crm_status              │
+│                          │    │  crm_sales_person        │
+└─────────────────────────┘    │  crm_date                │
+                                └──────────────────────────┘
+```
+
+### API (Firebase Cloud Functions)
+
+```
+Client
+  │  GET /api/crm/contact-sync?countries=NO&min_pages=500
+  │  GET /api/crm/push-and-sync
+  │  GET /api/crm/template-sync
+  ▼
+crmApi (Cloud Run, 30s)      ← trigger + job status
+  │  enqueues Cloud Task
+  ▼
+crmWorker (Cloud Run, 15min) ← runs actual job (1GB RAM)
+  │  updates job status
+  ▼
+crm_jobs/{job_id} (Firestore) ← poll GET /api/crm/status/{job_id}
+```
+
+Dashboard: https://blueboot-market.web.app/
 
 ---
 
@@ -288,10 +335,4 @@ python crm\contact_sync.py --countries NO --max 5 --min-pages 500 --max-pages 50
 | 13 | Contacts | `\|name,email,phone,title\|...` | all selected contacts |
 | 14 | Score | — | manual |
 | 15 | Status | — | manual → `crm_status` |
-| 16 | Selger | — | manual → `crm_sales_person` |
-| 17 | Kommentar | — | manual |
-| 18 | Tilbud | — | manual |
-| 19 | site_lead_id | normalized website | deduplication key |
-| 20 | ai_sector | `site_leads.ai_sector` | |
-| 21 | ai_company_type | `site_leads.ai_company_type` | |
-| 22 | ai_platform | `site_leads.ai_platform` | |
+| 16 | Selger | — | manual → `crm_sales_pe
