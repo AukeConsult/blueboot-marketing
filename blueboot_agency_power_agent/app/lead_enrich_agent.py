@@ -171,7 +171,9 @@ def _load_secrets():
     from dotenv import load_dotenv
     load_dotenv()
     from functions.firebase_cred import get_firebase_cred
-    return get_firebase_cred()
+    # Returns (firebase_cred, openai_key). The OpenAI key comes from cfg/env at the
+    # call site, so the second slot is None here.
+    return get_firebase_cred(), None
 
 
 def _init_firestore(fb_key_dict):

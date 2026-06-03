@@ -64,7 +64,7 @@ def _load_secrets():
     from dotenv import load_dotenv
     load_dotenv()
     from functions.firebase_cred import get_firebase_cred
-    return get_firebase_cred()
+    return get_firebase_cred(), None   # (firebase_cred, openai_key); key from cfg/env at call site
 
 
 def _init_firestore(fb_key_dict):

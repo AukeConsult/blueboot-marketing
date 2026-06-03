@@ -545,30 +545,36 @@ async def _run_batch_async(
             if not no_fb:
                 pending_writes.append((upsert_lead, lead, fb_col))
 
-        # Flush Firestore writes sequentially after crawl batch — no thread contention
+        # Flush Firestore writes CONCURRENTLY through the 3-thread executor.
+        # Sequential flushing serialised worst-case latencies (e.g. 19 writes x 15s
+        # = ~285s) and pushed a batch past the background crawler's 300s wait budget.
         if pending_writes:
             print(f"    [firebase] writing {len(pending_writes)} records…", flush=True)
             loop = asyncio.get_running_loop()
-            for pw in pending_writes:
+
+            async def _flush_one(pw):
                 fn, *pw_args = pw
-                if fn is upsert_lead:
-                    _lead, _col = pw_args[0], pw_args[1] if len(pw_args) > 1 else None
-                    try:
+                try:
+                    if fn is upsert_lead:
+                        _lead = pw_args[0]
+                        _col  = pw_args[1] if len(pw_args) > 1 else None
                         await asyncio.wait_for(
-                            loop.run_in_executor(_write_exec, lambda l=_lead, c=_col: upsert_lead(l, collection=c)),
+                            loop.run_in_executor(
+                                _write_exec,
+                                lambda l=_lead, c=_col: upsert_lead(l, collection=c)),
                             timeout=15.0,
                         )
-                    except Exception as exc:
-                        print(f"    [firebase] lead write error: {exc}")
-                else:
-                    # upsert_lead_excluded(domain, reason, website)
-                    try:
+                    else:
+                        # upsert_lead_excluded(domain, reason, website)
                         await asyncio.wait_for(
                             loop.run_in_executor(_write_exec, lambda a=pw_args: fn(*a)),
                             timeout=15.0,
                         )
-                    except Exception:
-                        pass
+                except Exception as exc:
+                    print(f"    [firebase] write error: {exc}")
+
+            await asyncio.gather(*[_flush_one(pw) for pw in pending_writes],
+                                 return_exceptions=True)
         _write_exec.shutdown(wait=False)
         if not getattr(args, "no_output", False):
             export(dedupe_leads(all_leads), export_path)
@@ -652,29 +658,43 @@ class _BackgroundCrawler:
     def submit(self, fn, *args):
         self._queue.put((fn, args))
 
-    def wait(self, timeout: float = 300.0):
-        """Block until all queued batches are done, or timeout (seconds) elapses.
+    def drain(self, timeout: float = 300.0):
+        """Block until all queued batches are actually processed, WITHOUT killing
+        the worker thread (so the run can keep submitting afterwards).
 
-        Uses a polling loop so the main thread stays responsive and can be
-        interrupted with Ctrl-C. Default timeout = 300 s (5 min) per wait call.
+        Polls ``unfinished_tasks`` (incremented on put, decremented on task_done)
+        rather than ``thread.is_alive()`` — the daemon worker is always alive, so
+        the old liveness check spun the full timeout on every call. A timeout here
+        is a heartbeat, not a give-up: callers re-drain until empty.
         """
         import time as _time
         deadline = _time.monotonic() + timeout
-        while not self._queue.empty() or self._thread.is_alive():
+        while self._queue.unfinished_tasks > 0:
             if _time.monotonic() > deadline:
-                print(f"  [bg-crawl] wait() timed out after {timeout:.0f}s — "
-                      f"background thread may still be running a slow site",
+                print(f"  [bg-crawl] still draining after {timeout:.0f}s "
+                      f"({self._queue.unfinished_tasks} batch(es) left) — waiting…",
                       flush=True)
-                break
+                deadline = _time.monotonic() + timeout   # keep draining, don't abandon
             _time.sleep(0.5)
-        # Send shutdown sentinel (idempotent — ignored after thread exits)
+        if self._error:
+            err, self._error = self._error, None
+            raise err
+
+    # Backwards-compatible alias — non-destructive drain
+    def wait(self, timeout: float = 300.0):
+        self.drain(timeout)
+
+    def close(self, timeout: float = 300.0):
+        """Final shutdown: drain everything, then stop the worker thread."""
+        self.drain(timeout)
         try:
-            self._queue.put_nowait(None)
+            self._queue.put_nowait(None)   # shutdown sentinel
         except Exception:
             pass
         self._thread.join(timeout=10.0)
         if self._error:
-            raise self._error
+            err, self._error = self._error, None
+            raise err
 
 
 
@@ -739,8 +759,8 @@ def run(args) -> None:
         batch, pending[code] = pending[code], []
         if label:
             print(f"  [{code}] {label}")
-        # Wait for any background crawls to finish before final flush
-        _bg_crawler.wait()
+        # Drain background crawls before this final flush (keeps worker alive)
+        _bg_crawler.drain()
         _crawl_batch(batch, args, code, configs, all_leads, Path(args.output), country_leads,
                      rejected_domains=rejected_domains)
 
@@ -758,7 +778,7 @@ def run(args) -> None:
                 continue
             if not queues[code]:
                 _flush(code, f"Final batch of {len(pending[code])} sites")
-                _bg_crawler.wait()
+                _bg_crawler.drain()
                 print(f"\n[{code}] No more queries — giving up.")
                 country_done.add(code)
                 continue
@@ -840,7 +860,7 @@ def run(args) -> None:
     for code in countries:
         if pending[code]:
             _flush(code, f"Final flush: {len(pending[code])} remaining sites")
-    _bg_crawler.wait()
+    _bg_crawler.close()
 
     print(f"\n{'='*60}")
     print(f"Search complete. Queries run: {total_queries_run}")

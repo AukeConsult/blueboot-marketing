@@ -185,3 +185,199 @@ open(p, "w", encoding="utf-8").write(s)
 PY
 python3 -m py_compile app/lead_agent.py && tail -3 app/lead_agent.py   # confirm not truncated
 ```
+
+---
+
+## Thread Safety
+
+These scripts run blocking Firestore/Firebase calls inside `ThreadPoolExecutor`
+threads. Every variable touched by more than one thread MUST be protected by a
+`threading.Lock`. (asyncio counters like `counters["done"] += 1` inside a coroutine
+are safe without locks — asyncio is single-threaded; only `ThreadPoolExecutor` code
+needs locks.)
+
+### RULE: singletons use double-checked locking
+
+`app/firestore_client.py` has a global `_db` singleton. Concurrent `_write_exec`
+threads calling `get_firestore()` can double-init and corrupt the connection pool →
+hangs. Never remove or bypass the lock.
+
+```python
+_singleton = None
+_lock = threading.Lock()
+
+def get_singleton():
+    if _singleton is not None:        # fast path, no lock
+        return _singleton
+    with _lock:
+        if _singleton is not None:    # re-check inside lock
+            return _singleton
+        _singleton = create_it()
+    return _singleton
+```
+
+`initialize_app` in every `app/*.py` must be wrapped with `_local_fb_lock`
+(`_threading.Lock()` defined at module top). Audit after adding any file:
+
+```bash
+python3 -c "
+import os, re
+for root, dirs, files in os.walk('app'):
+    dirs[:] = [d for d in dirs if d != '__pycache__']
+    for f in files:
+        if not f.endswith('.py'): continue
+        src = open(os.path.join(root,f), errors='replace').read()
+        lines = src.splitlines()
+        for i, l in enumerate(lines):
+            if ('initialize_app' in l or 'firestore.client()' in l) and not l.strip().startswith('#'):
+                ctx = chr(10).join(lines[max(0,i-30):i])
+                if not re.search(r'with\s+_\w*lock\w*\s*:', ctx):
+                    print(f'UNPROTECTED {root}/{f}:{i+1}  {l.strip()[:70]}')
+"
+```
+
+### RULE: `_write_exec` writes are awaited with a timeout — never fire-and-forget
+
+```python
+# WRONG — no backpressure, floods the pool when Firestore is slow
+_write_exec.submit(lambda: upsert_site_lead(lead, col))
+
+# CORRECT — bounded consumer
+await asyncio.wait_for(
+    loop.run_in_executor(_write_exec, lambda _l=lead: upsert_site_lead(_l, col)),
+    timeout=20.0,
+)
+```
+
+Set the pool size to the number of consumer workers so every consumer can submit
+at once: `ThreadPoolExecutor(max_workers=max(workers, 8))`.
+
+### RULE: never `shutdown(wait=True)` inside an `async def`
+
+```python
+_write_exec.shutdown(wait=True)    # WRONG — freezes the event loop
+_write_exec.shutdown(wait=False)   # CORRECT — threads drain in background
+```
+
+### RULE: `gather(*tasks)` fan-out helpers need a per-worker `wait_for`
+
+Helpers that build `tasks = [...]` then `await asyncio.gather(*tasks, return_exceptions=True)`
+(`fix_rescrape_contacts.py` `_recrawl_one`, `lead_enrich_contacts.py` `_enrich_one`)
+will hang forever if one worker's chained awaits never return — `return_exceptions=True`
+only catches *raised* exceptions, not a coroutine that never returns. Wrap each worker
+in `asyncio.wait_for`. Audit: `grep -c wait_for` == 0 while `grep -c gather` >= 1 ⇒ suspect.
+
+### Health check — run after editing ANY .py file
+
+```bash
+python3 -c "
+import os, subprocess, ast
+issues = []
+for root, dirs, files in os.walk('.'):
+    dirs[:] = [d for d in dirs if d not in ('__pycache__', '.venv', 'venv', '.git', 'node_modules')]
+    for f in sorted(files):
+        if not f.endswith('.py'): continue
+        path = os.path.join(root, f)
+        src  = open(path, errors='replace').read()
+        if len(src) < 100: continue
+        r = subprocess.run(['python3','-m','py_compile', path], capture_output=True)
+        if r.returncode != 0:
+            issues.append(f'COMPILE  {path}'); continue
+        try:
+            tree = ast.parse(src)
+            has_main = any(isinstance(n, ast.FunctionDef) and n.name == 'main' for n in ast.walk(tree))
+            if has_main and 'if __name__' not in src:
+                issues.append(f'NO_ENTRY {path}')
+        except: pass
+        if not src.endswith('\n'):
+            issues.append(f'NO_NL    {path}')   # truncated mid-write (Edit/Write byte limit)
+print('ALL OK' if not issues else chr(10).join(issues))
+"
+```
+
+`COMPILE` = syntax/import error. `NO_ENTRY` = `main()` defined but no
+`if __name__ == "__main__": main()` (script exits silently doing nothing).
+`NO_NL` = file truncated mid-write — repair the tail.
+
+---
+
+## Background worker threads (queue-drain pattern)
+
+`search_runner.py` `_BackgroundCrawler` runs crawl batches on a daemon thread fed
+by a `queue.Queue`. Two bugs caused the recurring
+`[bg-crawl] wait() timed out after 300s` and silently dropped sites.
+
+### RULE: drain on real outstanding work, never on `thread.is_alive()`
+
+A daemon worker sits in `while True: queue.get()` so it is **always alive** until it
+processes a shutdown sentinel. A drain loop gated on `thread.is_alive()` therefore
+never exits early and spins the entire timeout on every call.
+
+```python
+# WRONG — always-alive worker means this spins the full timeout every time
+while not self._queue.empty() or self._thread.is_alive():
+    ...
+
+# CORRECT — poll the queue's own outstanding-work counter
+while self._queue.unfinished_tasks > 0:   # ++ on put, -- on task_done
+    ...
+```
+
+### RULE: draining and shutdown are separate operations
+
+A mid-run drain MUST keep the worker alive so the run can submit more work after it.
+Only a single terminal `close()` may send the sentinel and `join()` the thread.
+
+```python
+def drain(self, timeout=300.0):   # non-destructive — call as often as needed
+    while self._queue.unfinished_tasks > 0:
+        if time.monotonic() > deadline:
+            print("  [bg] still draining — waiting…")   # heartbeat, NOT give-up
+            deadline = time.monotonic() + timeout       # re-arm, never abandon
+        time.sleep(0.5)
+
+def close(self, timeout=300.0):   # call ONCE at end of run
+    self.drain(timeout)
+    self._queue.put_nowait(None)  # sentinel
+    self._thread.join(timeout=10.0)
+```
+
+A destructive `wait()` that sends the sentinel mid-run kills the worker; every later
+`submit()` then queues work nothing consumes, and the next drain hits the timeout and
+loses those items. Keep `wait()` only as a non-destructive alias for `drain()`.
+
+### RULE: a drain timeout is a heartbeat, not a give-up
+
+Re-arm the deadline and keep waiting (or loop the drain) so a backlog larger than one
+timeout window still fully drains instead of being abandoned and dropped.
+
+---
+
+## Secrets / return-arity consistency
+
+### RULE: `_load_secrets()` return arity MUST match every caller's unpack
+
+Callers unpack `_load_secrets()` differently across the project — some expect one value,
+some expect two:
+
+```python
+fb_key             = _load_secrets()   # single-value callers
+fb_key, api_key    = _load_secrets()   # two-value callers (most enrich/check scripts)
+api_key, fb_key    = _load_secrets()   # site_enrich_agent.py — note the ORDER
+```
+
+If a `_load_secrets()` is changed to `return get_firebase_cred()` while its caller still
+does `fb_key, api_key = _load_secrets()`, it fails at runtime with
+`TypeError: cannot unpack non-iterable Certificate object`. `py_compile` and `pyflakes`
+do NOT catch this.
+
+**For two-value callers** (OpenAI key resolved from `cfg`/env at the call site) return:
+```python
+return get_firebase_cred(), None   # (firebase_cred, openai_key)
+```
+
+After editing any `_load_secrets()` or its caller, grep both ends and confirm they agree:
+```bash
+grep -n "= _load_secrets()" app/*.py        # caller unpack arity
+grep -n "return .*get_firebase_cred"  app/*.py   # definition return arity
+```
