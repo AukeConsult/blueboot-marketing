@@ -5,3 +5,4 @@
 /output/
 /config/google_oauth_client.json
 /config/google_token.json
+/functions-crm/venv/
