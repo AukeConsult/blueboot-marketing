@@ -19,7 +19,7 @@ import _pathsetup  # noqa: F401 — adds project root, app/, app/functions/, app
 from catalog_scrapers import catalog_run          # noqa: E402
 from search_runner import run                     # noqa: E402
 
-from app.functions.utils import clean_str
+from app.functions.utils import clean_str, normalize_url
 
 try:
     from app.functions.models import lead_id_from_url

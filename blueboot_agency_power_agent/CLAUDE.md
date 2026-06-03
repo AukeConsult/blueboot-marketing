@@ -149,3 +149,39 @@ if loc is None:
 
 This bug caused `_index_entries` to return empty `children` lists for all sitemapindex
 nodes, making every site report `pages=0 (index)`.
+
+---
+
+## Verification
+
+### RULE: `py_compile` is NOT enough — always run `pyflakes` for undefined names
+
+`python -m py_compile` only catches **syntax** errors. It passes on undefined-name bugs
+that crash at runtime — these keep recurring in this project:
+
+- `cfg.OPENAI_MODEL` used at module scope while `cfg` was only imported locally inside a
+  function (`site_enrich_agent.py`)
+- `_local_fb_lock` referenced but never defined (20 files at once)
+- `cred` used in `initialize_app(cred)` while the cert was assigned to `c`
+- `normalize_url(...)` used but never imported from `functions.utils` (`lead_agent.py`)
+
+**After ANY edit, run both:**
+```bash
+python3 -m py_compile app/*.py
+python3 -m pyflakes app/*.py | grep -i "undefined name"   # must print nothing
+```
+If `pyflakes` reports an undefined name, fix it before considering the task done.
+
+### RULE: Never edit large files with the Edit/Write tools — they truncate
+
+The Edit/Write tools silently truncate large files (`site_agent.py`, `lead_agent.py`,
+`site_email_check.py`) mid-file, producing `SyntaxError: unterminated string literal` /
+`'(' was never closed` at the tail. Always edit via a Python script in bash:
+```bash
+python3 - << 'PY'
+p = "app/lead_agent.py"; s = open(p, encoding="utf-8").read()
+s = s.replace(OLD, NEW, 1)
+open(p, "w", encoding="utf-8").write(s)
+PY
+python3 -m py_compile app/lead_agent.py && tail -3 app/lead_agent.py   # confirm not truncated
+```

@@ -40,6 +40,7 @@ import threading as _threading
 # Guards firebase_admin.initialize_app against concurrent init
 _local_fb_lock = _threading.Lock()
 import argparse
+from functions.config import cfg
 import asyncio
 import importlib.util
 import json
