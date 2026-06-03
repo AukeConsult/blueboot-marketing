@@ -1,4 +1,4 @@
-# BlueBoot Agency Power Agent
+# BlueBoot CRM
 
 ## Pipeline Overview
 
@@ -6,81 +6,56 @@ Two independent pipelines share the same Firestore project. The **Site Pipeline*
 is the actively developed one. The **Lead Agent Pipeline** (Section 2) is the original and
 remains fully operational.
 
----
+## Outreach Pipeline Architecture
 
-## CRM — Outreach Pipeline
-
-The CRM module manages the outreach workflow from contact selection to Leads Database sync.
-See **[crm/README.md](crm/README.md)** for the full reference.
-
-### Key URLs
-
-| Resource | URL |
-|---|---|
-| Dashboard | https://blueboot-market.web.app/ |
-| API base | https://us-central1-blueboot-market.cloudfunctions.net/crmApi |
-| Contact sheet | https://docs.google.com/spreadsheets/d/1aMglV53NiMEArjld37HN5cxliyNRGzIP2mrM4kwlupA |
-| CRM template | https://docs.google.com/spreadsheets/d/1b1kGKIldeawESH3RYiYjOqRFXRR5kG_81qYRFZI1gSY |
-
-### Project structure
+The full system connects two discovery pipelines through a unified contact store to an automated email sender.
 
 ```
-crm/                         <- CLI wrappers (local)
-  contact_sync.py            <- import contacts to contact sheet
-  push_and_sync.py           <- push selected -> CRM template + sync
-  template_sync.py           <- sync CRM template -> Leads Database
-
-functions-crm/               <- Firebase Cloud Functions (GCP)
-  main.py                    <- 2 Cloud Run functions: crmApi + crmWorker
-  crm/
-    contact_sync_lib.py      <- business logic (single source of truth)
-    push_and_sync_lib.py
-    crm_template_sync_lib.py
-
-public/
-  index.html                 <- Bootstrap dashboard
-
-firebase.json                <- Firebase hosting + functions config
-.firebaserc                  <- Firebase project: blueboot-market
-setup_gcp.sh                 <- one-time GCP setup
-deploy_crm.sh                <- deploy functions + hosting
-deploy_hosting.sh            <- deploy hosting only
+SITE PIPELINE                  LEAD PIPELINE
+(end-user companies)           (web agencies / resellers)
+        │                              │
+  discover → enrich             discover → enrich
+  site_agent                    lead_agent
+  site_enrich_agent             lead_enrich_agent
+  site_contact_enrich           lead_enrich_contacts
+  site_location_enrich          leads_email_check
+  site_email_check                     │
+        │                              │
+        └──────────┬───────────────────┘
+                   ▼
+          ┌─────────────────┐
+          │  email_contacts │  ← Firestore collection (status=pending)
+          │   (Firestore)   │     unified from both pipelines
+          └────────┬────────┘
+                   │
+          ┌────────▼────────┐
+          │  CRM Pipeline   │  ← contact_sync / push_and_sync / template_sync
+          │  (crm/ folder)  │     select, enrich, track outreach
+          └────────┬────────┘
+                   │
+          ┌────────▼────────┐
+          │  Excel Export   │  ← human reviews, approves / rejects
+          │  + Import Back  │    status updated to approved
+          └────────┬────────┘
+                   │  status=approved only
+          ┌────────▼────────┐
+          │  Automated      │  ← personalised mail, rate-limited
+          │  Outreach Sender│    tracks replies, updates status=sent
+          └─────────────────┘
 ```
 
-### Workflow
+### Contact Status Lifecycle
 
-```
-1. Import contacts    python crm\contact_sync.py --countries NO --min-pages 500
-2. Review & select    open contact sheet, fill Select column
-3. Push to CRM        python crm\push_and_sync.py
-4. Work the CRM       fill Status + Selger in CRM template
-5. Sync to DB         python crm\template_sync.py
-```
-
-### API endpoints
-
-```bash
-GET /api/crm/contact-sync?countries=NO&max=500&min_pages=500
-GET /api/crm/push-and-sync
-GET /api/crm/template-sync
-GET /api/crm/status/{job_id}
-GET /api/crm/jobs?limit=10
-```
-
-### Cloud Run functions
-
-| Function | Timeout | Memory | Purpose |
-|---|---|---|---|
-| `crmApi` | 30 sec | 256MB | Trigger jobs, poll status |
-| `crmWorker` | 15 min | 1GB | Run the actual job (via Cloud Tasks) |
-
-### Deploy
-
-```bash
-bash setup_gcp.sh        # one time
-bash deploy_crm.sh       # deploy everything
-bash deploy_hosting.sh   # hosting only
-```
+| Status | Set by | Meaning |
+|--------|--------|---------|
+| `pending` | Pipeline export | Ready for human review |
+| `approved` | Human via Excel import | OK to send |
+| `rejected` | Human via Excel import | Never send |
+| `sent` | Outreach sender | Mail dispatched |
+| `replied` | Reply tracker | Contact responded |
+| `bounced` | Send delivery | Invalid email |
+| `unsubscribed` | Opt-out | Remove from all lists |
+| `converted` | Manual / CRM | Became customer/partner |
 
 ---
 
@@ -1757,41 +1732,4 @@ Drives `site_agent.py` — defines per-country search instructions for finding c
 | `finance` | Banks, insurance, financial services |
 | `real_estate` | Property portals, housing associations |
 | `legal` | Law firms, legal information sites |
-| `logistics` | Shipping, transport, logistics operators |
-| `construction` | Building, infrastructure, engineering |
-| `hospitality` | Hotels, tourism, restaurants |
-| `hr` | HR platforms, recruitment, staffing |
-| `association` | Industry associations, NGOs, member organisations |
-| `company_cities` | City-specific company queries (NO/SE/DK) |
-| `company_fr` / `company_nl` / `company_paris` | Country-specific company variants |
-| `ecommerce_fr` / `ecommerce_nl` / `ecommerce_be` | Country-specific ecommerce variants |
-| `saas_tech_fr` / `saas_tech_nl` / `tech_be` | Country-specific tech variants |
-| `pune` / `mumbai` / `delhi` / `bangalore` / `chennai` / `hyderabad` / `ahmedabad` | India city-specific queries |
-| `other_cities` | Non-capital city queries |
-
-### How queries are used
-
-`site_agent.py` iterates query categories round-robin across all countries. Each query string is sent to Bing search, results are deduplicated against already-seen domains, and new sites are crawled for sitemap + contacts.
-
-Filter by category at export time:
-```bat
-python app\site_smart_export.py --countries NO --category municipality
-python app\site_smart_export.py --countries NO --category ecommerce
-```
-
-Run only a specific category during discovery:
-```bat
-python app\site_agent.py --countries NO --category real_estate
-```
-
-### Adding new queries
-
-Add entries to the `query_categories` dict for the relevant country:
-```json
-"healthcare": [
-  "norsk helseforetak pasientinformasjon nettside",
-  "sykehus norsk pasientportal"
-]
-```
-
-Or add a new category entirely — it will be picked up automatically in the round-robin. Keep queries in the target language and include site-structure terms (`nettside`, `portal`, `informasjon`) to bias toward large content sites rather than landing pages.
+| `logistics` | Shipping, transport
