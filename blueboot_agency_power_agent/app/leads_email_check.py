@@ -456,7 +456,7 @@ def main(argv=None):
         return
 
     print(f"\n  [leads-email-check] Contacts : {len(to_proc)}")
-    print(f"  [leads-email-check] Model    : {OPENAI_MODEL}")
+    print(f"  [leads-email-check] Model    : {cfg.OPENAI_MODEL}")
     print(f"  [leads-email-check] Dry run  : {dry_run}")
 
     asyncio.run(_run_async(client, to_proc, args.batch_size, args.concurrent, dry_run))

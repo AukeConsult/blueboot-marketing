@@ -121,7 +121,6 @@ def main():
     p.add_argument("--collection", default=None,
                    help="Firestore collection (default: leads / FIRESTORE_COLLECTION env)")
     args = p.parse_args()
-
     collection = args.collection or cfg.FIRESTORE_COLLECTION
     search(args.keyword, args.field, args.country, args.limit, collection)
 

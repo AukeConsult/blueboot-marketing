@@ -395,7 +395,7 @@ def enrich_locations(
     print(f"\n  [location-enrich] Sites to process : {len(to_proc)}")
     print(f"  [location-enrich] Batch size       : {batch_size}")
     print(f"  [location-enrich] Concurrent       : {concurrent}")
-    print(f"  [location-enrich] Model            : {OPENAI_MODEL}")
+    print(f"  [location-enrich] Model            : {cfg.OPENAI_MODEL}")
     print(f"  [location-enrich] Dry run          : {dry_run}")
 
     counters = asyncio.run(_run_async(client, to_proc, batch_size, concurrent, dry_run))

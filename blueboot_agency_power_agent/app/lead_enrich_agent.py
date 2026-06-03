@@ -441,7 +441,7 @@ def enrich_leads(
     batches   = [lead_ids[i:i+batch_size] for i in range(0, len(lead_ids), batch_size)]
 
     print(f"\n  [lead-enrich] Collection  : {collection}")
-    print(f"  [lead-enrich] Model       : {OPENAI_MODEL}")
+    print(f"  [lead-enrich] Model       : {cfg.OPENAI_MODEL}")
     print(f"  [lead-enrich] Leads       : {len(ref_map)}")
     print(f"  [lead-enrich] Batches     : {len(batches)} × {batch_size}")
     print(f"  [lead-enrich] Concurrent  : {concurrent} parallel GPT calls")

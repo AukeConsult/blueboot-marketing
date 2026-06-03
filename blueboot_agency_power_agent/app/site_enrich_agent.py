@@ -578,7 +578,7 @@ def enrich_site_leads(
 
     total = len(to_proc)
     b_tot = (total + batch_size - 1) // batch_size
-    print(f"\n  [enrich] Model       : {OPENAI_MODEL}")
+    print(f"\n  [enrich] Model       : {cfg.OPENAI_MODEL}")
     print(f"  [enrich] Batch size  : {batch_size}  ({b_tot} batches)")
     print(f"  [enrich] Concurrent  : {concurrent} parallel OpenAI calls")
     print(f"  [enrich] Total leads : {total}")

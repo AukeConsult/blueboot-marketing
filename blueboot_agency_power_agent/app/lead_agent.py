@@ -663,7 +663,7 @@ def audit_tlds(collection: str | None = None, dry_run: bool = False) -> None:
 
         if not dry_run:
             total_blocked = len(blocked_refs)
-            print(f"\n[audit] Deleting {total_blocked} blocked lead(s)…")
+            print(f"\n[audit] Deleting {total_blocked} blocked lead(s)\u2026")
             del_leads = 0
             for _ref, domain, reason in blocked_refs:
                 for cdoc in _ref.collection("contacts").stream():
@@ -672,7 +672,7 @@ def audit_tlds(collection: str | None = None, dry_run: bool = False) -> None:
                 del_leads += 1
             print(f"[audit] Deleted {del_leads} leads.")
         else:
-            print(f"\n[audit] DRY RUN — would delete {len(blocked_refs)} blocked lead(s).")
+            print(f"\n[audit] DRY RUN \u2014 would delete {len(blocked_refs)} blocked lead(s).")
 
 
 def main() -> None:
@@ -684,7 +684,7 @@ def main() -> None:
         args.preloaded_domains = set()
     else:
         from concurrent.futures import ThreadPoolExecutor as _TPE
-        print("  [lead_agent] preloading leads + leads_excluded in parallel…", flush=True)
+        print("  [lead_agent] preloading leads + leads_excluded in parallel\u2026", flush=True)
         with _TPE(max_workers=2) as _pool:
             _f_leads    = _pool.submit(load_leads_from_firebase, args.firebase_collection)
             _f_excluded = _pool.submit(load_leads_excluded)
@@ -704,11 +704,11 @@ def main() -> None:
         leads = run(args)
     else:
         print("\n" + "="*60)
-        print("PHASE 1 — Catalog scrape")
+        print("PHASE 1 \u2014 Catalog scrape")
         print("="*60)
         leads = catalog_run(args) or []
         print("\n" + "="*60)
-        print("PHASE 2 — Keyword search (Bing / Google)")
+        print("PHASE 2 \u2014 Keyword search (Bing / Google)")
         print("="*60)
         search_leads = run(args) or []
         try:
@@ -720,7 +720,7 @@ def main() -> None:
     if args.no_firebase:
         print("  [firebase] skipped (--no-firebase).")
     elif leads:
-        print("  [firebase] running end-of-run sync…")
+        print("  [firebase] running end-of-run sync\u2026")
         push_to_firebase(leads, collection=args.firebase_collection)
     else:
         print("  [firebase] no leads to upload.")

@@ -399,7 +399,7 @@ def enrich_contacts(
         return
 
     print(f"\n  [contact-enrich] Contacts to process : {len(to_proc)}")
-    print(f"  [contact-enrich] Model               : {OPENAI_MODEL}")
+    print(f"  [contact-enrich] Model               : {cfg.OPENAI_MODEL}")
     print(f"  [contact-enrich] Concurrent          : {concurrent}")
     print(f"  [contact-enrich] Dry run             : {dry_run}\n")
 
