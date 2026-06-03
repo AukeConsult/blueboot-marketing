@@ -1245,24 +1245,6 @@ REM Second extract — already-extracted leads are skipped automatically
   --save-extract "shopify_nordic_jun01"
 ```
 
-### Function API
-
-```python
-from extract_leads import extract_leads
-
-path = extract_leads(
-    min_score=70,
-    countries=["NO", "SE"],
-    source="search",
-    priorities=["A", "B"],
-    with_email=True,
-    keywords=["wordpress", "woocommerce"],
-    save_extract="wordpress_nordic_may26",
-    extract_dry_run=False,
-    out_file="my_extract.xlsx",
-)
-```
-
 ---
 
 ## `maint_fix_contact_country.py` — one-time country field migration
@@ -1598,6 +1580,91 @@ A full architecture document is saved at `docs/BlueSearch_Outreach_Pipeline.pdf`
 It covers all five stages, every script, the contact schema, and the status lifecycle.
 
 ---
+
+
+---
+
+## Additional Scripts
+
+### `campaign_importer.py` — import campaign Excel back to Firestore
+
+Reads a campaign Excel file and imports the lead/contact data back into the
+`leads_extract` Firestore collection. Used to restore or update a named campaign.
+
+```bat
+python app\campaign_importer.py NO_high_score_may26
+```
+
+---
+
+### `campaign_manager.py` — manage campaign lifecycle
+
+Helper module for creating, listing, and deleting campaign documents in
+the `leads_extract` Firestore collection. Used internally by other scripts.
+
+---
+
+### `send_mail.py` / `mail_sender.py` / `mail_reader.py` — outreach email components
+
+Three components of the outreach email system:
+
+| Script | Purpose |
+|---|---|
+| `send_mail.py` | Generates and sends personalised outreach emails via SMTP |
+| `mail_sender.py` | Low-level SMTP sending helper — rate limiting, retries, tracking |
+| `mail_reader.py` | IMAP reply reader — polls inbox, detects replies, updates `status=replied` |
+
+Requires SMTP credentials in `.env` (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `GMAIL_SENDER`).
+
+---
+
+### `wp_plugin_leads.py` — WordPress.org plugin catalogue scraper
+
+Queries the WordPress.org Plugin API for plugins matching given search terms,
+extracts the author's website URL, filters by country TLD, and produces leads.
+Useful for finding WordPress plugin developers as potential reseller prospects.
+
+```bat
+python app\wp_plugin_leads.py --search "woocommerce payment" --country NO
+```
+
+---
+
+### `push_to_firebase.py` — legacy CSV uploader *(deprecated)*
+
+Pushes an existing `agency_leads.csv` file to Firestore. Legacy script from before
+the pipeline wrote directly to Firestore. No longer needed for normal operation.
+
+```bat
+python app\push_to_firebase.py   # reads output/agency_leads.csv
+```
+
+---
+
+### `maint_fix_rescrape_contacts.py` — fix mismatched phone/email data
+
+Re-scrapes leads where the phone count in `email_phones` exceeds the email count —
+a legacy data bug that assigned all page phones to the first contact. Fixes the
+pairing and updates affected contact documents in Firestore.
+
+```bat
+python app\maint_fix_rescrape_contacts.py --countries NO --dry-run
+python app\maint_fix_rescrape_contacts.py --countries NO
+```
+
+---
+
+### `maint_firestore_snapshot.py` — search/debug Firestore leads
+
+Quick search tool — finds leads by keyword match across any field. Useful for
+debugging and spot-checking Firestore data without opening the console.
+
+```bat
+python app\maint_firestore_snapshot.py wordpress
+python app\maint_firestore_snapshot.py oslo --field location_city
+python app\maint_firestore_snapshot.py ecommerce --field ai_sector --countries NO
+```
+
 
 ## `config/catalogs.json` — Directory Catalog Sources
 
