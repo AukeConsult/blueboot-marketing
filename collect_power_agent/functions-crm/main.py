@@ -223,6 +223,18 @@ def template_sync():
         return _err(str(exc), 500)
 
 
+@app.route("/api/crm/campaign-sync", methods=["GET"])
+def campaign_sync():
+    """Sync campaign data from contact sheet to Firestore."""
+    force = request.args.get("force", "").lower() in ("1", "true", "yes")
+    try:
+        job_id = _new_job("campaign-sync", {"force": force})
+        _enqueue_task("campaign-sync", job_id, {"force": force})
+        return _accepted(job_id, "campaign-sync")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 # -- Worker endpoint ----------------------------------------------------------
 
 @app.route("/api/crm/worker/<name>/<job_id>", methods=["POST"])
@@ -256,6 +268,11 @@ def worker(name, job_id):
             from crm.crm_template_sync_lib import run_template_sync
             count  = run_template_sync(db=db, svc=svc)
             result = {"synced": count}
+
+        elif name == "campaign-sync":
+            from crm.campaign_sync_lib import run_campaign_sync
+            result = run_campaign_sync(db=db, svc=svc,
+                                       force=body.get("force", False))
 
         else:
             _update_job(job_id, status="error",
