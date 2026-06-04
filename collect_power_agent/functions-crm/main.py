@@ -354,6 +354,7 @@ def update_campaign(campaign_id):
             existing_mail = (doc.to_dict() or {}).get("mail", {})
             merged_mail   = dict(existing_mail)
             merged_mail.update(body["mail"])
+            # css is allowed as a mail sub-field
             update["mail"] = merged_mail
 
         if not update:

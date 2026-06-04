@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Campaign Editor</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css">
+<style>
+body { background: #f8f9fa; }
+.badge-draft{background:#e2e3e5;color:#383d41}
+.badge-dosend{background:#cce5ff;color:#004085}
+.badge-sent{background:#d4edda;color:#155724}
+.badge-cancelled{background:#f8d7da;color:#721c24}
+#quill-editor { min-height: 300px; font-size: 14px; }
+.ql-container { border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
+.ql-toolbar { border-top-left-radius: 8px; border-top-right-radius: 8px; background: #f8f9fa; }
+#source-editor { min-height: 320px; font-family: monospace; font-size: 12px; border-radius: 8px; }
+#preview-frame { width: 100%; min-height: 340px; border: 1px solid #dee2e6; border-radius: 8px; background: #fff; }
+.pv-bar { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: .4rem .75rem; }
+</style>
+</head>
+<body>
+<div class="container py-4" style="max-width:900px">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div class="d-flex align-items-center gap-2">
+      <a id="back-link" href="campaign.html" class="btn btn-sm btn-outline-secondary"><i class="ti ti-arrow-left"></i></a>
+      <h5 class="mb-0"><i class="ti ti-edit me-2"></i>Mail editor — <span id="c-campaign-id" class="text-muted fw-normal">loading...</span></h5>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <span id="save-feedback" class="small text-muted" style="display:none"></span>
+      <span class="badge" id="c-status-badge"></span>
+    </div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-body py-2 px-3">
+      <div class="mb-2">
+        <label class="form-label small text-muted mb-1">Outreach email account</label>
+        <input id="c-email-account-edit" class="form-control form-control-sm" placeholder="sender@example.com" oninput="autoSave()">
+      </div>
+      <div>
+        <label class="form-label small text-muted mb-1">Subject</label>
+        <input id="c-subject" class="form-control form-control-sm" placeholder="Email subject line" oninput="autoSave()">
+      </div>
+    </div>
+  </div>
+
+  <!-- Help panel -->
+  <div id="helpModal" class="card mb-3 d-none">
+    <div class="card-body py-2 px-3">
+      <h6 class="fw-500 mb-2"><i class="ti ti-help me-1 text-primary"></i>Editor help</h6>
+      <div class="row g-3 small">
+        <div class="col-md-4">
+          <strong>Formatting</strong>
+          <ul class="mt-1 ps-3 mb-0">
+            <li>Select text → click toolbar button</li>
+            <li>Bold: <kbd>Ctrl+B</kbd></li>
+            <li>Italic: <kbd>Ctrl+I</kbd></li>
+            <li>Underline: <kbd>Ctrl+U</kbd></li>
+          </ul>
+        </div>
+        <div class="col-md-4">
+          <strong>Links &amp; Images</strong>
+          <ul class="mt-1 ps-3 mb-0">
+            <li>Link: select text → click 🔗 → enter URL</li>
+            <li>Remove link: click linked text → click 🔗</li>
+            <li>Image (URL): paste URL in field above editor → Insert URL</li>
+            <li>Image (file): click 📷 in toolbar</li>
+            <li>Delete image: click image → <kbd>Delete</kbd></li>
+          </ul>
+        </div>
+        <div class="col-md-4">
+          <strong>Email tips</strong>
+          <ul class="mt-1 ps-3 mb-2">
+            <li>Use <code>style="..."</code> inline — email clients strip external CSS</li>
+            <li>Max width 600px works best</li>
+            <li>Avoid JavaScript — blocked by all email clients</li>
+            <li>Test in Gmail + Outlook before sending</li>
+          </ul>
+          <strong>Variables</strong>
+          <ul class="mt-1 ps-3 mb-0">
+            <li><code>{{name}}</code> — contact name</li>
+            <li><code>{{title}}</code> — job title</li>
+            <li><code>{{company}}</code> — company name</li>
+            <li><code>{{website}}</code> — website URL</li>
+            <li><code>{{domain}}</code> — domain only</li>
+            <li><code>{{location}}</code> — city/region</li>
+            <li><code>{{ai_summary}}</code> — AI description</li>
+          </ul>
+          <strong class="mt-2 d-block">Tabs</strong>
+          <ul class="mt-1 ps-3 mb-0">
+            <li><strong>Editor</strong> — WYSIWYG</li>
+            <li><strong>HTML source</strong> — raw HTML</li>
+            <li><strong>Preview</strong> — rendered with variables</li>
+            <li><strong>CSS</strong> — email base styles</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mail type selector -->
+  <div class="d-flex align-items-center gap-3 mb-2 small text-muted">
+    <strong>Body:</strong>
+    <div class="form-check form-check-inline mb-0">
+      <input class="form-check-input" type="radio" name="mail-type" id="mt-plain" value="plain" checked onchange="switchMode()">
+      <label class="form-check-label" for="mt-plain">Plain text</label>
+    </div>
+    <div class="form-check form-check-inline mb-0">
+      <input class="form-check-input" type="radio" name="mail-type" id="mt-html" value="html" onchange="switchMode()">
+      <label class="form-check-label" for="mt-html">HTML</label>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:12px" onclick="document.getElementById('helpModal').classList.toggle('d-none')" title="Help">
+      <i class="ti ti-help"></i>
+    </button>
+  </div>
+
+
+  <!-- Plain text mode -->
+  <div id="plain-mode">
+    <textarea id="c-body" class="form-control" rows="10" style="font-size:13px"
+              placeholder="Hei {{name}},&#10;&#10;..." oninput="autoSave()"></textarea>
+  </div>
+
+  <!-- HTML mode -->
+  <div id="html-mode" style="display:none">
+    <!-- Editor tabs -->
+    <ul class="nav nav-tabs mb-0" style="border-bottom:none">
+      <li class="nav-item">
+        <button class="nav-link active" id="tab-wysiwyg" onclick="showTab('wysiwyg')">
+          <i class="ti ti-pencil me-1"></i>Editor
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="tab-source" onclick="showTab('source')">
+          <i class="ti ti-code me-1"></i>HTML source
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="tab-preview" onclick="showTab('preview')">
+          <i class="ti ti-eye me-1"></i>Preview
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="tab-css" onclick="showTab('css')">
+          <i class="ti ti-palette me-1"></i>CSS
+        </button>
+      </li>
+    </ul>
+
+    <!-- WYSIWYG -->
+    <div id="pane-wysiwyg" class="border border-top-0 rounded-bottom mb-3">
+      <div class="px-2 py-1 border-bottom d-flex align-items-center gap-2" style="background:#f8f9fa">
+        <small class="text-muted">Insert image:</small>
+        <input id="img-url" class="form-control form-control-sm" style="max-width:300px;font-size:11px" placeholder="https://example.com/image.png">
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:11px" onclick="insertImageUrl()">Insert URL</button>
+      </div>
+      <div id="quill-editor"></div>
+    </div>
+
+    <!-- Source -->
+    <div id="pane-source" style="display:none" class="mb-3">
+      <textarea id="c-body-html" class="form-control" id="source-editor" rows="14"
+                style="font-family:monospace;font-size:12px"
+                placeholder="<p>Hei {{name}},</p>&#10;<p>...</p>"
+                oninput="autoSave()"></textarea>
+    </div>
+
+    <!-- CSS -->
+    <div id="pane-css" style="display:none" class="mb-3">
+      <div class="alert alert-light py-1 px-2 mb-2 small text-muted">
+        <i class="ti ti-info-circle me-1"></i>These styles are injected as <code>&lt;style&gt;</code> into every email. Stored separately from the body — keeps your HTML clean for editing.
+      </div>
+      <textarea id="c-mail-css" class="form-control" rows="12"
+                style="font-family:monospace;font-size:12px"
+                placeholder="body { font-family: Arial; }" oninput="autoSave()"></textarea>
+    </div>
+
+    <!-- Preview -->
+    <div id="pane-preview" style="display:none" class="mb-3">
+      <div class="pv-bar d-flex align-items-center gap-2 mb-2 flex-wrap small">
+        <span class="text-muted">Preview as:</span>
+        <input id="pv-name"    class="form-control form-control-sm" style="width:110px" placeholder="name"    value="Tone Hansen"  oninput="updatePreview()">
+        <input id="pv-company" class="form-control form-control-sm" style="width:120px" placeholder="company" value="Blueboot AS"   oninput="updatePreview()">
+        <input id="pv-website" class="form-control form-control-sm" style="width:130px" placeholder="website" value="blueboot.no"   oninput="updatePreview()">
+      </div>
+      <div id="mail-preview" class="border rounded p-3" style="background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#333;min-height:80px"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+<script>
+const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
+const urlParams = new URLSearchParams(window.location.search);
+const CAMPAIGN_ID = urlParams.get('campaign_id') || '';
+
+let quill = null;
+let _saveTimer = null;
+let _currentTab = 'wysiwyg';
+
+function insertLink() {
+  const text = document.getElementById('link-text').value.trim();
+  const url  = document.getElementById('link-url').value.trim();
+  if (!url || !quill) return;
+  bootstrap.Modal.getInstance(document.getElementById('linkModal')).hide();
+  const range = window._linkRange;
+  if (range && range.length > 0) {
+    // Replace selected text with link
+    quill.deleteText(range.index, range.length);
+    quill.insertText(range.index, text || url, 'link', url);
+  } else {
+    // Insert at cursor
+    const idx = range ? range.index : quill.getLength();
+    quill.insertText(idx, text || url, 'link', url);
+  }
+  autoSave();
+}
+
+function insertImageUrl() {
+  const url = document.getElementById('img-url').value.trim();
+  if (!url || !quill) return;
+  const range = quill.getSelection(true);
+  quill.insertEmbed(range ? range.index : quill.getLength(), 'image', url);
+  document.getElementById('img-url').value = '';
+  autoSave();
+}
+
+// Init Quill
+function initQuill() {
+  if (quill) return;
+  quill = new Quill('#quill-editor', {
+    theme: 'snow',
+    modules: {
+      toolbar: {
+        container: [
+          ['bold','italic','underline','strike'],
+          [{'header':[1,2,3,false]}],
+          [{'list':'ordered'},{'list':'bullet'}],
+          ['link','image','clean'],
+          [{'color':[]},{'background':[]}],
+          ['blockquote'],
+        ],
+        handlers: {
+          link: function(value) {
+            if (value) {
+              const range = quill.getSelection();
+              const selectedText = range && range.length > 0 ? quill.getText(range.index, range.length) : '';
+              document.getElementById('link-text').value = selectedText;
+              document.getElementById('link-url').value  = '';
+              window._linkRange = range;
+              new bootstrap.Modal(document.getElementById('linkModal')).show();
+              setTimeout(() => document.getElementById(selectedText ? 'link-url' : 'link-text').focus(), 300);
+            } else {
+              quill.format('link', false);
+            }
+          }
+        }
+      }
+    }
+  });
+  quill.on('text-change', () => { autoSave(); });
+
+  // Edit existing link on click
+  quill.root.addEventListener('click', (e) => {
+    const link = e.target.closest('a');
+    if (link) {
+      e.preventDefault();
+      // Find the link's range in Quill
+      const blot = Quill.find(link);
+      if (blot) {
+        const index = quill.getIndex(blot);
+        const length = blot.length();
+        quill.setSelection(index, length);
+        window._linkRange = {index, length};
+        document.getElementById('link-text').value = link.textContent || '';
+        document.getElementById('link-url').value  = link.getAttribute('href') || '';
+        new bootstrap.Modal(document.getElementById('linkModal')).show();
+        setTimeout(() => document.getElementById('link-url').focus(), 300);
+      }
+    }
+  });
+}
+
+function showTab(tab) {
+  // Sync content between tabs before switching
+  if (_currentTab === 'wysiwyg' && quill) {
+    document.getElementById('c-body-html').value = quill.root.innerHTML;
+  } else if (_currentTab === 'source' && quill) {
+    quill.root.innerHTML = document.getElementById('c-body-html').value;
+  }
+  _currentTab = tab;
+
+  document.getElementById('pane-wysiwyg').style.display = tab === 'wysiwyg' ? '' : 'none';
+  document.getElementById('pane-source').style.display  = tab === 'source'  ? '' : 'none';
+  document.getElementById('pane-preview').style.display = tab === 'preview' ? '' : 'none';
+  document.getElementById('pane-css').style.display     = tab === 'css'     ? '' : 'none';
+  ['wysiwyg','source','preview','css'].forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+  });
+
+  if (tab === 'preview') updatePreview();
+}
+
+function switchMode() {
+  const mode = document.querySelector('input[name="mail-type"]:checked').value;
+  document.getElementById('plain-mode').style.display = mode === 'plain' ? '' : 'none';
+  document.getElementById('html-mode').style.display  = mode === 'html'  ? '' : 'none';
+  if (mode === 'html') {
+    initQuill();
+    // Sync plain -> HTML editor if HTML is empty
+    const plain = document.getElementById('c-body').value;
+    if (!document.getElementById('c-body-html').value && plain) {
+      document.getElementById('c-body-html').value = plain;
+      if (quill) quill.root.innerHTML = plain;
+    }
+  }
+}
+
+function getBody() {
+  const mode = document.querySelector('input[name="mail-type"]:checked').value;
+  if (mode !== 'html') return document.getElementById('c-body').value;
+  if (_currentTab === 'wysiwyg' && quill) return quill.root.innerHTML;
+  return document.getElementById('c-body-html').value;
+}
+
+function updatePreview() {
+  const body    = getBody();
+  const name    = document.getElementById('pv-name').value    || '{{name}}';
+  const company = document.getElementById('pv-company').value || '{{company}}';
+  const website = document.getElementById('pv-website').value || '{{website}}';
+  const rendered = body
+    .replace(/\{\{name\}\}/g, name)
+    .replace(/\{\{company\}\}/g, company)
+    .replace(/\{\{website\}\}/g, website)
+    .replace(/\{\{domain\}\}/g, website.replace(/^https?:\/\//,'').split('/')[0])
+    .replace(/\{\{title\}\}/g,      'Markedssjef')
+    .replace(/\{\{email\}\}/g,      'tone@example.no')
+    .replace(/\{\{location\}\}/g,   'Oslo')
+    .replace(/\{\{ai_summary\}\}/g, '[AI summary here]');
+  document.getElementById('mail-preview').innerHTML = `<style>p{margin:0 0 6px 0}br{line-height:1.4}</style><div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.4;color:#333;max-width:600px">${rendered}</div>`;
+}
+
+function autoSave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(() => saveCampaign(true), 1200);
+}
+
+async function saveCampaign(silent = false) {
+  if (!CAMPAIGN_ID) return;
+  const mode    = document.querySelector('input[name="mail-type"]:checked').value;
+  const subject = document.getElementById('c-subject').value.trim();
+  const body    = getBody();
+  const account = document.getElementById('c-email-account-edit').value.trim();
+  const fb = document.getElementById('save-feedback');
+  if (!silent) { fb.textContent = 'Saving...'; fb.className = 'small text-muted'; fb.style.display = ''; }
+  try {
+    const css = document.getElementById('c-mail-css').value;
+    const r = await fetch(`${BASE}/api/crm/campaigns/${CAMPAIGN_ID}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ mail: {subject, body, type: mode, css}, outreach_email_account: account })
+    });
+    const d = await r.json();
+    fb.className = d.status === 'ok' ? 'small text-success' : 'small text-danger';
+    fb.textContent = d.status === 'ok' ? (silent ? 'Auto-saved.' : 'Saved.') : d.message;
+    fb.style.display = '';
+    if (d.status === 'ok') setTimeout(() => { fb.style.display = 'none'; }, 2000);
+  } catch(e) {
+    fb.className = 'small text-danger'; fb.textContent = e.message; fb.style.display = '';
+  }
+}
+
+async function loadCampaign() {
+  if (!CAMPAIGN_ID) { document.getElementById('c-campaign-id').textContent = 'No campaign selected'; return; }
+  document.getElementById('c-campaign-id').textContent = CAMPAIGN_ID;
+  document.getElementById('back-link').href = `campaign.html?campaign_id=${encodeURIComponent(CAMPAIGN_ID)}`;
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${CAMPAIGN_ID}`);
+    const c = await r.json();
+    const st = c.status || 'draft';
+    const badge = document.getElementById('c-status-badge');
+    badge.className = `badge badge-${st}`; badge.textContent = st;
+    document.getElementById('c-email-account-edit').value = c.outreach_email_account || '';
+    const mail = c.mail || {};
+    document.getElementById('c-subject').value   = mail.subject || '';
+    document.getElementById('c-body').value      = mail.body    || '';
+    document.getElementById('c-body-html').value = mail.body    || '';
+    document.getElementById('c-mail-css').value = mail.css || `body, p, div, span, td { margin: 0; padding: 0; }
+p { margin-bottom: 8px; }
+body { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; color: #333; max-width: 600px; }
+a { color: #0066cc; text-decoration: none; }
+h1, h2, h3 { font-weight: bold; margin-bottom: 8px; }
+ul, ol { margin: 0 0 8px 20px; padding: 0; }
+li { margin-bottom: 4px; }`;
+    document.getElementById('c-mail-css').value = mail.css || `.mail-wrap, .mail-wrap p, .mail-wrap div, .mail-wrap span, .mail-wrap td { margin: 0; padding: 0; }
+.mail-wrap p { margin-bottom: 8px; }
+.mail-wrap { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; color: #333; max-width: 600px; }
+.mail-wrap a { color: #0066cc; text-decoration: none; }
+.mail-wrap h1, .mail-wrap h2, .mail-wrap h3 { font-weight: bold; margin-bottom: 8px; }
+.mail-wrap ul, .mail-wrap ol { margin: 0 0 8px 20px; padding: 0; }
+.mail-wrap li { margin-bottom: 4px; }`;
+    const mt = mail.type || 'plain';
+    const mtEl = document.querySelector(`input[name="mail-type"][value="${mt}"]`);
+    if (mtEl) { mtEl.checked = true; switchMode(); }
+    if (mt === 'html') {
+      initQuill();
+      if (quill) quill.root.innerHTML = mail.body || '';
+    }
+  } catch(e) {
+    document.getElementById('c-campaign-id').textContent = `Error: ${e.message}`;
+  }
+}
+
+loadCampaign();
+</script>
+<!-- Link modal -->
+<div class="modal fade" id="linkModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-link me-1"></i>Insert link</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-1">Link text</label>
+          <input id="link-text" class="form-control form-control-sm" placeholder="Click here">
+        </div>
+        <div>
+          <label class="form-label small text-muted mb-1">URL</label>
+          <input id="link-url" class="form-control form-control-sm" placeholder="https://example.com">
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="insertLink()">Insert</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
