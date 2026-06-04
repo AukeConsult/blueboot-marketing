@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Campaign</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+body { background: #f8f9fa; }
+.stat-card { background: #f0efe8; border-radius: 8px; padding: .75rem; text-align: center; }
+.stat-n { font-size: 22px; font-weight: 500; }
+.stat-l { font-size: 11px; color: #888; margin-top: 2px; }
+.badge-draft      { background: #e2e3e5; color: #383d41; }
+.badge-dosend     { background: #cce5ff; color: #004085; }
+.badge-sent       { background: #d4edda; color: #155724; }
+.badge-cancelled  { background: #f8d7da; color: #721c24; }
+.badge-pending    { background: #fff3cd; color: #856404; }
+.badge-error      { background: #f8d7da; color: #721c24; }
+pre.mail-body { background: #f1f3f5; border-radius: 6px; padding: .75rem; font-size: 12px;
+                white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
+</style>
+</head>
+<body>
+<div class="container py-4" style="max-width:1000px">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="mb-0"><i class="ti ti-speakerphone me-2"></i>Campaign</h5>
+    <a href="index.html" class="btn btn-sm btn-outline-secondary">
+      <i class="ti ti-server-2 me-1"></i>Jobs
+    </a>
+  </div>
+
+  <!-- Campaign selector -->
+  <div class="card mb-3">
+    <div class="card-body py-2 px-3 d-flex align-items-center gap-3">
+      <label class="small text-muted mb-0 text-nowrap">Select campaign</label>
+      <select id="campaign-select" class="form-select form-select-sm" onchange="loadCampaign()">
+        <option value="">— loading campaigns —</option>
+      </select>
+      <button class="btn btn-sm btn-outline-secondary text-nowrap" onclick="loadCampaignList()">
+        <i class="ti ti-refresh"></i>
+      </button>
+    </div>
+  </div>
+
+  <div id="campaign-detail" style="display:none">
+
+    <!-- Campaign header -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div>
+            <h6 class="mb-0 fw-500" id="c-id"></h6>
+            <small class="text-muted"><i class="ti ti-mail me-1"></i><span id="c-email-account-display">—</span></small>
+          </div>
+          <span class="badge" id="c-status-badge"></span>
+        </div>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <label class="small text-muted mb-0 text-nowrap">Status</label>
+          <span id="c-status-select" class="badge badge-draft">draft</span>
+          <span id="status-feedback" class="small text-success" style="display:none">Saved</span>
+          <button class="btn btn-sm btn-outline-primary ms-auto" onclick="syncCampaign()">
+            <i class="ti ti-refresh me-1"></i>Sync from sheet
+          </button>
+          <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn">
+            <i class="ti ti-send me-1"></i>Send campaign
+          </button>
+        </div>
+        <div id="sync-feedback" class="alert py-1 px-2 small mt-2" style="display:none"></div>
+        <div id="job-status-bar" class="alert alert-info py-1 px-2 small mt-2 d-flex align-items-center gap-2" style="display:none">
+          <div class="spinner-border spinner-xs" role="status"></div>
+          <span id="job-status-text"></span>
+          <a id="job-status-link" href="#" class="ms-auto small" target="_blank" style="display:none"></a>
+        </div>
+        <div class="row g-1 mb-2">
+          <div class="col-3"><div class="stat-card py-1"><div class="stat-n" style="font-size:16px" id="c-contacts">—</div><div class="stat-l">contacts</div></div></div>
+          <div class="col-3"><div class="stat-card py-1"><div class="stat-n" style="font-size:16px" id="c-sites">—</div><div class="stat-l">sites</div></div></div>
+          <div class="col-3"><div class="stat-card py-1"><div class="stat-n" style="font-size:16px" id="c-countries">—</div><div class="stat-l">countries</div></div></div>
+          <div class="col-3"><div class="stat-card py-1"><div class="stat-n" style="font-size:16px" id="c-sent">—</div><div class="stat-l">sent</div></div></div>
+        </div>
+        <div class="row g-1 small text-muted">
+          <div class="col-6"><i class="ti ti-calendar me-1"></i>Updated: <span id="c-updated">—</span></div>
+          <div class="col-6" id="c-sent-at-row" style="display:none">
+            <i class="ti ti-send me-1"></i>Sent: <span id="c-sent-at">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mail template -->
+    <div class="card mb-3" id="c-mail-card">
+      <div class="card-body py-2 px-3 d-flex align-items-center justify-content-between"
+           style="cursor:pointer" onclick="toggleMail()">
+        <span class="fw-500 small"><i class="ti ti-mail me-1 text-primary"></i>Mail template</span>
+        <i class="ti ti-chevron-down text-muted" id="mail-chevron"></i>
+      </div>
+      <div id="mail-body" style="display:none" class="px-3 pb-3">
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-1">Outreach email account</label>
+          <input id="c-email-account-edit" class="form-control form-control-sm" placeholder="sender@example.com">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small text-muted mb-1">Subject</label>
+          <input id="c-subject" class="form-control form-control-sm" placeholder="Email subject">
+        </div>
+        <div class="mb-2">
+          <div class="d-flex align-items-center justify-content-between mb-1">
+            <label class="form-label small text-muted mb-0">Body</label>
+            <div class="d-flex gap-3">
+              <div class="form-check form-check-inline mb-0">
+                <input class="form-check-input" type="radio" name="mail-type" id="mt-plain" value="plain" checked>
+                <label class="form-check-label small" for="mt-plain">Plain text</label>
+              </div>
+              <div class="form-check form-check-inline mb-0">
+                <input class="form-check-input" type="radio" name="mail-type" id="mt-html" value="html">
+                <label class="form-check-label small" for="mt-html">HTML</label>
+              </div>
+            </div>
+          </div>
+          <div class="alert alert-light py-1 px-2 mb-1 small text-muted">
+            <strong>Available variables:</strong>
+            <code>{{name}}</code> contact name &nbsp;·&nbsp;
+            <code>{{title}}</code> job title &nbsp;·&nbsp;
+            <code>{{email}}</code> email address &nbsp;·&nbsp;
+            <code>{{company}}</code> company name &nbsp;·&nbsp;
+            <code>{{website}}</code> website URL &nbsp;·&nbsp;
+            <code>{{domain}}</code> domain only &nbsp;·&nbsp;
+            <code>{{ai_summary}}</code> AI site description &nbsp;·&nbsp;
+            <code>{{location}}</code> city/region
+          </div>
+          <textarea id="c-body" class="form-control" rows="6" style="font-size:12px;font-family:monospace"
+                    placeholder="Hei {{name}},&#10;&#10;..."></textarea>
+        </div>
+
+        <button class="btn btn-primary btn-sm w-100" onclick="saveCampaign()">
+          <i class="ti ti-device-floppy me-1"></i>Save changes
+        </button>
+        <div id="save-feedback" class="small mt-2" style="display:none"></div>
+      </div>
+    </div>
+
+    <!-- Contacts table -->
+    <div class="card">
+      <div class="card-body py-2 px-3 d-flex align-items-center justify-content-between mb-2">
+        <span class="fw-500 small"><i class="ti ti-users me-1 text-primary"></i>Contacts
+          <span class="text-muted ms-1" id="c-contact-count"></span>
+        </span>
+        <input id="contact-search" class="form-control form-control-sm" style="max-width:200px"
+               placeholder="search..." oninput="filterContacts()">
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0" id="contacts-table">
+          <thead class="table-light">
+            <tr>
+              <th>Status</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Title</th>
+              <th>Website</th>
+              <th>Sent at</th>
+            </tr>
+          </thead>
+          <tbody id="contacts-body"></tbody>
+        </table>
+      </div>
+      <div id="contacts-empty" class="text-center text-muted py-3 small" style="display:none">
+        No contacts found.
+      </div>
+    </div>
+
+  </div>
+
+  <div id="campaign-empty" class="text-center text-muted py-4">Select a campaign above.</div>
+</div>
+
+<script>
+const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
+let allContacts = [];
+
+function statusBadge(status) {
+  return `<span class="badge badge-${status||'draft'}">${status||'draft'}</span>`;
+}
+
+function fmt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString([], {dateStyle:'short', timeStyle:'short'});
+}
+
+async function loadCampaignList() {
+  const sel = document.getElementById('campaign-select');
+  sel.innerHTML = '<option value="">— loading —</option>';
+  try {
+    const r = await fetch(BASE + '/api/crm/campaigns');
+    const d = await r.json();
+    const campaigns = d.campaigns || [];
+    if (!campaigns.length) {
+      sel.innerHTML = '<option value="">No campaigns found</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">— select campaign —</option>' +
+      campaigns.map(c =>
+        `<option value="${c.campaign_id}">${c.campaign_id} (${c.status||'draft'}) — ${c.contact_count||0} contacts</option>`
+      ).join('');
+  } catch(e) {
+    sel.innerHTML = `<option value="">Error: ${e.message}</option>`;
+  }
+}
+
+async function loadCampaign() {
+  const id = document.getElementById('campaign-select').value;
+  document.getElementById('campaign-detail').style.display = 'none';
+  document.getElementById('campaign-empty').style.display = id ? 'none' : 'block';
+  if (!id) return;
+
+  try {
+    const r  = await fetch(`${BASE}/api/crm/campaigns/${id}`);
+    const c  = await r.json();
+
+    document.getElementById('c-id').textContent        = c.campaign_id;
+    document.getElementById('c-status-badge').outerHTML =
+      `<span class="badge badge-${c.status||'draft'}" id="c-status-badge">${c.status||'draft'}</span>`;
+    document.getElementById('c-contacts').textContent  = c.contact_count || 0;
+    document.getElementById('c-sites').textContent     = c.sites_count || 0;
+    document.getElementById('c-countries').textContent = (c.countries||[]).join(', ') || '—';
+    document.getElementById('c-sent').textContent      = (c.status_breakdown||{}).sent || 0;
+    document.getElementById('c-email-account-display').textContent = c.outreach_email_account || '—';
+    const st = c.status || 'draft';
+    const statusEl = document.getElementById('c-status-select');
+    statusEl.className = `badge badge-${st}`;
+    statusEl.textContent = st;
+    const isSent = st === 'sent' || st === 'cancelled';
+    document.getElementById('send-btn').disabled = isSent;
+    document.getElementById('send-btn').innerHTML = isSent
+      ? '<i class="ti ti-check me-1"></i>Sent'
+      : '<i class="ti ti-send me-1"></i>Send campaign';
+    const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
+    if (syncBtn) syncBtn.disabled = isSent;
+    document.getElementById('c-email-account-edit').value = c.outreach_email_account || '';
+    document.getElementById('c-updated').textContent   = fmt(c.updated_at);
+
+    const sentAtRow = document.getElementById('c-sent-at-row');
+    if (c.status === 'sent' && c.sent_at) {
+      sentAtRow.style.display = '';
+      document.getElementById('c-sent-at').textContent = fmt(c.sent_at);
+    } else {
+      sentAtRow.style.display = 'none';
+    }
+
+    const mail = c.mail || {};
+    document.getElementById('c-subject').value = mail.subject || '';
+    document.getElementById('c-body').value    = mail.body    || '';
+    document.querySelector('input[name="mail-type"]:checked').value = mail.type || 'plain';
+
+    // Contacts
+    allContacts = c.campaign_contacts || c.contacts || [];
+    document.getElementById('c-contact-count').textContent = `(${allContacts.length})`;
+    renderContacts(allContacts);
+
+    document.getElementById('campaign-detail').style.display = '';
+    checkRunningJobs(id);
+  } catch(e) {
+    document.getElementById('campaign-empty').textContent = `Error: ${e.message}`;
+    document.getElementById('campaign-empty').style.display = '';
+  }
+}
+
+function renderContacts(list) {
+  const tbody = document.getElementById('contacts-body');
+  const empty = document.getElementById('contacts-empty');
+  if (!list.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = list.map(c => `<tr>
+    <td>${statusBadge(c.status)}</td>
+    <td>${c.name||'—'}</td>
+    <td><a href="mailto:${c.email}">${c.email||'—'}</a></td>
+    <td class="text-muted small">${c.title||'—'}</td>
+    <td class="small"><a href="${c.website||'#'}" target="_blank">${(c.website||'').replace(/^https?:\/\//,'').slice(0,30)||'—'}</a></td>
+    <td class="small text-muted">${fmt(c.sent_at)}</td>
+  </tr>`).join('');
+}
+
+function filterContacts() {
+  const q = document.getElementById('contact-search').value.toLowerCase();
+  renderContacts(q ? allContacts.filter(c =>
+    (c.name||'').toLowerCase().includes(q) ||
+    (c.email||'').toLowerCase().includes(q) ||
+    (c.website||'').toLowerCase().includes(q) ||
+    (c.title||'').toLowerCase().includes(q)
+  ) : allContacts);
+}
+
+function toggleMail() {
+  const b = document.getElementById('mail-body');
+  const c = document.getElementById('mail-chevron');
+  const open = b.style.display === 'block';
+  b.style.display = open ? 'none' : 'block';
+  c.className = open ? 'ti ti-chevron-down text-muted' : 'ti ti-chevron-up text-muted';
+}
+
+function confirmSend() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  document.getElementById('modal-campaign-id').textContent = id;
+  new bootstrap.Modal(document.getElementById('sendModal')).show();
+}
+
+async function doSend() {
+  const id  = document.getElementById('campaign-select').value;
+  const modal = bootstrap.Modal.getInstance(document.getElementById('sendModal'));
+  if (modal) modal.hide();
+  const fb = document.getElementById('sync-feedback');
+  fb.style.display = 'none';
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${id}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({status: 'sent'})
+    });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      // Update UI to reflect sent state
+      const sb = document.getElementById('c-status-select'); sb.className='badge badge-sent'; sb.textContent='sent';
+      document.getElementById('c-status-badge').className = 'badge badge-sent';
+      document.getElementById('c-status-badge').textContent = 'sent';
+      if (d.campaign && d.campaign.sent_at) {
+        document.getElementById('c-sent-at-row').style.display = '';
+        document.getElementById('c-sent-at').textContent = fmt(d.campaign.sent_at);
+      }
+      // Disable send + sync buttons
+      document.getElementById('send-btn').disabled = true;
+      document.getElementById('send-btn').innerHTML = '<i class="ti ti-check me-1"></i>Sent';
+      document.querySelector('[onclick="syncCampaign()"]').disabled = true;
+      fb.className = 'small text-success';
+      fb.textContent = 'Campaign marked as sent.';
+      fb.style.display = '';
+    } else {
+      fb.className = 'small text-danger';
+      fb.textContent = d.message;
+      fb.style.display = '';
+    }
+  } catch(e) {
+    fb.className = 'small text-danger';
+    fb.textContent = e.message;
+    fb.style.display = '';
+  }
+}
+
+async function syncCampaign() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const fb  = document.getElementById('sync-feedback');
+  const btn = document.querySelector('[onclick="syncCampaign()"]');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Syncing...';
+  fb.style.display = 'none';
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaign-sync?campaign_id=${encodeURIComponent(id)}`);
+    const d = await r.json();
+    if (d.status === 'queued') {
+      showJobStatus(d.job_id);
+      fb.className = 'alert-success'; fb.textContent = `Sync job queued (${d.job_id})`; fb.style.display = '';
+    } else {
+      fb.className = 'alert-danger'; fb.textContent = d.message || 'Sync failed'; fb.style.display = '';
+    }
+  } catch(e) {
+    fb.className = 'small text-danger';
+    fb.textContent = e.message;
+    fb.style.display = '';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Sync from sheet';
+}
+
+let _pollInterval = null;
+
+function showJobStatus(jobId) {
+  const bar  = document.getElementById('job-status-bar');
+  const text = document.getElementById('job-status-text');
+  const link = document.getElementById('job-status-link');
+  bar.style.display = '';
+  text.textContent  = `Job running: ${jobId}`;
+  link.href         = `${BASE}/api/crm/status/${jobId}`;
+  link.textContent  = 'view';
+  link.style.display = '';
+  if (_pollInterval) clearInterval(_pollInterval);
+  _pollInterval = setInterval(() => pollJobStatus(jobId), 4000);
+}
+
+async function pollJobStatus(jobId) {
+  try {
+    const r = await fetch(`${BASE}/api/crm/status/${jobId}`);
+    const d = await r.json();
+    const bar  = document.getElementById('job-status-bar');
+    const text = document.getElementById('job-status-text');
+    if (d.status === 'done') {
+      clearInterval(_pollInterval); _pollInterval = null;
+      bar.style.display = 'none';
+      const fb = document.getElementById('sync-feedback');
+      fb.className = 'alert alert-success py-1 px-2 small mt-2';
+      fb.textContent = `Sync complete. ${JSON.stringify(d.result||{})}`;
+      fb.style.display = '';
+      loadCampaign();
+    } else if (d.status === 'error') {
+      clearInterval(_pollInterval); _pollInterval = null;
+      bar.style.display = 'none';
+      const fb = document.getElementById('sync-feedback');
+      fb.className = 'alert alert-danger py-1 px-2 small mt-2';
+      fb.textContent = `Sync error: ${d.error}`;
+      fb.style.display = '';
+    } else {
+      text.textContent = `Job ${d.status}: ${jobId}`;
+    }
+  } catch(e) {}
+}
+
+async function checkRunningJobs(campaignId) {
+  const bar = document.getElementById('job-status-bar');
+  try {
+    const url = `${BASE}/api/crm/jobs?running=true&campaign_id=${encodeURIComponent(campaignId)}`;
+    const r = await fetch(url);
+    const d = await r.json();
+    // Only show jobs for this specific campaign
+    const running = (d.jobs||[]).find(j =>
+      (j.status === 'running' || j.status === 'queued') &&
+      j.name === 'campaign-sync' &&
+      (j.params||{}).campaign_id === campaignId
+    );
+    if (running) {
+      showJobStatus(running.id);
+    } else {
+      bar.style.display = 'none';
+      if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
+    }
+  } catch(e) {
+    bar.style.display = 'none';
+  }
+}
+
+async function saveCampaign() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const subject  = document.getElementById('c-subject').value.trim();
+  const body     = document.getElementById('c-body').value;
+  const account  = document.getElementById('c-email-account-edit').value.trim();
+  const feedback = document.getElementById('save-feedback');
+  feedback.style.display = '';
+  feedback.className = 'small mt-2 text-muted';
+  feedback.textContent = 'Saving...';
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${id}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        mail: {subject, body, type: document.querySelector('input[name="mail-type"]:checked').value},
+        outreach_email_account: account,
+      })
+    });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      feedback.className = 'small mt-2 text-success';
+      feedback.textContent = 'Saved successfully.';
+      document.getElementById('c-email-account-display').textContent = account || '—';
+    } else {
+      feedback.className = 'small mt-2 text-danger';
+      feedback.textContent = 'Error: ' + d.message;
+    }
+  } catch(e) {
+    feedback.className = 'small mt-2 text-danger';
+    feedback.textContent = 'Error: ' + e.message;
+  }
+}
+
+loadCampaignList();
+</script>
+<!-- Send confirmation modal -->
+<div class="modal fade" id="sendModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-alert-triangle text-warning me-2"></i>Send campaign</h6>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1">You are about to mark campaign <strong id="modal-campaign-id"></strong> as <strong>sent</strong>.</p>
+        <div class="alert alert-warning py-2 small mb-0">
+          <i class="ti ti-lock me-1"></i>
+          Once marked as <strong>sent</strong>, the campaign and its contacts can no longer be changed or synced.
+          This action cannot be undone.
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-success btn-sm" onclick="doSend()">
+          <i class="ti ti-send me-1"></i>Yes, mark as sent
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

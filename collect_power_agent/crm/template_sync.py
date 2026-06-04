@@ -13,8 +13,11 @@ import threading
 import argparse
 from pathlib import Path
 
-from dotenv import load_dotenv
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 _here = Path(__file__).resolve().parent
 _root = _here.parent

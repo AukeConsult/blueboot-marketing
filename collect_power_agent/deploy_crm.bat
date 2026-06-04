@@ -4,14 +4,14 @@ echo.
 
 REM Step 1: setup venv if not exists
 if not exist "functions-crm\venv\Scripts\activate.bat" (
-    echo [1/3] Creating venv in functions-crm\venv...
+    echo [1/4] Creating venv in functions-crm\venv...
     python -m venv functions-crm\venv
 ) else (
-    echo [1/3] venv already exists
+    echo [1/4] venv exists, updating packages...
 )
 
 REM Step 2: install/update requirements
-echo [2/3] Installing requirements...
+echo [2/4] Installing/updating requirements...
 functions-crm\venv\Scripts\pip.exe install -r functions-crm\requirements.txt -q
 
 REM Step 3: deploy functions

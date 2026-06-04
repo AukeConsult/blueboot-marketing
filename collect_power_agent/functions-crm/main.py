@@ -223,6 +223,121 @@ def template_sync():
         return _err(str(exc), 500)
 
 
+@app.route("/api/crm/campaign-sync", methods=["GET"])
+def campaign_sync():
+    """Sync campaign data from contact sheet -> Firestore.
+    Required: ?campaign_id=NO_jun
+    Optional: ?force=true
+    """
+    campaign_id = request.args.get("campaign_id", "").strip()
+    if not campaign_id:
+        return _err("campaign_id is required e.g. ?campaign_id=NO_jun", 400)
+    force = request.args.get("force", "").lower() in ("1", "true", "yes")
+    try:
+        job_id = _new_job("campaign-sync", {"campaign_id": campaign_id, "force": force})
+        _enqueue_task("campaign-sync", job_id, {"campaign_id": campaign_id, "force": force})
+        return _accepted(job_id, "campaign-sync")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/campaigns", methods=["GET"])
+def list_campaigns():
+    """List all campaigns, ordered by updated_at descending.
+    Optional: ?status=draft  to filter by status
+    """
+    try:
+        db     = _get_db()
+        status = request.args.get("status", "").strip()
+        col    = db.collection("campaigns")
+        query  = col.order_by("updated_at", direction="DESCENDING")
+        if status:
+            from google.cloud.firestore_v1.base_query import FieldFilter
+            query = col.where(filter=FieldFilter("status", "==", status))
+        docs = list(query.stream())
+        campaigns = [d.to_dict() for d in docs]
+        return jsonify({"campaigns": campaigns, "count": len(campaigns)})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/campaigns/<campaign_id>", methods=["GET"])
+def get_campaign(campaign_id):
+    """Get a single campaign by ID, including contacts subcollection."""
+    try:
+        db  = _get_db()
+        doc = db.collection("campaigns").document(campaign_id).get()
+        if not doc.exists:
+            return _err(f"Campaign '{campaign_id}' not found", 404)
+        data = doc.to_dict()
+        # Include contacts subcollection
+        contacts_docs = db.collection("campaigns").document(campaign_id).collection("campaign_contacts").stream()
+        data["campaign_contacts"] = [c.to_dict() for c in contacts_docs]
+        return jsonify(data)
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/campaigns/<campaign_id>", methods=["POST", "PATCH"])
+def update_campaign(campaign_id):
+    """Update a campaign document.
+
+    Body fields (all optional):
+        status                  draft | dosend | sent | cancelled
+        outreach_email_account  e.g. "tone@blueboot.no"
+        mail.subject            email subject line
+        mail.body               email body text
+        sent_at                 ISO timestamp (set automatically when status=sent)
+
+    Setting status=sent automatically sets sent_at if not provided.
+    """
+    try:
+        db   = _get_db()
+        body = request.get_json(silent=True) or {}
+        if not body:
+            return _err("Request body is required", 400)
+
+        doc_ref = db.collection("campaigns").document(campaign_id)
+        doc     = doc_ref.get()
+        if not doc.exists:
+            return _err(f"Campaign '{campaign_id}' not found", 404)
+
+        update = {}
+
+        if "status" in body:
+            valid = {"draft", "dosend", "sent", "cancelled"}
+            if body["status"] not in valid:
+                return _err(f"Invalid status. Must be one of: {', '.join(sorted(valid))}", 400)
+            update["status"] = body["status"]
+            # Auto-set sent_at when status becomes sent
+            if body["status"] == "sent" and not body.get("sent_at"):
+                update["sent_at"] = datetime.now(timezone.utc).isoformat()
+
+        if "sent_at" in body:
+            update["sent_at"] = body["sent_at"]
+
+        if "outreach_email_account" in body:
+            update["outreach_email_account"] = body["outreach_email_account"]
+
+        if "mail" in body:
+            existing_mail = (doc.to_dict() or {}).get("mail", {})
+            merged_mail   = dict(existing_mail)
+            merged_mail.update(body["mail"])
+            update["mail"] = merged_mail
+
+        if not update:
+            return _err("No valid fields to update", 400)
+
+        update["updated_at"] = datetime.now(timezone.utc).isoformat() if "updated_at" not in update else update["updated_at"]
+        doc_ref.update(update)
+
+        updated_doc = doc_ref.get().to_dict()
+        return jsonify({"status": "ok", "message": f"Campaign '{campaign_id}' updated", "campaign": updated_doc})
+
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 # -- Worker endpoint ----------------------------------------------------------
 
 @app.route("/api/crm/worker/<name>/<job_id>", methods=["POST"])
@@ -257,6 +372,12 @@ def worker(name, job_id):
             count  = run_template_sync(db=db, svc=svc)
             result = {"synced": count}
 
+        elif name == "campaign-sync":
+            from crm.campaign_sync_lib import run_campaign_sync
+            result = run_campaign_sync(db=db, svc=svc,
+                                       campaign_id=body.get("campaign_id", ""),
+                                       force=body.get("force", False))
+
         else:
             _update_job(job_id, status="error",
                         error=f"Unknown job: {name}",
@@ -289,11 +410,35 @@ def job_status(job_id):
 
 @app.route("/api/crm/jobs", methods=["GET"])
 def list_jobs():
-    limit = min(int(request.args.get("limit", 20)), 50)
-    docs = _jobs_col().order_by(
-        "queued_at", direction="DESCENDING"
-    ).limit(limit).stream()
-    return jsonify({"jobs": [d.to_dict() for d in docs]})
+    """List recent jobs sorted by queued_at descending.
+    ?limit=20       max results (default 20, max 100)
+    ?running=true   only return running or queued jobs
+    ?campaign_id=X  only return jobs for a specific campaign
+    """
+    limit       = min(int(request.args.get("limit", 20)), 100)
+    running     = request.args.get("running", "").lower() in ("1", "true", "yes")
+    campaign_id = request.args.get("campaign_id", "").strip()
+
+    query = _jobs_col().order_by("queued_at", direction="DESCENDING")
+
+    if running:
+        from google.cloud.firestore_v1.base_query import FieldFilter as FF
+        # Firestore doesn't support OR — fetch both and merge client-side
+        queued  = list(_jobs_col().where(filter=FF("status", "==", "queued")).stream())
+        running_docs = list(_jobs_col().where(filter=FF("status", "==", "running")).stream())
+        all_jobs = [d.to_dict() for d in queued + running_docs]
+        # Filter by campaign_id if given
+        if campaign_id:
+            all_jobs = [j for j in all_jobs if (j.get("params") or {}).get("campaign_id") == campaign_id]
+        # Sort descending by queued_at
+        all_jobs.sort(key=lambda j: j.get("queued_at", ""), reverse=True)
+        return jsonify({"jobs": all_jobs[:limit], "count": len(all_jobs)})
+
+    docs = list(query.limit(limit).stream())
+    jobs = [d.to_dict() for d in docs]
+    if campaign_id:
+        jobs = [j for j in jobs if (j.get("params") or {}).get("campaign_id") == campaign_id]
+    return jsonify({"jobs": jobs, "count": len(jobs)})
 
 
 # -- Cloud Function entry points ----------------------------------------------
