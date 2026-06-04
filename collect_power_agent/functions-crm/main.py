@@ -278,6 +278,37 @@ def get_campaign(campaign_id):
         return _err(str(exc), 500)
 
 
+@app.route("/api/crm/campaigns/<campaign_id>/create", methods=["POST"])
+def create_campaign(campaign_id):
+    """Create a new campaign document. Fails if already exists."""
+    try:
+        db      = _get_db()
+        doc_ref = db.collection("campaigns").document(campaign_id)
+        if doc_ref.get().exists:
+            return _err(f"Campaign '{campaign_id}' already exists. Use PATCH to update.", 409)
+        body  = request.get_json(silent=True) or {}
+        now   = datetime.now(timezone.utc).isoformat()
+        data  = {
+            "campaign_id":            campaign_id,
+            "status":                 "draft",
+            "sent_at":                None,
+            "outreach_email_account": body.get("outreach_email_account", ""),
+            "mail":                   {"subject": "", "body": "", "type": "plain"},
+            "contact_count":          0,
+            "sites_count":            0,
+            "countries":              [],
+            "status_breakdown":       {},
+            "select_breakdown":       {},
+            "tier_breakdown":         {},
+            "outreach_breakdown":     {},
+            "updated_at":             now,
+        }
+        doc_ref.set(data)
+        return _ok(f"Campaign '{campaign_id}' created", campaign=data)
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @app.route("/api/crm/campaigns/<campaign_id>", methods=["POST", "PATCH"])
 def update_campaign(campaign_id):
     """Update a campaign document.
@@ -334,6 +365,80 @@ def update_campaign(campaign_id):
         updated_doc = doc_ref.get().to_dict()
         return jsonify({"status": "ok", "message": f"Campaign '{campaign_id}' updated", "campaign": updated_doc})
 
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/discover-campaigns", methods=["GET"])
+def discover_campaigns():
+    """Scan the contact sheet for campaign IDs. Create + sync any new ones.
+    Returns lists of existing and newly discovered campaign IDs.
+    """
+    try:
+        db  = _get_db()
+        svc = _sheets_service()
+
+        # Read campaign column from contact sheet
+        from crm.sheets_config import CONTACT_SHEET_ID, CONTACT_TAB
+        result = svc.spreadsheets().values().get(
+            spreadsheetId=CONTACT_SHEET_ID, range=f"{CONTACT_TAB}!A:ZZ"
+        ).execute()
+        rows = result.get("values", [])
+        if not rows:
+            return jsonify({"existing": [], "created": [], "message": "Sheet is empty"})
+
+        headers = [h.lower().replace(" ", "_") for h in rows[0]]
+        camp_idx = next((i for i, h in enumerate(headers) if h == "campaign"), -1)
+        if camp_idx < 0:
+            return _err("No 'Campaign' column found in contact sheet", 400)
+
+        # Collect unique non-blank campaign IDs from sheet
+        sheet_campaigns = set()
+        for row in rows[1:]:
+            val = row[camp_idx].strip() if camp_idx < len(row) else ""
+            if val:
+                sheet_campaigns.add(val)
+
+        if not sheet_campaigns:
+            return jsonify({"existing": [], "created": [], "message": "No campaign IDs found in sheet"})
+
+        # Get existing campaigns from Firestore
+        existing_docs = {d.id for d in db.collection("campaigns").stream()}
+
+        new_campaigns = sheet_campaigns - existing_docs
+        existing      = list(sheet_campaigns & existing_docs)
+        created       = []
+
+        for campaign_id in sorted(new_campaigns):
+            # Create campaign document
+            now  = datetime.now(timezone.utc).isoformat()
+            data = {
+                "campaign_id":            campaign_id,
+                "status":                 "draft",
+                "sent_at":                None,
+                "outreach_email_account": "",
+                "mail":                   {"subject": "", "body": "", "type": "plain"},
+                "contact_count":          0,
+                "sites_count":            0,
+                "countries":              [],
+                "status_breakdown":       {},
+                "select_breakdown":       {},
+                "tier_breakdown":         {},
+                "outreach_breakdown":     {},
+                "updated_at":             now,
+            }
+            db.collection("campaigns").document(campaign_id).set(data)
+            # Enqueue sync job
+            job_id = _new_job("campaign-sync", {"campaign_id": campaign_id, "force": False})
+            _enqueue_task("campaign-sync", job_id, {"campaign_id": campaign_id, "force": False})
+            created.append({"campaign_id": campaign_id, "job_id": job_id})
+
+        msg = f"Found {len(sheet_campaigns)} campaign(s) in sheet. {len(new_campaigns)} new — sync jobs queued." if new_campaigns else f"All {len(sheet_campaigns)} campaign(s) already exist."
+        return jsonify({
+            "existing": sorted(existing),
+            "created":  created,
+            "message":  msg,
+        })
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -421,16 +526,26 @@ def list_jobs():
 
     query = _jobs_col().order_by("queued_at", direction="DESCENDING")
 
+    # Compute cutoff time if since parameter given
+    since_minutes = request.args.get("since", type=int)
+    cutoff = None
+    if since_minutes:
+        from datetime import timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=since_minutes)).isoformat()
+
     if running:
         from google.cloud.firestore_v1.base_query import FieldFilter as FF
-        # Firestore doesn't support OR — fetch both and merge client-side
-        queued  = list(_jobs_col().where(filter=FF("status", "==", "queued")).stream())
+        queued       = list(_jobs_col().where(filter=FF("status", "==", "queued")).stream())
         running_docs = list(_jobs_col().where(filter=FF("status", "==", "running")).stream())
         all_jobs = [d.to_dict() for d in queued + running_docs]
-        # Filter by campaign_id if given
+        # Filter by campaign_id
         if campaign_id:
             all_jobs = [j for j in all_jobs if (j.get("params") or {}).get("campaign_id") == campaign_id]
-        # Sort descending by queued_at
+        # Filter by time window (ignore stale jobs)
+        if cutoff:
+            all_jobs = [j for j in all_jobs if (j.get("queued_at") or "") >= cutoff]
+        # Only truly active statuses
+        all_jobs = [j for j in all_jobs if j.get("status") in ("queued", "running")]
         all_jobs.sort(key=lambda j: j.get("queued_at", ""), reverse=True)
         return jsonify({"jobs": all_jobs[:limit], "count": len(all_jobs)})
 
@@ -438,6 +553,8 @@ def list_jobs():
     jobs = [d.to_dict() for d in docs]
     if campaign_id:
         jobs = [j for j in jobs if (j.get("params") or {}).get("campaign_id") == campaign_id]
+    if cutoff:
+        jobs = [j for j in jobs if (j.get("queued_at") or "") >= cutoff]
     return jsonify({"jobs": jobs, "count": len(jobs)})
 
 

@@ -25,10 +25,10 @@ pre.mail-body { background: #f1f3f5; border-radius: 6px; padding: .75rem; font-s
 <div class="container py-4" style="max-width:1000px">
 
   <div class="d-flex align-items-center justify-content-between mb-3">
-    <h5 class="mb-0"><i class="ti ti-speakerphone me-2"></i>Campaign</h5>
-    <a href="index.html" class="btn btn-sm btn-outline-secondary">
-      <i class="ti ti-server-2 me-1"></i>Jobs
-    </a>
+    <div class="d-flex align-items-center gap-2">
+      <a href="index.html" class="btn btn-sm btn-outline-secondary"><i class="ti ti-arrow-left"></i></a>
+      <h5 class="mb-0"><i class="ti ti-speakerphone me-2"></i>Campaign</h5>
+    </div>
   </div>
 
   <!-- Campaign selector -->
@@ -41,8 +41,14 @@ pre.mail-body { background: #f1f3f5; border-radius: 6px; padding: .75rem; font-s
       <button class="btn btn-sm btn-outline-secondary text-nowrap" onclick="loadCampaignList()">
         <i class="ti ti-refresh"></i>
       </button>
+      <button class="btn btn-sm btn-outline-primary text-nowrap" onclick="discoverCampaigns()" id="discover-btn" title="Scan sheet for new campaigns">
+        <i class="ti ti-search me-1"></i>Discover
+      </button>
     </div>
   </div>
+
+  <!-- Discover notification -->
+  <div id="discover-bar" class="alert py-2 px-3 small mb-3" style="display:none"></div>
 
   <div id="campaign-detail" style="display:none">
 
@@ -57,22 +63,14 @@ pre.mail-body { background: #f1f3f5; border-radius: 6px; padding: .75rem; font-s
           <span class="badge" id="c-status-badge"></span>
         </div>
         <div class="d-flex align-items-center gap-2 mb-2">
-          <label class="small text-muted mb-0 text-nowrap">Status</label>
-          <span id="c-status-select" class="badge badge-draft">draft</span>
-          <span id="status-feedback" class="small text-success" style="display:none">Saved</span>
-          <button class="btn btn-sm btn-outline-primary ms-auto" onclick="syncCampaign()">
+          <button class="btn btn-sm btn-outline-primary" onclick="syncCampaign()">
             <i class="ti ti-refresh me-1"></i>Sync from sheet
           </button>
-          <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn">
+          <button class="btn btn-sm btn-success ms-auto" onclick="confirmSend()" id="send-btn">
             <i class="ti ti-send me-1"></i>Send campaign
           </button>
         </div>
-        <div id="sync-feedback" class="alert py-1 px-2 small mt-2" style="display:none"></div>
-        <div id="job-status-bar" class="alert alert-info py-1 px-2 small mt-2 d-flex align-items-center gap-2" style="display:none">
-          <div class="spinner-border spinner-xs" role="status"></div>
-          <span id="job-status-text"></span>
-          <a id="job-status-link" href="#" class="ms-auto small" target="_blank" style="display:none"></a>
-        </div>
+        <div id="sync-feedback" class="alert py-1 px-2 small mt-1 mb-0" style="display:none"></div>
         <div class="row g-1 mb-2">
           <div class="col-3"><div class="stat-card py-1"><div class="stat-n" style="font-size:16px" id="c-contacts">—</div><div class="stat-l">contacts</div></div></div>
           <div class="col-3"><div class="stat-card py-1"><div class="stat-n" style="font-size:16px" id="c-sites">—</div><div class="stat-l">sites</div></div></div>
@@ -187,6 +185,35 @@ function fmt(iso) {
   return new Date(iso).toLocaleString([], {dateStyle:'short', timeStyle:'short'});
 }
 
+async function discoverCampaigns() {
+  const btn = document.getElementById('discover-btn');
+  const bar = document.getElementById('discover-bar');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-search me-1"></i>Scanning...';
+  bar.style.display = 'none';
+  try {
+    const r = await fetch(BASE + '/api/crm/discover-campaigns');
+    const d = await r.json();
+    if (d.created && d.created.length > 0) {
+      bar.className = 'alert alert-success py-2 px-3 small mb-3';
+      bar.innerHTML = `<i class="ti ti-check me-1"></i>${d.message} New: <strong>${d.created.map(c=>c.campaign_id).join(', ')}</strong> — sync jobs queued.`;
+      bar.classList.remove('d-none');
+  bar.style.display = '';
+      await loadCampaignList();
+    } else if (d.message) {
+      bar.className = 'alert alert-light py-2 px-3 small mb-3';
+      bar.innerHTML = `<i class="ti ti-info-circle me-1"></i>${d.message}`;
+      bar.style.display = '';
+    }
+  } catch(e) {
+    bar.className = 'alert alert-danger py-2 px-3 small mb-3';
+    bar.textContent = 'Discover error: ' + e.message;
+    bar.style.display = '';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover';
+}
+
 async function loadCampaignList() {
   const sel = document.getElementById('campaign-select');
   sel.innerHTML = '<option value="">— loading —</option>';
@@ -196,6 +223,10 @@ async function loadCampaignList() {
     const campaigns = d.campaigns || [];
     if (!campaigns.length) {
       sel.innerHTML = '<option value="">No campaigns found</option>';
+      const bar = document.getElementById('discover-bar');
+      bar.className = 'alert alert-light py-2 px-3 small mb-3';
+      bar.innerHTML = '<i class="ti ti-info-circle me-1 text-primary"></i>No campaigns yet — click <strong>Discover</strong> to scan the contact sheet for campaign IDs.';
+      bar.style.display = '';
       return;
     }
     sel.innerHTML = '<option value="">— select campaign —</option>' +
@@ -209,6 +240,8 @@ async function loadCampaignList() {
 
 async function loadCampaign() {
   const id = document.getElementById('campaign-select').value;
+  // Reset any running job trackers from previous campaign
+  document.getElementById('sync-feedback').style.display = 'none';
   document.getElementById('campaign-detail').style.display = 'none';
   document.getElementById('campaign-empty').style.display = id ? 'none' : 'block';
   if (!id) return;
@@ -226,7 +259,7 @@ async function loadCampaign() {
     document.getElementById('c-sent').textContent      = (c.status_breakdown||{}).sent || 0;
     document.getElementById('c-email-account-display').textContent = c.outreach_email_account || '—';
     const st = c.status || 'draft';
-    const statusEl = document.getElementById('c-status-select');
+    const statusEl = document.getElementById('c-status-badge');
     statusEl.className = `badge badge-${st}`;
     statusEl.textContent = st;
     const isSent = st === 'sent' || st === 'cancelled';
@@ -250,7 +283,9 @@ async function loadCampaign() {
     const mail = c.mail || {};
     document.getElementById('c-subject').value = mail.subject || '';
     document.getElementById('c-body').value    = mail.body    || '';
-    document.querySelector('input[name="mail-type"]:checked').value = mail.type || 'plain';
+    const mt = mail.type || 'plain';
+    const mtEl = document.querySelector(`input[name="mail-type"][value="${mt}"]`);
+    if (mtEl) mtEl.checked = true;
 
     // Contacts
     allContacts = c.campaign_contacts || c.contacts || [];
@@ -258,7 +293,6 @@ async function loadCampaign() {
     renderContacts(allContacts);
 
     document.getElementById('campaign-detail').style.display = '';
-    checkRunningJobs(id);
   } catch(e) {
     document.getElementById('campaign-empty').textContent = `Error: ${e.message}`;
     document.getElementById('campaign-empty').style.display = '';
@@ -324,7 +358,7 @@ async function doSend() {
     const d = await r.json();
     if (d.status === 'ok') {
       // Update UI to reflect sent state
-      const sb = document.getElementById('c-status-select'); sb.className='badge badge-sent'; sb.textContent='sent';
+      const sb = document.getElementById('c-status-badge'); sb.className='badge badge-sent'; sb.textContent='sent';
       document.getElementById('c-status-badge').className = 'badge badge-sent';
       document.getElementById('c-status-badge').textContent = 'sent';
       if (d.campaign && d.campaign.sent_at) {
@@ -356,13 +390,12 @@ async function syncCampaign() {
   const fb  = document.getElementById('sync-feedback');
   const btn = document.querySelector('[onclick="syncCampaign()"]');
   btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Syncing...';
+  btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Syncing...';
   fb.style.display = 'none';
   try {
     const r = await fetch(`${BASE}/api/crm/campaign-sync?campaign_id=${encodeURIComponent(id)}`);
     const d = await r.json();
     if (d.status === 'queued') {
-      showJobStatus(d.job_id);
       fb.className = 'alert-success'; fb.textContent = `Sync job queued (${d.job_id})`; fb.style.display = '';
     } else {
       fb.className = 'alert-danger'; fb.textContent = d.message || 'Sync failed'; fb.style.display = '';
@@ -374,71 +407,6 @@ async function syncCampaign() {
   }
   btn.disabled = false;
   btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Sync from sheet';
-}
-
-let _pollInterval = null;
-
-function showJobStatus(jobId) {
-  const bar  = document.getElementById('job-status-bar');
-  const text = document.getElementById('job-status-text');
-  const link = document.getElementById('job-status-link');
-  bar.style.display = '';
-  text.textContent  = `Job running: ${jobId}`;
-  link.href         = `${BASE}/api/crm/status/${jobId}`;
-  link.textContent  = 'view';
-  link.style.display = '';
-  if (_pollInterval) clearInterval(_pollInterval);
-  _pollInterval = setInterval(() => pollJobStatus(jobId), 4000);
-}
-
-async function pollJobStatus(jobId) {
-  try {
-    const r = await fetch(`${BASE}/api/crm/status/${jobId}`);
-    const d = await r.json();
-    const bar  = document.getElementById('job-status-bar');
-    const text = document.getElementById('job-status-text');
-    if (d.status === 'done') {
-      clearInterval(_pollInterval); _pollInterval = null;
-      bar.style.display = 'none';
-      const fb = document.getElementById('sync-feedback');
-      fb.className = 'alert alert-success py-1 px-2 small mt-2';
-      fb.textContent = `Sync complete. ${JSON.stringify(d.result||{})}`;
-      fb.style.display = '';
-      loadCampaign();
-    } else if (d.status === 'error') {
-      clearInterval(_pollInterval); _pollInterval = null;
-      bar.style.display = 'none';
-      const fb = document.getElementById('sync-feedback');
-      fb.className = 'alert alert-danger py-1 px-2 small mt-2';
-      fb.textContent = `Sync error: ${d.error}`;
-      fb.style.display = '';
-    } else {
-      text.textContent = `Job ${d.status}: ${jobId}`;
-    }
-  } catch(e) {}
-}
-
-async function checkRunningJobs(campaignId) {
-  const bar = document.getElementById('job-status-bar');
-  try {
-    const url = `${BASE}/api/crm/jobs?running=true&campaign_id=${encodeURIComponent(campaignId)}`;
-    const r = await fetch(url);
-    const d = await r.json();
-    // Only show jobs for this specific campaign
-    const running = (d.jobs||[]).find(j =>
-      (j.status === 'running' || j.status === 'queued') &&
-      j.name === 'campaign-sync' &&
-      (j.params||{}).campaign_id === campaignId
-    );
-    if (running) {
-      showJobStatus(running.id);
-    } else {
-      bar.style.display = 'none';
-      if (_pollInterval) { clearInterval(_pollInterval); _pollInterval = null; }
-    }
-  } catch(e) {
-    bar.style.display = 'none';
-  }
 }
 
 async function saveCampaign() {
