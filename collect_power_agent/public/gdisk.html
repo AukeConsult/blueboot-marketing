@@ -64,24 +64,13 @@ td .ti { font-size: 1rem; }
 
 </div>
 
+<script src="js/crm-common.js"></script>
 <script>
-const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
 
-function setStatus(id, msg, kind, html){
-  const el = document.getElementById(id);
-  el.className = 'small mt-2 ' + (kind === 'err' ? 'text-danger' : kind === 'ok' ? 'text-success' : 'text-muted');
-  if(html){ el.innerHTML = msg; } else { el.textContent = msg; }
-}
-
-function fmtSize(b){
-  b = Number(b);
-  if(!b && b !== 0) return '';
-  if(b < 1024) return b + ' B';
-  if(b < 1048576) return (b/1024).toFixed(1) + ' KB';
-  return (b/1048576).toFixed(1) + ' MB';
-}
-function fmtDate(iso){ return iso ? iso.replace('T',' ').slice(0,16) : ''; }
-function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// shared helpers come from js/crm-common.js; thin aliases keep call sites unchanged
+const setStatus = setStatusEl;     // setStatus(id, msg, kind, html)
+const fmtDate   = fmtDateTime;
+const esc       = escapeHtml;
 
 async function loadSetting(){
   try{

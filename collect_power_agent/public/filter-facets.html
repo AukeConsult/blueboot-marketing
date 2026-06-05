@@ -6,25 +6,8 @@
 <title>Blueboot — Filter Facets</title>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
 <style>
-:root {
-  --bb-navy: #1a2035;
-  --bb-accent: #4f6ef7;
-  --bb-border: #e8eaee;
-  --bb-muted: #6b7280;
-  --bb-card-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.04);
-}
-body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-
-.bb-nav { background: #fff; border-bottom: 1px solid var(--bb-border); padding: .6rem 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0; }
-.bb-nav .brand { color: #111; font-weight: 700; font-size: .95rem; text-decoration: none; display: flex; align-items: center; gap: .5rem; margin-right: 2rem; }
-.bb-nav .brand i { color: var(--bb-accent); }
-.bb-nav .nav-link { color: var(--bb-muted); font-size: .85rem; text-decoration: none; padding: .3rem .65rem; border-radius: 6px; transition: color .15s, background .15s; display: flex; align-items: center; gap: .35rem; }
-.bb-nav .nav-link:hover { color: #111; background: #f4f5f7; }
-.bb-nav .nav-link.active { color: var(--bb-accent); background: #eef0ff; }
-.bb-nav .nav-links { display: flex; gap: .25rem; }
-
-.bb-card { background: #fff; border-radius: 10px; box-shadow: var(--bb-card-shadow); border: 1px solid var(--bb-border); }
 
 .facet-card { break-inside: avoid; display: inline-block; width: 100%; margin-bottom: 1rem; border-radius: 10px; background: #fff; box-shadow: var(--bb-card-shadow); border: 1px solid var(--bb-border); }
 .facet-values { max-height: 260px; overflow-y: auto; }
@@ -105,24 +88,14 @@ body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Seg
 
 </div>
 
+<script src="js/crm-common.js"></script>
 <script>
-const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
+// BASE, fetchWithTimeout, escapeHtml, setStatusEl come from js/crm-common.js
 const DEFAULT_SOURCE = 'site_leads';
 let facets = null;
 
-async function fetchWithTimeout(url, options = {}, ms = 8000) {
-  const timeout = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Request timed out — API may be unreachable')), ms)
-  );
-  return Promise.race([fetch(url, options), timeout]);
-}
-
-function setStatus(msg, kind, html){
-  const el = document.getElementById('status');
-  el.className = 'small mt-2 ' + (kind === 'err' ? 'text-danger' : kind === 'ok' ? 'text-success' : '');
-  el.style.color = kind ? '' : 'var(--bb-muted)';
-  if(html){ el.innerHTML = msg; } else { el.textContent = msg; }
-}
+// page-local status helper -> shared setStatusEl, fixed to the #status element
+function setStatus(msg, kind, html){ setStatusEl('status', msg, kind, html); }
 
 async function loadList(){
   try{
@@ -393,9 +366,7 @@ function renderCounts(c){
     + `</div>`;
 }
 
-function escapeHtml(s){
-  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+// escapeHtml provided by js/crm-common.js
 
 console.log('[facets] page script loaded, starting…');
 loadList().then(() => {

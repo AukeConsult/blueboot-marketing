@@ -6,33 +6,13 @@
 <title>Blueboot — Campaigns</title>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
 <style>
-:root {
-  --bb-accent: #4f6ef7;
-  --bb-border: #e8eaee;
-  --bb-muted: #6b7280;
-  --bb-card-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.04);
-}
-body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-.bb-nav { background: #fff; border-bottom: 1px solid var(--bb-border); padding: .6rem 1.5rem; display: flex; align-items: center; justify-content: center; }
-.bb-nav .brand { color: #111; font-weight: 700; font-size: .95rem; text-decoration: none; display: flex; align-items: center; gap: .5rem; margin-right: 2rem; }
-.bb-nav .brand i { color: var(--bb-accent); }
-.bb-nav .nav-link { color: var(--bb-muted); font-size: .85rem; text-decoration: none; padding: .3rem .65rem; border-radius: 6px; transition: color .15s, background .15s; display: flex; align-items: center; gap: .35rem; }
-.bb-nav .nav-link:hover { color: #111; background: #f4f5f7; }
-.bb-nav .nav-link.active { color: var(--bb-accent); background: #eef0ff; }
-.bb-nav .nav-links { display: flex; gap: .25rem; }
 
 .camp-card { background: #fff; border: 1px solid var(--bb-border); border-radius: 10px; box-shadow: var(--bb-card-shadow); padding: 1rem 1.25rem; text-decoration: none; color: inherit; display: block; transition: box-shadow .12s, transform .12s; margin-bottom: 10px; }
 .camp-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-1px); color: inherit; }
 .camp-card:hover .camp-arrow { opacity: 1; }
 .camp-arrow { opacity: 0; transition: opacity .15s; color: var(--bb-accent); }
-
-.bb-badge { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 600; padding: .2rem .55rem; border-radius: 20px; }
-.bb-badge-draft     { background: #f1f1f1; color: #555; }
-.bb-badge-dosend    { background: #dbeafe; color: #1d4ed8; }
-.bb-badge-sent      { background: #dcfce7; color: #15803d; }
-.bb-badge-cancelled { background: #fee2e2; color: #b91c1c; }
-.bb-badge-pending   { background: #fef9c3; color: #854d0e; }
 
 .stat-pill { display: inline-flex; align-items: center; gap: .3rem; font-size: .78rem; color: var(--bb-muted); background: #f4f5f7; border-radius: 20px; padding: .15rem .55rem; }
 </style>
@@ -86,14 +66,12 @@ body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Seg
 
 </div>
 
+<script src="js/crm-common.js"></script>
 <script>
-const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
+// BASE + helpers from js/crm-common.js
 let allCampaigns = [];
 
-function fmt(iso) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString([], {dateStyle:'medium'});
-}
+const fmt = fmtDateMedium;      // shared
 
 function statusBadge(s) {
   return `<span class="bb-badge bb-badge-${s||'draft'}">${s||'draft'}</span>`;

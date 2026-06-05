@@ -914,6 +914,7 @@ Additional reference documents live in [`docs/`](docs/):
 
 | Document | Contents |
 |---|---|
+| [`docs/crm_api.md`](docs/crm_api.md) | Full CRM HTTP API reference — every `crmApi` endpoint, params and the job model. |
 | [`docs/gdisk_interface.md`](docs/gdisk_interface.md) | Google Drive (gdisk) interface — all settings, one-time Google setup, class API, HTTP endpoints and troubleshooting. |
 | [`docs/email_contacts_field_reference.docx`](docs/email_contacts_field_reference.docx) | Field-by-field reference for the unified `email_contacts` collection. |
 | [`docs/BlueBoot_Complete_Reference.docx`](docs/BlueBoot_Complete_Reference.docx) | Complete project reference (full pipeline and data model). |
