@@ -70,6 +70,9 @@ body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Seg
       <option value="sent">Sent</option>
       <option value="cancelled">Cancelled</option>
     </select>
+    <select id="owner-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
+      <option value="">All owners</option>
+    </select>
     <button class="btn btn-sm btn-outline-primary ms-auto" onclick="discover()" id="discover-btn">
       <i class="ti ti-search me-1"></i>Discover new
     </button>
@@ -105,7 +108,7 @@ function render(list) {
   el.innerHTML = list.map(c => {
     const sb = c.status_breakdown || {};
     const countries = (c.countries || []).join(', ') || '—';
-    const author = c.author ? `<span class="stat-pill"><i class="ti ti-user"></i>${c.author}</span>` : '';
+    const author = c.owner ? `<span class="stat-pill"><i class="ti ti-user"></i>${c.owner}</span>` : '';
     const sentPill = sb.sent ? `<span class="stat-pill" style="color:#15803d;background:#dcfce7"><i class="ti ti-send"></i>${sb.sent} sent</span>` : '';
     return `<a href="campaign.html?campaign_id=${encodeURIComponent(c.campaign_id)}" class="camp-card" onclick="localStorage.setItem('selectedCampaign','${c.campaign_id}')">
       <div class="d-flex align-items-start justify-content-between mb-2">
@@ -129,13 +132,23 @@ function render(list) {
 }
 
 function filter() {
-  const q = document.getElementById('search').value.toLowerCase();
+  const q  = document.getElementById('search').value.toLowerCase();
   const st = document.getElementById('status-filter').value;
+  const ow = document.getElementById('owner-filter').value;
   render(allCampaigns.filter(c => {
-    const matchQ = !q || c.campaign_id.toLowerCase().includes(q) || (c.author||'').toLowerCase().includes(q) || (c.mail?.subject||'').toLowerCase().includes(q);
+    const matchQ  = !q  || c.campaign_id.toLowerCase().includes(q) || (c.owner||'').toLowerCase().includes(q) || (c.mail?.subject||'').toLowerCase().includes(q);
     const matchSt = !st || c.status === st;
-    return matchQ && matchSt;
+    const matchOw = !ow || (c.owner || '') === ow;
+    return matchQ && matchSt && matchOw;
   }));
+}
+
+function populateOwnerFilter() {
+  const owners = [...new Set(allCampaigns.map(c => c.owner).filter(Boolean))].sort();
+  const sel = document.getElementById('owner-filter');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All owners</option>' +
+    owners.map(o => `<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join('');
 }
 
 async function load() {
@@ -144,6 +157,7 @@ async function load() {
     const r = await fetch(BASE + '/api/crm/campaigns');
     const d = await r.json();
     allCampaigns = d.campaigns || [];
+    populateOwnerFilter();
     filter();
   } catch(e) {
     document.getElementById('list-container').innerHTML = `<div class="text-center text-danger py-4 small">Could not load campaigns: ${e.message}</div>`;

@@ -350,6 +350,9 @@ def update_campaign(campaign_id):
         if "outreach_email_account" in body:
             update["outreach_email_account"] = body["outreach_email_account"]
 
+        if "owner" in body:
+            update["owner"] = body["owner"]
+
         if "mail" in body:
             existing_mail = (doc.to_dict() or {}).get("mail", {})
             merged_mail   = dict(existing_mail)

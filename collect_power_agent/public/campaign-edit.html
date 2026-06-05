@@ -72,17 +72,13 @@ body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Seg
   <!-- Meta fields -->
   <div class="bb-card p-3 mb-3">
     <div class="row g-3">
-      <div class="col-md-4">
+      <div class="col-md-6">
         <label class="form-label small fw-500 mb-1">Outreach email account</label>
         <input id="c-email-account-edit" class="form-control form-control-sm" placeholder="sender@example.com" oninput="autoSave()">
       </div>
-      <div class="col-md-4">
+      <div class="col-md-6">
         <label class="form-label small fw-500 mb-1">Subject</label>
         <input id="c-subject" class="form-control form-control-sm" placeholder="Email subject line" oninput="autoSave()">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label small fw-500 mb-1">Created by</label>
-        <input id="c-author" class="form-control form-control-sm" placeholder="Your name" oninput="autoSave()">
       </div>
     </div>
   </div>
@@ -381,7 +377,7 @@ async function saveCampaign(silent = false) {
     const r = await fetch(`${BASE}/api/crm/campaigns/${CAMPAIGN_ID}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ mail: {subject, body, type: mode, css}, outreach_email_account: account, author: document.getElementById('c-author').value.trim() })
+      body: JSON.stringify({ mail: {subject, body, type: mode, css}, outreach_email_account: account })
     });
     const d = await r.json();
     fb.style.color = d.status === 'ok' ? '#16a34a' : '#dc2626';
@@ -404,7 +400,6 @@ async function loadCampaign() {
     const badge = document.getElementById('c-status-badge');
     badge.className = `bb-badge bb-badge-${st}`; badge.textContent = st;
     document.getElementById('c-email-account-edit').value = c.outreach_email_account || '';
-    document.getElementById('c-author').value = c.author || '';
     const mail = c.mail || {};
     document.getElementById('c-subject').value   = mail.subject || '';
     document.getElementById('c-body').value      = mail.body    || '';

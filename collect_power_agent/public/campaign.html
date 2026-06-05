@@ -87,14 +87,24 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 
     <!-- Campaign header -->
     <div class="bb-card p-3 mb-3">
-      <div class="d-flex align-items-start justify-content-between mb-3">
+      <!-- Top row: name left, buttons + badge right -->
+      <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
         <div>
-          <h6 class="mb-1 fw-600" id="c-id" style="font-size:1rem"></h6>
-          <div class="small" style="color:var(--bb-muted)"><i class="ti ti-mail me-1"></i><span id="c-email-account-display">—</span></div>
-          <div class="small mt-1" style="color:var(--bb-muted)" id="c-author-row" style="display:none"><i class="ti ti-user me-1"></i><span id="c-author-display">—</span></div>
+          <h6 class="mb-0 fw-600" id="c-id" style="font-size:1rem"></h6>
+          <div class="small mt-1" style="color:var(--bb-muted)"><i class="ti ti-mail me-1"></i><span id="c-email-account-display">—</span></div>
         </div>
-        <span class="bb-badge" id="c-status-badge"></span>
+        <div class="ms-auto d-flex align-items-center gap-2">
+          <span class="bb-badge" id="c-status-badge"></span>
+          <button class="btn btn-sm btn-outline-secondary" onclick="syncCampaign()">
+            <i class="ti ti-refresh me-1"></i>Sync
+          </button>
+          <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn">
+            <i class="ti ti-send me-1"></i>Send
+          </button>
+        </div>
       </div>
+
+      <div id="sync-feedback" class="alert py-1 px-2 small mb-3" style="display:none"></div>
 
       <div class="row g-2 mb-3">
         <div class="col-3"><div class="stat-card"><div class="stat-n" id="c-contacts">—</div><div class="stat-l">contacts</div></div></div>
@@ -103,15 +113,10 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
         <div class="col-3"><div class="stat-card"><div class="stat-n" id="c-sent">—</div><div class="stat-l">sent</div></div></div>
       </div>
 
-      <div class="d-flex align-items-center gap-2 flex-wrap">
-        <button class="btn btn-sm btn-outline-secondary" onclick="syncCampaign()">
-          <i class="ti ti-refresh me-1"></i>Sync from sheet
-        </button>
-        <button class="btn btn-sm btn-success ms-auto" onclick="confirmSend()" id="send-btn">
-          <i class="ti ti-send me-1"></i>Send campaign
-        </button>
+      <div class="d-flex align-items-center gap-2 mt-1">
+        <label class="small fw-500 mb-0 text-nowrap" style="color:var(--bb-muted)">Owner</label>
+        <input id="c-owner-input" class="form-control form-control-sm" style="max-width:180px;font-size:.82rem" placeholder="Owner name" oninput="scheduleOwnerSave()">
       </div>
-      <div id="sync-feedback" class="alert py-1 px-2 small mt-2 mb-0" style="display:none"></div>
 
       <div class="row g-1 mt-2 small" style="color:var(--bb-muted)">
         <div class="col-6"><i class="ti ti-calendar me-1"></i>Updated: <span id="c-updated">—</span></div>
@@ -261,8 +266,7 @@ async function loadCampaign() {
     document.getElementById('c-countries').textContent = (c.countries||[]).length || '—';
     document.getElementById('c-sent').textContent     = (c.status_breakdown||{}).sent || 0;
     document.getElementById('c-email-account-display').textContent = c.outreach_email_account || '—';
-    const authorRow = document.getElementById('c-author-row');
-    if (c.author) { document.getElementById('c-author-display').textContent = c.author; authorRow.style.display = ''; } else { authorRow.style.display = 'none'; }
+    document.getElementById('c-owner-input').value = c.owner || '';
     document.getElementById('c-updated').textContent  = fmt(c.updated_at);
     const sentAtRow = document.getElementById('c-sent-at-row');
     if (st === 'sent' && c.sent_at) { sentAtRow.style.display = ''; document.getElementById('c-sent-at').textContent = fmt(c.sent_at); }
@@ -376,6 +380,23 @@ async function doSend() {
     fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
     fb.textContent = e.message; fb.style.display = '';
   }
+}
+
+let _ownerTimer = null;
+function scheduleOwnerSave() {
+  clearTimeout(_ownerTimer);
+  _ownerTimer = setTimeout(saveOwner, 1200);
+}
+async function saveOwner() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const owner = document.getElementById('c-owner-input').value.trim();
+  try {
+    await fetch(`${BASE}/api/crm/campaigns/${id}`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ owner })
+    });
+  } catch(e) { /* silent */ }
 }
 
 (async () => {

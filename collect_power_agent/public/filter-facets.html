@@ -51,7 +51,7 @@ body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Seg
 
   <div class="d-flex align-items-center justify-content-between mb-3">
     <h5 class="mb-0 fw-600" style="font-size:1rem"><i class="ti ti-filter me-2 text-primary"></i>Filter Facets</h5>
-    <span id="meta" class="small" style="color:var(--bb-muted)"></span>
+<span id="meta" class="small" style="color:var(--bb-muted)"></span>
   </div>
 
   <!-- Load / save toolbar -->
@@ -59,7 +59,7 @@ body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Seg
     <div class="row g-2 align-items-end">
       <div class="col-md-4">
         <label class="form-label small fw-500 mb-1">Load facets</label>
-        <select id="load-select" class="form-select form-select-sm" onchange="loadSelected()"></select>
+        <select id="load-select" class="form-select form-select-sm" onchange="localStorage.setItem('selectedFacet', this.value); loadSelected()"></select>
       </div>
       <div class="col-md-2">
         <button class="btn btn-outline-secondary btn-sm w-100" onclick="loadSelected()">
@@ -87,7 +87,13 @@ body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Seg
       <span style="color:var(--bb-muted)">of <strong id="sum-total">0</strong> values</span>
       <span style="color:var(--bb-muted)">across <strong id="sum-cats">0</strong> / <strong id="sum-allcats">0</strong> categories</span>
       <span id="sum-saved" style="color:var(--bb-muted);font-style:italic"></span>
-      <button class="btn btn-link btn-sm p-0 ms-auto text-decoration-none" onclick="clearAll()" style="color:var(--bb-muted)"><i class="ti ti-eraser me-1"></i>clear all</button>
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <select id="view-mode" class="form-select form-select-sm" style="width:auto;font-size:.78rem" onchange="render()">
+          <option value="all">Show all</option>
+          <option value="selected">Show selected only</option>
+        </select>
+        <button class="btn btn-link btn-sm p-0 text-decoration-none" onclick="clearAll()" style="color:var(--bb-muted)"><i class="ti ti-eraser me-1"></i>clear all</button>
+      </div>
     </div>
   </div>
 
@@ -104,14 +110,11 @@ const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
 const DEFAULT_SOURCE = 'site_leads';
 let facets = null;
 
-async function fetchWithTimeout(url, options = {}, ms = 12000) {
-  const ctrl = new AbortController();
-  const id = setTimeout(() => ctrl.abort(), ms);
-  try {
-    return await fetch(url, { ...options, signal: ctrl.signal });
-  } finally {
-    clearTimeout(id);
-  }
+async function fetchWithTimeout(url, options = {}, ms = 8000) {
+  const timeout = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Request timed out — API may be unreachable')), ms)
+  );
+  return Promise.race([fetch(url, options), timeout]);
 }
 
 function setStatus(msg, kind){
@@ -136,21 +139,31 @@ async function loadList(){
 }
 
 async function loadFacets(name){
+  console.log('[facets] loadFacets called:', name);
   setStatus('Loading ' + name + '…');
   document.getElementById('facets').innerHTML =
     '<div class="text-center py-5 w-100" style="color:var(--bb-muted)"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>';
   try{
+    console.log('[facets] fetching from API…');
     const r = await fetchWithTimeout(BASE + '/api/crm/filter-facets/' + encodeURIComponent(name));
     if(!r.ok){ throw new Error((await r.json()).error || r.status); }
+    console.log('[facets] response ok, parsing JSON…');
     facets = await r.json();
-    render();
-    renderCounts(facets.counts || {});
+    console.log('[facets] JSON parsed, rendering…');
+    try {
+      render();
+      renderCounts(facets.counts || {});
+    } catch(renderErr) {
+      document.getElementById('facets').innerHTML =
+        `<div class="text-center text-danger py-4 small"><i class="ti ti-alert-triangle me-1"></i>Render error: ${renderErr.message}</div>`;
+    }
     const saveName = document.getElementById('save-name');
     if(!saveName.value || saveName.value === DEFAULT_SOURCE){
       saveName.value = (name === DEFAULT_SOURCE) ? '' : name;
     }
     setStatus('Loaded ' + name, 'ok');
   }catch(e){
+    console.error('[facets] error:', e);
     const msg = e.name === 'AbortError' ? 'Request timed out — API may be unreachable.' : e.message;
     document.getElementById('facets').innerHTML =
       `<div class="text-center py-5 w-100">
@@ -228,26 +241,33 @@ function render(){
   if(facets.generated_at) meta.push('generated ' + facets.generated_at.replace('T',' ').slice(0,16));
   document.getElementById('meta').textContent = meta.join('  ·  ');
 
+  const selOnly = (document.getElementById('view-mode')||{}).value === 'selected';
   const order = Object.keys(facets.filters || {});
-  const html = order.map(name => renderFacet(name, facets.filters[name])).join('');
+  const html = order
+    .filter(name => !selOnly || selectedCount(facets.filters[name]) > 0)
+    .map(name => renderFacet(name, facets.filters[name], selOnly)).join('');
   document.getElementById('facets').innerHTML = html ||
-    '<div class="text-center py-5 w-100" style="color:var(--bb-muted)">No filters in this document.</div>';
+    (selOnly
+      ? '<div class="text-center py-5 w-100" style="color:var(--bb-muted)"><i class="ti ti-filter-off" style="font-size:2rem;opacity:.3;display:block;margin-bottom:.5rem"></i>No selections yet</div>'
+      : '<div class="text-center py-5 w-100" style="color:var(--bb-muted)">No filters in this document.</div>');
   updateSummary();
 }
 
-function renderFacet(name, f){
+function renderFacet(name, f, selOnly = false){
   const isGroup = f.type === 'group';
-  const items = isGroup ? (f.groups || []) : (f.values || []);
-  const total = isGroup ? items.length : (f.distinct != null ? f.distinct : items.length);
+  const allItems = isGroup ? (f.groups || []) : (f.values || []);
+  const items = selOnly ? allItems.filter(it => it.selected) : allItems;
+  const total = isGroup ? allItems.length : (f.distinct != null ? f.distinct : allItems.length);
   const sel = selectedCount(f);
   const rows = items.map((item, i) => {
-    const id = `chk_${name}_${i}`;
+    const i_real = allItems.indexOf(item);
+    const id = `chk_${name}_${i_real}`;
     const checked = item.selected ? 'checked' : '';
     const label = isGroup ? item.label : item.value;
     const count = item.count != null ? item.count : '';
     return `<div class="form-check">
       <input class="form-check-input" type="checkbox" id="${id}" ${checked}
-             onchange="onToggle('${name}', ${i}, ${isGroup}, this.checked)">
+             onchange="onToggle('${name}', ${i_real}, ${isGroup}, this.checked)">
       <label class="form-check-label d-flex justify-content-between" for="${id}">
         <span>${escapeHtml(String(label))}</span>
         <span class="count-badge ms-2" style="color:var(--bb-muted);font-size:.78rem">${count}</span>
@@ -362,4 +382,17 @@ function renderCounts(c){
 }
 
 function escapeHtml(s){
-  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+console.log('[facets] page script loaded, starting…');
+loadList().then(() => {
+  const saved = localStorage.getItem('selectedFacet') || DEFAULT_SOURCE;
+  const sel = document.getElementById('load-select');
+  const opt = Array.from(sel.options).find(o => o.value === saved);
+  if (opt) { sel.value = saved; }
+  loadFacets(sel.value || DEFAULT_SOURCE);
+});
+</script>
+</body>
+</html>
