@@ -473,110 +473,28 @@ def update_campaign(campaign_id):
 
 @app.route("/api/crm/campaigns/<campaign_id>/ping-mail-account", methods=["POST"])
 def ping_mail_account(campaign_id):
-    """Test the mail account configured on a campaign.
-
-    Reads imap / gmail settings from the campaign document and attempts a
-    live connection.  Returns {"status": "ok", "message": "..."} or
-    {"status": "error", "message": "..."}.
-    """
-    import socket
+    """Test the mail account configured on a campaign."""
     try:
         db  = _get_db()
         doc = db.collection("campaigns").document(campaign_id).get()
         if not doc.exists:
             return _err(f"Campaign '{campaign_id}' not found", 404)
-        data         = doc.to_dict() or {}
+        data           = doc.to_dict() or {}
         outreach_email = data.get("outreach_email_account", "")
         ma = _get_mail_account(db, outreach_email)
         if not ma:
             return _err(f"No mail account found for '{outreach_email}'. Save IMAP/Gmail settings first.", 400)
-        account_type = ma.get("account_type", "imap")
-
-        if account_type == "imap":
-            import imaplib, ssl as _ssl
-            imap = ma
-            host     = (imap or {}).get("host", "").strip()
-            port     = int((imap or {}).get("port") or 993)
-            username = (imap or {}).get("username", "").strip()
-            password = (imap or {}).get("password", "")
-            use_ssl  = (imap or {}).get("ssl", True)
-            if not host or not username:
-                return _err("IMAP host and username are required", 400)
-            try:
-                if use_ssl:
-                    conn = imaplib.IMAP4_SSL(host, port,
-                           ssl_context=_ssl.create_default_context())
-                else:
-                    conn = imaplib.IMAP4(host, port)
-                conn.login(username, password)
-                conn.logout()
-                return jsonify({"status": "ok",
-                                "message": f"Connected to {host}:{port} as {username}"})
-            except imaplib.IMAP4.error as e:
-                return jsonify({"status": "error", "message": f"IMAP auth failed: {e}"})
-            except (socket.gaierror, OSError) as e:
-                return jsonify({"status": "error", "message": f"Cannot reach {host}:{port} — {e}"})
-
-        elif account_type == "gmail":
-            import urllib.request, json as _json
-            client_id     = ma.get("client_id", "").strip()
-            client_secret = ma.get("client_secret", "").strip()
-            refresh_token = ma.get("refresh_token", "").strip()
-            if not client_id or not client_secret or not refresh_token:
-                return _err("client_id, client_secret and refresh_token are required", 400)
-            payload = (
-                f"client_id={urllib.parse.quote(client_id)}"
-                f"&client_secret={urllib.parse.quote(client_secret)}"
-                f"&refresh_token={urllib.parse.quote(refresh_token)}"
-                f"&grant_type=refresh_token"
-            ).encode()
-            req = urllib.request.Request(
-                "https://oauth2.googleapis.com/token",
-                data=payload,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    result = _json.loads(resp.read())
-                if "access_token" in result:
-                    # Persist the refreshed access token to mail_accounts
-                    outreach_email = data.get("outreach_email_account", "")
-                    if outreach_email:
-                        db.collection("settings").document("mail_accounts") \
-                          .collection("accounts").document(outreach_email.strip().lower()) \
-                          .update({"access_token": result["access_token"],
-                                   "updated_at": datetime.now(timezone.utc).isoformat()})
-                    return jsonify({"status": "ok",
-                                    "message": "OAuth2 token refreshed successfully",
-                                    "access_token": result["access_token"]})
-                return jsonify({"status": "error",
-                                "message": result.get("error_description", str(result))})
-            except urllib.error.HTTPError as e:
-                body_txt = e.read().decode(errors="replace")
-                try:
-                    err_obj = _json.loads(body_txt)
-                    msg = err_obj.get("error_description") or err_obj.get("error") or body_txt
-                except Exception:
-                    msg = body_txt
-                return jsonify({"status": "error", "message": f"Google OAuth2 error: {msg}"})
-
-        else:
-            return _err(f"Unknown account type: {account_type}", 400)
-
+        from crm.mail_sender import MailSender
+        result = MailSender(ma).ping()
+        return jsonify(result)
     except Exception as exc:
         return _err(str(exc), 500)
-
 
 @app.route("/api/crm/campaigns/<campaign_id>/send-test-mail", methods=["POST"])
 def send_test_mail(campaign_id):
     """Send a test email using the campaign mail account settings.
-
-    Body: { "to": "...", "subject": "...", "body": "..." }
-    Supports account_type imap (via SMTP) and gmail (via OAuth2 SMTP).
+    Body: { "to": "...", "subject": "...", "body_plain": "...", "body_html": "..." }
     """
-    import smtplib, base64
-    from email.mime.text import MIMEText
     try:
         db  = _get_db()
         doc = db.collection("campaigns").document(campaign_id).get()
@@ -587,88 +505,17 @@ def send_test_mail(campaign_id):
         ma             = _get_mail_account(db, outreach_email)
         if not ma:
             return _err(f"No mail account found for '{outreach_email}'. Save IMAP/Gmail settings first.", 400)
-        account_type = ma.get("account_type", "imap")
-        body         = request.get_json(silent=True) or {}
-        to_addr      = body.get("to", "").strip()
-        subject      = body.get("subject", "Test email").strip()
-        mail_body    = body.get("body", "This is a test email.").strip()
+        body       = request.get_json(silent=True) or {}
+        to_addr    = body.get("to", "").strip()
+        subject    = body.get("subject", "Test email").strip()
+        body_html  = body.get("body_html", "").strip()
+        body_plain = body.get("body_plain", body.get("body", "")).strip()
         if not to_addr:
             return _err("'to' is required", 400)
-
-        msg             = MIMEText(mail_body, "plain", "utf-8")
-        msg["Subject"]  = subject
-        msg["To"]       = to_addr
-
-        if account_type == "imap":
-            host     = ma.get("host", "").strip()
-            username = ma.get("username", "").strip()
-            password = ma.get("password", "")
-            if not host or not username:
-                return _err("IMAP host and username are required", 400)
-            # Derive SMTP host: replace leading "imap." with "smtp."
-            smtp_host = host.replace("imap.", "smtp.", 1) if host.startswith("imap.") else host
-            msg["From"] = username
-            try:
-                with smtplib.SMTP(smtp_host, 587, timeout=15) as server:
-                    server.ehlo()
-                    server.starttls()
-                    server.login(username, password)
-                    server.sendmail(username, [to_addr], msg.as_string())
-                return jsonify({"status": "ok",
-                                "message": f"Test email sent to {to_addr} via {smtp_host}"})
-            except smtplib.SMTPAuthenticationError as e:
-                return jsonify({"status": "error", "message": f"SMTP auth failed: {e}"})
-            except Exception as e:
-                return jsonify({"status": "error", "message": f"SMTP error: {e}"})
-
-        elif account_type == "gmail":
-            client_id     = ma.get("client_id", "").strip()
-            client_secret = ma.get("client_secret", "").strip()
-            refresh_token = ma.get("refresh_token", "").strip()
-            access_token  = ma.get("access_token", "").strip()
-            from_addr     = outreach_email.strip()
-            if not from_addr or not refresh_token:
-                return _err("outreach_email_account and refresh_token are required", 400)
-
-            # Refresh access token if needed
-            if not access_token:
-                import urllib.request, json as _json
-                payload = (
-                    f"client_id={urllib.parse.quote(client_id)}"
-                    f"&client_secret={urllib.parse.quote(client_secret)}"
-                    f"&refresh_token={urllib.parse.quote(refresh_token)}"
-                    f"&grant_type=refresh_token"
-                ).encode()
-                req = urllib.request.Request(
-                    "https://oauth2.googleapis.com/token", data=payload,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    method="POST")
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    token_data = _json.loads(resp.read())
-                access_token = token_data.get("access_token", "")
-                if not access_token:
-                    return jsonify({"status": "error",
-                                    "message": token_data.get("error_description", "Token refresh failed")})
-
-            msg["From"] = from_addr
-            auth_string = f"user={from_addr}\x01auth=Bearer {access_token}\x01\x01"
-            auth_b64    = base64.b64encode(auth_string.encode()).decode()
-            try:
-                with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
-                    server.ehlo()
-                    server.starttls()
-                    server.docmd("AUTH", "XOAUTH2 " + auth_b64)
-                    server.sendmail(from_addr, [to_addr], msg.as_string())
-                return jsonify({"status": "ok",
-                                "message": f"Test email sent to {to_addr} via Gmail"})
-            except smtplib.SMTPAuthenticationError as e:
-                return jsonify({"status": "error", "message": f"Gmail auth failed: {e}"})
-            except Exception as e:
-                return jsonify({"status": "error", "message": f"Gmail SMTP error: {e}"})
-
-        else:
-            return _err(f"Unknown account type: {account_type}", 400)
-
+        from crm.mail_sender import MailSender
+        result = MailSender(ma).send(to=to_addr, subject=subject,
+                                     body_plain=body_plain, body_html=body_html)
+        return jsonify(result)
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -787,354 +634,40 @@ def delete_mail_account(email):
 @app.route("/api/crm/settings/mail-accounts/<email>/ping", methods=["POST"])
 def ping_mail_account_settings(email):
     """Ping a mail account directly from settings (no campaign needed)."""
-    import socket, imaplib, ssl as _ssl
     try:
         db  = _get_db()
         key = email.strip().lower()
         ma  = _get_mail_account(db, key)
         if not ma:
             return _err(f"Mail account '{key}' not found", 404)
-
-        account_type = ma.get("account_type", "imap")
-
-        if account_type == "imap":
-            host     = ma.get("host", "").strip()
-            port     = int(ma.get("port") or 993)
-            username = ma.get("username", "").strip()
-            password = ma.get("password", "")
-            use_ssl  = ma.get("ssl", True)
-            if not host or not username:
-                return _err("IMAP host and username are required", 400)
-            try:
-                if use_ssl:
-                    conn = imaplib.IMAP4_SSL(host, port,
-                           ssl_context=_ssl.create_default_context())
-                else:
-                    conn = imaplib.IMAP4(host, port)
-                conn.login(username, password)
-                conn.logout()
-                return jsonify({"status": "ok",
-                                "message": f"Connected to {host}:{port} as {username}"})
-            except imaplib.IMAP4.error as e:
-                return jsonify({"status": "error", "message": f"IMAP auth failed: {e}"})
-            except (socket.gaierror, OSError) as e:
-                return jsonify({"status": "error", "message": f"Cannot reach {host}:{port} — {e}"})
-
-        elif account_type == "gmail":
-            import urllib.request, json as _json
-            client_id     = ma.get("client_id", "").strip()
-            client_secret = ma.get("client_secret", "").strip()
-            refresh_token = ma.get("refresh_token", "").strip()
-            if not client_id or not client_secret or not refresh_token:
-                return _err("client_id, client_secret and refresh_token are required", 400)
-            payload = (
-                f"client_id={urllib.parse.quote(client_id)}"
-                f"&client_secret={urllib.parse.quote(client_secret)}"
-                f"&refresh_token={urllib.parse.quote(refresh_token)}"
-                f"&grant_type=refresh_token"
-            ).encode()
-            req = urllib.request.Request(
-                "https://oauth2.googleapis.com/token", data=payload,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                method="POST")
-            try:
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    result = _json.loads(resp.read())
-                if "access_token" in result:
-                    _ma_col(db).document(key).update({
-                        "access_token": result["access_token"],
-                        "updated_at":   datetime.now(timezone.utc).isoformat(),
-                    })
-                    return jsonify({"status": "ok",
-                                    "message": "OAuth2 token refreshed successfully"})
-                return jsonify({"status": "error",
-                                "message": result.get("error_description", str(result))})
-            except urllib.error.HTTPError as e:
-                import json as _json2
-                try:
-                    msg = _json2.loads(e.read()).get("error_description", str(e))
-                except Exception:
-                    msg = str(e)
-                return jsonify({"status": "error", "message": f"Google error: {msg}"})
-        else:
-            return _err(f"Unknown account type: {account_type}", 400)
-
+        from crm.mail_sender import MailSender
+        result = MailSender(ma).ping()
+        return jsonify(result)
     except Exception as exc:
         return _err(str(exc), 500)
-
 
 @app.route("/api/crm/settings/mail-accounts/<email>/send-test", methods=["POST"])
 def send_test_mail_settings(email):
     """Send a test email using a mail account from settings (no campaign needed).
-
-    Body: { "to": "...", "subject": "...", "body": "..." }
+    Body: { "to": "...", "subject": "...", "body_plain": "...", "body_html": "..." }
     """
-    import smtplib, base64
-    from email.mime.text import MIMEText
     try:
         db   = _get_db()
         key  = email.strip().lower()
         ma   = _get_mail_account(db, key)
         if not ma:
             return _err(f"Mail account '{key}' not found", 404)
-
-        body     = request.get_json(silent=True) or {}
-        to_addr  = body.get("to", "").strip()
-        subject  = body.get("subject", "Test email").strip()
-        mail_body = body.get("body", "This is a test email.").strip()
+        body       = request.get_json(silent=True) or {}
+        to_addr    = body.get("to", "").strip()
+        subject    = body.get("subject", "Test email").strip()
+        body_html  = body.get("body_html", "").strip()
+        body_plain = body.get("body_plain", body.get("body", "This is a test email.")).strip()
         if not to_addr:
             return _err("'to' is required", 400)
-
-        msg            = MIMEText(mail_body, "plain", "utf-8")
-        msg["Subject"] = subject
-        msg["To"]      = to_addr
-
-        account_type = ma.get("account_type", "imap")
-
-        if account_type == "imap":
-            host     = ma.get("host", "").strip()
-            username = ma.get("username", "").strip()
-            password = ma.get("password", "")
-            if not host or not username:
-                return _err("IMAP host and username are required", 400)
-            smtp_host = host.replace("imap.", "smtp.", 1) if host.startswith("imap.") else host
-            msg["From"] = username
-            try:
-                with smtplib.SMTP(smtp_host, 587, timeout=15) as server:
-                    server.ehlo(); server.starttls()
-                    server.login(username, password)
-                    server.sendmail(username, [to_addr], msg.as_string())
-                return jsonify({"status": "ok",
-                                "message": f"Test email sent to {to_addr} via {smtp_host}"})
-            except smtplib.SMTPAuthenticationError as e:
-                return jsonify({"status": "error", "message": f"SMTP auth failed: {e}"})
-            except Exception as e:
-                return jsonify({"status": "error", "message": f"SMTP error: {e}"})
-
-        elif account_type == "gmail":
-            client_id     = ma.get("client_id", "").strip()
-            client_secret = ma.get("client_secret", "").strip()
-            refresh_token = ma.get("refresh_token", "").strip()
-            access_token  = ma.get("access_token", "").strip()
-            from_addr     = key
-            if not refresh_token:
-                return _err("refresh_token is required", 400)
-            if not access_token:
-                import urllib.request, json as _json
-                payload = (
-                    f"client_id={urllib.parse.quote(client_id)}"
-                    f"&client_secret={urllib.parse.quote(client_secret)}"
-                    f"&refresh_token={urllib.parse.quote(refresh_token)}"
-                    f"&grant_type=refresh_token"
-                ).encode()
-                req = urllib.request.Request(
-                    "https://oauth2.googleapis.com/token", data=payload,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    method="POST")
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    token_data = _json.loads(resp.read())
-                access_token = token_data.get("access_token", "")
-                if not access_token:
-                    return jsonify({"status": "error",
-                                    "message": token_data.get("error_description", "Token refresh failed")})
-            msg["From"] = from_addr
-            auth_string = f"user={from_addr}\x01auth=Bearer {access_token}\x01\x01"
-            auth_b64    = base64.b64encode(auth_string.encode()).decode()
-            try:
-                with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
-                    server.ehlo(); server.starttls()
-                    server.docmd("AUTH", "XOAUTH2 " + auth_b64)
-                    server.sendmail(from_addr, [to_addr], msg.as_string())
-                return jsonify({"status": "ok",
-                                "message": f"Test email sent to {to_addr} via Gmail"})
-            except smtplib.SMTPAuthenticationError as e:
-                return jsonify({"status": "error", "message": f"Gmail auth failed: {e}"})
-            except Exception as e:
-                return jsonify({"status": "error", "message": f"Gmail SMTP error: {e}"})
-        else:
-            return _err(f"Unknown account type: {account_type}", 400)
-    except Exception as exc:
-        return _err(str(exc), 500)
-
-
-@app.route("/api/crm/settings/mail-accounts/<email>/inbox", methods=["GET"])
-def read_inbox(email):
-    """Read recent emails from a mail account inbox.
-
-    Query params:
-      limit   int  max messages to return (default 20)
-
-    Returns list of messages: { uid, subject, from, date, preview, body }
-    """
-    import imaplib, email as _email, ssl as _ssl, base64
-    from email.header import decode_header as _dh
-    from email.utils import parsedate_to_datetime
-
-    def _decode_str(val):
-        if not val:
-            return ""
-        parts = _dh(val)
-        out = []
-        for raw, enc in parts:
-            if isinstance(raw, bytes):
-                out.append(raw.decode(enc or "utf-8", errors="replace"))
-            else:
-                out.append(raw)
-        return " ".join(out)
-
-    def _get_body(msg):
-        """Extract plain-text body, falling back to HTML stripped of tags."""
-        import re as _re
-        body = ""
-        if msg.is_multipart():
-            for part in msg.walk():
-                ct = part.get_content_type()
-                cd = str(part.get("Content-Disposition", ""))
-                if ct == "text/plain" and "attachment" not in cd:
-                    charset = part.get_content_charset() or "utf-8"
-                    body = part.get_payload(decode=True).decode(charset, errors="replace")
-                    break
-            if not body:
-                for part in msg.walk():
-                    ct = part.get_content_type()
-                    cd = str(part.get("Content-Disposition", ""))
-                    if ct == "text/html" and "attachment" not in cd:
-                        charset = part.get_content_charset() or "utf-8"
-                        html = part.get_payload(decode=True).decode(charset, errors="replace")
-                        body = _re.sub(r"<[^>]+>", " ", html)
-                        body = _re.sub(r"\s+", " ", body).strip()
-                        break
-        else:
-            charset = msg.get_content_charset() or "utf-8"
-            body = msg.get_payload(decode=True).decode(charset, errors="replace")
-        return body.strip()
-
-    try:
-        db    = _get_db()
-        key   = email.strip().lower()
-        ma    = _get_mail_account(db, key)
-        if not ma:
-            return _err(f"Mail account '{key}' not found", 404)
-
-        limit = min(int(request.args.get("limit", 20)), 100)
-        account_type = ma.get("account_type", "imap")
-        messages = []
-
-        if account_type == "imap":
-            host     = ma.get("host", "").strip()
-            port     = int(ma.get("port") or 993)
-            username = ma.get("username", "").strip()
-            password = ma.get("password", "")
-            use_ssl  = ma.get("ssl", True)
-            if not host or not username:
-                return _err("IMAP host and username are required", 400)
-
-            if use_ssl:
-                conn = imaplib.IMAP4_SSL(host, port,
-                       ssl_context=_ssl.create_default_context())
-            else:
-                conn = imaplib.IMAP4(host, port)
-
-            conn.login(username, password)
-            conn.select("INBOX", readonly=True)
-
-            # Fetch all message UIDs, take the most recent `limit`
-            typ, data = conn.uid("search", None, "ALL")
-            uids = data[0].split()
-            recent_uids = uids[-limit:][::-1]   # newest first
-
-            for uid in recent_uids:
-                typ, raw = conn.uid("fetch", uid, "(RFC822)")
-                if typ != "OK" or not raw or not raw[0]:
-                    continue
-                msg = _email.message_from_bytes(raw[0][1])
-                body = _get_body(msg)
-                try:
-                    date_str = parsedate_to_datetime(msg.get("Date", "")).isoformat()
-                except Exception:
-                    date_str = msg.get("Date", "")
-                messages.append({
-                    "uid":     uid.decode(),
-                    "subject": _decode_str(msg.get("Subject", "(no subject)")),
-                    "from":    _decode_str(msg.get("From", "")),
-                    "date":    date_str,
-                    "preview": body[:200],
-                    "body":    body[:8000],
-                })
-
-            conn.logout()
-
-        elif account_type == "gmail":
-            # Gmail IMAP with OAuth2 XOAUTH2
-            client_id     = ma.get("client_id", "").strip()
-            client_secret = ma.get("client_secret", "").strip()
-            refresh_token = ma.get("refresh_token", "").strip()
-            access_token  = ma.get("access_token", "").strip()
-            from_addr     = key
-
-            if not refresh_token:
-                return _err("refresh_token is required for Gmail", 400)
-
-            # Refresh access token if missing
-            if not access_token:
-                import urllib.request, json as _json
-                payload = (
-                    f"client_id={urllib.parse.quote(client_id)}"
-                    f"&client_secret={urllib.parse.quote(client_secret)}"
-                    f"&refresh_token={urllib.parse.quote(refresh_token)}"
-                    f"&grant_type=refresh_token"
-                ).encode()
-                req = urllib.request.Request(
-                    "https://oauth2.googleapis.com/token", data=payload,
-                    headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    method="POST")
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    token_data = _json.loads(resp.read())
-                access_token = token_data.get("access_token", "")
-                if not access_token:
-                    return jsonify({"status": "error",
-                                    "message": token_data.get("error_description", "Token refresh failed")})
-                _ma_col(db).document(key).update({"access_token": access_token})
-
-            auth_string = f"user={from_addr}\x01auth=Bearer {access_token}\x01\x01"
-            auth_b64    = base64.b64encode(auth_string.encode()).decode()
-
-            conn = imaplib.IMAP4_SSL("imap.gmail.com", 993)
-            conn.authenticate("XOAUTH2", lambda x: auth_b64)
-            conn.select("INBOX", readonly=True)
-
-            typ, data = conn.uid("search", None, "ALL")
-            uids = data[0].split()
-            recent_uids = uids[-limit:][::-1]
-
-            for uid in recent_uids:
-                typ, raw = conn.uid("fetch", uid, "(RFC822)")
-                if typ != "OK" or not raw or not raw[0]:
-                    continue
-                msg = _email.message_from_bytes(raw[0][1])
-                body = _get_body(msg)
-                try:
-                    date_str = parsedate_to_datetime(msg.get("Date", "")).isoformat()
-                except Exception:
-                    date_str = msg.get("Date", "")
-                messages.append({
-                    "uid":     uid.decode(),
-                    "subject": _decode_str(msg.get("Subject", "(no subject)")),
-                    "from":    _decode_str(msg.get("From", "")),
-                    "date":    date_str,
-                    "preview": body[:200],
-                    "body":    body[:8000],
-                })
-
-            conn.logout()
-
-        else:
-            return _err(f"Unknown account type: {account_type}", 400)
-
-        return jsonify({"status": "ok", "email": key, "count": len(messages), "messages": messages})
-
-    except imaplib.IMAP4.error as e:
-        return jsonify({"status": "error", "message": f"IMAP error: {e}"})
+        from crm.mail_sender import MailSender
+        result = MailSender(ma).send(to=to_addr, subject=subject,
+                                     body_plain=body_plain, body_html=body_html)
+        return jsonify(result)
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -1524,3 +1057,200 @@ def crmWorker(req: https_fn.Request) -> https_fn.Response:
             return app.full_dispatch_request()
         except Exception as exc:
             return _err(str(exc), 500)
+
+
+@app.route("/api/crm/settings/mail-accounts/<email>/inbox", methods=["GET"])
+def read_inbox(email):
+    """Read recent emails from all folders of a mail account.
+
+    Query params:
+      per_folder  int  max messages per folder (default 10, max 50)
+
+    Returns list of messages sorted newest first:
+      { uid, folder, subject, from, to, date, preview, body }
+    """
+    import imaplib
+    import email as _email
+    import ssl as _ssl
+    import base64
+    import re as _re
+    from email.header import decode_header as _dh
+    from email.utils import parsedate_to_datetime
+
+    def _decode_str(val):
+        if not val:
+            return ""
+        parts = _dh(val)
+        out = []
+        for raw, enc in parts:
+            if isinstance(raw, bytes):
+                out.append(raw.decode(enc or "utf-8", errors="replace"))
+            else:
+                out.append(raw)
+        return " ".join(out)
+
+    def _parse_folder(item):
+        # Parse IMAP LIST item -> (selectable: bool, folder_name: str)
+        # Format: (\flags) "delim" "name"  or  (\flags) "delim" name
+        # Noselect folders are containers and cannot be selected.
+        if isinstance(item, bytes):
+            item = item.decode("utf-8", errors="replace")
+        import re as _r
+        flags_m = _r.match(r"\(([^)]*)\)", item)
+        flags = flags_m.group(1).lower() if flags_m else ""
+        selectable = "noselect" not in flags
+        name_part = _r.sub(r"^\(.*?\)\s+(?:\"[^\"]*\"|NIL)\s*", "", item).strip()
+        if name_part.startswith('"') and name_part.endswith('"'):
+            name_part = name_part[1:-1]
+        return selectable, name_part
+    def _get_body(msg):
+        body = ""
+        if msg.is_multipart():
+            for part in msg.walk():
+                ct = part.get_content_type()
+                cd = str(part.get("Content-Disposition", ""))
+                if ct == "text/plain" and "attachment" not in cd:
+                    charset = part.get_content_charset() or "utf-8"
+                    raw = part.get_payload(decode=True)
+                    body = raw.decode(charset, errors="replace") if raw else ""
+                    break
+            if not body:
+                for part in msg.walk():
+                    ct = part.get_content_type()
+                    cd = str(part.get("Content-Disposition", ""))
+                    if ct == "text/html" and "attachment" not in cd:
+                        charset = part.get_content_charset() or "utf-8"
+                        raw = part.get_payload(decode=True)
+                        html = raw.decode(charset, errors="replace") if raw else ""
+                        body = _re.sub(r"<[^>]+>", " ", html)
+                        body = _re.sub(r"\s+", " ", body).strip()
+                        break
+        else:
+            raw = msg.get_payload(decode=True)
+            charset = msg.get_content_charset() or "utf-8"
+            body = raw.decode(charset, errors="replace") if raw else ""
+        return body.strip()
+
+    def _fetch_folder(conn, folder_name, per_folder):
+        msgs = []
+        try:
+            quoted = '"' + folder_name.replace('"', '\\"') + '"'
+            typ, _ = conn.select(quoted, readonly=True)
+            if typ != "OK":
+                typ, _ = conn.select(folder_name, readonly=True)
+            if typ != "OK":
+                return msgs
+        except Exception:
+            return msgs
+        typ, data = conn.uid("search", None, "ALL")
+        if typ != "OK" or not data[0]:
+            return msgs
+        uids = data[0].split()
+        for uid in uids[-per_folder:][::-1]:
+            try:
+                typ, raw = conn.uid("fetch", uid, "(RFC822)")
+                if typ != "OK" or not raw or not raw[0]:
+                    continue
+                msg = _email.message_from_bytes(raw[0][1])
+                body = _get_body(msg)
+                try:
+                    date_str = parsedate_to_datetime(msg.get("Date", "")).isoformat()
+                except Exception:
+                    date_str = msg.get("Date", "")
+                msgs.append({
+                    "uid":     uid.decode(),
+                    "folder":  folder_name,
+                    "subject": _decode_str(msg.get("Subject", "(no subject)")),
+                    "from":    _decode_str(msg.get("From", "")),
+                    "to":      _decode_str(msg.get("To", "")),
+                    "date":    date_str,
+                    "preview": body[:200],
+                    "body":    body[:8000],
+                })
+            except Exception:
+                continue
+        return msgs
+
+    try:
+        db  = _get_db()
+        key = email.strip().lower()
+        ma  = _get_mail_account(db, key)
+        if not ma:
+            return _err(f"Mail account '{key}' not found", 404)
+
+        per_folder   = min(int(request.args.get("per_folder", 10)), 50)
+        account_type = ma.get("account_type", "imap")
+        messages     = []
+
+        if account_type == "imap":
+            host     = ma.get("host", "").strip()
+            port     = int(ma.get("port") or 993)
+            username = ma.get("username", "").strip()
+            password = ma.get("password", "")
+            use_ssl  = ma.get("ssl", True)
+            if not host or not username:
+                return _err("IMAP host and username are required", 400)
+            if use_ssl:
+                conn = imaplib.IMAP4_SSL(host, port, ssl_context=_ssl.create_default_context())
+            else:
+                conn = imaplib.IMAP4(host, port)
+            conn.login(username, password)
+
+        elif account_type == "gmail":
+            client_id     = ma.get("client_id", "").strip()
+            client_secret = ma.get("client_secret", "").strip()
+            refresh_token = ma.get("refresh_token", "").strip()
+            access_token  = ma.get("access_token", "").strip()
+            if not refresh_token:
+                return _err("refresh_token is required for Gmail", 400)
+            if not access_token:
+                import urllib.request
+                import json as _json
+                p = (
+                    f"client_id={urllib.parse.quote(client_id)}"
+                    f"&client_secret={urllib.parse.quote(client_secret)}"
+                    f"&refresh_token={urllib.parse.quote(refresh_token)}"
+                    f"&grant_type=refresh_token"
+                ).encode()
+                req = urllib.request.Request(
+                    "https://oauth2.googleapis.com/token", data=p,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    method="POST")
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    td = _json.loads(resp.read())
+                access_token = td.get("access_token", "")
+                if not access_token:
+                    return jsonify({"status": "error",
+                                    "message": td.get("error_description", "Token refresh failed")})
+                _ma_col(db).document(key).update({"access_token": access_token})
+            auth_str = f"user={key}\x01auth=Bearer {access_token}\x01\x01"
+            auth_b64 = base64.b64encode(auth_str.encode()).decode()
+            conn = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+            conn.authenticate("XOAUTH2", lambda x: auth_b64)
+        else:
+            return _err(f"Unknown account type: {account_type}", 400)
+
+        # List all folders
+        typ, folder_list = conn.list()
+        folders = []
+        for item in (folder_list or []):
+            selectable, name = _parse_folder(item)
+            if selectable and name:
+                folders.append(name)
+        if not folders:
+            folders = ["INBOX"]
+
+        for folder in folders:
+            messages.extend(_fetch_folder(conn, folder, per_folder))
+
+        conn.logout()
+
+        messages.sort(key=lambda m: m.get("date", ""), reverse=True)
+
+        return jsonify({"status": "ok", "email": key,
+                        "count": len(messages), "messages": messages})
+
+    except imaplib.IMAP4.error as e:
+        return jsonify({"status": "error", "message": f"IMAP error: {e}"})
+    except Exception as exc:
+        return _err(str(exc), 500)

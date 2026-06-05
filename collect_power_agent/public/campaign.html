@@ -103,6 +103,10 @@
            style="cursor:pointer;border-radius:10px 10px 0 0;background:#f9fafb" onclick="toggleMail()">
         <span class="fw-500 small"><i class="ti ti-mail me-1 text-primary"></i>Mail template</span>
         <div class="d-flex align-items-center gap-3">
+          <button class="btn btn-sm btn-outline-secondary py-0" style="font-size:.78rem"
+                  onclick="event.stopPropagation();openCampaignTestMail()">
+            <i class="ti ti-send me-1"></i>Send test
+          </button>
           <a id="c-edit-mail-link" href="campaign-edit.html" class="small text-primary text-decoration-none" onclick="event.stopPropagation()">
             <i class="ti ti-edit me-1"></i>Edit
           </a>
@@ -138,6 +142,49 @@
       <div id="contacts-empty" class="text-center py-3 small" style="color:var(--bb-muted);display:none">No contacts found.</div>
     </div>
 
+  </div>
+</div>
+
+<!-- Campaign test mail modal -->
+<div class="modal fade" id="campaignTestMailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-send text-primary me-2"></i>Send test email</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- From / To / Subject -->
+        <div class="mb-2 small" style="color:var(--bb-muted)">
+          <span class="fw-500" style="color:#111">From:</span>
+          <span id="ctm-from" class="ms-1">—</span>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label small fw-500">To</label>
+            <input id="ctm-to" class="form-control form-control-sm" type="email" placeholder="recipient@example.com">
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-500">Subject</label>
+            <input id="ctm-subject" class="form-control form-control-sm">
+          </div>
+        </div>
+        <!-- Preview -->
+        <div class="mb-2 d-flex align-items-center justify-content-between">
+          <label class="form-label small fw-500 mb-0">Mail preview</label>
+          <span id="ctm-type-badge" class="badge bg-secondary" style="font-size:.65rem"></span>
+        </div>
+        <div id="ctm-preview" class="border rounded p-3 mb-3"
+             style="background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#333;min-height:60px;max-height:320px;overflow-y:auto"></div>
+        <div id="ctm-feedback" class="alert py-2 small mb-0" style="display:none"></div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="ctm-send-btn" onclick="doSendCampaignTestMail()">
+          <i class="ti ti-send me-1"></i>Send
+        </button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -375,7 +422,11 @@ async function loadCampaign() {
     document.getElementById('c-sites').textContent    = c.sites_count || 0;
     document.getElementById('c-countries').textContent = (c.countries||[]).length || '—';
     document.getElementById('c-sent').textContent     = (c.status_breakdown||{}).sent || 0;
-    document.getElementById('c-email-account-preview').textContent = c.outreach_email_account || '—';
+    const ma = c.mail_account || {};
+    const displayName = ma.display_name || '';
+    const fromAddr    = c.outreach_email_account || '';
+    const fromFormatted = displayName ? `${displayName} <${fromAddr}>` : (fromAddr || '—');
+    document.getElementById('c-email-account-preview').textContent = fromFormatted;
     await populateEmailAccountSelect(c.outreach_email_account || '');
     document.getElementById('c-owner-input').value = c.owner || '';
     const hasMailAccount = !!(c.mail_account && c.mail_account.account_type);
@@ -386,6 +437,8 @@ async function loadCampaign() {
     if (st === 'sent' && c.sent_at) { sentAtRow.style.display = ''; document.getElementById('c-sent-at').textContent = fmt(c.sent_at); }
     else sentAtRow.style.display = 'none';
     const mail = c.mail || {};
+    window._campaignMail = { ...mail, outreach_email: c.outreach_email_account || '',
+                              _display_name: (c.mail_account || {}).display_name || '' };
     document.getElementById('c-subject-preview').textContent = mail.subject || '—';
     const previewDiv = document.getElementById('c-body-preview');
     const mailCss = mail.css || `.mail-wrap{font-family:Arial,sans-serif;font-size:14px;line-height:1.4;color:#333;max-width:600px}.mail-wrap p{margin-bottom:8px}.mail-wrap a{color:#0066cc;text-decoration:none}`;
@@ -568,6 +621,79 @@ async function saveEmailAccount() {
       body: JSON.stringify({ outreach_email_account: email })
     });
   } catch(e) { /* silent */ }
+}
+
+function openCampaignTestMail() {
+  const mail = window._campaignMail || {};
+  const isHtml = (mail.type || 'plain') !== 'plain';
+  const displayName = mail._display_name || '';
+  const fromAddr    = mail.outreach_email || '';
+  document.getElementById('ctm-from').textContent =
+    displayName ? `${displayName} <${fromAddr}>` : (fromAddr || '—');
+  const fb = document.getElementById('ctm-feedback');
+  fb.style.display = 'none';
+  document.getElementById('ctm-send-btn').disabled = false;
+  document.getElementById('ctm-send-btn').innerHTML = '<i class="ti ti-send me-1"></i>Send';
+  document.getElementById('ctm-to').value = '';
+  document.getElementById('ctm-subject').value = mail.subject || '';
+  document.getElementById('ctm-type-badge').textContent = isHtml ? 'HTML' : 'Plain text';
+  document.getElementById('ctm-type-badge').className = `badge ${isHtml ? 'bg-primary' : 'bg-secondary'} ms-1`;
+  const preview = document.getElementById('ctm-preview');
+  if (isHtml && mail.body) {
+    const css = mail.css || '';
+    preview.innerHTML = `<style>${css}</style><div class="mail-wrap">${mail.body}</div>`;
+  } else {
+    preview.style.whiteSpace = 'pre-wrap';
+    preview.textContent = mail.body || '(no body)';
+  }
+  new bootstrap.Modal(document.getElementById('campaignTestMailModal')).show();
+}
+
+async function doSendCampaignTestMail() {
+  const mail    = window._campaignMail || {};
+  const email   = mail.outreach_email || '';
+  const to      = document.getElementById('ctm-to').value.trim();
+  const subject = document.getElementById('ctm-subject').value.trim();
+  const isHtml  = (mail.type || 'plain') !== 'plain';
+  const fb      = document.getElementById('ctm-feedback');
+  const btn     = document.getElementById('ctm-send-btn');
+
+  if (!to) {
+    fb.className = 'alert alert-warning py-2 small mb-0';
+    fb.textContent = 'Recipient is required.'; fb.style.display = '';
+    return;
+  }
+  if (!email) {
+    fb.className = 'alert alert-warning py-2 small mb-0';
+    fb.textContent = 'No outreach email account set on this campaign.'; fb.style.display = '';
+    return;
+  }
+
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Sending…';
+  fb.style.display = 'none';
+
+  const payload = { to, subject };
+  if (isHtml) {
+    payload.body_html = mail.body || '';
+    payload.body_plain = mail.body ? mail.body.replace(/<[^>]+>/g, ' ').replace(/\s+/g,' ').trim() : '';
+  } else {
+    payload.body = mail.body || '';
+  }
+
+  try {
+    const r = await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(email)}/send-test`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    fb.className = d.status === 'ok' ? 'alert alert-success py-2 small mb-0' : 'alert alert-danger py-2 small mb-0';
+    fb.innerHTML = (d.status === 'ok' ? '<i class="ti ti-circle-check me-1"></i>' : '<i class="ti ti-circle-x me-1"></i>') + d.message;
+    fb.style.display = '';
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 small mb-0';
+    fb.textContent = e.message; fb.style.display = '';
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-send me-1"></i>Send';
 }
 
 async function viewMailAccount() {

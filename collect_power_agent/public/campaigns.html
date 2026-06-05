@@ -45,7 +45,11 @@
     <select id="owner-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
       <option value="">All owners</option>
     </select>
-    <button class="btn btn-sm btn-outline-primary ms-auto" onclick="discover()" id="discover-btn">
+    <a href="https://docs.google.com/spreadsheets/d/1aMglV53NiMEArjld37HN5cxliyNRGzIP2mrM4kwlupA" target="_blank"
+       class="btn btn-sm btn-outline-secondary ms-auto text-decoration-none">
+      <i class="ti ti-table me-1"></i>Master sheet
+    </a>
+    <button class="btn btn-sm btn-outline-primary" onclick="discover()" id="discover-btn">
       <i class="ti ti-search me-1"></i>Discover new
     </button>
   </div>
@@ -139,20 +143,47 @@ async function load() {
 async function discover() {
   const btn = document.getElementById('discover-btn');
   const bar = document.getElementById('discover-bar');
-  btn.disabled = true; btn.innerHTML = '<i class="ti ti-search me-1"></i>Scanning…';
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Scanning…';
   bar.style.display = 'none';
   try {
+    // Step 1: discover new campaigns
     const r = await fetch(BASE + '/api/crm/discover-campaigns');
     const d = await r.json();
-    if (d.created && d.created.length > 0) {
-      bar.className = 'alert alert-success py-2 px-3 small mb-3';
-      bar.innerHTML = `<i class="ti ti-check me-1"></i>${d.message} New: <strong>${d.created.map(c=>c.campaign_id).join(', ')}</strong>`;
-      await load();
-    } else {
-      bar.className = 'alert alert-light py-2 px-3 small mb-3';
-      bar.innerHTML = `<i class="ti ti-info-circle me-1"></i>${d.message || 'No new campaigns found.'}`;
-    }
+    const newCampaigns = d.created || [];
+
+    bar.className = 'alert alert-info py-2 px-3 small mb-3';
+    bar.innerHTML = newCampaigns.length
+      ? `<i class="ti ti-check me-1 text-success"></i>${d.message} New: <strong>${newCampaigns.map(c=>c.campaign_id).join(', ')}</strong> — syncing contacts from master sheet…`
+      : `<i class="ti ti-refresh me-1"></i>${d.message || 'No new campaigns.'} Syncing all contacts from master sheet…`;
     bar.style.display = '';
+
+    // Step 2: run full crm-sync to pick up any new contacts across all campaigns
+    const sr = await fetch(BASE + '/api/crm/crm-sync');
+    const sd = await sr.json();
+    const jobId = sd.job_id;
+
+    if (jobId) {
+      // Poll until done
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        const jr = await fetch(`${BASE}/api/crm/status/${jobId}`);
+        const jd = await jr.json();
+        if (jd.status === 'done') {
+          const res = jd.result || {};
+          bar.className = 'alert alert-success py-2 px-3 small mb-3';
+          bar.innerHTML = `<i class="ti ti-check me-1"></i>Done — `
+            + `${res.campaigns_upserted ?? 0} campaigns, ${res.contact_select_synced ?? 0} contacts synced`
+            + (newCampaigns.length ? ` · <strong>${newCampaigns.length} new campaign(s) created</strong>` : '');
+          break;
+        }
+        if (jd.status === 'error') {
+          bar.className = 'alert alert-warning py-2 px-3 small mb-3';
+          bar.innerHTML = `<i class="ti ti-alert-triangle me-1"></i>Sync error: ${jd.error || 'unknown'}`;
+          break;
+        }
+      }
+    }
+    await load();
   } catch(e) {
     bar.className = 'alert alert-danger py-2 px-3 small mb-3';
     bar.textContent = 'Error: ' + e.message; bar.style.display = '';

@@ -36,11 +36,12 @@
         <option value="">— select account —</option>
       </select>
       <div class="d-flex align-items-center gap-2 ms-2">
-        <label class="small mb-0" style="color:var(--bb-muted)">Show</label>
+        <label class="small mb-0" style="color:var(--bb-muted)">Per folder</label>
         <select id="limit-select" class="form-select form-select-sm" style="max-width:90px" onchange="loadInbox()">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
           <option value="20">20</option>
           <option value="50">50</option>
-          <option value="100">100</option>
         </select>
       </div>
       <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="loadInbox()" id="refresh-btn">
@@ -63,7 +64,9 @@
       <table class="table table-sm mb-0">
         <thead style="background:#f9fafb">
           <tr>
+            <th class="small">Folder</th>
             <th class="small">From</th>
+            <th class="small">To</th>
             <th class="small">Subject</th>
             <th class="small text-nowrap">Date</th>
           </tr>
@@ -87,8 +90,12 @@
         <div>
           <h6 class="modal-title mb-1" id="msg-modal-subject">—</h6>
           <div class="small" style="color:var(--bb-muted)">
-            <span id="msg-modal-from"></span>
+            <span><i class="ti ti-arrow-right me-1"></i><span id="msg-modal-from"></span></span>
             <span class="mx-2">·</span>
+            <span><i class="ti ti-arrow-left me-1"></i><span id="msg-modal-to"></span></span>
+            <span class="mx-2">·</span>
+            <span id="msg-modal-folder" class="badge bg-secondary" style="font-size:.65rem"></span>
+            <span class="mx-1">·</span>
             <span id="msg-modal-date"></span>
           </div>
         </div>
@@ -134,7 +141,7 @@ async function loadInbox() {
   btn.innerHTML = '<i class="ti ti-loader me-1"></i>Loading…';
 
   try {
-    const r = await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(email)}/inbox?limit=${limit}`);
+    const r = await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(email)}/inbox?per_folder=${limit}`);
     const d = await r.json();
 
     if (d.status !== 'ok') {
@@ -166,7 +173,9 @@ function renderMessages(msgs) {
   empty.style.display = 'none';
   tbody.innerHTML = msgs.map((m, i) => `
     <tr class="msg-row" onclick="openMessage(${i})" data-idx="${i}">
+      <td class="small text-nowrap"><span class="badge bg-secondary" style="font-size:.65rem;font-weight:500">${escapeHtml(m.folder||'')}</span></td>
       <td class="from-cell small">${escapeHtml(m.from)}</td>
+      <td class="from-cell small text-muted">${escapeHtml(m.to)}</td>
       <td class="subject-cell small">
         ${escapeHtml(m.subject)}
         ${m.preview ? `<span class="text-muted fw-normal"> — ${escapeHtml(m.preview.slice(0,80))}</span>` : ''}
@@ -183,6 +192,8 @@ function openMessage(idx) {
   if (!m) return;
   document.getElementById('msg-modal-subject').textContent = m.subject || '(no subject)';
   document.getElementById('msg-modal-from').textContent    = m.from || '';
+  document.getElementById('msg-modal-to').textContent      = m.to || '';
+  document.getElementById('msg-modal-folder').textContent  = m.folder || '';
   document.getElementById('msg-modal-date').textContent    = fmt(m.date);
   document.getElementById('msg-modal-body').textContent    = m.body || '(empty)';
   new bootstrap.Modal(document.getElementById('msgModal')).show();
