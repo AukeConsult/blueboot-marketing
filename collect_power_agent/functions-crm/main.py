@@ -40,14 +40,13 @@ import firebase_admin
 from firebase_admin import credentials, firestore as fs
 
 # -- Config -------------------------------------------------------------------
-GCP_PROJECT     = "blueboot-market"
-GCP_LOCATION    = "us-central1"
-TASKS_QUEUE     = "crm-queue"
-WORKER_BASE_URL = (
-    "https://us-central1-blueboot-market.cloudfunctions.net"
-    "/crmWorker/api/crm/worker"
-)
-JOBS_COLLECTION = "crm_jobs"
+GCP_PROJECT     = os.getenv("GCP_PROJECT", "blueboot-market")
+GCP_LOCATION    = os.getenv("GCP_LOCATION", "us-central1")
+TASKS_QUEUE     = os.getenv("TASKS_QUEUE", "crm-queue")
+WORKER_BASE_URL = os.getenv(
+    "WORKER_BASE_URL",
+    "https://us-central1-blueboot-market.cloudfunctions.net/crmWorker/api/crm/worker")
+JOBS_COLLECTION = os.getenv("JOBS_COLLECTION", "crm_jobs")
 
 # -- Bootstrap ----------------------------------------------------------------
 _fb_lock = threading.Lock()
@@ -374,8 +373,8 @@ def update_campaign(campaign_id):
 
 
 # -- gdisk (Google Drive folder) ---------------------------------------------
-GDISK_SETTINGS_COLLECTION = "settings"
-GDISK_SETTINGS_DOC = "gdisk"
+GDISK_SETTINGS_COLLECTION = os.getenv("GDISK_SETTINGS_COLLECTION", "settings")
+GDISK_SETTINGS_DOC = os.getenv("GDISK_SETTINGS_DOC", "gdisk")
 
 
 def _gdisk():
@@ -401,6 +400,15 @@ def gdisk_set_settings():
             {"folder_id": folder_id,
              "updated_at": datetime.now(timezone.utc).isoformat()}, merge=True)
         return _ok("gdisk folder saved", folder_id=folder_id)
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/gdisk/check", methods=["GET"])
+def gdisk_check_access():
+    """Report what the service account can do with the configured folder."""
+    try:
+        return jsonify(_gdisk().check_access())
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -468,7 +476,7 @@ def gdisk_delete_file(name):
 
 
 # -- Filter facets ------------------------------------------------------------
-FILTER_FACETS_COLLECTION = "filter_facets"
+FILTER_FACETS_COLLECTION = os.getenv("FILTER_FACETS_COLLECTION", "filter_facets")
 
 
 @app.route("/api/crm/filter-facets", methods=["GET"])

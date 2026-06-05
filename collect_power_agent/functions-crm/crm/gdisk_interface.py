@@ -32,6 +32,10 @@ SETTINGS_COLLECTION = "settings"
 SETTINGS_DOC = "gdisk"
 GDISK_FOLDER_ID_ENV = "GDISK_FOLDER_ID"
 
+# Built once per warm instance and reused -- avoids re-auth + discovery on
+# every request (the main cause of slow uploads).
+_DRIVE_SERVICE = None
+
 
 class GdiskInterface:
     """Read/write documents in a Google Drive folder. Reusable across functions."""
@@ -59,12 +63,16 @@ class GdiskInterface:
 
     @property
     def service(self):
-        if self._service is None:
+        global _DRIVE_SERVICE
+        if self._service is not None:
+            return self._service
+        if _DRIVE_SERVICE is None:
             import google.auth
             from googleapiclient.discovery import build
             creds, _ = google.auth.default(scopes=self.SCOPES)
-            self._service = build("drive", "v3", credentials=creds)
-        return self._service
+            _DRIVE_SERVICE = build("drive", "v3", credentials=creds,
+                                   cache_discovery=False)
+        return _DRIVE_SERVICE
 
     def is_configured(self) -> bool:
         return bool(self.folder_id)
@@ -104,6 +112,56 @@ class GdiskInterface:
         return self.service.files().get(
             fileId=fid, fields="id, name, mimeType, size, modifiedTime",
             supportsAllDrives=True).execute()
+
+    def service_account_email(self) -> str:
+        """Best-effort: the email of the service account the backend runs as."""
+        env = os.environ.get("GDISK_SERVICE_ACCOUNT", "").strip()
+        if env:
+            return env
+        try:
+            import google.auth
+            creds, _ = google.auth.default(scopes=self.SCOPES)
+            email = getattr(creds, "service_account_email", None)
+            if email and email != "default":
+                return email
+        except Exception:
+            pass
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "http://metadata.google.internal/computeMetadata/v1/instance/"
+                "service-accounts/default/email",
+                headers={"Metadata-Flavor": "Google"})
+            return urllib.request.urlopen(req, timeout=2).read().decode().strip()
+        except Exception:
+            return "(unknown — check the function's runtime service account in GCP)"
+
+    def check_access(self) -> dict:
+        """Report what the service account can do with the configured folder.
+        Never raises -- returns a dict describing the result."""
+        if not self.is_configured():
+            return {"configured": False,
+                    "reason": "No folder configured (settings/gdisk or GDISK_FOLDER_ID)."}
+        try:
+            meta = self.service.files().get(
+                fileId=self.folder_id,
+                fields="id, name, mimeType, capabilities(canListChildren, canAddChildren, canEdit)",
+                supportsAllDrives=True).execute()
+        except Exception as exc:
+            return {"configured": True, "folder_id": self.folder_id,
+                    "ok": False, "error": str(exc)}
+        caps = meta.get("capabilities", {}) or {}
+        is_folder = meta.get("mimeType") == "application/vnd.google-apps.folder"
+        return {
+            "configured":   True,
+            "ok":           True,
+            "folder_id":    self.folder_id,
+            "name":         meta.get("name"),
+            "is_folder":    is_folder,
+            "can_read":     bool(caps.get("canListChildren")),
+            "can_write":    bool(caps.get("canAddChildren") or caps.get("canEdit")),
+            "service_account": self.service_account_email(),
+        }
 
     # -- read --------------------------------------------------------------
     def read_bytes(self, name: str) -> bytes | None:
@@ -156,8 +214,15 @@ class GdiskInterface:
             mime="application/json")
 
     def delete_file(self, name: str) -> bool:
+        """Move the file to trash (recoverable). Trashing works for editors,
+        whereas a hard delete requires ownership. Returns False if not found."""
         fid = self.find_file(name)
         if not fid:
             return False
-        self.service.files().delete(fileId=fid, supportsAllDrives=True).execute()
+        try:
+            self.service.files().update(
+                fileId=fid, body={"trashed": True}, supportsAllDrives=True).execute()
+        except Exception:
+            # fall back to a hard delete (works when the SA owns the file)
+            self.service.files().delete(fileId=fid, supportsAllDrives=True).execute()
         return True

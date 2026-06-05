@@ -89,3 +89,71 @@ function elapsed(a, b){
   const s = Math.round((new Date(b) - new Date(a)) / 1000);
   return s < 60 ? s + 's' : Math.floor(s/60) + 'm ' + (s % 60) + 's';
 }
+
+// Turn a raw API/Google error string into a short, friendly HTML snippet.
+function prettyError(msg){
+  const m = String(msg || 'Unknown error');
+  if(/has not been used in project|accessNotConfigured|drive\.googleapis\.com/i.test(m)){
+    const url = (m.match(/https?:\/\/console\.developers\.google\.com[^\s"'\]]+/) || [])[0]
+             || 'https://console.developers.google.com/apis/api/drive.googleapis.com';
+    return '<strong>Google Drive API is not enabled.</strong> '
+         + 'Enable it, wait a minute, then refresh — '
+         + '<a href="' + url + '" target="_blank">enable Drive API</a>.';
+  }
+  if(/insufficientPermissions|caller does not have permission|\bpermission\b/i.test(m)){
+    return '<strong>Permission denied.</strong> Share the Drive folder (Editor) with the '
+         + 'backend service account — click <em>Check access</em> to see which account that is.';
+  }
+  if(/No .*folder configured/i.test(m)){
+    return 'No Drive folder configured yet — set it on the <a href="settings.html">Settings</a> page.';
+  }
+  if(/file not found/i.test(m)){
+    return '<strong>Folder not found or not shared.</strong> Check the folder ID, and share the '
+         + 'Drive folder (Editor) with the backend service account — use <em>Check access</em> '
+         + 'to see which account and confirm read/write.';
+  }
+  if(/\bnot found\b|\b404\b/i.test(m)) return 'Not found.';
+  if(/timed out|unreachable/i.test(m)) return 'The API did not respond — check your connection and try again.';
+  return escapeHtml(m.length > 300 ? m.slice(0, 300) + '…' : m);
+}
+
+// --- shared top navigation (single source of truth) -------------------------
+// Pages include  <div id="nav"></div>  and load this file; the nav renders
+// automatically with the active link highlighted from the current URL.
+const NAV_LINKS = [
+  { href: 'campaigns.html',     icon: 'ti-speakerphone',      label: 'Campaigns',
+    match: ['campaigns.html', 'campaign.html', 'campaign-edit.html'] },
+  { href: 'crm-bp.html',        icon: 'ti-server-2',          label: 'CRM' },
+  { href: 'jobs.html',          icon: 'ti-list-check',        label: 'Jobs' },
+  { href: 'filter-facets.html', icon: 'ti-filter',            label: 'Filter Facets' },
+  { href: 'gdisk.html',         icon: 'ti-brand-google-drive',label: 'Drive Folder' },
+  { href: 'settings.html',      icon: 'ti-settings',          label: 'Settings' },
+];
+
+function renderNav(targetId){
+  const el = document.getElementById(targetId || 'nav');
+  if(!el) return;
+  const cur = (location.pathname.split('/').pop() || 'index.html') || 'index.html';
+  const links = NAV_LINKS.map(l => {
+    const active = (l.match || [l.href]).includes(cur) ? ' active' : '';
+    return '<a href="' + l.href + '" class="nav-link' + active + '">'
+         + '<i class="ti ' + l.icon + '"></i>' + l.label + '</a>';
+  }).join('');
+  el.outerHTML = '<nav class="bb-nav">'
+    + '<a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>'
+    + '<div class="nav-links">' + links + '</div></nav>';
+}
+
+// auto-render on any page that has a #nav placeholder
+(function(){
+  function go(){ if(document.getElementById('nav')) renderNav(); }
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go);
+  else go();
+})();
+
+// Back button: go to the previous page if there is history, otherwise let the
+// link's href act as a fallback. Use as: <a href="index.html" onclick="return goBack()">
+function goBack(){
+  if(history.length > 1){ history.back(); return false; }
+  return true;   // no history (opened directly) -> follow the href
+}

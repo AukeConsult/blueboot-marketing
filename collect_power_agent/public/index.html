@@ -18,16 +18,7 @@
 </head>
 <body>
 
-<nav class="bb-nav">
-  <a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>
-  <div class="nav-links">
-    <a href="campaigns.html" class="nav-link"><i class="ti ti-speakerphone"></i>Campaigns</a>
-    <a href="crm-bp.html" class="nav-link"><i class="ti ti-server-2"></i>CRM</a>
-    <a href="jobs.html" class="nav-link"><i class="ti ti-list-check"></i>Jobs</a>
-    <a href="filter-facets.html" class="nav-link"><i class="ti ti-filter"></i>Filter Facets</a>
-    <a href="gdisk.html" class="nav-link"><i class="ti ti-brand-google-drive"></i>Drive Folder</a>
-  </div>
-</nav>
+<div id="nav"></div>
 
 <div class="container" style="max-width:700px; padding-top:64px; padding-bottom:64px">
 
@@ -79,8 +70,16 @@
         <p>Browse the configured Google Drive folder — list, upload and download files.</p>
       </a>
     </div>
+    <div class="col-md-6">
+      <a href="settings.html" class="menu-card h-100">
+        <div class="menu-icon" style="background:#f1f3f5;color:#495057"><i class="ti ti-settings"></i></div>
+        <h5>Settings</h5>
+        <p>Configure the Google Drive folder and check the backend service account's access.</p>
+      </a>
+    </div>
   </div>
 </div>
 
+<script src="js/crm-common.js"></script>
 </body>
 </html>

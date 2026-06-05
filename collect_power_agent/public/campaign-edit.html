@@ -20,21 +20,13 @@
 </head>
 <body>
 
-<nav class="bb-nav">
-  <a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>
-  <div class="nav-links">
-    <a href="campaigns.html" class="nav-link active"><i class="ti ti-speakerphone"></i>Campaigns</a>
-    <a href="crm-bp.html" class="nav-link"><i class="ti ti-server-2"></i>CRM</a>
-    <a href="jobs.html" class="nav-link"><i class="ti ti-list-check"></i>Jobs</a>
-    <a href="filter-facets.html" class="nav-link"><i class="ti ti-filter"></i>Filter Facets</a>
-  </div>
-</nav>
+<div id="nav"></div>
 
 <div class="container py-4" style="max-width:900px">
 
   <div class="d-flex align-items-center justify-content-between mb-3">
     <div class="d-flex align-items-center gap-2">
-      <a id="back-link" href="campaigns.html" class="btn btn-sm btn-outline-secondary"><i class="ti ti-arrow-left"></i></a>
+      <a id="back-link" href="campaigns.html" class="btn btn-sm btn-outline-secondary" onclick="return goBack()"><i class="ti ti-arrow-left"></i></a>
       <div>
         <div class="fw-600" style="font-size:1rem">Mail editor</div>
         <div class="small" style="color:var(--bb-muted)" id="c-campaign-id">loading…</div>

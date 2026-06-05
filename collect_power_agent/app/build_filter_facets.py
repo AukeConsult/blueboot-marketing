@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from collections import Counter
 from datetime import datetime, timezone
@@ -51,9 +52,10 @@ COLLECTION_DEFAULT = "site_leads"
 CONTACTS_SUBCOLLECTION = "site_contacts"
 OUTPUT_DIR = Path(__file__).parent.parent / "output"
 # high-cardinality fields -- return only the N most-used values.
-TOP_N_LOCATION = 200
-TOP_N_KEYWORDS = 100
-TOP_N_AI_PLATFORM = 10
+TOP_N_LOCATION = int(os.getenv("FACET_TOP_N_LOCATION", "200"))
+TOP_N_KEYWORDS = int(os.getenv("FACET_TOP_N_KEYWORDS", "100"))
+TOP_N_AI_PLATFORM = int(os.getenv("FACET_TOP_N_AI_PLATFORM", "10"))
+TITLE_MIN_COUNT = int(os.getenv("FACET_TITLE_MIN_COUNT", "20"))
 
 # Canonical page-count size bands -- kept in sync with the buckets in
 # app/maint_statistics.py. (key, label, lo, hi) where the band matches lo <= pc <= hi.
@@ -186,7 +188,7 @@ def build_facets(collection: str, cap: int) -> dict:
 
     # site_contacts facets
     occupation   = EnumFacet(cap, lower=True)
-    title        = EnumFacet(cap, lower=True, transform=_first_word, min_count=20)
+    title        = EnumFacet(cap, lower=True, transform=_first_word, min_count=TITLE_MIN_COUNT)
     email_type   = EnumFacet(cap)
     country_contacts = EnumFacet(cap)
     ai_country_contacts = EnumFacet(cap)

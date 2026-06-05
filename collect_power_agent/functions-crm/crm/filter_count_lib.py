@@ -13,6 +13,7 @@ transform is applied to each contact's title before comparing.
 """
 from __future__ import annotations
 
+import os
 import re
 from collections import Counter
 from datetime import datetime, timezone
@@ -29,7 +30,7 @@ LEAD_SCALAR_FIELDS = (
 LEAD_ARRAY_FIELDS = ("keywords",)
 CONTACT_FIELDS = ("occupation", "title", "email_type")
 GROUP_FIELD = "page_count"
-TOP_N_KEYWORDS = 100   # keep in sync with build_filter_facets.py
+TOP_N_KEYWORDS = int(os.getenv("FACET_TOP_N_KEYWORDS", "100"))   # keep in sync with build_filter_facets.py
 
 # (key, lo, hi) -- canonical page bands, kept in sync with build_filter_facets.py
 _PAGE_BANDS = [
