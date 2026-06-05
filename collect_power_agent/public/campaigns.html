@@ -79,7 +79,8 @@ function render(list) {
     const sb = c.status_breakdown || {};
     const countries = (c.countries || []).join(', ') || '—';
     const author = c.owner ? `<span class="stat-pill"><i class="ti ti-user"></i>${c.owner}</span>` : '';
-    const sentPill = sb.sent ? `<span class="stat-pill" style="color:#15803d;background:#dcfce7"><i class="ti ti-send"></i>${sb.sent} sent</span>` : '';
+    const sentPill   = sb.sent ? `<span class="stat-pill" style="color:#15803d;background:#dcfce7"><i class="ti ti-send"></i>${sb.sent} sent</span>` : '';
+    const sourcePill = c.source === 'master-sheet' ? `<span class="stat-pill" style="color:#15803d;background:#f0fdf4"><i class="ti ti-table"></i>master-sheet</span>` : '';
     return `<a href="campaign.html?campaign_id=${encodeURIComponent(c.campaign_id)}" class="camp-card" onclick="localStorage.setItem('selectedCampaign','${c.campaign_id}')">
       <div class="d-flex align-items-start justify-content-between mb-2">
         <div>
@@ -93,6 +94,7 @@ function render(list) {
         <span class="stat-pill"><i class="ti ti-building-store"></i>${c.sites_count || 0} sites</span>
         <span class="stat-pill"><i class="ti ti-map-pin"></i>${countries}</span>
         ${sentPill}
+        ${sourcePill}
         ${author}
         <span class="stat-pill ms-auto"><i class="ti ti-clock"></i>${fmt(c.updated_at)}</span>
       </div>

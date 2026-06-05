@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — CRM Sync</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:860px">
+
+  <div class="page-header mb-3">
+    <h5 class="page-title"><i class="ti ti-refresh text-primary"></i>CRM Sync</h5>
+  </div>
+
+  <p class="small text-muted mb-3">
+    Reads the master CRM contact sheet and syncs all campaigns to Firestore.
+    New campaigns found in the sheet are created automatically.
+    Existing <code>sent</code> or <code>cancelled</code> contacts are never overwritten.
+  </p>
+
+  <!-- Sync controls -->
+  <div class="bb-card p-3 mb-3">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <div class="d-flex align-items-center gap-2">
+        <label class="small fw-500 mb-0 text-nowrap" style="color:var(--bb-muted)">Campaign</label>
+        <input id="campaign-filter" class="form-control form-control-sm" style="max-width:220px"
+               placeholder="All campaigns (leave blank)">
+      </div>
+      <button class="btn btn-sm btn-primary ms-auto" onclick="startSync()" id="sync-btn">
+        <i class="ti ti-refresh me-1"></i>Run CRM Sync
+      </button>
+    </div>
+  </div>
+
+  <div id="sync-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
+
+  <!-- Result -->
+  <div id="result-card" class="bb-card mb-3" style="display:none">
+    <div class="px-3 py-2 border-bottom" style="background:#f9fafb;border-radius:10px 10px 0 0">
+      <span class="fw-500 small"><i class="ti ti-check text-success me-1"></i>Sync result</span>
+    </div>
+    <div class="p-3" id="result-body"></div>
+  </div>
+
+  <!-- Recent sync jobs -->
+  <div class="bb-card">
+    <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
+         style="background:#f9fafb;border-radius:10px 10px 0 0">
+      <span class="fw-500 small"><i class="ti ti-history me-1 text-primary"></i>Recent jobs</span>
+      <button class="btn btn-xs btn-outline-secondary py-0 px-2" onclick="loadJobs()">
+        <i class="ti ti-refresh"></i>
+      </button>
+    </div>
+    <div id="jobs-body" class="p-2">
+      <div class="text-center py-3 small text-muted">
+        <div class="spinner-border spinner-border-sm me-1"></div>Loading…
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/crm-common.js"></script>
+<script>
+const fmt = fmtDateTimeShort;
+let _pollTimer = null;
+
+async function startSync() {
+  const campaignId = document.getElementById('campaign-filter').value.trim();
+  const btn = document.getElementById('sync-btn');
+  const fb  = document.getElementById('sync-feedback');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Queuing…';
+  fb.style.display = 'none';
+  document.getElementById('result-card').style.display = 'none';
+
+  try {
+    const url = BASE + '/api/crm/crm-sync' + (campaignId ? `?campaign_id=${encodeURIComponent(campaignId)}` : '');
+    const r = await fetch(url);
+    const d = await r.json();
+    if (!d.job_id) throw new Error(d.message || 'No job_id returned');
+    fb.className = 'alert alert-info py-2 px-3 small mb-3';
+    fb.innerHTML = `<i class="ti ti-clock me-1"></i>Job queued <code>${d.job_id}</code> — polling for result…`;
+    fb.style.display = '';
+    pollJob(d.job_id);
+    loadJobs();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 px-3 small mb-3';
+    fb.textContent = 'Error: ' + e.message; fb.style.display = '';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Run CRM Sync';
+  }
+}
+
+async function pollJob(jobId) {
+  clearTimeout(_pollTimer);
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const r = await fetch(`${BASE}/api/crm/status/${jobId}`);
+      const j = await r.json();
+      if (j.status === 'done') {
+        showResult(j.result || {});
+        document.getElementById('sync-btn').disabled = false;
+        document.getElementById('sync-btn').innerHTML = '<i class="ti ti-refresh me-1"></i>Run CRM Sync';
+        document.getElementById('sync-feedback').style.display = 'none';
+        loadJobs();
+        return;
+      }
+      if (j.status === 'error') {
+        const fb = document.getElementById('sync-feedback');
+        fb.className = 'alert alert-danger py-2 px-3 small mb-3';
+        fb.textContent = 'Job failed: ' + (j.error || 'unknown error'); fb.style.display = '';
+        document.getElementById('sync-btn').disabled = false;
+        document.getElementById('sync-btn').innerHTML = '<i class="ti ti-refresh me-1"></i>Run CRM Sync';
+        loadJobs();
+        return;
+      }
+    } catch(_) {}
+  }
+}
+
+function showResult(res) {
+  const card = document.getElementById('result-card');
+  const body = document.getElementById('result-body');
+  card.style.display = '';
+
+  const newCamps = (res.new_campaigns || []);
+  const allCamps = (res.campaign_ids || []);
+  const contacts = res.contacts_sync || {};
+
+  let html = `<div class="row g-2 small mb-3">
+    <div class="col-3"><div class="text-muted">Contacts synced</div><strong>${res.contact_select_synced ?? '—'}</strong></div>
+    <div class="col-3"><div class="text-muted">Email contacts</div><strong>${res.email_updated ?? '—'}</strong></div>
+    <div class="col-3"><div class="text-muted">Campaigns</div><strong>${res.campaigns_upserted ?? '—'}</strong></div>
+    <div class="col-3"><div class="text-muted">New campaigns</div><strong>${newCamps.length}</strong></div>
+  </div>`;
+
+  if (newCamps.length) {
+    html += `<div class="alert alert-success py-2 small mb-3">
+      <i class="ti ti-plus me-1"></i>New campaigns created: <strong>${newCamps.join(', ')}</strong>
+    </div>`;
+  }
+
+  if (allCamps.length) {
+    html += `<table class="table table-sm small mb-0"><thead style="background:#f9fafb">
+      <tr><th>Campaign</th><th>Added</th><th>Updated</th><th>Skipped</th><th>Deleted</th></tr>
+    </thead><tbody>`;
+    for (const cid of allCamps) {
+      const cs = contacts[cid] || {};
+      html += `<tr>
+        <td><a href="campaign.html?campaign_id=${encodeURIComponent(cid)}">${cid}</a></td>
+        <td>${cs.added ?? '—'}</td><td>${cs.updated ?? '—'}</td>
+        <td>${cs.skipped ?? '—'}</td><td>${cs.deleted ?? '—'}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+  }
+
+  body.innerHTML = html;
+}
+
+async function loadJobs() {
+  const el = document.getElementById('jobs-body');
+  try {
+    const r = await fetch(`${BASE}/api/crm/jobs?name=crm-sync&limit=10`);
+    const d = await r.json();
+    const jobs = d.jobs || [];
+    if (!jobs.length) { el.innerHTML = '<div class="small text-muted px-1 py-2">No sync jobs yet.</div>'; return; }
+    el.innerHTML = jobs.map(j => {
+      const statusCls = j.status === 'done' ? 'success' : j.status === 'error' ? 'danger' : 'secondary';
+      const camp = (j.params || {}).campaign_id || 'all';
+      return `<div class="d-flex align-items-center gap-2 py-2 border-bottom small">
+        <span class="bb-badge bb-badge-${j.status === 'done' ? 'sent' : j.status === 'error' ? 'excluded' : 'pending'}">${j.status}</span>
+        <span class="text-muted">${fmt(j.queued_at)}</span>
+        <span><i class="ti ti-speakerphone me-1 text-muted"></i>${camp}</span>
+        ${j.status === 'done' ? `<span class="ms-auto text-muted">${(j.result || {}).campaigns_upserted ?? ''} campaigns</span>` : ''}
+        ${j.status === 'error' ? `<span class="ms-auto text-danger">${j.error || ''}</span>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="small text-danger px-1">Error: ${e.message}</div>`;
+  }
+}
+
+loadJobs();
+</script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+</body>
+</html>

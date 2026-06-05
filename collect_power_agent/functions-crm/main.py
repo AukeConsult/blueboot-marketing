@@ -223,6 +223,23 @@ def template_sync():
         return _err(str(exc), 500)
 
 
+
+@app.route("/api/crm/crm-sync", methods=["GET"])
+def crm_sync_trigger():
+    """Trigger a CRM sync from the master contact sheet.
+
+    Optional: ?campaign_id=X  to sync only one campaign.
+    Returns a job_id to poll via GET /api/crm/status/<job_id>.
+    """
+    try:
+        campaign_id = request.args.get("campaign_id", "").strip()
+        params = {"campaign_id": campaign_id}
+        job_id = _new_job("crm-sync", params)
+        _enqueue_task("crm-sync", job_id, params)
+        return _accepted(job_id, "crm-sync")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
 @app.route("/api/crm/campaign-sync", methods=["GET"])
 def campaign_sync():
     """Sync campaign data from contact sheet -> Firestore.
@@ -324,7 +341,7 @@ def create_campaign(campaign_id):
         now   = datetime.now(timezone.utc).isoformat()
         data  = {
             "campaign_id":            campaign_id,
-            "status":                 "pending",
+            "status":                 "draft",
             "sent_at":                None,
             "outreach_email_account": body.get("outreach_email_account", ""),
 "mail":                   {"subject": "", "body": "", "type": "plain"},
@@ -370,7 +387,7 @@ def update_campaign(campaign_id):
         update = {}
 
         if "status" in body:
-            valid = {"pending", "draft", "dosend", "sent", "cancelled"}
+            valid = {"draft", "dosend", "sent", "cancelled"}
             if body["status"] not in valid:
                 return _err(f"Invalid status. Must be one of: {', '.join(sorted(valid))}", 400)
             update["status"] = body["status"]
@@ -1320,7 +1337,7 @@ def discover_campaigns():
             now  = datetime.now(timezone.utc).isoformat()
             data = {
                 "campaign_id":            campaign_id,
-                "status":                 "pending",
+                "status":                 "draft",
                 "sent_at":                None,
                 "outreach_email_account": "",
                 "mail":                   {"subject": "", "body": "", "type": "plain"},
@@ -1334,9 +1351,9 @@ def discover_campaigns():
                 "updated_at":             now,
             }
             db.collection("campaigns").document(campaign_id).set(data)
-            # Enqueue sync job
-            job_id = _new_job("campaign-sync", {"campaign_id": campaign_id, "force": False})
-            _enqueue_task("campaign-sync", job_id, {"campaign_id": campaign_id, "force": False})
+            # Enqueue crm-sync (master sheet) to populate contacts for the new campaign
+            job_id = _new_job("crm-sync", {"campaign_id": campaign_id})
+            _enqueue_task("crm-sync", job_id, {"campaign_id": campaign_id})
             created.append({"campaign_id": campaign_id, "job_id": job_id})
 
         msg = f"Found {len(sheet_campaigns)} campaign(s) in sheet. {len(new_campaigns)} new — sync jobs queued." if new_campaigns else f"All {len(sheet_campaigns)} campaign(s) already exist."
@@ -1383,11 +1400,15 @@ def worker(name, job_id):
             count  = run_template_sync(db=db, svc=svc)
             result = {"synced": count}
 
+        elif name == "crm-sync":
+            from crm.crm_sync_lib import run_crm_sync
+            result = run_crm_sync(db=db, svc=svc,
+                                  campaign_id=body.get("campaign_id", ""))
+
         elif name == "campaign-sync":
             from crm.campaign_sync_lib import run_campaign_sync
-            result = run_campaign_sync(db=db, svc=svc,
-                                       campaign_id=body.get("campaign_id", ""),
-                                       force=body.get("force", False))
+            result = run_campaign_sync(db=db, svc=svc, gd=_gdisk(),
+                                       campaign_id=body.get("campaign_id", ""))
 
         elif name == "filter-count":
             from crm.filter_count_lib import run_filter_count

@@ -1,285 +1,220 @@
 """
-campaign_sync_lib.py -- Sync campaign data from contact sheet to Firestore.
+campaign_sync_lib.py -- Sync a campaign between its Google Drive sheet and Firestore.
 
-Three steps:
-  1. Read contact sheet -> upsert crm/contact_select/items (sheet wins)
-  2. Update email_contacts.campaign (blank-only unless force=True)
-  3. Create/update campaigns/{campaign_id} with statistics
+Rule
+----
+* Sheet does not exist → create it and dump all DB contacts (delegates to
+  campaign_export_lib.run_campaign_export).
+* Sheet exists:
+  - Sheet wins for every field, including any new columns added manually.
+  - New DB contacts that have no matching Doc ID row in the sheet are
+    appended as new rows so the sheet stays complete.
+
+Column mapping
+--------------
+Known columns come from CONTACT_COLUMNS (see campaign_export_lib).
+Any extra / unknown column header is converted to a snake_case field name
+and written straight to Firestore – new sheet columns are added to DB
+automatically.
 """
 from __future__ import annotations
+
 from datetime import datetime, timezone
-from collections import Counter, defaultdict
-from crm.sheets_config import CONTACT_SHEET_ID, CONTACT_TAB, CRM_COLLECTION, CRM_CONTACT_DOC
+from collections import Counter
 
 CAMPAIGNS_COLLECTION = "campaigns"
+CONTACTS_SUBCOLLECTION = "campaign_contacts"
+
+TAB_FOLLOWUP = "Follow up"
+
+# Canonical header → Firestore field mapping (same as export_lib.CONTACT_COLUMNS).
+_HEADER_TO_FIELD: dict[str, str] = {
+    "Status":             "status",
+    "Name":               "name",
+    "Email":              "email",
+    "Title":              "title",
+    "Website":            "website",
+    "Sent at":            "sent_at",
+    "Last action":        "last_action",
+    "Last action status": "last_action_status",
+    "Lead ID":            "lead_id",
+    "Doc ID":             "doc_id",
+}
+
+# Firestore field → sheet header (reverse, for building new sheet rows).
+_FIELD_TO_HEADER: dict[str, str] = {v: k for k, v in _HEADER_TO_FIELD.items()}
+
+# Fields that are always DB-controlled — sheet values are never written back.
+DB_CONTROLLED = {"status", "sent_at"}
 
 
-def _read_sheet_contacts(svc, tab: str) -> list[dict]:
-    result = svc.spreadsheets().values().get(
-        spreadsheetId=CONTACT_SHEET_ID, range=f"{tab}!A:ZZ"
+def _header_to_field(label: str) -> str:
+    """Map a sheet column header to a Firestore field name."""
+    if label in _HEADER_TO_FIELD:
+        return _HEADER_TO_FIELD[label]
+    return label.lower().replace(" ", "_")
+
+
+def _quote(tab: str) -> str:
+    return "'" + tab.replace("'", "''") + "'"
+
+
+def _read_followup_tab(svc, sheet_id: str) -> tuple[list[str], list[dict]]:
+    """Return (headers, rows) where each row is {header: value}."""
+    res = svc.spreadsheets().values().get(
+        spreadsheetId=sheet_id, range=_quote(TAB_FOLLOWUP)
     ).execute()
-    rows = result.get("values", [])
-    if not rows:
-        return []
-    headers = [h.lower().replace(" ", "_") for h in rows[0]]
-    col = {h: i for i, h in enumerate(headers)}
-    records = []
-    for row in rows[1:]:
-        rec = {h: (row[i].strip() if i < len(row) else "") for h, i in col.items()}
-        if any(rec.values()):
-            records.append(rec)
-    print(f"[campaign-sync] Read {len(records)} rows from sheet", flush=True)
-    return records
+    raw = res.get("values", [])
+    if not raw:
+        return [], []
+    headers = raw[0]
+    rows = []
+    for r in raw[1:]:
+        padded = r + [""] * (len(headers) - len(r))
+        rows.append({headers[i]: padded[i] for i in range(len(headers))})
+    return headers, rows
 
 
-def _sync_contact_select(db, records: list[dict]) -> int:
-    col = db.collection(CRM_COLLECTION).document(CRM_CONTACT_DOC).collection("items")
+def _cell(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, (list, tuple)):
+        return ", ".join(str(x) for x in v)
+    return str(v)
+
+
+def run_campaign_sync(db, svc, gd, campaign_id: str, **_kwargs) -> dict:
+    """Sync campaign contacts between the campaign Drive sheet and Firestore.
+
+    If the Drive sheet does not exist the function delegates to
+    run_campaign_export (creates the sheet and dumps all DB data).
+
+    Parameters
+    ----------
+    db           Firestore client
+    svc          Google Sheets API service
+    gd           GdiskInterface instance
+    campaign_id  The campaign to sync
+    """
+    if not campaign_id:
+        raise ValueError("campaign_id is required")
+
+    # ── 0. Guard: only sync editable campaigns ─────────────────────────────
+    camp_doc = db.collection(CAMPAIGNS_COLLECTION).document(campaign_id).get()
+    if camp_doc.exists:
+        camp_status = (camp_doc.to_dict() or {}).get("status", "draft")
+        if camp_status in ("sent", "cancelled"):
+            return {
+                "blocked": True,
+                "reason": f"Campaign status is '{camp_status}' — sync only allowed for non-sent campaigns.",
+            }
+
+    # ── 1. Does the sheet exist? ────────────────────────────────────────────
+    sheet_id = gd.find_file(campaign_id)
+    if not sheet_id:
+        print(f"[campaign-sync] No sheet found for '{campaign_id}' — running export to create it.", flush=True)
+        from crm.campaign_export_lib import run_campaign_export
+        result = run_campaign_export(db, svc, gd, campaign_id)
+        result["source"] = "export (sheet created)"
+        return result
+
+    # ── 2. Read Follow up tab ───────────────────────────────────────────────
+    print(f"[campaign-sync] Reading sheet '{campaign_id}' ({sheet_id})", flush=True)
+    headers, sheet_rows = _read_followup_tab(svc, sheet_id)
+
+    if not headers or not sheet_rows:
+        print(f"[campaign-sync] Sheet is empty — running export to populate it.", flush=True)
+        from crm.campaign_export_lib import run_campaign_export
+        result = run_campaign_export(db, svc, gd, campaign_id)
+        result["source"] = "export (sheet was empty)"
+        return result
+
+    doc_id_header = next((h for h in headers if _header_to_field(h) == "doc_id"), None)
+    if not doc_id_header:
+        raise ValueError("Sheet 'Follow up' tab has no 'Doc ID' column — cannot sync.")
+
+    # ── 3. Build sheet index by doc_id ──────────────────────────────────────
+    sheet_by_doc: dict[str, dict] = {}
+    for row in sheet_rows:
+        did = row.get(doc_id_header, "").strip()
+        if did:
+            sheet_by_doc[did] = row
+
+    print(f"[campaign-sync] Sheet has {len(sheet_by_doc)} rows with Doc ID", flush=True)
+
+    # ── 4. Load all DB contacts ─────────────────────────────────────────────
+    contacts_col = (
+        db.collection(CAMPAIGNS_COLLECTION)
+        .document(campaign_id)
+        .collection(CONTACTS_SUBCOLLECTION)
+    )
+    db_contacts: dict[str, dict] = {d.id: d.to_dict() or {} for d in contacts_col.stream()}
+    print(f"[campaign-sync] DB has {len(db_contacts)} contacts", flush=True)
+
+    # ── 5. Sheet → DB: sheet wins for every field ──────────────────────────
     BATCH_SIZE = 400
+    now = datetime.now(timezone.utc).isoformat()
+    updated = 0
     pairs = []
-    for rec in records:
-        doc_id = (rec.get("doc_id") or "").strip()
-        if not doc_id:
-            continue
-        pairs.append((doc_id, {
-            "doc_id":   doc_id,
-            "select":   rec.get("select", ""),
-            "campaign": rec.get("campaign", ""),
-            "status":   rec.get("status", ""),
-            "email":    rec.get("email", ""),
-            "website":  rec.get("website", ""),
-        }))
-    count = 0
+
+    for doc_id, sheet_row in sheet_by_doc.items():
+        update: dict = {"doc_id": doc_id, "synced_at": now}
+        for header, raw_val in sheet_row.items():
+            field = _header_to_field(header)
+            if field == "doc_id" or field in DB_CONTROLLED:
+                continue
+            update[field] = raw_val
+        pairs.append((doc_id, update))
+
     for i in range(0, len(pairs), BATCH_SIZE):
         batch = db.batch()
-        for doc_id, data in pairs[i:i+BATCH_SIZE]:
-            batch.set(col.document(doc_id), data, merge=True)
+        for doc_id, data in pairs[i:i + BATCH_SIZE]:
+            batch.set(contacts_col.document(doc_id), data, merge=True)
         batch.commit()
-        count += len(pairs[i:i+BATCH_SIZE])
-        print(f"[campaign-sync]   contact_select upserted {count}/{len(pairs)}", flush=True)
-    print(f"[campaign-sync] Step 1 done: {count} docs -> crm/{CRM_CONTACT_DOC}/items")
-    return count
+        updated += len(pairs[i:i + BATCH_SIZE])
+        print(f"[campaign-sync]   written {updated}/{len(pairs)} contacts to DB", flush=True)
 
-
-def _update_email_contacts_campaign(db, records: list[dict], force: bool = False) -> dict:
-    from google.cloud.firestore_v1.base_query import FieldFilter
-    col = db.collection("email_contacts")
-    BATCH_SIZE = 400
-    candidates = [
-        r for r in records
-        if (r.get("doc_id") or "").strip() and (r.get("campaign") or "").strip()
+    # ── 6. New DB rows not in sheet → append to sheet ──────────────────────
+    new_in_db = [
+        db_data for doc_id, db_data in db_contacts.items()
+        if doc_id not in sheet_by_doc
     ]
-    print(f"[campaign-sync] {len(candidates)} rows with doc_id + campaign", flush=True)
-    updated = skipped = 0
-    to_update = candidates
-    print(f"[campaign-sync]   updating all {len(to_update)} docs (sheet always wins)", flush=True)
-    for i in range(0, len(to_update), BATCH_SIZE):
-        batch = db.batch()
-        for r in to_update[i:i+BATCH_SIZE]:
-            batch.update(col.document(r["doc_id"]), {"campaign": r["campaign"]})
-        batch.commit()
-        updated += len(to_update[i:i+BATCH_SIZE])
-        print(f"[campaign-sync]   email_contacts updated {updated}/{len(to_update)}", flush=True)
-    print(f"[campaign-sync] Step 2 done: updated={updated}")
-    return {"updated": updated, "skipped": 0}
+    appended = 0
+    if new_in_db:
+        print(f"[campaign-sync] Appending {len(new_in_db)} new DB rows to sheet", flush=True)
+        new_rows = []
+        for c in new_in_db:
+            row = []
+            for h in headers:
+                field = _header_to_field(h)
+                row.append(_cell(c.get(field)))
+            new_rows.append(row)
+        svc.spreadsheets().values().append(
+            spreadsheetId=sheet_id,
+            range=_quote(TAB_FOLLOWUP),
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": new_rows},
+        ).execute()
+        appended = len(new_in_db)
 
+    # ── 7. Update campaign-level stats in DB ────────────────────────────────
+    all_statuses = Counter(
+        row.get("Status", "pending") or "pending" for row in sheet_rows
+    )
+    db.collection(CAMPAIGNS_COLLECTION).document(campaign_id).update({
+        "contact_count":    len(sheet_by_doc) + appended,
+        "status_breakdown": dict(all_statuses),
+        "updated_at":       now,
+    })
 
-def _build_campaign_stats(records: list[dict]) -> dict[str, dict]:
-    by_campaign: dict[str, list[dict]] = defaultdict(list)
-    for r in records:
-        campaign = (r.get("campaign") or "").strip()
-        if campaign:
-            by_campaign[campaign].append(r)
-    stats = {}
-    for campaign_id, rows in by_campaign.items():
-        domains   = {r.get("domain", "") or r.get("website", "") for r in rows}
-        countries = Counter(r.get("country", "").upper() for r in rows if r.get("country"))
-        statuses  = Counter(r.get("status", "pending") or "pending" for r in rows)
-        selects   = Counter("marked" if r.get("select", "").strip() else "blank" for r in rows)
-        tiers     = Counter(r.get("tier", "") or "unknown" for r in rows)
-        outreach  = Counter(r.get("outreach", "") or "unknown" for r in rows)
-        stats[campaign_id] = {
-            "campaign_id":        campaign_id,
-            "updated_at":         datetime.now(timezone.utc).isoformat(),
-            "contact_count":      len(rows),
-            "sites_count":        len(domains - {""}),
-            "countries":          [c for c, _ in countries.most_common() if c],
-            "status_breakdown":   dict(statuses),
-            "select_breakdown":   dict(selects),
-            "tier_breakdown":     dict(tiers),
-            "outreach_breakdown": dict(outreach),
-            # These fields are set manually / preserved via merge=True
-            # "status":                 "draft"  (draft | dosend | sent | cancelled)
-            # "sent_at":                None
-            # "outreach_email_account": ""
-            # "mail":                   {"subject": "", "body": ""}
-        }
-        # Set defaults only on first creation (merge=True preserves existing values)
-        stats[campaign_id]["_defaults"] = {
-            "status":                 "draft",
-            "sent_at":                None,
-            "outreach_email_account": "",
-            "mail":                   {"subject": "", "body": ""},
-        }
-    return stats
-
-
-def _upsert_campaigns(db, campaign_stats: dict[str, dict]) -> int:
-    col = db.collection(CAMPAIGNS_COLLECTION)
-    count = 0
-    for campaign_id, data in campaign_stats.items():
-        defaults = data.pop("_defaults", {})
-        # Check which default fields are missing in Firestore
-        existing = col.document(campaign_id).get()
-        existing_data = existing.to_dict() or {} if existing.exists else {}
-        for field, default_val in defaults.items():
-            if field not in existing_data:
-                data[field] = default_val
-        col.document(campaign_id).set(data, merge=True)
-        count += 1
-        print(f"[campaign-sync]   {campaign_id}: {data['contact_count']} contacts, {data['sites_count']} sites, status={existing_data.get('status', data.get('status', 'draft'))}", flush=True)
-    print(f"[campaign-sync] Step 3 done: {count} campaign docs upserted")
-    return count
-
-
-
-def _upsert_campaign_contacts(db, campaign_id: str, records: list[dict]) -> dict:
-    """Sync campaign_contacts subcollection.
-    - New contacts -> add with status=pending
-    - Existing pending -> update fields
-    - Existing sent/error -> skip (never touch)
-    - Removed from sheet + pending -> delete
-    - Removed from sheet + sent/error -> leave
-    """
-    col = db.collection("campaigns").document(campaign_id).collection("campaign_contacts")
-    BATCH_SIZE = 400
-    existing_docs = {d.id: d.to_dict() for d in col.stream()}
-    print(f"[campaign-sync]   {len(existing_docs)} existing, {len(records)} in sheet", flush=True)
-
-    sheet_ids = set()
-    to_write  = []
-    skipped   = 0
-
-    for r in records:
-        doc_id = (r.get("doc_id") or "").strip()
-        if not doc_id:
-            continue
-        sheet_ids.add(doc_id)
-        existing_status = existing_docs.get(doc_id, {}).get("status", "pending")
-        if doc_id in existing_docs and existing_status != "pending":
-            skipped += 1
-            continue
-        is_new = doc_id not in existing_docs
-        entry = {
-            "doc_id":  doc_id,
-            "email":   r.get("email", ""),
-            "lead_id": r.get("lead_id_site") or r.get("lead_id_leads") or doc_id,
-            "website": r.get("website", ""),
-            "name":    r.get("name", ""),
-            "title":   r.get("title", ""),
-            "status":  "pending",
-            "sent_at": existing_docs.get(doc_id, {}).get("sent_at", None),
-        }
-        if is_new:
-            entry["created_at"] = datetime.now(timezone.utc).isoformat()
-        else:
-            # Preserve existing created_at
-            entry["created_at"] = existing_docs[doc_id].get("created_at",
-                                   datetime.now(timezone.utc).isoformat())
-        to_write.append((doc_id, entry))
-
-    to_delete = [
-        did for did, doc in existing_docs.items()
-        if did not in sheet_ids and doc.get("status", "pending") == "pending"
-    ]
-
-    added   = sum(1 for did, _ in to_write if did not in existing_docs)
-    updated = len(to_write) - added
-    deleted = 0
-
-    for i in range(0, len(to_write), BATCH_SIZE):
-        batch = db.batch()
-        for doc_id, data in to_write[i:i+BATCH_SIZE]:
-            batch.set(col.document(doc_id), data, merge=True)
-        batch.commit()
-
-    for i in range(0, len(to_delete), BATCH_SIZE):
-        batch = db.batch()
-        for doc_id in to_delete[i:i+BATCH_SIZE]:
-            batch.delete(col.document(doc_id))
-        batch.commit()
-        deleted += len(to_delete[i:i+BATCH_SIZE])
-
-    print(f"[campaign-sync] campaign_contacts: added={added} updated={updated} skipped={skipped}(non-pending) deleted={deleted}")
-    return {"added": added, "updated": updated, "skipped": skipped, "deleted": deleted}
-
-
-def run_campaign_sync(db, svc, campaign_id: str, tab: str = CONTACT_TAB,
-                      force: bool = False, dry_run: bool = False) -> dict:
-    """
-    Full 3-step campaign sync for a specific campaign_id.
-    force=False:   only update email_contacts.campaign if currently blank
-    force=True:    always overwrite
-    dry_run=True:  show what would be written without touching Firestore
-    """
-    print(f"[campaign-sync] Campaign: {campaign_id}", flush=True)
-
-    # Check campaign status — only sync if status is "draft" or "dosend" (pending states)
-    campaign_doc = db.collection("campaigns").document(campaign_id).get()
-    if campaign_doc.exists:
-        campaign_status = (campaign_doc.to_dict() or {}).get("status", "draft")
-        if campaign_status not in ("draft", "dosend"):
-            print(f"[campaign-sync] BLOCKED: campaign status is '{campaign_status}' — sync only allowed for draft/dosend")
-            return {
-                "contact_select_synced": 0,
-                "email_updated":         0,
-                "email_skipped":         0,
-                "campaigns_upserted":    0,
-                "campaign_ids":          [],
-                "blocked":               True,
-                "reason":                f"Campaign status is '{campaign_status}'. Only draft/dosend campaigns can be synced.",
-            }
-        print(f"[campaign-sync] Campaign status: {campaign_status} — sync allowed", flush=True)
-
-    print("[campaign-sync] Step 1: reading sheet + syncing contact_select...", flush=True)
-    records = _read_sheet_contacts(svc, tab)
-    if not records:
-        print("[campaign-sync] Sheet is empty.")
-        return {"contact_select_synced": 0, "email_updated": 0, "email_skipped": 0, "campaigns_upserted": 0, "campaign_ids": []}
-
-    # Filter to only rows matching the requested campaign_id
-    filtered = [r for r in records if (r.get("campaign") or "").strip() == campaign_id]
-    print(f"[campaign-sync] {len(filtered)}/{len(records)} rows match campaign '{campaign_id}'", flush=True)
-    if not filtered:
-        print(f"[campaign-sync] No rows found for campaign '{campaign_id}'. Check the Campaign column in the sheet.")
-        return {"contact_select_synced": 0, "email_updated": 0, "email_skipped": 0, "campaigns_upserted": 0, "campaign_ids": []}
-
-    if dry_run:
-        print(f"[campaign-sync] DRY RUN -- would sync {len(filtered)} contacts for '{campaign_id}'")
-        for r in filtered[:5]:
-            print(f"  {r.get('doc_id','?')} | {r.get('email','?')} | campaign={r.get('campaign','')}")
-        if len(filtered) > 5:
-            print(f"  ... and {len(filtered)-5} more")
-        return {"contact_select_synced": 0, "email_updated": 0,
-                "email_skipped": len(filtered), "campaigns_upserted": 0,
-                "campaign_ids": [campaign_id], "dry_run": True}
-    synced = _sync_contact_select(db, filtered)
-    print("[campaign-sync] Step 2: updating email_contacts.campaign...", flush=True)
-    email_result = _update_email_contacts_campaign(db, filtered, force=force)
-    print("[campaign-sync] Step 3: building campaign statistics...", flush=True)
-    campaign_stats = _build_campaign_stats(filtered)
-    campaigns = _upsert_campaigns(db, campaign_stats)
     result = {
-        "contact_select_synced": synced,
-        "email_updated":         email_result["updated"],
-        "email_skipped":         email_result["skipped"],
-        "campaigns_upserted":    campaigns,
-        "campaign_ids":          list(campaign_stats.keys()),
+        "campaign_id":              campaign_id,
+        "sheet_id":                 sheet_id,
+        "source":                   "sheet",
+        "contacts_updated_in_db":   updated,
+        "new_db_rows_added_to_sheet": appended,
+        "dynamic_columns":          [h for h in headers if h not in _HEADER_TO_FIELD],
     }
-    print("[campaign-sync] Step 4: storing contacts subcollection...", flush=True)
-    contacts_result = {}
-    for campaign_id in campaign_stats.keys():
-        contacts_result[campaign_id] = _upsert_campaign_contacts(db, campaign_id, filtered)
-
-    result["contacts_sync"] = contacts_result
-    print(f"[campaign-sync] All done: {result}", flush=True)
+    print(f"[campaign-sync] Done: {result}", flush=True)
     return result

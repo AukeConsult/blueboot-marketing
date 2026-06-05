@@ -27,11 +27,15 @@
     </h5>
     <div class="d-flex align-items-center gap-2" id="campaign-actions" style="display:none!important">
       <span class="bb-badge" id="c-status-badge"></span>
+      <span id="c-source-badge" style="display:none" class="bb-badge" title="Created from master CRM sheet"
+            style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;font-size:.68rem">
+        <i class="ti ti-table me-1"></i>master-sheet
+      </span>
       <button class="btn btn-sm btn-outline-secondary" onclick="syncCampaign()">
         <i class="ti ti-refresh me-1"></i>Sync
       </button>
-      <button class="btn btn-sm btn-outline-secondary" onclick="exportToDrive()">
-        <i class="ti ti-table-export me-1"></i>Export to Drive
+      <button class="btn btn-sm btn-outline-secondary" onclick="confirmFullOverride()">
+        <i class="ti ti-table-export me-1"></i>Full override
       </button>
       <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none">
         <i class="ti ti-rocket me-1"></i>Activate campaign
@@ -156,6 +160,29 @@
   </div>
 </div>
 
+<!-- Full override modal -->
+<div class="modal fade" id="fullOverrideModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-alert-triangle text-warning me-2"></i>Full override</h6>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">This will overwrite the campaign spreadsheet with all data from the database.</p>
+        <div class="alert alert-warning py-2 small mb-0">
+          <i class="ti ti-eraser me-1"></i>Any manual edits in the sheet — except <strong>Last action</strong> and <strong>Last action status</strong> — will be lost. This cannot be undone.
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-warning btn-sm" onclick="doFullOverride()">
+          <i class="ti ti-table-export me-1"></i>Yes, override
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Send modal -->
 <div class="modal fade" id="sendModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
@@ -211,7 +238,7 @@ let allContacts = [];
 const fmt = fmtDateTimeShort;   // shared
 
 function statusBadge(s) {
-  return `<span class="bb-badge bb-badge-${s||'pending'}">${s||'pending'}</span>`;
+  return `<span class="bb-badge bb-badge-${s||'draft'}">${s||'draft'}</span>`;
 }
 
 function toggleDetails() {
@@ -336,6 +363,8 @@ async function loadCampaign() {
     const r = await fetch(`${BASE}/api/crm/campaigns/${id}`);
     const c = await r.json();
     document.getElementById('page-title-campaign').textContent = c.campaign_id;
+    const sourceBadge = document.getElementById('c-source-badge');
+    sourceBadge.style.display = c.source === 'master-sheet' ? '' : 'none';
     const sheetLink = document.getElementById('sheet-link');
     if (c.sheet_url) { sheetLink.href = c.sheet_url; sheetLink.style.display = ''; }
     else sheetLink.style.display = 'none';
@@ -381,6 +410,16 @@ async function loadCampaign() {
   }
 }
 
+
+function confirmFullOverride() {
+  new bootstrap.Modal(document.getElementById('fullOverrideModal')).show();
+}
+
+function doFullOverride() {
+  const modal = bootstrap.Modal.getInstance(document.getElementById('fullOverrideModal'));
+  if (modal) modal.hide();
+  exportToDrive();
+}
 
 async function exportToDrive() {
   const id = document.getElementById('campaign-select').value;

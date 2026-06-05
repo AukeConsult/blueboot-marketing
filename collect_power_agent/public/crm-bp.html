@@ -112,6 +112,22 @@
     </div>
   </div>
 
+  <!-- Step 6: Campaign Sync -->
+  <div class="wf-card">
+    <div class="wf-step-num">6</div>
+    <div class="wf-body">
+      <p class="wf-title"><i class="ti ti-speakerphone me-1 text-primary"></i>Campaign sync</p>
+      <p class="wf-desc">Reads the master CRM contact sheet and syncs campaigns to Firestore. New campaigns found in the sheet are created automatically.</p>
+      <div class="wf-form">
+        <input type="text" id="crm-sync-campaign" placeholder="Campaign ID (optional)">
+        <button class="btn btn-primary btn-sm ms-auto" style="height:30px;font-size:.8rem" onclick="runCrmSync()" id="crm-sync-btn">
+          <i class="ti ti-refresh me-1"></i>Sync campaigns
+        </button>
+      </div>
+      <div id="crm-sync-result" class="mt-2" style="display:none"></div>
+    </div>
+  </div>
+
 </div>
 
 <script src="js/crm-common.js"></script>
@@ -134,6 +150,49 @@ async function runImport() {
   if (max)      params += `&max=${max}`;
   if (minPages) params += `&min_pages=${minPages}`;
   await trigger('contact-sync', params);
+}
+
+async function runCrmSync() {
+  const campaignId = document.getElementById('crm-sync-campaign').value.trim();
+  const btn = document.getElementById('crm-sync-btn');
+  const res = document.getElementById('crm-sync-result');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Syncing…';
+  res.style.display = 'none';
+  try {
+    const url = BASE + '/api/crm/crm-sync' + (campaignId ? `?campaign_id=${encodeURIComponent(campaignId)}` : '');
+    const r = await fetch(url);
+    const d = await r.json();
+    if (!d.job_id) throw new Error(d.message || 'No job_id');
+    res.innerHTML = `<div class="small text-muted">Job queued <code>${d.job_id}</code> — polling…</div>`;
+    res.style.display = '';
+    // Poll for result
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const jr = await fetch(`${BASE}/api/crm/status/${d.job_id}`);
+      const jd = await jr.json();
+      if (jd.status === 'done') {
+        const result = jd.result || {};
+        const newC = (result.new_campaigns || []);
+        res.innerHTML = `<div class="small">
+          <span class="text-success"><i class="ti ti-check me-1"></i>Done</span>
+          — ${result.campaigns_upserted ?? 0} campaigns synced,
+          ${result.contact_select_synced ?? 0} contacts
+          ${newC.length ? `<span class="ms-1 text-success">· ${newC.length} new: <strong>${newC.join(', ')}</strong></span>` : ''}
+        </div>`;
+        break;
+      }
+      if (jd.status === 'error') {
+        res.innerHTML = `<div class="small text-danger"><i class="ti ti-x me-1"></i>${jd.error || 'Job failed'}</div>`;
+        break;
+      }
+    }
+  } catch(e) {
+    res.innerHTML = `<div class="small text-danger">${e.message}</div>`;
+    res.style.display = '';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Sync campaigns';
 }
 
 async function trigger(name, params) {
