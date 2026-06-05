@@ -370,6 +370,67 @@ def update_campaign(campaign_id):
         return _err(str(exc), 500)
 
 
+# -- Filter facets ------------------------------------------------------------
+FILTER_FACETS_COLLECTION = "filter_facets"
+
+
+@app.route("/api/crm/filter-facets", methods=["GET"])
+def list_filter_facets():
+    """List filter-facets documents (the generated catalog + saved presets)."""
+    try:
+        db = _get_db()
+        out = []
+        for d in db.collection(FILTER_FACETS_COLLECTION).stream():
+            data = d.to_dict() or {}
+            out.append({
+                "name":              d.id,
+                "source_collection": data.get("source_collection"),
+                "generated_at":      data.get("generated_at"),
+                "saved_at":          data.get("saved_at"),
+                "lead_count":        data.get("lead_count"),
+                "contact_count":     data.get("contact_count"),
+            })
+        out.sort(key=lambda x: x["name"])
+        return jsonify({"facets": out, "count": len(out)})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/filter-facets/<name>", methods=["GET"])
+def get_filter_facets(name):
+    """Return a single filter-facets document (e.g. the 'site_leads' catalog)."""
+    try:
+        db  = _get_db()
+        doc = db.collection(FILTER_FACETS_COLLECTION).document(name).get()
+        if not doc.exists:
+            return _err(f"filter_facets/'{name}' not found", 404)
+        return jsonify(doc.to_dict())
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/filter-facets/<name>", methods=["POST", "PATCH"])
+def save_filter_facets(name):
+    """Save a filter-facets document (with selections) under <name>."""
+    try:
+        body = request.get_json(silent=True) or {}
+        if not isinstance(body, dict) or "filters" not in body:
+            return _err("body must be a filter-facets object containing a 'filters' key")
+        db = _get_db()
+        body["name"]     = name
+        body["saved_at"] = datetime.now(timezone.utc).isoformat()
+        db.collection(FILTER_FACETS_COLLECTION).document(name).set(body, merge=False)
+        # Kick off a job to count the leads/contacts this selection matches.
+        job_params = {"name": name}
+        job_id = _new_job("filter-count", job_params)
+        _enqueue_task("filter-count", job_id, job_params)
+        return _ok(f"Saved filter_facets/'{name}'", name=name,
+                   saved_at=body["saved_at"], job_id=job_id,
+                   poll=f"/api/crm/status/{job_id}")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @app.route("/api/crm/discover-campaigns", methods=["GET"])
 def discover_campaigns():
     """Scan the contact sheet for campaign IDs. Create + sync any new ones.
@@ -483,6 +544,11 @@ def worker(name, job_id):
             result = run_campaign_sync(db=db, svc=svc,
                                        campaign_id=body.get("campaign_id", ""),
                                        force=body.get("force", False))
+
+        elif name == "filter-count":
+            from crm.filter_count_lib import run_filter_count
+            counts = run_filter_count(db=db, name=body.get("name", ""))
+            result = {"name": body.get("name", ""), "counts": counts}
 
         else:
             _update_job(job_id, status="error",

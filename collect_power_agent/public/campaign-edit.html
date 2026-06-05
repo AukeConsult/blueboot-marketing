@@ -3,108 +3,128 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Blueboot — Campaign Editor</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<title>Blueboot — Mail Editor</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css">
 <style>
-body { background: #f8f9fa; }
-.badge-draft{background:#e2e3e5;color:#383d41}
-.badge-dosend{background:#cce5ff;color:#004085}
-.badge-sent{background:#d4edda;color:#155724}
-.badge-cancelled{background:#f8d7da;color:#721c24}
+:root {
+  --bb-navy: #1a2035;
+  --bb-accent: #4f6ef7;
+  --bb-border: #e8eaee;
+  --bb-muted: #6b7280;
+  --bb-card-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.04);
+}
+body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+.bb-nav { background: #fff; border-bottom: 1px solid var(--bb-border); padding: .6rem 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0; }
+.bb-nav .brand { color: #111; font-weight: 700; font-size: .95rem; text-decoration: none; display: flex; align-items: center; gap: .5rem; margin-right: 2rem; }
+.bb-nav .brand i { color: var(--bb-accent); }
+.bb-nav .nav-link { color: var(--bb-muted); font-size: .85rem; text-decoration: none; padding: .3rem .65rem; border-radius: 6px; transition: color .15s, background .15s; display: flex; align-items: center; gap: .35rem; }
+.bb-nav .nav-link:hover { color: #111; background: #f4f5f7; }
+.bb-nav .nav-link.active { color: var(--bb-accent); background: #eef0ff; }
+.bb-nav .nav-links { display: flex; gap: .25rem; }
+
+.bb-card { background: #fff; border-radius: 10px; box-shadow: var(--bb-card-shadow); border: 1px solid var(--bb-border); }
+
+.bb-badge { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 600; padding: .2rem .55rem; border-radius: 20px; }
+.bb-badge-draft     { background: #f1f1f1; color: #555; }
+.bb-badge-dosend    { background: #dbeafe; color: #1d4ed8; }
+.bb-badge-sent      { background: #dcfce7; color: #15803d; }
+.bb-badge-cancelled { background: #fee2e2; color: #b91c1c; }
+
 #quill-editor { min-height: 300px; font-size: 14px; }
-.ql-container { border-bottom-left-radius: 8px; border-bottom-right-radius: 8px; }
-.ql-toolbar { border-top-left-radius: 8px; border-top-right-radius: 8px; background: #f8f9fa; }
+.ql-container { border-bottom-left-radius: 0 0 8px 8px; }
+.ql-toolbar { background: #f9fafb; border-radius: 8px 8px 0 0; }
 #source-editor { min-height: 320px; font-family: monospace; font-size: 12px; border-radius: 8px; }
-#preview-frame { width: 100%; min-height: 340px; border: 1px solid #dee2e6; border-radius: 8px; background: #fff; }
-.pv-bar { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: .4rem .75rem; }
+#preview-frame { width: 100%; min-height: 340px; border: 1px solid var(--bb-border); border-radius: 8px; background: #fff; }
+.pv-bar { background: #f9fafb; border: 1px solid var(--bb-border); border-radius: 8px; padding: .4rem .75rem; }
 </style>
 </head>
 <body>
+
+<nav class="bb-nav">
+  <a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>
+  <div class="nav-links">
+    <a href="campaigns.html" class="nav-link active"><i class="ti ti-speakerphone"></i>Campaigns</a>
+    <a href="crm-bp.html" class="nav-link"><i class="ti ti-server-2"></i>CRM</a>
+    <a href="jobs.html" class="nav-link"><i class="ti ti-list-check"></i>Jobs</a>
+    <a href="filter-facets.html" class="nav-link"><i class="ti ti-filter"></i>Filter Facets</a>
+  </div>
+</nav>
+
 <div class="container py-4" style="max-width:900px">
 
   <div class="d-flex align-items-center justify-content-between mb-3">
     <div class="d-flex align-items-center gap-2">
-      <a id="back-link" href="campaign.html" class="btn btn-sm btn-outline-secondary"><i class="ti ti-arrow-left"></i></a>
-      <h5 class="mb-0"><i class="ti ti-edit me-2"></i>Mail editor — <span id="c-campaign-id" class="text-muted fw-normal">loading...</span></h5>
+      <a id="back-link" href="campaigns.html" class="btn btn-sm btn-outline-secondary"><i class="ti ti-arrow-left"></i></a>
+      <div>
+        <div class="fw-600" style="font-size:1rem">Mail editor</div>
+        <div class="small" style="color:var(--bb-muted)" id="c-campaign-id">loading…</div>
+      </div>
     </div>
     <div class="d-flex align-items-center gap-2">
-      <span id="save-feedback" class="small text-muted" style="display:none"></span>
-      <span class="badge" id="c-status-badge"></span>
+      <span id="save-feedback" class="small" style="display:none;color:var(--bb-muted)"></span>
+      <span class="bb-badge" id="c-status-badge"></span>
     </div>
   </div>
 
-  <div class="card mb-3">
-    <div class="card-body py-2 px-3">
-      <div class="mb-2">
-        <label class="form-label small text-muted mb-1">Outreach email account</label>
+  <!-- Meta fields -->
+  <div class="bb-card p-3 mb-3">
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label small fw-500 mb-1">Outreach email account</label>
         <input id="c-email-account-edit" class="form-control form-control-sm" placeholder="sender@example.com" oninput="autoSave()">
       </div>
-      <div>
-        <label class="form-label small text-muted mb-1">Subject</label>
+      <div class="col-md-4">
+        <label class="form-label small fw-500 mb-1">Subject</label>
         <input id="c-subject" class="form-control form-control-sm" placeholder="Email subject line" oninput="autoSave()">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label small fw-500 mb-1">Created by</label>
+        <input id="c-author" class="form-control form-control-sm" placeholder="Your name" oninput="autoSave()">
       </div>
     </div>
   </div>
 
   <!-- Help panel -->
-  <div id="helpModal" class="card mb-3 d-none">
-    <div class="card-body py-2 px-3">
-      <h6 class="fw-500 mb-2"><i class="ti ti-help me-1 text-primary"></i>Editor help</h6>
-      <div class="row g-3 small">
-        <div class="col-md-4">
-          <strong>Formatting</strong>
-          <ul class="mt-1 ps-3 mb-0">
-            <li>Select text → click toolbar button</li>
-            <li>Bold: <kbd>Ctrl+B</kbd></li>
-            <li>Italic: <kbd>Ctrl+I</kbd></li>
-            <li>Underline: <kbd>Ctrl+U</kbd></li>
-          </ul>
-        </div>
-        <div class="col-md-4">
-          <strong>Links &amp; Images</strong>
-          <ul class="mt-1 ps-3 mb-0">
-            <li>Link: select text → click 🔗 → enter URL</li>
-            <li>Remove link: click linked text → click 🔗</li>
-            <li>Image (URL): paste URL in field above editor → Insert URL</li>
-            <li>Image (file): click 📷 in toolbar</li>
-            <li>Delete image: click image → <kbd>Delete</kbd></li>
-          </ul>
-        </div>
-        <div class="col-md-4">
-          <strong>Email tips</strong>
-          <ul class="mt-1 ps-3 mb-2">
-            <li>Use <code>style="..."</code> inline — email clients strip external CSS</li>
-            <li>Max width 600px works best</li>
-            <li>Avoid JavaScript — blocked by all email clients</li>
-            <li>Test in Gmail + Outlook before sending</li>
-          </ul>
-          <strong>Variables</strong>
-          <ul class="mt-1 ps-3 mb-0">
-            <li><code>{{name}}</code> — contact name</li>
-            <li><code>{{title}}</code> — job title</li>
-            <li><code>{{company}}</code> — company name</li>
-            <li><code>{{website}}</code> — website URL</li>
-            <li><code>{{domain}}</code> — domain only</li>
-            <li><code>{{location}}</code> — city/region</li>
-            <li><code>{{ai_summary}}</code> — AI description</li>
-          </ul>
-          <strong class="mt-2 d-block">Tabs</strong>
-          <ul class="mt-1 ps-3 mb-0">
-            <li><strong>Editor</strong> — WYSIWYG</li>
-            <li><strong>HTML source</strong> — raw HTML</li>
-            <li><strong>Preview</strong> — rendered with variables</li>
-            <li><strong>CSS</strong> — email base styles</li>
-          </ul>
-        </div>
+  <div id="helpModal" class="bb-card p-3 mb-3 d-none">
+    <h6 class="fw-600 mb-2 small"><i class="ti ti-help me-1 text-primary"></i>Editor help</h6>
+    <div class="row g-3 small">
+      <div class="col-md-4">
+        <strong>Formatting</strong>
+        <ul class="mt-1 ps-3 mb-0">
+          <li>Bold: <kbd>Ctrl+B</kbd></li>
+          <li>Italic: <kbd>Ctrl+I</kbd></li>
+          <li>Underline: <kbd>Ctrl+U</kbd></li>
+        </ul>
+      </div>
+      <div class="col-md-4">
+        <strong>Links &amp; Images</strong>
+        <ul class="mt-1 ps-3 mb-0">
+          <li>Link: select text → click 🔗 → enter URL</li>
+          <li>Image (URL): paste URL above editor → Insert URL</li>
+          <li>Delete image: click image → <kbd>Delete</kbd></li>
+        </ul>
+      </div>
+      <div class="col-md-4">
+        <strong>Variables</strong>
+        <ul class="mt-1 ps-3 mb-0">
+          <li><code>{{name}}</code> — contact name</li>
+          <li><code>{{title}}</code> — job title</li>
+          <li><code>{{company}}</code> — company</li>
+          <li><code>{{website}}</code> — website URL</li>
+          <li><code>{{domain}}</code> — domain only</li>
+          <li><code>{{location}}</code> — city/region</li>
+          <li><code>{{ai_summary}}</code> — AI description</li>
+        </ul>
       </div>
     </div>
   </div>
 
   <!-- Mail type selector -->
-  <div class="d-flex align-items-center gap-3 mb-2 small text-muted">
-    <strong>Body:</strong>
+  <div class="d-flex align-items-center gap-3 mb-2 small" style="color:var(--bb-muted)">
+    <strong>Body type:</strong>
     <div class="form-check form-check-inline mb-0">
       <input class="form-check-input" type="radio" name="mail-type" id="mt-plain" value="plain" checked onchange="switchMode()">
       <label class="form-check-label" for="mt-plain">Plain text</label>
@@ -113,48 +133,30 @@ body { background: #f8f9fa; }
       <input class="form-check-input" type="radio" name="mail-type" id="mt-html" value="html" onchange="switchMode()">
       <label class="form-check-label" for="mt-html">HTML</label>
     </div>
-    <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:12px" onclick="document.getElementById('helpModal').classList.toggle('d-none')" title="Help">
-      <i class="ti ti-help"></i>
+    <button class="btn btn-sm btn-outline-secondary py-0 px-2 ms-auto" style="font-size:12px" onclick="document.getElementById('helpModal').classList.toggle('d-none')">
+      <i class="ti ti-help me-1"></i>Help
     </button>
   </div>
 
-
   <!-- Plain text mode -->
   <div id="plain-mode">
-    <textarea id="c-body" class="form-control" rows="10" style="font-size:13px"
+    <textarea id="c-body" class="form-control" rows="10" style="font-size:13px;border-radius:8px"
               placeholder="Hei {{name}},&#10;&#10;..." oninput="autoSave()"></textarea>
   </div>
 
   <!-- HTML mode -->
   <div id="html-mode" style="display:none">
-    <!-- Editor tabs -->
     <ul class="nav nav-tabs mb-0" style="border-bottom:none">
-      <li class="nav-item">
-        <button class="nav-link active" id="tab-wysiwyg" onclick="showTab('wysiwyg')">
-          <i class="ti ti-pencil me-1"></i>Editor
-        </button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link" id="tab-source" onclick="showTab('source')">
-          <i class="ti ti-code me-1"></i>HTML source
-        </button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link" id="tab-preview" onclick="showTab('preview')">
-          <i class="ti ti-eye me-1"></i>Preview
-        </button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link" id="tab-css" onclick="showTab('css')">
-          <i class="ti ti-palette me-1"></i>CSS
-        </button>
-      </li>
+      <li class="nav-item"><button class="nav-link active" id="tab-wysiwyg" onclick="showTab('wysiwyg')"><i class="ti ti-pencil me-1"></i>Editor</button></li>
+      <li class="nav-item"><button class="nav-link" id="tab-source" onclick="showTab('source')"><i class="ti ti-code me-1"></i>HTML</button></li>
+      <li class="nav-item"><button class="nav-link" id="tab-preview" onclick="showTab('preview')"><i class="ti ti-eye me-1"></i>Preview</button></li>
+      <li class="nav-item"><button class="nav-link" id="tab-css" onclick="showTab('css')"><i class="ti ti-palette me-1"></i>CSS</button></li>
     </ul>
 
     <!-- WYSIWYG -->
     <div id="pane-wysiwyg" class="border border-top-0 rounded-bottom mb-3">
-      <div class="px-2 py-1 border-bottom d-flex align-items-center gap-2" style="background:#f8f9fa">
-        <small class="text-muted">Insert image:</small>
+      <div class="px-2 py-1 border-bottom d-flex align-items-center gap-2" style="background:#f9fafb">
+        <small style="color:var(--bb-muted)">Insert image:</small>
         <input id="img-url" class="form-control form-control-sm" style="max-width:300px;font-size:11px" placeholder="https://example.com/image.png">
         <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:11px" onclick="insertImageUrl()">Insert URL</button>
       </div>
@@ -163,34 +165,60 @@ body { background: #f8f9fa; }
 
     <!-- Source -->
     <div id="pane-source" style="display:none" class="mb-3">
-      <textarea id="c-body-html" class="form-control" id="source-editor" rows="14"
-                style="font-family:monospace;font-size:12px"
+      <textarea id="c-body-html" class="form-control" rows="14"
+                style="font-family:monospace;font-size:12px;border-radius:8px"
                 placeholder="<p>Hei {{name}},</p>&#10;<p>...</p>"
                 oninput="autoSave()"></textarea>
     </div>
 
     <!-- CSS -->
     <div id="pane-css" style="display:none" class="mb-3">
-      <div class="alert alert-light py-1 px-2 mb-2 small text-muted">
-        <i class="ti ti-info-circle me-1"></i>These styles are injected as <code>&lt;style&gt;</code> into every email. Stored separately from the body — keeps your HTML clean for editing.
+      <div class="alert alert-light py-1 px-2 mb-2 small" style="color:var(--bb-muted)">
+        <i class="ti ti-info-circle me-1"></i>Injected as <code>&lt;style&gt;</code> into every email. Stored separately from the body.
       </div>
       <textarea id="c-mail-css" class="form-control" rows="12"
-                style="font-family:monospace;font-size:12px"
+                style="font-family:monospace;font-size:12px;border-radius:8px"
                 placeholder="body { font-family: Arial; }" oninput="autoSave()"></textarea>
     </div>
 
     <!-- Preview -->
     <div id="pane-preview" style="display:none" class="mb-3">
       <div class="pv-bar d-flex align-items-center gap-2 mb-2 flex-wrap small">
-        <span class="text-muted">Preview as:</span>
+        <span style="color:var(--bb-muted)">Preview as:</span>
         <input id="pv-name"    class="form-control form-control-sm" style="width:110px" placeholder="name"    value="Tone Hansen"  oninput="updatePreview()">
         <input id="pv-company" class="form-control form-control-sm" style="width:120px" placeholder="company" value="Blueboot AS"   oninput="updatePreview()">
         <input id="pv-website" class="form-control form-control-sm" style="width:130px" placeholder="website" value="blueboot.no"   oninput="updatePreview()">
       </div>
-      <div id="mail-preview" class="border rounded p-3" style="background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#333;min-height:80px"></div>
+      <div id="mail-preview" class="border rounded p-3" style="background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#333;min-height:80px;border-radius:8px!important"></div>
     </div>
   </div>
 
+</div>
+
+<!-- Link modal -->
+<div class="modal fade" id="linkModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-link me-1"></i>Insert link</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <div class="mb-2">
+          <label class="form-label small fw-500 mb-1">Link text</label>
+          <input id="link-text" class="form-control form-control-sm" placeholder="Click here">
+        </div>
+        <div>
+          <label class="form-label small fw-500 mb-1">URL</label>
+          <input id="link-url" class="form-control form-control-sm" placeholder="https://example.com">
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="insertLink()">Insert</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
@@ -210,11 +238,9 @@ function insertLink() {
   bootstrap.Modal.getInstance(document.getElementById('linkModal')).hide();
   const range = window._linkRange;
   if (range && range.length > 0) {
-    // Replace selected text with link
     quill.deleteText(range.index, range.length);
     quill.insertText(range.index, text || url, 'link', url);
   } else {
-    // Insert at cursor
     const idx = range ? range.index : quill.getLength();
     quill.insertText(idx, text || url, 'link', url);
   }
@@ -230,7 +256,6 @@ function insertImageUrl() {
   autoSave();
 }
 
-// Init Quill
 function initQuill() {
   if (quill) return;
   quill = new Quill('#quill-editor', {
@@ -264,13 +289,10 @@ function initQuill() {
     }
   });
   quill.on('text-change', () => { autoSave(); });
-
-  // Edit existing link on click
   quill.root.addEventListener('click', (e) => {
     const link = e.target.closest('a');
     if (link) {
       e.preventDefault();
-      // Find the link's range in Quill
       const blot = Quill.find(link);
       if (blot) {
         const index = quill.getIndex(blot);
@@ -287,14 +309,12 @@ function initQuill() {
 }
 
 function showTab(tab) {
-  // Sync content between tabs before switching
   if (_currentTab === 'wysiwyg' && quill) {
     document.getElementById('c-body-html').value = quill.root.innerHTML;
   } else if (_currentTab === 'source' && quill) {
     quill.root.innerHTML = document.getElementById('c-body-html').value;
   }
   _currentTab = tab;
-
   document.getElementById('pane-wysiwyg').style.display = tab === 'wysiwyg' ? '' : 'none';
   document.getElementById('pane-source').style.display  = tab === 'source'  ? '' : 'none';
   document.getElementById('pane-preview').style.display = tab === 'preview' ? '' : 'none';
@@ -302,7 +322,6 @@ function showTab(tab) {
   ['wysiwyg','source','preview','css'].forEach(t => {
     document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
   });
-
   if (tab === 'preview') updatePreview();
 }
 
@@ -312,7 +331,6 @@ function switchMode() {
   document.getElementById('html-mode').style.display  = mode === 'html'  ? '' : 'none';
   if (mode === 'html') {
     initQuill();
-    // Sync plain -> HTML editor if HTML is empty
     const plain = document.getElementById('c-body').value;
     if (!document.getElementById('c-body-html').value && plain) {
       document.getElementById('c-body-html').value = plain;
@@ -357,21 +375,21 @@ async function saveCampaign(silent = false) {
   const body    = getBody();
   const account = document.getElementById('c-email-account-edit').value.trim();
   const fb = document.getElementById('save-feedback');
-  if (!silent) { fb.textContent = 'Saving...'; fb.className = 'small text-muted'; fb.style.display = ''; }
+  if (!silent) { fb.textContent = 'Saving…'; fb.style.color = 'var(--bb-muted)'; fb.style.display = ''; }
   try {
     const css = document.getElementById('c-mail-css').value;
     const r = await fetch(`${BASE}/api/crm/campaigns/${CAMPAIGN_ID}`, {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ mail: {subject, body, type: mode, css}, outreach_email_account: account })
+      body: JSON.stringify({ mail: {subject, body, type: mode, css}, outreach_email_account: account, author: document.getElementById('c-author').value.trim() })
     });
     const d = await r.json();
-    fb.className = d.status === 'ok' ? 'small text-success' : 'small text-danger';
+    fb.style.color = d.status === 'ok' ? '#16a34a' : '#dc2626';
     fb.textContent = d.status === 'ok' ? (silent ? 'Auto-saved.' : 'Saved.') : d.message;
     fb.style.display = '';
     if (d.status === 'ok') setTimeout(() => { fb.style.display = 'none'; }, 2000);
   } catch(e) {
-    fb.className = 'small text-danger'; fb.textContent = e.message; fb.style.display = '';
+    fb.style.color = '#dc2626'; fb.textContent = e.message; fb.style.display = '';
   }
 }
 
@@ -384,19 +402,13 @@ async function loadCampaign() {
     const c = await r.json();
     const st = c.status || 'draft';
     const badge = document.getElementById('c-status-badge');
-    badge.className = `badge badge-${st}`; badge.textContent = st;
+    badge.className = `bb-badge bb-badge-${st}`; badge.textContent = st;
     document.getElementById('c-email-account-edit').value = c.outreach_email_account || '';
+    document.getElementById('c-author').value = c.author || '';
     const mail = c.mail || {};
     document.getElementById('c-subject').value   = mail.subject || '';
     document.getElementById('c-body').value      = mail.body    || '';
     document.getElementById('c-body-html').value = mail.body    || '';
-    document.getElementById('c-mail-css').value = mail.css || `body, p, div, span, td { margin: 0; padding: 0; }
-p { margin-bottom: 8px; }
-body { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; color: #333; max-width: 600px; }
-a { color: #0066cc; text-decoration: none; }
-h1, h2, h3 { font-weight: bold; margin-bottom: 8px; }
-ul, ol { margin: 0 0 8px 20px; padding: 0; }
-li { margin-bottom: 4px; }`;
     document.getElementById('c-mail-css').value = mail.css || `.mail-wrap, .mail-wrap p, .mail-wrap div, .mail-wrap span, .mail-wrap td { margin: 0; padding: 0; }
 .mail-wrap p { margin-bottom: 8px; }
 .mail-wrap { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; color: #333; max-width: 600px; }
@@ -418,31 +430,6 @@ li { margin-bottom: 4px; }`;
 
 loadCampaign();
 </script>
-<!-- Link modal -->
-<div class="modal fade" id="linkModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered modal-sm">
-    <div class="modal-content">
-      <div class="modal-header border-0 pb-0">
-        <h6 class="modal-title"><i class="ti ti-link me-1"></i>Insert link</h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body pt-2">
-        <div class="mb-2">
-          <label class="form-label small text-muted mb-1">Link text</label>
-          <input id="link-text" class="form-control form-control-sm" placeholder="Click here">
-        </div>
-        <div>
-          <label class="form-label small text-muted mb-1">URL</label>
-          <input id="link-url" class="form-control form-control-sm" placeholder="https://example.com">
-        </div>
-      </div>
-      <div class="modal-footer border-0 pt-0">
-        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn btn-primary btn-sm" onclick="insertLink()">Insert</button>
-      </div>
-    </div>
-  </div>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
 </body>
 </html>

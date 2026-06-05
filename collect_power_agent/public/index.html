@@ -4,48 +4,89 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Blueboot CRM</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
 <style>
-body { background: #f8f9fa; min-height: 100vh; }
-.menu-card { border-radius: 16px; transition: box-shadow .15s, transform .1s; cursor: pointer; text-decoration: none; color: inherit; }
-.menu-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.1); transform: translateY(-2px); color: inherit; }
-.menu-icon { font-size: 2.5rem; }
+:root {
+  --bb-accent: #4f6ef7;
+  --bb-border: #e8eaee;
+  --bb-muted: #6b7280;
+  --bb-card-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.04);
+}
+body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+.bb-nav { background: #fff; border-bottom: 1px solid var(--bb-border); padding: .6rem 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0; }
+.bb-nav .brand { color: #111; font-weight: 700; font-size: .95rem; text-decoration: none; display: flex; align-items: center; gap: .5rem; margin-right: 2rem; }
+.bb-nav .brand i { color: var(--bb-accent); }
+.bb-nav .nav-link { color: var(--bb-muted); font-size: .85rem; text-decoration: none; padding: .3rem .65rem; border-radius: 6px; transition: color .15s, background .15s; display: flex; align-items: center; gap: .35rem; }
+.bb-nav .nav-link:hover { color: #111; background: #f4f5f7; }
+.bb-nav .nav-link.active { color: var(--bb-accent); background: #eef0ff; }
+.bb-nav .nav-links { display: flex; gap: .25rem; }
+
+.menu-card { background: #fff; border-radius: 12px; box-shadow: var(--bb-card-shadow); border: 1px solid var(--bb-border); padding: 1.5rem; text-decoration: none; color: inherit; display: block; transition: box-shadow .15s, transform .12s; }
+.menu-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-2px); color: inherit; }
+.menu-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; margin-bottom: .9rem; }
+.menu-card h5 { font-size: .95rem; font-weight: 600; margin-bottom: .3rem; }
+.menu-card p { font-size: .82rem; color: var(--bb-muted); margin: 0; line-height: 1.5; }
 </style>
 </head>
 <body>
-<div class="container" style="max-width:700px; padding-top:30px">
-  <div class="text-center mb-5">
-    <h3 class="fw-500 mb-1">Blueboot CRM</h3>
-    <p class="text-muted small">Outreach pipeline management</p>
+
+<nav class="bb-nav">
+  <a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>
+  <div class="nav-links">
+    <a href="campaigns.html" class="nav-link"><i class="ti ti-speakerphone"></i>Campaigns</a>
+    <a href="crm-bp.html" class="nav-link"><i class="ti ti-server-2"></i>CRM</a>
+    <a href="jobs.html" class="nav-link"><i class="ti ti-list-check"></i>Jobs</a>
+    <a href="filter-facets.html" class="nav-link"><i class="ti ti-filter"></i>Filter Facets</a>
   </div>
-  <div class="row g-4">
+</nav>
+
+<div class="container" style="max-width:700px; padding-top:64px; padding-bottom:64px">
+
+  <!-- Hero -->
+  <div class="text-center mb-5">
+    <div style="display:inline-flex;align-items:center;justify-content:center;width:56px;height:56px;border-radius:14px;background:#eef0ff;margin-bottom:1.25rem">
+      <i class="ti ti-bolt" style="font-size:1.6rem;color:var(--bb-accent)"></i>
+    </div>
+    <h1 style="font-size:1.75rem;font-weight:700;margin-bottom:.5rem;color:#111">Blueboot CRM</h1>
+    <p style="color:var(--bb-muted);font-size:.95rem;max-width:420px;margin:0 auto;line-height:1.6">
+      End-to-end outreach pipeline — discover leads, build contact lists, run email campaigns and track results.
+    </p>
+  </div>
+
+  <!-- Menu cards -->
+  <div class="row g-3">
     <div class="col-md-6">
-      <a href="campaign.html" class="card menu-card p-4 h-100 d-block">
-        <div class="menu-icon text-primary mb-3"><i class="ti ti-speakerphone"></i></div>
-        <h5 class="fw-500 mb-1">Campaigns</h5>
-        <p class="text-muted small mb-0">View and manage outreach campaigns, edit mail templates, sync contacts and track send status.</p>
+      <a href="campaign.html" class="menu-card h-100">
+        <div class="menu-icon" style="background:#eef0ff;color:#4f6ef7"><i class="ti ti-speakerphone"></i></div>
+        <h5>Campaigns</h5>
+        <p>Manage outreach campaigns, edit mail templates, sync contacts and track send status.</p>
       </a>
     </div>
     <div class="col-md-6">
-      <a href="crm-bp.html" class="card menu-card p-4 h-100 d-block">
-        <div class="menu-icon text-success mb-3"><i class="ti ti-server-2"></i></div>
-        <h5 class="fw-500 mb-1">CRM Jobs</h5>
-        <p class="text-muted small mb-0">Monitor async pipeline jobs — import contacts, push to CRM, sync templates and track progress.</p>
+      <a href="crm-bp.html" class="menu-card h-100">
+        <div class="menu-icon" style="background:#edfdf5;color:#16a34a"><i class="ti ti-server-2"></i></div>
+        <h5>CRM</h5>
+        <p>Import contacts, push selections to the CRM template and sync status back to the Leads Database.</p>
+      </a>
+    </div>
+    <div class="col-md-6">
+      <a href="jobs.html" class="menu-card h-100">
+        <div class="menu-icon" style="background:#faf0ff;color:#9333ea"><i class="ti ti-list-check"></i></div>
+        <h5>Jobs</h5>
+        <p>Monitor all pipeline job history — import, push, sync and campaign jobs with live status.</p>
+      </a>
+    </div>
+    <div class="col-md-6">
+      <a href="filter-facets.html" class="menu-card h-100">
+        <div class="menu-icon" style="background:#fff7ed;color:#ea580c"><i class="ti ti-filter"></i></div>
+        <h5>Filter Facets</h5>
+        <p>Select values per category from the lead catalog and save them as named filter presets.</p>
       </a>
     </div>
   </div>
 </div>
-  <div class="container pb-4" style="max-width:700px">
-    <div class="row g-4">
-      <div class="col-md-6">
-        <a href="campaign-edit.html" class="card menu-card p-4 h-100 d-block">
-          <div class="menu-icon text-warning mb-3"><i class="ti ti-edit"></i></div>
-          <h5 class="fw-500 mb-1">Campaign Editor</h5>
-          <p class="text-muted small mb-0">Edit HTML mail templates with live preview. See how your email looks with real contact variables.</p>
-        </a>
-      </div>
-    </div>
-  </div>
+
 </body>
 </html>

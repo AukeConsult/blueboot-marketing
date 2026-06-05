@@ -3,122 +3,156 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Blueboot — Campaign</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<title>Blueboot — Campaigns</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
 <style>
-body { background: #f8f9fa; }
-.stat-card { background: #f0efe8; border-radius: 8px; padding: .5rem; text-align: center; }
-.stat-n { font-size: 16px; font-weight: 500; }
-.stat-l { font-size: 11px; color: #888; margin-top: 2px; }
-.badge-draft      { background: #e2e3e5; color: #383d41; }
-.badge-dosend     { background: #cce5ff; color: #004085; }
-.badge-sent       { background: #d4edda; color: #155724; }
-.badge-cancelled  { background: #f8d7da; color: #721c24; }
-.badge-pending    { background: #fff3cd; color: #856404; }
-.badge-error      { background: #f8d7da; color: #721c24; }
-.job-card { cursor: pointer; }
-.detail { display: none; }
+:root {
+  --bb-navy: #1a2035;
+  --bb-accent: #4f6ef7;
+  --bb-border: #e8eaee;
+  --bb-muted: #6b7280;
+  --bb-card-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.04);
+}
+body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+.bb-nav { background: #fff; border-bottom: 1px solid var(--bb-border); padding: .6rem 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0; }
+.bb-nav .brand { color: #111; font-weight: 700; font-size: .95rem; text-decoration: none; display: flex; align-items: center; gap: .5rem; margin-right: 2rem; }
+.bb-nav .brand i { color: var(--bb-accent); }
+.bb-nav .nav-link { color: var(--bb-muted); font-size: .85rem; text-decoration: none; padding: .3rem .65rem; border-radius: 6px; transition: color .15s, background .15s; display: flex; align-items: center; gap: .35rem; }
+.bb-nav .nav-link:hover { color: #111; background: #f4f5f7; }
+.bb-nav .nav-link.active { color: var(--bb-accent); background: #eef0ff; }
+.bb-nav .nav-links { display: flex; gap: .25rem; }
+
+.bb-card { background: #fff; border-radius: 10px; box-shadow: var(--bb-card-shadow); border: 1px solid var(--bb-border); }
+
+.stat-card { background: #f9fafb; border: 1px solid var(--bb-border); border-radius: 8px; padding: .65rem .75rem; text-align: center; }
+.stat-n { font-size: 1.2rem; font-weight: 600; color: #111; }
+.stat-l { font-size: .72rem; color: var(--bb-muted); margin-top: 2px; }
+
+/* Status badges */
+.bb-badge { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 600; padding: .2rem .55rem; border-radius: 20px; }
+.bb-badge-draft     { background: #f1f1f1; color: #555; }
+.bb-badge-dosend    { background: #dbeafe; color: #1d4ed8; }
+.bb-badge-sent      { background: #dcfce7; color: #15803d; }
+.bb-badge-cancelled { background: #fee2e2; color: #b91c1c; }
+.bb-badge-pending   { background: #fef9c3; color: #854d0e; }
+.bb-badge-error     { background: #fee2e2; color: #b91c1c; }
+
 .spinner-xs { width: 14px; height: 14px; border-width: 2px; }
-pre { background: #f1f3f5; border-radius: 6px; padding: .5rem .75rem; font-size: 11px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
+pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size: 11px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; border: 1px solid var(--bb-border); }
+
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+.page-title { font-size: 1rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: .5rem; }
 </style>
 </head>
 <body>
+
+<nav class="bb-nav">
+  <a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>
+  <div class="nav-links">
+    <a href="campaigns.html" class="nav-link active"><i class="ti ti-speakerphone"></i>Campaigns</a>
+    <a href="crm-bp.html" class="nav-link"><i class="ti ti-server-2"></i>CRM</a>
+    <a href="jobs.html" class="nav-link"><i class="ti ti-list-check"></i>Jobs</a>
+    <a href="filter-facets.html" class="nav-link"><i class="ti ti-filter"></i>Filter Facets</a>
+  </div>
+</nav>
+
 <div class="container py-4" style="max-width:1000px">
 
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <div class="d-flex align-items-center gap-2">
-      <a href="index.html" class="btn btn-sm btn-outline-secondary"><i class="ti ti-arrow-left"></i></a>
-      <h5 class="mb-0"><i class="ti ti-speakerphone me-2"></i>Campaign</h5>
-    </div>
+  <div class="page-header">
+    <h5 class="page-title"><i class="ti ti-speakerphone text-primary"></i>Campaigns</h5>
   </div>
 
   <!-- Campaign selector -->
-  <div class="card mb-3">
-    <div class="card-body py-2 px-3 d-flex align-items-center gap-2">
-      <label class="small text-muted mb-0 text-nowrap">Select campaign</label>
-      <select id="campaign-select" class="form-select form-select-sm" onchange="loadCampaign()">
+  <div class="bb-card p-3 mb-3">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <label class="small fw-500 mb-0 text-nowrap" style="color:var(--bb-muted)">Campaign</label>
+      <select id="campaign-select" class="form-select form-select-sm" style="max-width:340px" onchange="loadCampaign()">
         <option value="">— loading —</option>
       </select>
-      <button class="btn btn-sm btn-outline-primary text-nowrap" onclick="discoverCampaigns()" id="discover-btn">
-        <i class="ti ti-search me-1"></i>Discover new campaigns
+      <button class="btn btn-sm btn-outline-primary text-nowrap ms-auto" onclick="discoverCampaigns()" id="discover-btn">
+        <i class="ti ti-search me-1"></i>Discover new
       </button>
     </div>
   </div>
 
   <div id="discover-bar" class="alert py-2 px-3 small mb-3" style="display:none"></div>
-  <div id="campaign-empty" class="text-center text-muted py-4">Select a campaign above.</div>
+  <div id="campaign-empty" class="text-center py-5" style="color:var(--bb-muted)">
+    <i class="ti ti-speakerphone" style="font-size:2rem;opacity:.3"></i>
+    <div class="mt-2 small">Select a campaign above</div>
+  </div>
 
   <div id="campaign-detail" style="display:none">
 
     <!-- Campaign header -->
-    <div class="card mb-3">
-      <div class="card-body">
-        <div class="d-flex align-items-center justify-content-between mb-2">
-          <div>
-            <h6 class="mb-0 fw-500" id="c-id"></h6>
-            <small class="text-muted"><i class="ti ti-mail me-1"></i><span id="c-email-account-display">—</span></small>
-          </div>
-          <span class="badge" id="c-status-badge"></span>
+    <div class="bb-card p-3 mb-3">
+      <div class="d-flex align-items-start justify-content-between mb-3">
+        <div>
+          <h6 class="mb-1 fw-600" id="c-id" style="font-size:1rem"></h6>
+          <div class="small" style="color:var(--bb-muted)"><i class="ti ti-mail me-1"></i><span id="c-email-account-display">—</span></div>
+          <div class="small mt-1" style="color:var(--bb-muted)" id="c-author-row" style="display:none"><i class="ti ti-user me-1"></i><span id="c-author-display">—</span></div>
         </div>
-        <div class="d-flex align-items-center gap-2 mb-2">
-          <button class="btn btn-sm btn-outline-primary" onclick="syncCampaign()">
-            <i class="ti ti-refresh me-1"></i>Update from contact sheet
-          </button>
-          <button class="btn btn-sm btn-success ms-auto" onclick="confirmSend()" id="send-btn">
-            <i class="ti ti-send me-1"></i>Send campaign
-          </button>
-        </div>
-        <div id="sync-feedback" class="alert py-1 px-2 small mt-1 mb-2" style="display:none"></div>
-        <div class="row g-1 mb-2">
-          <div class="col-3"><div class="stat-card"><div class="stat-n" id="c-contacts">—</div><div class="stat-l">contacts</div></div></div>
-          <div class="col-3"><div class="stat-card"><div class="stat-n" id="c-sites">—</div><div class="stat-l">sites</div></div></div>
-          <div class="col-3"><div class="stat-card"><div class="stat-n" id="c-countries">—</div><div class="stat-l">countries</div></div></div>
-          <div class="col-3"><div class="stat-card"><div class="stat-n" id="c-sent">—</div><div class="stat-l">sent</div></div></div>
-        </div>
-        <div class="row g-1 small text-muted">
-          <div class="col-6"><i class="ti ti-calendar me-1"></i>Updated: <span id="c-updated">—</span></div>
-          <div class="col-6" id="c-sent-at-row" style="display:none"><i class="ti ti-send me-1"></i>Sent: <span id="c-sent-at">—</span></div>
-        </div>
+        <span class="bb-badge" id="c-status-badge"></span>
+      </div>
+
+      <div class="row g-2 mb-3">
+        <div class="col-3"><div class="stat-card"><div class="stat-n" id="c-contacts">—</div><div class="stat-l">contacts</div></div></div>
+        <div class="col-3"><div class="stat-card"><div class="stat-n" id="c-sites">—</div><div class="stat-l">sites</div></div></div>
+        <div class="col-3"><div class="stat-card"><div class="stat-n" id="c-countries">—</div><div class="stat-l">countries</div></div></div>
+        <div class="col-3"><div class="stat-card"><div class="stat-n" id="c-sent">—</div><div class="stat-l">sent</div></div></div>
+      </div>
+
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button class="btn btn-sm btn-outline-secondary" onclick="syncCampaign()">
+          <i class="ti ti-refresh me-1"></i>Sync from sheet
+        </button>
+        <button class="btn btn-sm btn-success ms-auto" onclick="confirmSend()" id="send-btn">
+          <i class="ti ti-send me-1"></i>Send campaign
+        </button>
+      </div>
+      <div id="sync-feedback" class="alert py-1 px-2 small mt-2 mb-0" style="display:none"></div>
+
+      <div class="row g-1 mt-2 small" style="color:var(--bb-muted)">
+        <div class="col-6"><i class="ti ti-calendar me-1"></i>Updated: <span id="c-updated">—</span></div>
+        <div class="col-6" id="c-sent-at-row" style="display:none"><i class="ti ti-send me-1"></i>Sent: <span id="c-sent-at">—</span></div>
       </div>
     </div>
 
     <!-- Mail template preview -->
-    <div class="card mb-3" style="overflow:visible">
-      <div class="card-body py-2 px-3 d-flex align-items-center justify-content-between"
-           style="cursor:pointer" onclick="toggleMail()">
+    <div class="bb-card mb-3" style="overflow:visible">
+      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
+           style="cursor:pointer;border-radius:10px 10px 0 0;background:#f9fafb" onclick="toggleMail()">
         <span class="fw-500 small"><i class="ti ti-mail me-1 text-primary"></i>Mail template</span>
-        <div class="d-flex align-items-center gap-2" onclick="event.stopPropagation()">
+        <div class="d-flex align-items-center gap-3" onclick="event.stopPropagation()">
           <a id="c-edit-mail-link" href="campaign-edit.html" class="small text-primary text-decoration-none">
             <i class="ti ti-edit me-1"></i>Edit
           </a>
-          <i class="ti ti-chevron-down text-muted" id="mail-chevron"></i>
+          <i class="ti ti-chevron-down" style="color:var(--bb-muted)" id="mail-chevron"></i>
         </div>
       </div>
       <div id="mail-body" style="display:none;overflow:visible" class="px-3 pb-3 pt-2">
-        <div class="small text-muted mb-2">
-          <div><i class="ti ti-mail me-1"></i><strong>From:</strong> <span id="c-email-account-preview">—</span></div>
-          <div><i class="ti ti-at me-1"></i><strong>Subject:</strong> <span id="c-subject-preview">—</span></div>
-          <div class="mt-1">
-            <div id="c-body-preview" class="border rounded p-3" style="background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#333;min-height:40px"></div>
-          </div>
+        <div class="small mb-2" style="color:var(--bb-muted)">
+          <div><strong>From:</strong> <span id="c-email-account-preview">—</span></div>
+          <div><strong>Subject:</strong> <span id="c-subject-preview">—</span></div>
         </div>
+        <div id="c-body-preview" class="border rounded p-3" style="background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#333;min-height:40px"></div>
       </div>
     </div>
 
     <!-- Contacts table -->
-    <div class="card">
-      <div class="card-body py-2 px-3 d-flex align-items-center justify-content-between mb-1">
-        <span class="fw-500 small"><i class="ti ti-users me-1 text-primary"></i>Contacts <span class="text-muted ms-1" id="c-contact-count"></span></span>
-        <input id="contact-search" class="form-control form-control-sm" style="max-width:200px" placeholder="search..." oninput="filterContacts()">
+    <div class="bb-card">
+      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom" style="background:#f9fafb;border-radius:10px 10px 0 0">
+        <span class="fw-500 small"><i class="ti ti-users me-1 text-primary"></i>Contacts <span class="ms-1" style="color:var(--bb-muted)" id="c-contact-count"></span></span>
+        <input id="contact-search" class="form-control form-control-sm" style="max-width:200px" placeholder="Search…" oninput="filterContacts()">
       </div>
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
-          <thead class="table-light"><tr><th>Status</th><th>Name</th><th>Email</th><th>Title</th><th>Website</th><th>Sent at</th></tr></thead>
+          <thead style="background:#f9fafb"><tr><th>Status</th><th>Name</th><th>Email</th><th>Title</th><th>Website</th><th>Sent at</th></tr></thead>
           <tbody id="contacts-body"></tbody>
         </table>
       </div>
-      <div id="contacts-empty" class="text-center text-muted py-3 small" style="display:none">No contacts found.</div>
+      <div id="contacts-empty" class="text-center py-3 small" style="color:var(--bb-muted);display:none">No contacts found.</div>
     </div>
 
   </div>
@@ -127,14 +161,14 @@ pre { background: #f1f3f5; border-radius: 6px; padding: .5rem .75rem; font-size:
 <!-- Send modal -->
 <div class="modal fade" id="sendModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
       <div class="modal-header border-0 pb-0">
         <h6 class="modal-title"><i class="ti ti-alert-triangle text-warning me-2"></i>Send campaign</h6>
       </div>
       <div class="modal-body">
-        <p class="mb-1">You are about to mark campaign <strong id="modal-campaign-id"></strong> as <strong>sent</strong>.</p>
+        <p class="mb-2">You are about to mark campaign <strong id="modal-campaign-id"></strong> as <strong>sent</strong>.</p>
         <div class="alert alert-warning py-2 small mb-0">
-          <i class="ti ti-lock me-1"></i>Once marked as <strong>sent</strong>, the campaign cannot be changed or synced. This action cannot be undone.
+          <i class="ti ti-lock me-1"></i>Once sent, the campaign cannot be changed or synced. This cannot be undone.
         </div>
       </div>
       <div class="modal-footer border-0 pt-0">
@@ -155,7 +189,7 @@ function fmt(iso) {
 }
 
 function statusBadge(s) {
-  return `<span class="badge badge-${s||'pending'}">${s||'pending'}</span>`;
+  return `<span class="bb-badge bb-badge-${s||'pending'}">${s||'pending'}</span>`;
 }
 
 function toggleMail() {
@@ -163,7 +197,7 @@ function toggleMail() {
   const c = document.getElementById('mail-chevron');
   const open = b.style.display === 'block';
   b.style.display = open ? 'none' : 'block';
-  c.className = open ? 'ti ti-chevron-down text-muted' : 'ti ti-chevron-up text-muted';
+  c.className = open ? 'ti ti-chevron-down' : 'ti ti-chevron-up';
 }
 
 function renderContacts(list) {
@@ -199,7 +233,7 @@ async function loadCampaignList() {
       sel.innerHTML = '<option value="">No campaigns found</option>';
       const bar = document.getElementById('discover-bar');
       bar.className = 'alert alert-light py-2 px-3 small mb-3';
-      bar.innerHTML = '<i class="ti ti-info-circle me-1 text-primary"></i>No campaigns yet — click <strong>Discover</strong> to scan the contact sheet.';
+      bar.innerHTML = '<i class="ti ti-info-circle me-1 text-primary"></i>No campaigns yet — click <strong>Discover new</strong> to scan the contact sheet.';
       bar.style.display = '';
       return;
     }
@@ -210,6 +244,7 @@ async function loadCampaignList() {
 
 async function loadCampaign() {
   const id = document.getElementById('campaign-select').value;
+  if (id) localStorage.setItem('selectedCampaign', id);
   document.getElementById('sync-feedback').style.display = 'none';
   document.getElementById('campaign-detail').style.display = 'none';
   document.getElementById('campaign-empty').style.display = id ? 'none' : 'block';
@@ -217,45 +252,36 @@ async function loadCampaign() {
   try {
     const r = await fetch(`${BASE}/api/crm/campaigns/${id}`);
     const c = await r.json();
-    document.getElementById('c-id').textContent       = c.campaign_id;
+    document.getElementById('c-id').textContent = c.campaign_id;
     const st = c.status || 'draft';
     const badge = document.getElementById('c-status-badge');
-    badge.className = `badge badge-${st}`; badge.textContent = st;
+    badge.className = `bb-badge bb-badge-${st}`; badge.textContent = st;
     document.getElementById('c-contacts').textContent = c.contact_count || 0;
     document.getElementById('c-sites').textContent    = c.sites_count || 0;
-    document.getElementById('c-countries').textContent = (c.countries||[]).join(', ') || '—';
+    document.getElementById('c-countries').textContent = (c.countries||[]).length || '—';
     document.getElementById('c-sent').textContent     = (c.status_breakdown||{}).sent || 0;
     document.getElementById('c-email-account-display').textContent = c.outreach_email_account || '—';
+    const authorRow = document.getElementById('c-author-row');
+    if (c.author) { document.getElementById('c-author-display').textContent = c.author; authorRow.style.display = ''; } else { authorRow.style.display = 'none'; }
     document.getElementById('c-updated').textContent  = fmt(c.updated_at);
     const sentAtRow = document.getElementById('c-sent-at-row');
     if (st === 'sent' && c.sent_at) { sentAtRow.style.display = ''; document.getElementById('c-sent-at').textContent = fmt(c.sent_at); }
     else sentAtRow.style.display = 'none';
-    // Mail preview
     const mail = c.mail || {};
     document.getElementById('c-email-account-preview').textContent = c.outreach_email_account || '—';
     document.getElementById('c-subject-preview').textContent       = mail.subject || '—';
     const previewDiv = document.getElementById('c-body-preview');
-    const mailCss = mail.css || `.mail-wrap, .mail-wrap p, .mail-wrap div, .mail-wrap span, .mail-wrap td { margin: 0; padding: 0; }
-.mail-wrap p { margin-bottom: 8px; }
-.mail-wrap { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; color: #333; max-width: 600px; }
-.mail-wrap a { color: #0066cc; text-decoration: none; }
-.mail-wrap h1, .mail-wrap h2, .mail-wrap h3 { font-weight: bold; margin-bottom: 8px; }
-.mail-wrap ul, .mail-wrap ol { margin: 0 0 8px 20px; padding: 0; }
-.mail-wrap li { margin-bottom: 4px; }`;
+    const mailCss = mail.css || `.mail-wrap{font-family:Arial,sans-serif;font-size:14px;line-height:1.4;color:#333;max-width:600px}.mail-wrap p{margin-bottom:8px}.mail-wrap a{color:#0066cc;text-decoration:none}`;
     previewDiv.innerHTML = mail.body
       ? `<style>${mailCss}</style><div class="mail-wrap">${mail.body}</div>`
       : '<span style="color:#aaa;font-size:12px">No body set yet.</span>';
     const editLink = document.getElementById('c-edit-mail-link');
     if (editLink) editLink.href = `campaign-edit.html?campaign_id=${encodeURIComponent(id)}`;
-    const editorLink = document.getElementById('editor-link');
-    if (editorLink) { editorLink.href = `campaign-edit.html?campaign_id=${encodeURIComponent(id)}`; editorLink.style.display = ''; }
-    // Buttons
     const isSent = st === 'sent' || st === 'cancelled';
     document.getElementById('send-btn').disabled = isSent;
     document.getElementById('send-btn').innerHTML = isSent ? '<i class="ti ti-check me-1"></i>Sent' : '<i class="ti ti-send me-1"></i>Send campaign';
     const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
     if (syncBtn) syncBtn.disabled = isSent;
-    // Contacts
     allContacts = c.campaign_contacts || [];
     document.getElementById('c-contact-count').textContent = `(${allContacts.length})`;
     renderContacts(allContacts);
@@ -269,7 +295,7 @@ async function loadCampaign() {
 async function discoverCampaigns() {
   const btn = document.getElementById('discover-btn');
   const bar = document.getElementById('discover-bar');
-  btn.disabled = true; btn.innerHTML = '<i class="ti ti-search me-1"></i>Scanning...';
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-search me-1"></i>Scanning…';
   bar.style.display = 'none';
   try {
     const r = await fetch(BASE + '/api/crm/discover-campaigns');
@@ -288,7 +314,7 @@ async function discoverCampaigns() {
     bar.className = 'alert alert-danger py-2 px-3 small mb-3';
     bar.textContent = 'Error: ' + e.message; bar.style.display = '';
   }
-  btn.disabled = false; btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover new campaigns';
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover new';
 }
 
 async function syncCampaign() {
@@ -296,20 +322,20 @@ async function syncCampaign() {
   if (!id) return;
   const fb = document.getElementById('sync-feedback');
   const btn = document.querySelector('[onclick="syncCampaign()"]');
-  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Syncing...';
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Syncing…';
   fb.style.display = 'none';
   try {
     const r = await fetch(`${BASE}/api/crm/campaign-sync?campaign_id=${encodeURIComponent(id)}`);
     const d = await r.json();
-    fb.className = 'alert alert-info py-1 px-2 small mt-1 mb-2';
+    fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
     fb.textContent = d.status === 'queued' ? `Sync job queued (${d.job_id})` : (d.message || 'Sync triggered');
     fb.style.display = '';
     setTimeout(() => loadCampaign(), 3000);
   } catch(e) {
-    fb.className = 'alert alert-danger py-1 px-2 small mt-1 mb-2';
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
     fb.textContent = e.message; fb.style.display = '';
   }
-  btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Update from contact sheet';
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Sync from sheet';
 }
 
 function confirmSend() {
@@ -332,7 +358,7 @@ async function doSend() {
     const d = await r.json();
     if (d.status === 'ok') {
       const badge = document.getElementById('c-status-badge');
-      badge.className = 'badge badge-sent'; badge.textContent = 'sent';
+      badge.className = 'bb-badge bb-badge-sent'; badge.textContent = 'sent';
       if (d.campaign && d.campaign.sent_at) {
         document.getElementById('c-sent-at-row').style.display = '';
         document.getElementById('c-sent-at').textContent = fmt(d.campaign.sent_at);
@@ -340,32 +366,29 @@ async function doSend() {
       document.getElementById('send-btn').disabled = true;
       document.getElementById('send-btn').innerHTML = '<i class="ti ti-check me-1"></i>Sent';
       document.querySelector('[onclick="syncCampaign()"]').disabled = true;
-      fb.className = 'alert alert-success py-1 px-2 small mt-1 mb-2';
+      fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
       fb.textContent = 'Campaign marked as sent.'; fb.style.display = '';
     } else {
-      fb.className = 'alert alert-danger py-1 px-2 small mt-1 mb-2';
+      fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
       fb.textContent = d.message; fb.style.display = '';
     }
   } catch(e) {
-    fb.className = 'alert alert-danger py-1 px-2 small mt-1 mb-2';
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
     fb.textContent = e.message; fb.style.display = '';
   }
 }
 
 (async () => {
   await loadCampaignList();
-  const cid = new URLSearchParams(window.location.search).get('campaign_id');
+  const cid = new URLSearchParams(window.location.search).get('campaign_id')
+           || localStorage.getItem('selectedCampaign');
   if (cid) {
     const sel = document.getElementById('campaign-select');
-    // Find option with matching value (handles encoding differences)
     const opt = Array.from(sel.options).find(o => o.value === cid);
-    if (opt) {
-      sel.value = cid;
-      await loadCampaign();
-    }
+    if (opt) { sel.value = cid; await loadCampaign(); }
   }
 })();
 </script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
 </body>
 </html>

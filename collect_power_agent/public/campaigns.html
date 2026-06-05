@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Campaigns</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<style>
+:root {
+  --bb-accent: #4f6ef7;
+  --bb-border: #e8eaee;
+  --bb-muted: #6b7280;
+  --bb-card-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.04);
+}
+body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+.bb-nav { background: #fff; border-bottom: 1px solid var(--bb-border); padding: .6rem 1.5rem; display: flex; align-items: center; justify-content: center; }
+.bb-nav .brand { color: #111; font-weight: 700; font-size: .95rem; text-decoration: none; display: flex; align-items: center; gap: .5rem; margin-right: 2rem; }
+.bb-nav .brand i { color: var(--bb-accent); }
+.bb-nav .nav-link { color: var(--bb-muted); font-size: .85rem; text-decoration: none; padding: .3rem .65rem; border-radius: 6px; transition: color .15s, background .15s; display: flex; align-items: center; gap: .35rem; }
+.bb-nav .nav-link:hover { color: #111; background: #f4f5f7; }
+.bb-nav .nav-link.active { color: var(--bb-accent); background: #eef0ff; }
+.bb-nav .nav-links { display: flex; gap: .25rem; }
+
+.camp-card { background: #fff; border: 1px solid var(--bb-border); border-radius: 10px; box-shadow: var(--bb-card-shadow); padding: 1rem 1.25rem; text-decoration: none; color: inherit; display: block; transition: box-shadow .12s, transform .12s; margin-bottom: 10px; }
+.camp-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-1px); color: inherit; }
+.camp-card:hover .camp-arrow { opacity: 1; }
+.camp-arrow { opacity: 0; transition: opacity .15s; color: var(--bb-accent); }
+
+.bb-badge { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 600; padding: .2rem .55rem; border-radius: 20px; }
+.bb-badge-draft     { background: #f1f1f1; color: #555; }
+.bb-badge-dosend    { background: #dbeafe; color: #1d4ed8; }
+.bb-badge-sent      { background: #dcfce7; color: #15803d; }
+.bb-badge-cancelled { background: #fee2e2; color: #b91c1c; }
+.bb-badge-pending   { background: #fef9c3; color: #854d0e; }
+
+.stat-pill { display: inline-flex; align-items: center; gap: .3rem; font-size: .78rem; color: var(--bb-muted); background: #f4f5f7; border-radius: 20px; padding: .15rem .55rem; }
+</style>
+</head>
+<body>
+
+<nav class="bb-nav">
+  <a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>
+  <div class="nav-links">
+    <a href="campaigns.html" class="nav-link active"><i class="ti ti-speakerphone"></i>Campaigns</a>
+    <a href="crm-bp.html" class="nav-link"><i class="ti ti-server-2"></i>CRM</a>
+    <a href="jobs.html" class="nav-link"><i class="ti ti-list-check"></i>Jobs</a>
+    <a href="filter-facets.html" class="nav-link"><i class="ti ti-filter"></i>Filter Facets</a>
+  </div>
+</nav>
+
+<div class="container py-4" style="max-width:860px">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="mb-0 fw-600" style="font-size:1rem"><i class="ti ti-speakerphone me-2 text-primary"></i>Campaigns</h5>
+    <button class="btn btn-sm btn-outline-secondary" onclick="load()">
+      <i class="ti ti-refresh me-1"></i>Refresh
+    </button>
+  </div>
+
+  <div id="discover-bar" class="alert py-2 px-3 small mb-3" style="display:none"></div>
+
+  <!-- Toolbar -->
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <input id="search" class="form-control form-control-sm" style="max-width:220px" placeholder="Search campaigns…" oninput="filter()">
+    <select id="status-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
+      <option value="">All statuses</option>
+      <option value="draft">Draft</option>
+      <option value="dosend">Do send</option>
+      <option value="sent">Sent</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+    <button class="btn btn-sm btn-outline-primary ms-auto" onclick="discover()" id="discover-btn">
+      <i class="ti ti-search me-1"></i>Discover new
+    </button>
+  </div>
+
+  <div id="list-container">
+    <div class="text-center py-5" style="color:var(--bb-muted)">
+      <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+    </div>
+  </div>
+
+</div>
+
+<script>
+const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
+let allCampaigns = [];
+
+function fmt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString([], {dateStyle:'medium'});
+}
+
+function statusBadge(s) {
+  return `<span class="bb-badge bb-badge-${s||'draft'}">${s||'draft'}</span>`;
+}
+
+function render(list) {
+  const el = document.getElementById('list-container');
+  if (!list.length) {
+    el.innerHTML = '<div class="text-center py-5 small" style="color:var(--bb-muted)"><i class="ti ti-inbox" style="font-size:2rem;opacity:.3;display:block;margin-bottom:.5rem"></i>No campaigns found</div>';
+    return;
+  }
+  el.innerHTML = list.map(c => {
+    const sb = c.status_breakdown || {};
+    const countries = (c.countries || []).join(', ') || '—';
+    const author = c.author ? `<span class="stat-pill"><i class="ti ti-user"></i>${c.author}</span>` : '';
+    const sentPill = sb.sent ? `<span class="stat-pill" style="color:#15803d;background:#dcfce7"><i class="ti ti-send"></i>${sb.sent} sent</span>` : '';
+    return `<a href="campaign.html?campaign_id=${encodeURIComponent(c.campaign_id)}" class="camp-card" onclick="localStorage.setItem('selectedCampaign','${c.campaign_id}')">
+      <div class="d-flex align-items-start justify-content-between mb-2">
+        <div>
+          <span class="fw-600" style="font-size:.95rem">${c.campaign_id}</span>
+          <span class="ms-2">${statusBadge(c.status)}</span>
+        </div>
+        <i class="ti ti-arrow-right camp-arrow" style="font-size:1.1rem;margin-top:2px"></i>
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <span class="stat-pill"><i class="ti ti-users"></i>${c.contact_count || 0} contacts</span>
+        <span class="stat-pill"><i class="ti ti-building-store"></i>${c.sites_count || 0} sites</span>
+        <span class="stat-pill"><i class="ti ti-map-pin"></i>${countries}</span>
+        ${sentPill}
+        ${author}
+        <span class="stat-pill ms-auto"><i class="ti ti-clock"></i>${fmt(c.updated_at)}</span>
+      </div>
+      ${c.mail && c.mail.subject ? `<div class="mt-2 small" style="color:var(--bb-muted)"><i class="ti ti-mail me-1"></i>${c.mail.subject}</div>` : ''}
+    </a>`;
+  }).join('');
+}
+
+function filter() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const st = document.getElementById('status-filter').value;
+  render(allCampaigns.filter(c => {
+    const matchQ = !q || c.campaign_id.toLowerCase().includes(q) || (c.author||'').toLowerCase().includes(q) || (c.mail?.subject||'').toLowerCase().includes(q);
+    const matchSt = !st || c.status === st;
+    return matchQ && matchSt;
+  }));
+}
+
+async function load() {
+  document.getElementById('list-container').innerHTML = '<div class="text-center py-5" style="color:var(--bb-muted)"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>';
+  try {
+    const r = await fetch(BASE + '/api/crm/campaigns');
+    const d = await r.json();
+    allCampaigns = d.campaigns || [];
+    filter();
+  } catch(e) {
+    document.getElementById('list-container').innerHTML = `<div class="text-center text-danger py-4 small">Could not load campaigns: ${e.message}</div>`;
+  }
+}
+
+async function discover() {
+  const btn = document.getElementById('discover-btn');
+  const bar = document.getElementById('discover-bar');
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-search me-1"></i>Scanning…';
+  bar.style.display = 'none';
+  try {
+    const r = await fetch(BASE + '/api/crm/discover-campaigns');
+    const d = await r.json();
+    if (d.created && d.created.length > 0) {
+      bar.className = 'alert alert-success py-2 px-3 small mb-3';
+      bar.innerHTML = `<i class="ti ti-check me-1"></i>${d.message} New: <strong>${d.created.map(c=>c.campaign_id).join(', ')}</strong>`;
+      await load();
+    } else {
+      bar.className = 'alert alert-light py-2 px-3 small mb-3';
+      bar.innerHTML = `<i class="ti ti-info-circle me-1"></i>${d.message || 'No new campaigns found.'}`;
+    }
+    bar.style.display = '';
+  } catch(e) {
+    bar.className = 'alert alert-danger py-2 px-3 small mb-3';
+    bar.textContent = 'Error: ' + e.message; bar.style.display = '';
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover new';
+}
+
+load();
+</script>
+</body>
+</html>
