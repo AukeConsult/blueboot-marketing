@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drive Folder — Blueboot CRM</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<style>
+body { background: #f8f9fa; }
+.drop-zone { border: 2px dashed #ced4da; border-radius: 12px; transition: border-color .15s, background .15s; }
+.drop-zone.drag { border-color: #0d6efd; background: #e7f1ff; }
+td .ti { font-size: 1rem; }
+</style>
+</head>
+<body>
+
+<div class="container py-4" style="max-width:1000px">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <div class="d-flex align-items-center gap-2">
+      <a href="index.html" class="btn btn-sm btn-outline-secondary"><i class="ti ti-arrow-left"></i></a>
+      <h5 class="mb-0"><i class="ti ti-brand-google-drive me-2"></i>Drive Folder</h5>
+    </div>
+    <button class="btn btn-sm btn-outline-secondary" onclick="loadFiles()"><i class="ti ti-refresh me-1"></i>refresh</button>
+  </div>
+
+  <!-- Folder setting -->
+  <div class="card p-3 mb-3">
+    <label class="form-label small text-muted mb-1">Drive folder ID <span class="text-muted">(from the folder URL after /folders/)</span></label>
+    <div class="row g-2 align-items-end">
+      <div class="col-md-9">
+        <input id="folder-id" class="form-control form-control-sm" placeholder="1AbCdEf…">
+      </div>
+      <div class="col-md-3">
+        <button class="btn btn-outline-primary btn-sm w-100" onclick="saveSetting()"><i class="ti ti-device-floppy me-1"></i>Save folder</button>
+      </div>
+    </div>
+    <div id="setting-status" class="small mt-2 text-muted"></div>
+  </div>
+
+  <!-- Upload -->
+  <div id="drop" class="drop-zone card p-4 mb-3 text-center">
+    <div class="mb-2"><i class="ti ti-cloud-upload" style="font-size:2rem"></i></div>
+    <p class="small text-muted mb-2">Drag &amp; drop files here, or choose files to upload</p>
+    <div class="d-flex justify-content-center gap-2">
+      <input id="file-input" type="file" class="form-control form-control-sm" style="max-width:360px" multiple>
+      <button class="btn btn-primary btn-sm" onclick="uploadChosen()"><i class="ti ti-upload me-1"></i>Upload</button>
+    </div>
+    <div id="upload-status" class="small mt-2"></div>
+  </div>
+
+  <!-- File list -->
+  <div class="card">
+    <div class="card-body p-0">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr><th>Name</th><th class="text-end">Size</th><th>Modified</th><th class="text-end">Actions</th></tr>
+        </thead>
+        <tbody id="files"><tr><td colspan="4" class="text-center text-muted py-4">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
+
+function setStatus(id, msg, kind, html){
+  const el = document.getElementById(id);
+  el.className = 'small mt-2 ' + (kind === 'err' ? 'text-danger' : kind === 'ok' ? 'text-success' : 'text-muted');
+  if(html){ el.innerHTML = msg; } else { el.textContent = msg; }
+}
+
+function fmtSize(b){
+  b = Number(b);
+  if(!b && b !== 0) return '';
+  if(b < 1024) return b + ' B';
+  if(b < 1048576) return (b/1024).toFixed(1) + ' KB';
+  return (b/1048576).toFixed(1) + ' MB';
+}
+function fmtDate(iso){ return iso ? iso.replace('T',' ').slice(0,16) : ''; }
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function loadSetting(){
+  try{
+    const r = await fetch(BASE + '/api/crm/gdisk/settings');
+    const d = await r.json();
+    document.getElementById('folder-id').value = d.folder_id || '';
+    if(!d.configured) setStatus('setting-status', 'No folder configured yet — paste a Drive folder ID and save.', 'muted');
+  }catch(e){ setStatus('setting-status', 'Could not read settings: ' + e.message, 'err'); }
+}
+
+async function saveSetting(){
+  const folder_id = document.getElementById('folder-id').value.trim();
+  setStatus('setting-status', 'Saving…');
+  try{
+    const r = await fetch(BASE + '/api/crm/gdisk/settings', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({folder_id})
+    });
+    const d = await r.json();
+    if(!r.ok || d.status === 'error') throw new Error(d.message || r.status);
+    setStatus('setting-status', 'Folder saved.', 'ok');
+    loadFiles();
+  }catch(e){ setStatus('setting-status', 'Save failed: ' + e.message, 'err'); }
+}
+
+async function loadFiles(){
+  const tb = document.getElementById('files');
+  tb.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Loading…</td></tr>';
+  try{
+    const r = await fetch(BASE + '/api/crm/gdisk/files');
+    const d = await r.json();
+    if(!r.ok || d.status === 'error') throw new Error(d.message || r.status);
+    const files = d.files || [];
+    if(!files.length){ tb.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Folder is empty</td></tr>'; return; }
+    files.sort((a,b) => (a.name||'').localeCompare(b.name||''));
+    tb.innerHTML = files.map(f => {
+      const n = esc(f.name);
+      const url = BASE + '/api/crm/gdisk/files/' + encodeURIComponent(f.name);
+      return `<tr>
+        <td><i class="ti ti-file me-1 text-muted"></i>${n}</td>
+        <td class="text-end text-muted">${fmtSize(f.size)}</td>
+        <td class="text-muted">${fmtDate(f.modifiedTime)}</td>
+        <td class="text-end">
+          <a class="btn btn-sm btn-outline-secondary me-1" href="${url}" title="Download"><i class="ti ti-download"></i></a>
+          <button class="btn btn-sm btn-outline-danger" onclick="del('${n.replace(/'/g,"\\'")}')" title="Delete"><i class="ti ti-trash"></i></button>
+        </td></tr>`;
+    }).join('');
+  }catch(e){
+    tb.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-4">Could not list files: ${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function uploadFiles(fileList){
+  const files = [...fileList];
+  if(!files.length) return;
+  let done = 0;
+  for(const f of files){
+    setStatus('upload-status', `Uploading ${esc(f.name)} (${done+1}/${files.length})…`, 'muted', true);
+    const fd = new FormData();
+    fd.append('file', f, f.name);
+    try{
+      const r = await fetch(BASE + '/api/crm/gdisk/files', {method:'POST', body: fd});
+      const d = await r.json();
+      if(!r.ok || d.status === 'error') throw new Error(d.message || r.status);
+      done++;
+    }catch(e){
+      setStatus('upload-status', `Failed on ${esc(f.name)}: ${esc(e.message)}`, 'err', true);
+      return;
+    }
+  }
+  setStatus('upload-status', `Uploaded ${done} file${done===1?'':'s'}.`, 'ok');
+  document.getElementById('file-input').value = '';
+  loadFiles();
+}
+
+function uploadChosen(){ uploadFiles(document.getElementById('file-input').files); }
+
+async function del(name){
+  if(!confirm('Delete "' + name + '" from the Drive folder?')) return;
+  try{
+    const r = await fetch(BASE + '/api/crm/gdisk/files/' + encodeURIComponent(name), {method:'DELETE'});
+    const d = await r.json();
+    if(!r.ok || d.status === 'error') throw new Error(d.message || r.status);
+    loadFiles();
+  }catch(e){ alert('Delete failed: ' + e.message); }
+}
+
+// drag & drop
+const dz = document.getElementById('drop');
+['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag'); }));
+['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag'); }));
+dz.addEventListener('drop', e => { if(e.dataTransfer && e.dataTransfer.files) uploadFiles(e.dataTransfer.files); });
+
+loadSetting();
+loadFiles();
+</script>
+</body>
+</html>

@@ -72,7 +72,7 @@ body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Seg
       </div>
       <div class="col-md-2">
         <button class="btn btn-primary btn-sm w-100" onclick="save()">
-          <i class="ti ti-device-floppy me-1"></i>Save
+          <i class="ti ti-device-floppy me-1"></i>Save &amp; count
         </button>
       </div>
     </div>
@@ -117,11 +117,11 @@ async function fetchWithTimeout(url, options = {}, ms = 8000) {
   return Promise.race([fetch(url, options), timeout]);
 }
 
-function setStatus(msg, kind){
+function setStatus(msg, kind, html){
   const el = document.getElementById('status');
   el.className = 'small mt-2 ' + (kind === 'err' ? 'text-danger' : kind === 'ok' ? 'text-success' : '');
   el.style.color = kind ? '' : 'var(--bb-muted)';
-  el.textContent = msg;
+  if(html){ el.innerHTML = msg; } else { el.textContent = msg; }
 }
 
 async function loadList(){
@@ -324,9 +324,21 @@ async function save(){
     });
     const d = await r.json();
     if(!r.ok || d.status === 'error'){ throw new Error(d.message || r.status); }
-    loadList();
+    // make the just-saved preset the active selection (dropdown + storage key)
+    await loadList();
+    const ls = document.getElementById('load-select');
+    if(![...ls.options].some(o => o.value === name)){
+      ls.add(new Option(name, name));
+    }
+    ls.value = name;
+    localStorage.setItem('selectedFacet', name);
     if(d.job_id){
-      setStatus(`Saved as '${name}'. Counting matching sites & contacts…`, 'ok');
+      setStatus(
+        `<span class="spinner-border spinner-border-sm me-1" role="status"></span>`
+        + `Saved '${name}'. Started count job <code>${d.job_id}</code> `
+        + `(refreshing keywords + counting) — `
+        + `<a href="crm-bp.html" target="_blank">view in CRM Jobs</a>`,
+        'ok', true);
       pollCount(d.job_id, name);
     } else {
       setStatus(`Saved as '${name}' at ${d.saved_at || ''}`, 'ok');
@@ -343,10 +355,10 @@ async function pollCount(jobId, name){
       const r = await fetch(BASE + '/api/crm/status/' + jobId);
       const j = await r.json();
       if(j.status === 'done'){
-        const c = (j.result && j.result.counts) || {};
-        if(facets) facets.counts_generated_at = new Date().toISOString();
-        renderCounts(c);
-        setStatus(`'${name}' saved — ${c.leads ?? '?'} sites, ${c.contacts ?? '?'} contacts match.`, 'ok');
+        // reload so the refreshed keyword list + stored counts are shown
+        await loadFacets(name);
+        const c = (facets && facets.counts) || (j.result && j.result.counts) || {};
+        setStatus(`'${name}' saved \u2014 ${c.leads ?? '?'} sites, ${c.contacts ?? '?'} contacts match.`, 'ok');
         return;
       }
       if(j.status === 'error'){

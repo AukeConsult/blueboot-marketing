@@ -14,6 +14,7 @@ transform is applied to each contact's title before comparing.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from datetime import datetime, timezone
 
 FILTER_FACETS_COLLECTION = "filter_facets"
@@ -28,6 +29,7 @@ LEAD_SCALAR_FIELDS = (
 LEAD_ARRAY_FIELDS = ("keywords",)
 CONTACT_FIELDS = ("occupation", "title", "email_type")
 GROUP_FIELD = "page_count"
+TOP_N_KEYWORDS = 100   # keep in sync with build_filter_facets.py
 
 # (key, lo, hi) -- canonical page bands, kept in sync with build_filter_facets.py
 _PAGE_BANDS = [
@@ -74,6 +76,36 @@ def _selected_groups(facet) -> set:
             for g in (facet.get("groups") or []) if g.get("selected")}
 
 
+def _refresh_keywords(db, filters: dict) -> None:
+    """Re-extract the keywords facet from site_leads (lowercased, top N by
+    count), preserving which values were selected. Previously-selected
+    keywords that fall out of the top N are kept so a selection is never lost.
+    Mutates filters['keywords'] in place."""
+    prev = filters.get("keywords", {}) or {}
+    prev_selected = {str(v.get("value")).strip().lower()
+                     for v in prev.get("values", []) if v.get("selected")}
+    counter: Counter = Counter()
+    for d in db.collection(LEADS_COLLECTION).select(["keywords"]).stream():
+        for kw in (d.to_dict() or {}).get("keywords") or []:
+            w = str(kw).strip().lower()
+            if w:
+                counter[w] += 1
+    values = [{"value": v, "count": c, "selected": v in prev_selected}
+              for v, c in counter.most_common(TOP_N_KEYWORDS)]
+    present = {v["value"] for v in values}
+    for kw in prev_selected:
+        if kw not in present:
+            values.append({"value": kw, "count": counter.get(kw, 0), "selected": True})
+    filters["keywords"] = {
+        "type":      "array_enum",
+        "source":    "site_leads.keywords",
+        "distinct":  len(counter),
+        "min_count": 0,
+        "truncated": len(counter) > TOP_N_KEYWORDS,
+        "values":    values,
+    }
+
+
 def run_filter_count(db, name: str) -> dict:
     """Count matching leads/contacts for filter_facets/<name> and store results."""
     if not name:
@@ -83,6 +115,9 @@ def run_filter_count(db, name: str) -> dict:
     if not snap.exists:
         raise ValueError(f"filter_facets/'{name}' not found")
     filters = (snap.to_dict() or {}).get("filters", {}) or {}
+
+    # Step 1: refresh the keyword list from current data (selections preserved).
+    _refresh_keywords(db, filters)
 
     lead_scalar = {f: _selected_values(filters[f])
                    for f in LEAD_SCALAR_FIELDS
@@ -154,7 +189,9 @@ def run_filter_count(db, name: str) -> dict:
         "contacts_in_email_contacts":     len(seen_in),
         "contacts_not_in_email_contacts": len(seen_not),
     }
+    # Step 3: store the refreshed filter (keywords) together with the counts.
     doc_ref.update({
+        "filters":             filters,
         "counts":              counts,
         "counts_generated_at": datetime.now(timezone.utc).isoformat(),
     })
