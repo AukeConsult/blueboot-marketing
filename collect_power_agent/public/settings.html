@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Settings — Blueboot CRM</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
 <style>
 body { background: #f8f9fa; }
 </style>
@@ -17,6 +17,20 @@ body { background: #f8f9fa; }
   <div class="d-flex align-items-center gap-2 mb-3">
     <a href="index.html" class="btn btn-sm btn-outline-secondary" onclick="return goBack()"><i class="ti ti-arrow-left"></i></a>
     <h5 class="mb-0"><i class="ti ti-settings me-2"></i>Settings</h5>
+  </div>
+
+  <!-- Mail accounts -->
+  <div class="card p-3 mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h6 class="fw-semibold mb-0"><i class="ti ti-at me-1 text-primary"></i>Mail accounts</h6>
+      <button class="btn btn-sm btn-outline-primary" onclick="openMailAccountModal()">
+        <i class="ti ti-plus me-1"></i>Add account
+      </button>
+    </div>
+    <p class="small text-muted mb-3">Outreach mail accounts used by campaigns. Each account is keyed by its email address.</p>
+    <div id="mail-accounts-list">
+      <div class="text-center py-3 small text-muted"><div class="spinner-border spinner-border-sm me-1"></div>Loading…</div>
+    </div>
   </div>
 
   <!-- Google Drive folder -->
@@ -41,6 +55,128 @@ body { background: #f8f9fa; }
     <div id="access-status" class="mt-2"></div>
   </div>
 
+</div>
+
+<!-- Send test mail modal -->
+<div class="modal fade" id="sendTestModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-send text-primary me-2"></i>Send test email</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="small text-muted mb-3">From: <strong id="send-test-from">—</strong></div>
+        <div class="mb-3">
+          <label class="form-label small fw-500">To</label>
+          <input id="send-test-to" class="form-control form-control-sm" type="email" placeholder="recipient@example.com">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-500">Subject</label>
+          <input id="send-test-subject" class="form-control form-control-sm" value="Test email">
+        </div>
+        <div class="mb-2">
+          <label class="form-label small fw-500">Body</label>
+          <textarea id="send-test-body" class="form-control form-control-sm" rows="3">This is a test email.</textarea>
+        </div>
+        <div id="send-test-feedback" class="alert py-2 small mb-0 mt-2" style="display:none"></div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="send-test-btn" onclick="doSendTest()">
+          <i class="ti ti-send me-1"></i>Send
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mail account modal -->
+<div class="modal fade" id="mailAccountModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title" id="ma-modal-title"><i class="ti ti-at text-primary me-2"></i>Mail account</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Account type -->
+        <div class="mb-3">
+          <label class="form-label small fw-500 text-muted">Account type</label>
+          <div class="btn-group btn-group-sm d-flex" role="group">
+            <input type="radio" class="btn-check" name="ma-type" id="ma-type-imap" value="imap" onchange="maToggleType('imap')" checked>
+            <label class="btn btn-outline-secondary" for="ma-type-imap"><i class="ti ti-server me-1"></i>IMAP</label>
+            <input type="radio" class="btn-check" name="ma-type" id="ma-type-gmail" value="gmail" onchange="maToggleType('gmail')">
+            <label class="btn btn-outline-secondary" for="ma-type-gmail"><i class="ti ti-brand-google me-1"></i>Google / Gmail</label>
+          </div>
+        </div>
+
+        <!-- Common -->
+        <div class="mb-3">
+          <label class="form-label small fw-500">Email address</label>
+          <input id="ma-email" class="form-control form-control-sm" type="email" placeholder="you@example.com">
+        </div>
+
+        <!-- IMAP fields -->
+        <div id="ma-imap-fields">
+          <div class="row g-2 mb-2">
+            <div class="col-8">
+              <label class="form-label small fw-500">Host</label>
+              <input id="ma-imap-host" class="form-control form-control-sm" placeholder="imap.example.com">
+            </div>
+            <div class="col-4">
+              <label class="form-label small fw-500">Port</label>
+              <input id="ma-imap-port" class="form-control form-control-sm" type="number" value="993">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-500">Username</label>
+            <input id="ma-imap-username" class="form-control form-control-sm" placeholder="you@example.com">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-500">Password</label>
+            <input id="ma-imap-password" class="form-control form-control-sm" type="password" placeholder="App password">
+          </div>
+          <div class="form-check form-switch mb-2">
+            <input class="form-check-input" type="checkbox" id="ma-imap-ssl" checked>
+            <label class="form-check-label small" for="ma-imap-ssl">Use SSL/TLS</label>
+          </div>
+        </div>
+
+        <!-- Gmail fields -->
+        <div id="ma-gmail-fields" style="display:none">
+          <div class="mb-2">
+            <label class="form-label small fw-500">Client ID</label>
+            <input id="ma-gmail-client-id" class="form-control form-control-sm" placeholder="xxx.apps.googleusercontent.com">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-500">Client Secret</label>
+            <input id="ma-gmail-client-secret" class="form-control form-control-sm" type="password">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-500">Refresh Token</label>
+            <input id="ma-gmail-refresh-token" class="form-control form-control-sm" type="password">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small fw-500">Access Token <span class="fw-normal text-muted">(optional)</span></label>
+            <input id="ma-gmail-access-token" class="form-control form-control-sm" type="password">
+          </div>
+        </div>
+
+        <div id="ma-feedback" class="alert py-2 small mb-0 mt-2" style="display:none"></div>
+      </div>
+      <div class="modal-footer border-0 pt-0 gap-2">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-outline-primary btn-sm" onclick="maTestConnection()" id="ma-test-btn">
+          <i class="ti ti-plug me-1"></i>Test
+        </button>
+        <button class="btn btn-primary btn-sm" onclick="saveMailAccount()" id="ma-save-btn">
+          <i class="ti ti-device-floppy me-1"></i>Save
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="js/crm-common.js"></script>
@@ -98,6 +234,193 @@ async function checkAccess(){
 }
 
 loadSetting();
+loadMailAccounts();
+
+// ── Mail accounts ────────────────────────────────────────────────────────
+
+let _mailAccounts = {};
+
+async function loadMailAccounts() {
+  const el = document.getElementById('mail-accounts-list');
+  try {
+    const r = await fetch(BASE + '/api/crm/settings/mail-accounts');
+    const d = await r.json();
+    const list = d.accounts || [];
+    _mailAccounts = {};
+    list.forEach(a => _mailAccounts[a.email] = a);
+    if (!list.length) {
+      el.innerHTML = '<div class="small text-muted">No mail accounts yet.</div>';
+      return;
+    }
+    el.innerHTML = list.map(a => `
+      <div class="d-flex align-items-center gap-2 py-2 border-bottom small">
+        <span class="badge ${a.account_type === 'gmail' ? 'bg-danger' : 'bg-secondary'} text-uppercase" style="font-size:.65rem">${esc(a.account_type)}</span>
+        <span class="fw-500">${esc(a.email)}</span>
+        ${a.account_type === 'imap' ? `<span class="text-muted">${esc(a.host||'')}:${a.port||993}</span>` : ''}
+        <div class="ms-auto d-flex gap-1">
+          <button class="btn btn-xs btn-outline-primary py-0 px-1" onclick="openSendTestModal('${esc(a.email)}')">
+            <i class="ti ti-send"></i>
+          </button>
+          <button class="btn btn-xs btn-outline-secondary py-0 px-1" onclick="editMailAccount('${esc(a.email)}')">
+            <i class="ti ti-edit"></i>
+          </button>
+          <button class="btn btn-xs btn-outline-danger py-0 px-1" onclick="deleteMailAccount('${esc(a.email)}')">
+            <i class="ti ti-trash"></i>
+          </button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="small text-danger">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+function maToggleType(type) {
+  document.getElementById('ma-imap-fields').style.display  = type === 'imap'  ? '' : 'none';
+  document.getElementById('ma-gmail-fields').style.display = type === 'gmail' ? '' : 'none';
+}
+
+function openMailAccountModal(account) {
+  document.getElementById('ma-feedback').style.display = 'none';
+  const isEdit = !!account;
+  document.getElementById('ma-modal-title').innerHTML =
+    `<i class="ti ti-at text-primary me-2"></i>${isEdit ? 'Edit' : 'Add'} mail account`;
+
+  const type = account?.account_type || 'imap';
+  document.getElementById(type === 'gmail' ? 'ma-type-gmail' : 'ma-type-imap').checked = true;
+  maToggleType(type);
+  document.getElementById('ma-email').value              = account?.email || '';
+  document.getElementById('ma-email').readOnly           = isEdit;
+  document.getElementById('ma-imap-host').value          = account?.host || '';
+  document.getElementById('ma-imap-port').value          = account?.port || 993;
+  document.getElementById('ma-imap-username').value      = account?.username || '';
+  document.getElementById('ma-imap-password').value      = account?.password || '';
+  document.getElementById('ma-imap-ssl').checked         = account?.ssl !== false;
+  document.getElementById('ma-gmail-client-id').value    = account?.client_id || '';
+  document.getElementById('ma-gmail-client-secret').value = account?.client_secret || '';
+  document.getElementById('ma-gmail-refresh-token').value = account?.refresh_token || '';
+  document.getElementById('ma-gmail-access-token').value  = account?.access_token || '';
+  new bootstrap.Modal(document.getElementById('mailAccountModal')).show();
+}
+
+function editMailAccount(email) {
+  openMailAccountModal(_mailAccounts[email]);
+}
+
+function maGetPayload() {
+  const type = document.querySelector('input[name="ma-type"]:checked')?.value || 'imap';
+  const payload = {
+    email:        document.getElementById('ma-email').value.trim().toLowerCase(),
+    account_type: type,
+  };
+  if (type === 'imap') {
+    payload.host     = document.getElementById('ma-imap-host').value.trim();
+    payload.port     = parseInt(document.getElementById('ma-imap-port').value) || 993;
+    payload.username = document.getElementById('ma-imap-username').value.trim();
+    payload.password = document.getElementById('ma-imap-password').value;
+    payload.ssl      = document.getElementById('ma-imap-ssl').checked;
+  } else {
+    payload.client_id     = document.getElementById('ma-gmail-client-id').value.trim();
+    payload.client_secret = document.getElementById('ma-gmail-client-secret').value.trim();
+    payload.refresh_token = document.getElementById('ma-gmail-refresh-token').value.trim();
+    payload.access_token  = document.getElementById('ma-gmail-access-token').value.trim();
+  }
+  return payload;
+}
+
+async function saveMailAccount() {
+  const fb  = document.getElementById('ma-feedback');
+  const btn = document.getElementById('ma-save-btn');
+  const payload = maGetPayload();
+  if (!payload.email) { fb.className = 'alert alert-warning py-2 small mb-0 mt-2'; fb.textContent = 'Email is required.'; fb.style.display=''; return; }
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Saving…';
+  fb.style.display = 'none';
+  try {
+    const r = await fetch(BASE + '/api/crm/settings/mail-accounts', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (d.status !== 'ok') throw new Error(d.message);
+    bootstrap.Modal.getInstance(document.getElementById('mailAccountModal')).hide();
+    loadMailAccounts();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
+    fb.textContent = 'Error: ' + e.message; fb.style.display = '';
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-device-floppy me-1"></i>Save';
+}
+
+async function maTestConnection() {
+  const fb  = document.getElementById('ma-feedback');
+  const btn = document.getElementById('ma-test-btn');
+  const payload = maGetPayload();
+  if (!payload.email) { fb.className = 'alert alert-warning py-2 small mb-0 mt-2'; fb.textContent = 'Save the account first, then test.'; fb.style.display=''; return; }
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Testing…';
+  fb.style.display = 'none';
+  // Save first so the ping endpoint can read from Firestore
+  try {
+    await fetch(BASE + '/api/crm/settings/mail-accounts', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    // Use a temporary campaign-less ping via the settings endpoint
+    const r = await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(payload.email)}/ping`, {
+      method: 'POST'
+    });
+    const d = await r.json();
+    fb.className = d.status === 'ok' ? 'alert alert-success py-2 small mb-0 mt-2' : 'alert alert-danger py-2 small mb-0 mt-2';
+    fb.innerHTML = (d.status === 'ok' ? '<i class="ti ti-circle-check me-1"></i>' : '<i class="ti ti-circle-x me-1"></i>') + esc(d.message);
+    fb.style.display = '';
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
+    fb.textContent = e.message; fb.style.display = '';
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-plug me-1"></i>Test';
+}
+
+let _sendTestEmail = '';
+function openSendTestModal(email) {
+  _sendTestEmail = email;
+  document.getElementById('send-test-from').textContent = email;
+  document.getElementById('send-test-feedback').style.display = 'none';
+  document.getElementById('send-test-btn').disabled = false;
+  document.getElementById('send-test-btn').innerHTML = '<i class="ti ti-send me-1"></i>Send';
+  new bootstrap.Modal(document.getElementById('sendTestModal')).show();
+}
+
+async function doSendTest() {
+  const btn = document.getElementById('send-test-btn');
+  const fb  = document.getElementById('send-test-feedback');
+  const to      = document.getElementById('send-test-to').value.trim();
+  const subject = document.getElementById('send-test-subject').value.trim();
+  const body    = document.getElementById('send-test-body').value.trim();
+  if (!to) { fb.className='alert alert-warning py-2 small mb-0 mt-2'; fb.textContent='Recipient is required.'; fb.style.display=''; return; }
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Sending…';
+  fb.style.display = 'none';
+  try {
+    const r = await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(_sendTestEmail)}/send-test`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ to, subject, body })
+    });
+    const d = await r.json();
+    fb.className = d.status === 'ok' ? 'alert alert-success py-2 small mb-0 mt-2' : 'alert alert-danger py-2 small mb-0 mt-2';
+    fb.innerHTML = (d.status === 'ok' ? '<i class="ti ti-circle-check me-1"></i>' : '<i class="ti ti-circle-x me-1"></i>') + esc(d.message);
+    fb.style.display = '';
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
+    fb.textContent = e.message; fb.style.display = '';
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-send me-1"></i>Send';
+}
+
+async function deleteMailAccount(email) {
+  if (!confirm(`Delete mail account "${email}"?`)) return;
+  try {
+    await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(email)}`, { method: 'DELETE' });
+    loadMailAccounts();
+  } catch(e) { alert('Delete failed: ' + e.message); }
+}
 </script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
 </body>
 </html>

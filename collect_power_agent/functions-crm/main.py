@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import json
 import threading
 import uuid
+import urllib.parse
 from datetime import datetime, timezone
 from firebase_functions import https_fn, options as fn_options
 from flask import Flask, request, jsonify
@@ -240,6 +241,22 @@ def campaign_sync():
         return _err(str(exc), 500)
 
 
+@app.route("/api/crm/campaign-export", methods=["GET"])
+def campaign_export():
+    """Export a campaign + its contacts to a Sheet (named after the campaign)
+    in the gdisk Drive folder. Required: ?campaign_id=NO_jun"""
+    campaign_id = request.args.get("campaign_id", "").strip()
+    if not campaign_id:
+        return _err("campaign_id is required")
+    try:
+        params = {"campaign_id": campaign_id}
+        job_id = _new_job("campaign-export", params)
+        _enqueue_task("campaign-export", job_id, params)
+        return _accepted(job_id, "campaign-export")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @app.route("/api/crm/campaigns", methods=["GET"])
 def list_campaigns():
     """List all campaigns, ordered by updated_at descending.
@@ -260,6 +277,21 @@ def list_campaigns():
         return _err(str(exc), 500)
 
 
+
+def _get_mail_account(db, outreach_email):
+    """Fetch mail account settings from settings/mail_accounts/accounts/{email}."""
+    key = (outreach_email or "").strip().lower()
+    if not key:
+        return None
+    doc = (
+        db.collection("settings")
+        .document("mail_accounts")
+        .collection("accounts")
+        .document(key)
+        .get()
+    )
+    return doc.to_dict() if doc.exists else None
+
 @app.route("/api/crm/campaigns/<campaign_id>", methods=["GET"])
 def get_campaign(campaign_id):
     """Get a single campaign by ID, including contacts subcollection."""
@@ -269,6 +301,9 @@ def get_campaign(campaign_id):
         if not doc.exists:
             return _err(f"Campaign '{campaign_id}' not found", 404)
         data = doc.to_dict()
+        # Attach mail account settings from settings/mail_accounts
+        outreach_email = data.get("outreach_email_account", "")
+        data["mail_account"] = _get_mail_account(db, outreach_email) or {}
         # Include contacts subcollection
         contacts_docs = db.collection("campaigns").document(campaign_id).collection("campaign_contacts").stream()
         data["campaign_contacts"] = [c.to_dict() for c in contacts_docs]
@@ -289,10 +324,10 @@ def create_campaign(campaign_id):
         now   = datetime.now(timezone.utc).isoformat()
         data  = {
             "campaign_id":            campaign_id,
-            "status":                 "draft",
+            "status":                 "pending",
             "sent_at":                None,
             "outreach_email_account": body.get("outreach_email_account", ""),
-            "mail":                   {"subject": "", "body": "", "type": "plain"},
+"mail":                   {"subject": "", "body": "", "type": "plain"},
             "contact_count":          0,
             "sites_count":            0,
             "countries":              [],
@@ -335,7 +370,7 @@ def update_campaign(campaign_id):
         update = {}
 
         if "status" in body:
-            valid = {"draft", "dosend", "sent", "cancelled"}
+            valid = {"pending", "draft", "dosend", "sent", "cancelled"}
             if body["status"] not in valid:
                 return _err(f"Invalid status. Must be one of: {', '.join(sorted(valid))}", 400)
             update["status"] = body["status"]
@@ -359,6 +394,52 @@ def update_campaign(campaign_id):
             # css is allowed as a mail sub-field
             update["mail"] = merged_mail
 
+        # imap / gmail / mail_account_type are stored in settings/mail_accounts,
+        # NOT on the campaign document. Look up the outreach account key.
+        if "imap" in body or "gmail" in body or "mail_account_type" in body:
+            campaign_data    = doc.to_dict() or {}
+            outreach_account = (
+                body.get("outreach_email_account")
+                or campaign_data.get("outreach_email_account", "")
+            ).strip().lower()
+            if outreach_account:
+                # Load existing settings so we can merge
+                existing_ma   = _get_mail_account(db, outreach_account) or {}
+                account_type  = (
+                    body.get("mail_account_type")
+                    or existing_ma.get("account_type", "imap")
+                )
+                if account_type == "imap":
+                    merged_imap = dict(existing_ma)
+                    merged_imap.update(body.get("imap", {}))
+                    account_doc = {
+                        "account_type": "imap",
+                        "email":        outreach_account,
+                        "host":         merged_imap.get("host", ""),
+                        "port":         merged_imap.get("port", 993),
+                        "username":     merged_imap.get("username", ""),
+                        "password":     merged_imap.get("password", ""),
+                        "ssl":          merged_imap.get("ssl", True),
+                    }
+                else:
+                    merged_gmail = dict(existing_ma)
+                    merged_gmail.update(body.get("gmail", {}))
+                    account_doc = {
+                        "account_type":  "gmail",
+                        "email":         outreach_account,
+                        "client_id":     merged_gmail.get("client_id", ""),
+                        "client_secret": merged_gmail.get("client_secret", ""),
+                        "refresh_token": merged_gmail.get("refresh_token", ""),
+                        "access_token":  merged_gmail.get("access_token", ""),
+                    }
+                account_doc["updated_at"] = datetime.now(timezone.utc).isoformat()
+                settings_ma = db.collection("settings").document("mail_accounts")
+                if not settings_ma.get().exists:
+                    settings_ma.set({"_type": "mail_accounts"})
+                settings_ma.collection("accounts").document(outreach_account).set(
+                    account_doc, merge=True
+                )
+
         if not update:
             return _err("No valid fields to update", 400)
 
@@ -367,6 +448,250 @@ def update_campaign(campaign_id):
 
         updated_doc = doc_ref.get().to_dict()
         return jsonify({"status": "ok", "message": f"Campaign '{campaign_id}' updated", "campaign": updated_doc})
+
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+
+@app.route("/api/crm/campaigns/<campaign_id>/ping-mail-account", methods=["POST"])
+def ping_mail_account(campaign_id):
+    """Test the mail account configured on a campaign.
+
+    Reads imap / gmail settings from the campaign document and attempts a
+    live connection.  Returns {"status": "ok", "message": "..."} or
+    {"status": "error", "message": "..."}.
+    """
+    import socket
+    try:
+        db  = _get_db()
+        doc = db.collection("campaigns").document(campaign_id).get()
+        if not doc.exists:
+            return _err(f"Campaign '{campaign_id}' not found", 404)
+        data         = doc.to_dict() or {}
+        outreach_email = data.get("outreach_email_account", "")
+        ma = _get_mail_account(db, outreach_email)
+        if not ma:
+            return _err(f"No mail account found for '{outreach_email}'. Save IMAP/Gmail settings first.", 400)
+        account_type = ma.get("account_type", "imap")
+
+        if account_type == "imap":
+            import imaplib, ssl as _ssl
+            imap = ma
+            host     = (imap or {}).get("host", "").strip()
+            port     = int((imap or {}).get("port") or 993)
+            username = (imap or {}).get("username", "").strip()
+            password = (imap or {}).get("password", "")
+            use_ssl  = (imap or {}).get("ssl", True)
+            if not host or not username:
+                return _err("IMAP host and username are required", 400)
+            try:
+                if use_ssl:
+                    conn = imaplib.IMAP4_SSL(host, port,
+                           ssl_context=_ssl.create_default_context())
+                else:
+                    conn = imaplib.IMAP4(host, port)
+                conn.login(username, password)
+                conn.logout()
+                return jsonify({"status": "ok",
+                                "message": f"Connected to {host}:{port} as {username}"})
+            except imaplib.IMAP4.error as e:
+                return jsonify({"status": "error", "message": f"IMAP auth failed: {e}"})
+            except (socket.gaierror, OSError) as e:
+                return jsonify({"status": "error", "message": f"Cannot reach {host}:{port} — {e}"})
+
+        elif account_type == "gmail":
+            import urllib.request, json as _json
+            client_id     = ma.get("client_id", "").strip()
+            client_secret = ma.get("client_secret", "").strip()
+            refresh_token = ma.get("refresh_token", "").strip()
+            if not client_id or not client_secret or not refresh_token:
+                return _err("client_id, client_secret and refresh_token are required", 400)
+            payload = (
+                f"client_id={urllib.parse.quote(client_id)}"
+                f"&client_secret={urllib.parse.quote(client_secret)}"
+                f"&refresh_token={urllib.parse.quote(refresh_token)}"
+                f"&grant_type=refresh_token"
+            ).encode()
+            req = urllib.request.Request(
+                "https://oauth2.googleapis.com/token",
+                data=payload,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    result = _json.loads(resp.read())
+                if "access_token" in result:
+                    # Persist the refreshed access token to mail_accounts
+                    outreach_email = data.get("outreach_email_account", "")
+                    if outreach_email:
+                        db.collection("settings").document("mail_accounts") \
+                          .collection("accounts").document(outreach_email.strip().lower()) \
+                          .update({"access_token": result["access_token"],
+                                   "updated_at": datetime.now(timezone.utc).isoformat()})
+                    return jsonify({"status": "ok",
+                                    "message": "OAuth2 token refreshed successfully",
+                                    "access_token": result["access_token"]})
+                return jsonify({"status": "error",
+                                "message": result.get("error_description", str(result))})
+            except urllib.error.HTTPError as e:
+                body_txt = e.read().decode(errors="replace")
+                try:
+                    err_obj = _json.loads(body_txt)
+                    msg = err_obj.get("error_description") or err_obj.get("error") or body_txt
+                except Exception:
+                    msg = body_txt
+                return jsonify({"status": "error", "message": f"Google OAuth2 error: {msg}"})
+
+        else:
+            return _err(f"Unknown account type: {account_type}", 400)
+
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/campaigns/<campaign_id>/send-test-mail", methods=["POST"])
+def send_test_mail(campaign_id):
+    """Send a test email using the campaign mail account settings.
+
+    Body: { "to": "...", "subject": "...", "body": "..." }
+    Supports account_type imap (via SMTP) and gmail (via OAuth2 SMTP).
+    """
+    import smtplib, base64
+    from email.mime.text import MIMEText
+    try:
+        db  = _get_db()
+        doc = db.collection("campaigns").document(campaign_id).get()
+        if not doc.exists:
+            return _err(f"Campaign '{campaign_id}' not found", 404)
+        data           = doc.to_dict() or {}
+        outreach_email = data.get("outreach_email_account", "")
+        ma             = _get_mail_account(db, outreach_email)
+        if not ma:
+            return _err(f"No mail account found for '{outreach_email}'. Save IMAP/Gmail settings first.", 400)
+        account_type = ma.get("account_type", "imap")
+        body         = request.get_json(silent=True) or {}
+        to_addr      = body.get("to", "").strip()
+        subject      = body.get("subject", "Test email").strip()
+        mail_body    = body.get("body", "This is a test email.").strip()
+        if not to_addr:
+            return _err("'to' is required", 400)
+
+        msg             = MIMEText(mail_body, "plain", "utf-8")
+        msg["Subject"]  = subject
+        msg["To"]       = to_addr
+
+        if account_type == "imap":
+            host     = ma.get("host", "").strip()
+            username = ma.get("username", "").strip()
+            password = ma.get("password", "")
+            if not host or not username:
+                return _err("IMAP host and username are required", 400)
+            # Derive SMTP host: replace leading "imap." with "smtp."
+            smtp_host = host.replace("imap.", "smtp.", 1) if host.startswith("imap.") else host
+            msg["From"] = username
+            try:
+                with smtplib.SMTP(smtp_host, 587, timeout=15) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.login(username, password)
+                    server.sendmail(username, [to_addr], msg.as_string())
+                return jsonify({"status": "ok",
+                                "message": f"Test email sent to {to_addr} via {smtp_host}"})
+            except smtplib.SMTPAuthenticationError as e:
+                return jsonify({"status": "error", "message": f"SMTP auth failed: {e}"})
+            except Exception as e:
+                return jsonify({"status": "error", "message": f"SMTP error: {e}"})
+
+        elif account_type == "gmail":
+            client_id     = ma.get("client_id", "").strip()
+            client_secret = ma.get("client_secret", "").strip()
+            refresh_token = ma.get("refresh_token", "").strip()
+            access_token  = ma.get("access_token", "").strip()
+            from_addr     = outreach_email.strip()
+            if not from_addr or not refresh_token:
+                return _err("outreach_email_account and refresh_token are required", 400)
+
+            # Refresh access token if needed
+            if not access_token:
+                import urllib.request, json as _json
+                payload = (
+                    f"client_id={urllib.parse.quote(client_id)}"
+                    f"&client_secret={urllib.parse.quote(client_secret)}"
+                    f"&refresh_token={urllib.parse.quote(refresh_token)}"
+                    f"&grant_type=refresh_token"
+                ).encode()
+                req = urllib.request.Request(
+                    "https://oauth2.googleapis.com/token", data=payload,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    method="POST")
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    token_data = _json.loads(resp.read())
+                access_token = token_data.get("access_token", "")
+                if not access_token:
+                    return jsonify({"status": "error",
+                                    "message": token_data.get("error_description", "Token refresh failed")})
+
+            msg["From"] = from_addr
+            auth_string = f"user={from_addr}\x01auth=Bearer {access_token}\x01\x01"
+            auth_b64    = base64.b64encode(auth_string.encode()).decode()
+            try:
+                with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.docmd("AUTH", "XOAUTH2 " + auth_b64)
+                    server.sendmail(from_addr, [to_addr], msg.as_string())
+                return jsonify({"status": "ok",
+                                "message": f"Test email sent to {to_addr} via Gmail"})
+            except smtplib.SMTPAuthenticationError as e:
+                return jsonify({"status": "error", "message": f"Gmail auth failed: {e}"})
+            except Exception as e:
+                return jsonify({"status": "error", "message": f"Gmail SMTP error: {e}"})
+
+        else:
+            return _err(f"Unknown account type: {account_type}", 400)
+
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+@app.route("/api/crm/campaigns/<campaign_id>/contacts/remove", methods=["POST"])
+def remove_campaign_contacts(campaign_id):
+    """Remove contacts from a campaign by email list.
+
+    Body: { "emails": ["a@b.com", "c@d.com"] }
+
+    Deletes matching documents from the campaign_contacts subcollection
+    and updates the campaign's contact_count.
+    """
+    try:
+        db   = _get_db()
+        body = request.get_json(silent=True) or {}
+        emails = body.get("emails", [])
+        if not emails or not isinstance(emails, list):
+            return _err("Body must contain a non-empty 'emails' list", 400)
+
+        doc_ref = db.collection("campaigns").document(campaign_id)
+        if not doc_ref.get().exists:
+            return _err(f"Campaign '{campaign_id}' not found", 404)
+
+        contacts_col = doc_ref.collection("campaign_contacts")
+        deleted = 0
+        for email in emails:
+            # query by email field
+            matches = contacts_col.where("email", "==", email).stream()
+            for m in matches:
+                m.reference.delete()
+                deleted += 1
+
+        # recount and update campaign document
+        remaining = sum(1 for _ in contacts_col.stream())
+        doc_ref.update({
+            "contact_count": remaining,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+        return jsonify({"status": "ok", "deleted": deleted, "contact_count": remaining})
 
     except Exception as exc:
         return _err(str(exc), 500)
@@ -381,6 +706,238 @@ def _gdisk():
     from crm.gdisk_interface import GdiskInterface
     return GdiskInterface.from_settings(_get_db())
 
+
+
+# ── Mail accounts settings ────────────────────────────────────────────────
+
+def _ma_col(db):
+    """Shortcut to settings/mail_accounts/accounts collection."""
+    settings_ma = db.collection("settings").document("mail_accounts")
+    if not settings_ma.get().exists:
+        settings_ma.set({"_type": "mail_accounts"})
+    return settings_ma.collection("accounts")
+
+
+@app.route("/api/crm/settings/mail-accounts", methods=["GET"])
+def list_mail_accounts():
+    """List all mail accounts from settings/mail_accounts/accounts."""
+    try:
+        db   = _get_db()
+        docs = _ma_col(db).stream()
+        accounts = [d.to_dict() for d in docs]
+        return jsonify({"status": "ok", "accounts": accounts, "count": len(accounts)})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/settings/mail-accounts", methods=["POST"])
+def upsert_mail_account():
+    """Create or update a mail account.
+
+    Body must include 'email' (used as document ID) and 'account_type' (imap | gmail).
+    All other fields are merged.
+    """
+    try:
+        db   = _get_db()
+        body = request.get_json(silent=True) or {}
+        email = body.get("email", "").strip().lower()
+        if not email:
+            return _err("'email' is required", 400)
+        account_type = body.get("account_type", "imap")
+        if account_type not in ("imap", "gmail"):
+            return _err("account_type must be 'imap' or 'gmail'", 400)
+        body["email"]      = email
+        body["updated_at"] = datetime.now(timezone.utc).isoformat()
+        _ma_col(db).document(email).set(body, merge=True)
+        doc = _ma_col(db).document(email).get().to_dict()
+        return jsonify({"status": "ok", "account": doc})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/settings/mail-accounts/<email>", methods=["DELETE"])
+def delete_mail_account(email):
+    """Delete a mail account by email."""
+    try:
+        db  = _get_db()
+        key = email.strip().lower()
+        _ma_col(db).document(key).delete()
+        return jsonify({"status": "ok", "deleted": key})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/settings/mail-accounts/<email>/ping", methods=["POST"])
+def ping_mail_account_settings(email):
+    """Ping a mail account directly from settings (no campaign needed)."""
+    import socket, imaplib, ssl as _ssl
+    try:
+        db  = _get_db()
+        key = email.strip().lower()
+        ma  = _get_mail_account(db, key)
+        if not ma:
+            return _err(f"Mail account '{key}' not found", 404)
+
+        account_type = ma.get("account_type", "imap")
+
+        if account_type == "imap":
+            host     = ma.get("host", "").strip()
+            port     = int(ma.get("port") or 993)
+            username = ma.get("username", "").strip()
+            password = ma.get("password", "")
+            use_ssl  = ma.get("ssl", True)
+            if not host or not username:
+                return _err("IMAP host and username are required", 400)
+            try:
+                if use_ssl:
+                    conn = imaplib.IMAP4_SSL(host, port,
+                           ssl_context=_ssl.create_default_context())
+                else:
+                    conn = imaplib.IMAP4(host, port)
+                conn.login(username, password)
+                conn.logout()
+                return jsonify({"status": "ok",
+                                "message": f"Connected to {host}:{port} as {username}"})
+            except imaplib.IMAP4.error as e:
+                return jsonify({"status": "error", "message": f"IMAP auth failed: {e}"})
+            except (socket.gaierror, OSError) as e:
+                return jsonify({"status": "error", "message": f"Cannot reach {host}:{port} — {e}"})
+
+        elif account_type == "gmail":
+            import urllib.request, json as _json
+            client_id     = ma.get("client_id", "").strip()
+            client_secret = ma.get("client_secret", "").strip()
+            refresh_token = ma.get("refresh_token", "").strip()
+            if not client_id or not client_secret or not refresh_token:
+                return _err("client_id, client_secret and refresh_token are required", 400)
+            payload = (
+                f"client_id={urllib.parse.quote(client_id)}"
+                f"&client_secret={urllib.parse.quote(client_secret)}"
+                f"&refresh_token={urllib.parse.quote(refresh_token)}"
+                f"&grant_type=refresh_token"
+            ).encode()
+            req = urllib.request.Request(
+                "https://oauth2.googleapis.com/token", data=payload,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST")
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    result = _json.loads(resp.read())
+                if "access_token" in result:
+                    _ma_col(db).document(key).update({
+                        "access_token": result["access_token"],
+                        "updated_at":   datetime.now(timezone.utc).isoformat(),
+                    })
+                    return jsonify({"status": "ok",
+                                    "message": "OAuth2 token refreshed successfully"})
+                return jsonify({"status": "error",
+                                "message": result.get("error_description", str(result))})
+            except urllib.error.HTTPError as e:
+                import json as _json2
+                try:
+                    msg = _json2.loads(e.read()).get("error_description", str(e))
+                except Exception:
+                    msg = str(e)
+                return jsonify({"status": "error", "message": f"Google error: {msg}"})
+        else:
+            return _err(f"Unknown account type: {account_type}", 400)
+
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/settings/mail-accounts/<email>/send-test", methods=["POST"])
+def send_test_mail_settings(email):
+    """Send a test email using a mail account from settings (no campaign needed).
+
+    Body: { "to": "...", "subject": "...", "body": "..." }
+    """
+    import smtplib, base64
+    from email.mime.text import MIMEText
+    try:
+        db   = _get_db()
+        key  = email.strip().lower()
+        ma   = _get_mail_account(db, key)
+        if not ma:
+            return _err(f"Mail account '{key}' not found", 404)
+
+        body     = request.get_json(silent=True) or {}
+        to_addr  = body.get("to", "").strip()
+        subject  = body.get("subject", "Test email").strip()
+        mail_body = body.get("body", "This is a test email.").strip()
+        if not to_addr:
+            return _err("'to' is required", 400)
+
+        msg            = MIMEText(mail_body, "plain", "utf-8")
+        msg["Subject"] = subject
+        msg["To"]      = to_addr
+
+        account_type = ma.get("account_type", "imap")
+
+        if account_type == "imap":
+            host     = ma.get("host", "").strip()
+            username = ma.get("username", "").strip()
+            password = ma.get("password", "")
+            if not host or not username:
+                return _err("IMAP host and username are required", 400)
+            smtp_host = host.replace("imap.", "smtp.", 1) if host.startswith("imap.") else host
+            msg["From"] = username
+            try:
+                with smtplib.SMTP(smtp_host, 587, timeout=15) as server:
+                    server.ehlo(); server.starttls()
+                    server.login(username, password)
+                    server.sendmail(username, [to_addr], msg.as_string())
+                return jsonify({"status": "ok",
+                                "message": f"Test email sent to {to_addr} via {smtp_host}"})
+            except smtplib.SMTPAuthenticationError as e:
+                return jsonify({"status": "error", "message": f"SMTP auth failed: {e}"})
+            except Exception as e:
+                return jsonify({"status": "error", "message": f"SMTP error: {e}"})
+
+        elif account_type == "gmail":
+            client_id     = ma.get("client_id", "").strip()
+            client_secret = ma.get("client_secret", "").strip()
+            refresh_token = ma.get("refresh_token", "").strip()
+            access_token  = ma.get("access_token", "").strip()
+            from_addr     = key
+            if not refresh_token:
+                return _err("refresh_token is required", 400)
+            if not access_token:
+                import urllib.request, json as _json
+                payload = (
+                    f"client_id={urllib.parse.quote(client_id)}"
+                    f"&client_secret={urllib.parse.quote(client_secret)}"
+                    f"&refresh_token={urllib.parse.quote(refresh_token)}"
+                    f"&grant_type=refresh_token"
+                ).encode()
+                req = urllib.request.Request(
+                    "https://oauth2.googleapis.com/token", data=payload,
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    method="POST")
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    token_data = _json.loads(resp.read())
+                access_token = token_data.get("access_token", "")
+                if not access_token:
+                    return jsonify({"status": "error",
+                                    "message": token_data.get("error_description", "Token refresh failed")})
+            msg["From"] = from_addr
+            auth_string = f"user={from_addr}\x01auth=Bearer {access_token}\x01\x01"
+            auth_b64    = base64.b64encode(auth_string.encode()).decode()
+            try:
+                with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
+                    server.ehlo(); server.starttls()
+                    server.docmd("AUTH", "XOAUTH2 " + auth_b64)
+                    server.sendmail(from_addr, [to_addr], msg.as_string())
+                return jsonify({"status": "ok",
+                                "message": f"Test email sent to {to_addr} via Gmail"})
+            except smtplib.SMTPAuthenticationError as e:
+                return jsonify({"status": "error", "message": f"Gmail auth failed: {e}"})
+            except Exception as e:
+                return jsonify({"status": "error", "message": f"Gmail SMTP error: {e}"})
+        else:
+            return _err(f"Unknown account type: {account_type}", 400)
+    except Exception as exc:
+        return _err(str(exc), 500)
 
 @app.route("/api/crm/gdisk/settings", methods=["GET"])
 def gdisk_get_settings():
@@ -581,7 +1138,7 @@ def discover_campaigns():
             now  = datetime.now(timezone.utc).isoformat()
             data = {
                 "campaign_id":            campaign_id,
-                "status":                 "draft",
+                "status":                 "pending",
                 "sent_at":                None,
                 "outreach_email_account": "",
                 "mail":                   {"subject": "", "body": "", "type": "plain"},
@@ -655,6 +1212,18 @@ def worker(name, job_id):
             counts = run_filter_count(db=db, name=body.get("name", ""))
             result = {"name": body.get("name", ""), "counts": counts}
 
+        elif name == "campaign-export":
+            from crm.campaign_export_lib import run_campaign_export
+            result = run_campaign_export(db=db, svc=svc, gd=_gdisk(),
+                                         campaign_id=body.get("campaign_id", ""))
+            # Persist sheet_url on the campaign document for quick access
+            cid = body.get("campaign_id", "")
+            if cid and result.get("url"):
+                db.collection("campaigns").document(cid).update({
+                    "sheet_url":  result["url"],
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                })
+
         else:
             _update_job(job_id, status="error",
                         error=f"Unknown job: {name}",
@@ -688,11 +1257,11 @@ def job_status(job_id):
 @app.route("/api/crm/jobs", methods=["GET"])
 def list_jobs():
     """List recent jobs sorted by queued_at descending.
-    ?limit=20       max results (default 20, max 100)
+    ?limit=20       max results (default 20, max 500)
     ?running=true   only return running or queued jobs
     ?campaign_id=X  only return jobs for a specific campaign
     """
-    limit       = min(int(request.args.get("limit", 20)), 100)
+    limit       = min(int(request.args.get("limit", 20)), 500)
     running     = request.args.get("running", "").lower() in ("1", "true", "yes")
     campaign_id = request.args.get("campaign_id", "").strip()
 

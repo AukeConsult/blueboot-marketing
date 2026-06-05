@@ -213,6 +213,20 @@ class GdiskInterface:
             name, json.dumps(data, indent=2, ensure_ascii=False),
             mime="application/json")
 
+    def ensure_sheet(self, name: str) -> str:
+        """Return the id of a Google Sheet named <name> in the folder, creating
+        it if absent. Used so a campaign always maps to one sheet of the same name."""
+        fid = self.find_file(name)
+        if fid:
+            return fid
+        meta: dict = {"name": name,
+                      "mimeType": "application/vnd.google-apps.spreadsheet"}
+        if self.folder_id:
+            meta["parents"] = [self.folder_id]
+        created = self.service.files().create(
+            body=meta, fields="id", supportsAllDrives=True).execute()
+        return created["id"]
+
     def delete_file(self, name: str) -> bool:
         """Move the file to trash (recoverable). Trashing works for editors,
         whereas a hard delete requires ownership. Returns False if not found."""
