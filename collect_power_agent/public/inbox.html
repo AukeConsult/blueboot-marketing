@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Inbox</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+.msg-row { cursor: pointer; }
+.msg-row:hover { background: #f9fafb; }
+.msg-row.unread td { font-weight: 600; }
+.msg-body { background: #fff; border: 1px solid var(--bb-border); border-radius: 8px;
+            padding: 1rem; font-size: .85rem; line-height: 1.6; white-space: pre-wrap;
+            word-break: break-word; max-height: 400px; overflow-y: auto; }
+.from-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subject-cell { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:1000px">
+
+  <div class="page-header mb-3">
+    <h5 class="page-title"><i class="ti ti-inbox text-primary"></i>Inbox</h5>
+  </div>
+
+  <!-- Account selector -->
+  <div class="bb-card p-3 mb-3">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <label class="small fw-500 mb-0 text-nowrap" style="color:var(--bb-muted)">Account</label>
+      <select id="account-select" class="form-select form-select-sm" style="max-width:300px" onchange="loadInbox()">
+        <option value="">— select account —</option>
+      </select>
+      <div class="d-flex align-items-center gap-2 ms-2">
+        <label class="small mb-0" style="color:var(--bb-muted)">Show</label>
+        <select id="limit-select" class="form-select form-select-sm" style="max-width:90px" onchange="loadInbox()">
+          <option value="20">20</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+      <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="loadInbox()" id="refresh-btn">
+        <i class="ti ti-refresh me-1"></i>Refresh
+      </button>
+      <a href="settings.html" class="btn btn-sm btn-outline-secondary">
+        <i class="ti ti-settings me-1"></i>Manage accounts
+      </a>
+    </div>
+  </div>
+
+  <div id="inbox-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
+
+  <!-- Message list -->
+  <div class="bb-card" id="inbox-card" style="display:none">
+    <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom" style="background:#f9fafb;border-radius:10px 10px 0 0">
+      <span class="fw-500 small"><i class="ti ti-mail me-1 text-primary"></i>Messages <span id="msg-count" class="text-muted ms-1"></span></span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead style="background:#f9fafb">
+          <tr>
+            <th class="small">From</th>
+            <th class="small">Subject</th>
+            <th class="small text-nowrap">Date</th>
+          </tr>
+        </thead>
+        <tbody id="inbox-body"></tbody>
+      </table>
+    </div>
+    <div id="inbox-empty" class="text-center py-4 small" style="color:var(--bb-muted);display:none">
+      <i class="ti ti-inbox" style="font-size:1.5rem;opacity:.3;display:block;margin-bottom:.4rem"></i>
+      No messages found.
+    </div>
+  </div>
+
+</div>
+
+<!-- Message detail modal -->
+<div class="modal fade" id="msgModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <div>
+          <h6 class="modal-title mb-1" id="msg-modal-subject">—</h6>
+          <div class="small" style="color:var(--bb-muted)">
+            <span id="msg-modal-from"></span>
+            <span class="mx-2">·</span>
+            <span id="msg-modal-date"></span>
+          </div>
+        </div>
+        <button type="button" class="btn-close ms-auto" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <div id="msg-modal-body" class="msg-body"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/crm-common.js"></script>
+<script>
+const fmt = fmtDateTimeShort;
+
+async function loadAccounts() {
+  const sel = document.getElementById('account-select');
+  try {
+    const r = await fetch(BASE + '/api/crm/settings/mail-accounts');
+    const d = await r.json();
+    const list = d.accounts || [];
+    sel.innerHTML = '<option value="">— select account —</option>' +
+      list.map(a => `<option value="${a.email}">${a.email} (${a.account_type})</option>`).join('');
+    if (list.length === 1) { sel.value = list[0].email; loadInbox(); }
+  } catch(e) {
+    sel.innerHTML = '<option value="">Error loading accounts</option>';
+  }
+}
+
+async function loadInbox() {
+  const email = document.getElementById('account-select').value;
+  const limit = document.getElementById('limit-select').value;
+  const fb    = document.getElementById('inbox-feedback');
+  const card  = document.getElementById('inbox-card');
+  const btn   = document.getElementById('refresh-btn');
+
+  fb.style.display = 'none';
+  card.style.display = 'none';
+  if (!email) return;
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Loading…';
+
+  try {
+    const r = await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(email)}/inbox?limit=${limit}`);
+    const d = await r.json();
+
+    if (d.status !== 'ok') {
+      fb.className = 'alert alert-danger py-2 px-3 small mb-3';
+      fb.innerHTML = `<i class="ti ti-circle-x me-1"></i>${d.message}`;
+      fb.style.display = ''; return;
+    }
+
+    renderMessages(d.messages || []);
+    card.style.display = '';
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 px-3 small mb-3';
+    fb.textContent = 'Error: ' + e.message; fb.style.display = '';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Refresh';
+}
+
+function renderMessages(msgs) {
+  const tbody = document.getElementById('inbox-body');
+  const empty = document.getElementById('inbox-empty');
+  document.getElementById('msg-count').textContent = `(${msgs.length})`;
+
+  if (!msgs.length) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+  tbody.innerHTML = msgs.map((m, i) => `
+    <tr class="msg-row" onclick="openMessage(${i})" data-idx="${i}">
+      <td class="from-cell small">${escapeHtml(m.from)}</td>
+      <td class="subject-cell small">
+        ${escapeHtml(m.subject)}
+        ${m.preview ? `<span class="text-muted fw-normal"> — ${escapeHtml(m.preview.slice(0,80))}</span>` : ''}
+      </td>
+      <td class="small text-muted text-nowrap">${fmt(m.date)}</td>
+    </tr>`).join('');
+
+  // store messages for modal access
+  window._inboxMessages = msgs;
+}
+
+function openMessage(idx) {
+  const m = window._inboxMessages[idx];
+  if (!m) return;
+  document.getElementById('msg-modal-subject').textContent = m.subject || '(no subject)';
+  document.getElementById('msg-modal-from').textContent    = m.from || '';
+  document.getElementById('msg-modal-date').textContent    = fmt(m.date);
+  document.getElementById('msg-modal-body').textContent    = m.body || '(empty)';
+  new bootstrap.Modal(document.getElementById('msgModal')).show();
+}
+
+function escapeHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+loadAccounts();
+</script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+</body>
+</html>

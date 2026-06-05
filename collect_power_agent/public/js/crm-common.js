@@ -127,6 +127,7 @@ const NAV_LINKS = [
   { href: 'jobs.html',          icon: 'ti-list-check',        label: 'Jobs' },
   { href: 'filter-facets.html', icon: 'ti-filter',            label: 'Filter Facets' },
   { href: 'gdisk.html',         icon: 'ti-brand-google-drive',label: 'Drive Folder' },
+  { href: 'inbox.html',         icon: 'ti-inbox',             label: 'Inbox' },
   { href: 'settings.html',      icon: 'ti-settings',          label: 'Settings' },
 ];
 
