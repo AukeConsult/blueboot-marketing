@@ -386,7 +386,7 @@ python app/build_filter_facets.py --cap 300 --no-write   # JSON preview only
 | Job queue | Google Cloud Tasks |
 | Database | Firestore (NoSQL) |
 | File storage | Google Drive (via Drive API) |
-| AI enrichment | OpenAI GPT-4o |
+| AI enrichment | OpenAI GPT-5.4 |
 | Contact enrichment | Brave Search API |
 | Web discovery | Bing Search API · aiohttp · asyncio |
 | Frontend | Vanilla HTML · Bootstrap 5 · Tabler Icons |

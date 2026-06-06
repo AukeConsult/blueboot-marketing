@@ -136,9 +136,10 @@ const NAV_LINKS = [
     children: [
       { href: 'doc-viewer.html?doc=installation',        icon: 'ti-download',      label: 'Installation' },
       { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user', label: 'User guide' },
-      { href: 'doc-viewer.html?doc=system-architecture', icon: 'ti-circuit-board', label: 'System architecture' },
+      { href: 'doc-viewer.html?doc=system-architecture', icon: 'ti-topology-star-3', label: 'System architecture' },
       { href: 'doc-viewer.html?doc=backend-functions',   icon: 'ti-terminal',      label: 'Backend functions' },
       { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',    label: 'Pipeline config' },
+      { href: 'doc-viewer.html?doc=ai-assistance',       icon: 'ti-brain',         label: 'AI assistance' },
     ]},
   { href: 'settings.html',      icon: 'ti-settings',          label: 'Settings' },
 ];

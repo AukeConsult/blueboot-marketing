@@ -27,10 +27,11 @@ body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Seg
 .nav-dropdown.active > .nav-dropdown-toggle { color: var(--bb-accent); background: #eef0ff; }
 .nav-dropdown-menu { display: none; position: absolute; top: calc(100% + 4px); left: 0;
   background: #fff; border: 1px solid var(--bb-border); border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0,0,0,.1); min-width: 160px; z-index: 1000; padding: .3rem; }
+  box-shadow: 0 4px 16px rgba(0,0,0,.1); min-width: max-content; z-index: 1000; padding: .3rem; }
 .nav-dropdown.open .nav-dropdown-menu { display: block; }
-.nav-dropdown-item { display: flex; align-items: center; gap: .4rem; padding: .3rem .6rem;
-  border-radius: 6px; font-size: .85rem; color: var(--bb-muted); text-decoration: none; }
+.nav-dropdown-item { display: flex; align-items: center; gap: .4rem; padding: .3rem .75rem;
+  border-radius: 6px; font-size: .85rem; color: var(--bb-muted); text-decoration: none;
+  white-space: nowrap; }
 .nav-dropdown-item:hover { background: #f4f5f7; color: #111; }
 .nav-dropdown-item.active { color: var(--bb-accent); background: #eef0ff; }
 

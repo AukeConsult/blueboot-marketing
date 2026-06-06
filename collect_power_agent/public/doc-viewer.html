@@ -9,15 +9,15 @@
 <link rel="stylesheet" href="css/styles.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <style>
-.doc-body { max-width: 860px; margin: 0 auto; }
-.doc-body h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 1rem; padding-bottom: .5rem; border-bottom: 2px solid var(--bb-border); }
+.doc-body { max-width: 860px; margin: 0 auto; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+.doc-body h1 { font-size: 1.55rem; font-weight: 700; margin-bottom: 1rem; padding-bottom: .6rem; border-bottom: 2px solid var(--bb-border); letter-spacing: -.01em; color: #111; }
 .doc-body h2 { font-size: 1.15rem; font-weight: 600; margin-top: 2rem; margin-bottom: .6rem; padding-bottom: .3rem; border-bottom: 1px solid var(--bb-border); color: var(--bb-accent); }
 .doc-body h3 { font-size: 1rem; font-weight: 600; margin-top: 1.4rem; margin-bottom: .4rem; }
 .doc-body h4 { font-size: .9rem; font-weight: 600; margin-top: 1rem; color: var(--bb-muted); }
-.doc-body p  { font-size: .88rem; line-height: 1.7; margin-bottom: .75rem; }
-.doc-body ul, .doc-body ol { font-size: .88rem; line-height: 1.7; margin-bottom: .75rem; padding-left: 1.4rem; }
-.doc-body li { margin-bottom: .2rem; }
-.doc-body table { width: 100%; border-collapse: collapse; font-size: .83rem; margin-bottom: 1rem; }
+.doc-body p  { font-size: .9rem; line-height: 1.8; margin-bottom: .8rem; color: #222; }
+.doc-body ul, .doc-body ol { font-size: .9rem; line-height: 1.8; margin-bottom: .8rem; padding-left: 1.5rem; }
+.doc-body li { margin-bottom: .25rem; color: #222; }
+.doc-body table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-bottom: 1.1rem; }
 .doc-body th { background: #f4f5f7; font-weight: 600; text-align: left; padding: .4rem .7rem; border: 1px solid var(--bb-border); }
 .doc-body td { padding: .35rem .7rem; border: 1px solid var(--bb-border); vertical-align: top; }
 .doc-body tr:nth-child(even) td { background: #fafbfc; }
@@ -72,6 +72,7 @@ const DOCS = {
   'system-architecture': { title: 'System Architecture', path: 'doc/system-architecture.md' },
   'backend-functions':   { title: 'Backend functions',    path: 'doc/backend-functions.md' },
   'pipeline-config':     { title: 'Pipeline configuration', path: 'doc/pipeline-config.md' },
+  'ai-assistance':       { title: 'AI Assistance',          path: 'doc/ai-assistance.md' },
 };
 
 async function loadDoc() {
