@@ -157,13 +157,11 @@ async function discover() {
       : `<i class="ti ti-refresh me-1"></i>${d.message || 'No new campaigns.'} Syncing all contacts from master sheet…`;
     bar.style.display = '';
 
-    // Step 2: run full crm-sync to pick up any new contacts across all campaigns
+    // Step 2: full crm-sync to pick up new contacts across all campaigns
     const sr = await fetch(BASE + '/api/crm/crm-sync');
     const sd = await sr.json();
     const jobId = sd.job_id;
-
     if (jobId) {
-      // Poll until done
       for (let i = 0; i < 60; i++) {
         await new Promise(r => setTimeout(r, 3000));
         const jr = await fetch(`${BASE}/api/crm/status/${jobId}`);

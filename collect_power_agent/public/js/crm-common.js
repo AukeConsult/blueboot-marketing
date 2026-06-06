@@ -125,9 +125,13 @@ const NAV_LINKS = [
     match: ['campaigns.html', 'campaign.html', 'campaign-edit.html'] },
   { href: 'crm-bp.html',        icon: 'ti-server-2',          label: 'CRM' },
   { href: 'jobs.html',          icon: 'ti-list-check',        label: 'Jobs' },
-  { href: 'filter-facets.html', icon: 'ti-filter',            label: 'Filter Facets' },
+  { dropdown: 'data-sources',   icon: 'ti-database',          label: 'Data collect',
+    children: [
+      { href: 'statistics.html',    icon: 'ti-chart-bar', label: 'Statistics' },
+      { href: 'filter-facets.html', icon: 'ti-filter',    label: 'Filter facets' },
+    ]},
   { href: 'gdisk.html',         icon: 'ti-brand-google-drive',label: 'Drive Folder' },
-  { href: 'inbox.html',         icon: 'ti-inbox',             label: 'Inbox' },
+  { href: 'mailbox.html',       icon: 'ti-inbox',             label: 'Mailbox' },
   { href: 'settings.html',      icon: 'ti-settings',          label: 'Settings' },
 ];
 
@@ -136,6 +140,20 @@ function renderNav(targetId){
   if(!el) return;
   const cur = (location.pathname.split('/').pop() || 'index.html') || 'index.html';
   const links = NAV_LINKS.map(l => {
+    if (l.dropdown) {
+      // Dropdown group
+      const childActive = l.children.some(c => (c.match || [c.href]).includes(cur));
+      const items = l.children.map(c => {
+        const a = (c.match || [c.href]).includes(cur) ? ' active' : '';
+        return '<a href="' + c.href + '" class="nav-dropdown-item' + a + '">'
+             + '<i class="ti ' + c.icon + '"></i>' + c.label + '</a>';
+      }).join('');
+      return '<div class="nav-dropdown' + (childActive ? ' active' : '') + '">'
+           + '<button class="nav-link nav-dropdown-toggle" onclick="this.parentElement.classList.toggle(&quot;open&quot;)">'
+           + '<i class="ti ' + l.icon + '"></i>' + l.label
+           + '<i class="ti ti-chevron-down" style="font-size:.7rem;margin-left:.2rem"></i></button>'
+           + '<div class="nav-dropdown-menu">' + items + '</div></div>';
+    }
     const active = (l.match || [l.href]).includes(cur) ? ' active' : '';
     return '<a href="' + l.href + '" class="nav-link' + active + '">'
          + '<i class="ti ' + l.icon + '"></i>' + l.label + '</a>';
@@ -143,6 +161,12 @@ function renderNav(targetId){
   el.outerHTML = '<nav class="bb-nav">'
     + '<a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>'
     + '<div class="nav-links">' + links + '</div></nav>';
+  // Close dropdown when clicking outside
+  document.addEventListener('click', e => {
+    document.querySelectorAll('.nav-dropdown.open').forEach(d => {
+      if (!d.contains(e.target)) d.classList.remove('open');
+    });
+  }, { once: false, capture: true });
 }
 
 // auto-render on any page that has a #nav placeholder
@@ -156,5 +180,5 @@ function renderNav(targetId){
 // link's href act as a fallback. Use as: <a href="index.html" onclick="return goBack()">
 function goBack(){
   if(history.length > 1){ history.back(); return false; }
-  return true;   // no history (opened directly) -> follow the href
+  return true;
 }

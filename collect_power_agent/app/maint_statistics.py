@@ -37,6 +37,7 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from functions.config import cfg
+from functions.statistics_builder import StatisticsBuilder  # noqa: F401
 
 
 # ---------------------------------------------------------------------------
@@ -1324,8 +1325,8 @@ def main():
     parser.add_argument("--no-writeback", action="store_true")
     parser.add_argument("--no-overview", action="store_true")
     parser.add_argument("--only", default=None,
-        choices=["priority","reasons","overview","site-funnel","lead-funnel",
-                 "quality","email-funnel","coverage"])
+        choices=["priority","reasons","overview","leads-overview","site-leads-overview",
+                 "site-funnel","lead-funnel","quality","email-funnel","coverage"])
     args = parser.parse_args()
 
     run_all = args.only is None
@@ -1339,9 +1340,15 @@ def main():
         print("\n--- Reasons Count ---")
         r = summarise_reasons_count(args.leads_collection, args.stats_collection, writeback=not args.no_writeback)
         all_results["reasons"] = r
-    if (run_all or args.only == "overview") and not args.no_overview:
-        print("\n--- Collection Overview ---")
-        r = collection_overview(args.stats_collection); all_results["overview"] = r
+    if (run_all or args.only in ("overview","leads-overview","site-leads-overview")) and not args.no_overview:
+        sb = StatisticsBuilder(args.leads_collection, args.stats_collection)
+        if args.only == "leads-overview":
+            all_results["leads_overview"] = sb.leads_overview()
+        elif args.only == "site-leads-overview":
+            all_results["site_leads_overview"] = sb.site_leads_overview()
+        else:
+            all_results["leads_overview"]      = sb.leads_overview()
+            all_results["site_leads_overview"] = sb.site_leads_overview()
     if run_all or args.only == "site-funnel":
         print("\n--- Site Pipeline Enrichment Funnel ---")
         all_results["site_funnel"] = site_pipeline_enrichment_funnel(args.stats_collection)

@@ -70,9 +70,9 @@ function renderJobs(jobs){
     const err = j.error || '';
     const duration = elapsed(j.started_at, j.finished_at);
     const params = j.params && Object.keys(j.params).length ? JSON.stringify(j.params) : '';
-    return `<div class="bb-card mb-2 job-card" onclick="toggle('${j.id}')">
+    return `<div class="bb-card mb-2 job-card">
       <div class="px-3 py-2">
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2" onclick="toggle('${j.id}')" style="cursor:pointer">
           ${spin}
           ${jobPill(j.status)}
           <span class="fw-500 flex-grow-1 small">${JOB_NAMES[j.name]||j.name}</span>
@@ -89,9 +89,13 @@ function renderJobs(jobs){
   }).join('');
 }
 
+const _openRows = new Set();
+
 function toggle(id){
   const el = document.getElementById('d-'+id);
-  el.style.display = el.style.display==='block' ? 'none' : 'block';
+  const open = el.style.display === 'block';
+  el.style.display = open ? 'none' : 'block';
+  open ? _openRows.delete(id) : _openRows.add(id);
 }
 
 async function loadJobs(){
@@ -100,6 +104,11 @@ async function loadJobs(){
     const r = await fetch(BASE+'/api/crm/jobs?limit='+limit);
     const d = await r.json();
     renderJobs(d.jobs||[]);
+    // Restore previously open rows
+    _openRows.forEach(id => {
+      const el = document.getElementById('d-'+id);
+      if (el) el.style.display = 'block';
+    });
   } catch(e){
     document.getElementById('jobs-list').innerHTML=`<div class="text-center text-danger py-4 small">Could not reach API: ${e.message}</div>`;
   }

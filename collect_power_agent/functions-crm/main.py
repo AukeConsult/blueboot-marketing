@@ -671,6 +671,47 @@ def send_test_mail_settings(email):
     except Exception as exc:
         return _err(str(exc), 500)
 
+
+
+@app.route("/api/crm/statistics/collect", methods=["POST"])
+def collect_statistics():
+    """Queue a job to run all statistics aggregations."""
+    try:
+        body   = request.get_json(silent=True) or {}
+        only   = body.get("only", "")   # optional: run one section only
+        params = {"only": only} if only else {}
+        job_id = _new_job("statistics", params)
+        _enqueue_task("statistics", job_id, params)
+        return _accepted(job_id, "statistics")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+@app.route("/api/crm/statistics", methods=["GET"])
+def get_statistics():
+    """Return all statistics documents from the statistics collection.
+
+    Returns a map of doc_id -> document dict for the main stat documents.
+    Sub-collections (countries) are included for priority-pr-country.
+    """
+    try:
+        db   = _get_db()
+        col  = db.collection("statistics")
+        docs = {d.id: d.to_dict() for d in col.stream() if d.exists}
+
+        # Attach countries sub-collection for priority-pr-country
+        if "priority-pr-country" in docs:
+            countries = {
+                d.id: d.to_dict()
+                for d in col.document("priority-pr-country")
+                             .collection("countries").stream()
+            }
+            docs["priority-pr-country"]["countries"] = countries
+
+        return jsonify({"status": "ok", "statistics": docs,
+                        "doc_count": len(docs)})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
 @app.route("/api/crm/gdisk/settings", methods=["GET"])
 def gdisk_get_settings():
     try:
@@ -938,6 +979,37 @@ def worker(name, job_id):
             result = run_crm_sync(db=db, svc=svc,
                                   campaign_id=body.get("campaign_id", ""))
 
+        elif name == "statistics":
+            from crm.statistics_builder import StatisticsBuilder
+            only = body.get("only", "")
+            sb   = StatisticsBuilder(db=db)
+            if only == "leads-overview":
+                result = sb.leads_overview()
+            elif only == "site-leads-overview":
+                result = sb.site_leads_overview()
+            elif only == "site-funnel":
+                result = sb.site_pipeline_enrichment_funnel()
+            elif only == "lead-funnel":
+                result = sb.lead_pipeline_enrichment_funnel()
+            elif only == "quality":
+                result = sb.data_quality_report()
+            elif only == "email-funnel":
+                result = sb.email_contacts_funnel()
+            elif only == "coverage":
+                result = sb.pipeline_coverage()
+            elif only == "campaigns":
+                result = sb.campaign_statistics()
+            else:
+                sb.leads_overview()
+                sb.site_leads_overview()
+                sb.site_pipeline_enrichment_funnel()
+                sb.lead_pipeline_enrichment_funnel()
+                sb.data_quality_report()
+                sb.email_contacts_funnel()
+                sb.pipeline_coverage()
+                sb.campaign_statistics()
+                result = {"collected": True}
+
         elif name == "campaign-sync":
             from crm.campaign_sync_lib import run_campaign_sync
             result = run_campaign_sync(db=db, svc=svc, gd=_gdisk(),
@@ -970,7 +1042,7 @@ def worker(name, job_id):
                     status="done",
                     result=result,
                     finished_at=datetime.now(timezone.utc).isoformat())
-        return _ok(f"Job {job_id} done", **result)
+        return jsonify({"status": "ok", "message": f"Job {job_id} done", "result": result})
 
     except Exception as exc:
         _update_job(job_id,
@@ -1059,8 +1131,8 @@ def crmWorker(req: https_fn.Request) -> https_fn.Response:
             return _err(str(exc), 500)
 
 
-@app.route("/api/crm/settings/mail-accounts/<email>/inbox", methods=["GET"])
-def read_inbox(email):
+@app.route("/api/crm/settings/mail-accounts/<email>/mailbox", methods=["GET"])
+def read_mailbox(email):
     """Read recent emails from all folders of a mail account.
 
     Query params:
@@ -1234,9 +1306,14 @@ def read_inbox(email):
         typ, folder_list = conn.list()
         folders = []
         for item in (folder_list or []):
-            selectable, name = _parse_folder(item)
-            if selectable and name:
-                folders.append(name)
+            if item is None:
+                continue
+            try:
+                selectable, name = _parse_folder(item)
+                if selectable and name:
+                    folders.append(name)
+            except Exception:
+                continue
         if not folders:
             folders = ["INBOX"]
 

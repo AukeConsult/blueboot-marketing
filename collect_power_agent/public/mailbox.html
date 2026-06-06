@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Blueboot — Inbox</title>
+<title>Blueboot — Mailbox</title>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
 <link rel="stylesheet" href="css/styles.css">
@@ -25,26 +25,26 @@
 <div class="container py-4" style="max-width:1000px">
 
   <div class="page-header mb-3">
-    <h5 class="page-title"><i class="ti ti-inbox text-primary"></i>Inbox</h5>
+    <h5 class="page-title"><i class="ti ti-inbox text-primary"></i>Mailbox</h5>
   </div>
 
   <!-- Account selector -->
   <div class="bb-card p-3 mb-3">
     <div class="d-flex align-items-center gap-2 flex-wrap">
       <label class="small fw-500 mb-0 text-nowrap" style="color:var(--bb-muted)">Account</label>
-      <select id="account-select" class="form-select form-select-sm" style="max-width:300px" onchange="loadInbox()">
+      <select id="account-select" class="form-select form-select-sm" style="max-width:300px" onchange="loadMailbox()">
         <option value="">— select account —</option>
       </select>
       <div class="d-flex align-items-center gap-2 ms-2">
         <label class="small mb-0" style="color:var(--bb-muted)">Per folder</label>
-        <select id="limit-select" class="form-select form-select-sm" style="max-width:90px" onchange="loadInbox()">
+        <select id="limit-select" class="form-select form-select-sm" style="max-width:90px" onchange="loadMailbox()">
           <option value="5">5</option>
           <option value="10" selected>10</option>
           <option value="20">20</option>
           <option value="50">50</option>
         </select>
       </div>
-      <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="loadInbox()" id="refresh-btn">
+      <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="loadMailbox()" id="refresh-btn">
         <i class="ti ti-refresh me-1"></i>Refresh
       </button>
       <a href="settings.html" class="btn btn-sm btn-outline-secondary">
@@ -120,13 +120,13 @@ async function loadAccounts() {
     const list = d.accounts || [];
     sel.innerHTML = '<option value="">— select account —</option>' +
       list.map(a => `<option value="${a.email}">${a.email} (${a.account_type})</option>`).join('');
-    if (list.length === 1) { sel.value = list[0].email; loadInbox(); }
+    if (list.length === 1) { sel.value = list[0].email; loadMailbox(); }
   } catch(e) {
     sel.innerHTML = '<option value="">Error loading accounts</option>';
   }
 }
 
-async function loadInbox() {
+async function loadMailbox() {
   const email = document.getElementById('account-select').value;
   const limit = document.getElementById('limit-select').value;
   const fb    = document.getElementById('inbox-feedback');
@@ -141,7 +141,7 @@ async function loadInbox() {
   btn.innerHTML = '<i class="ti ti-loader me-1"></i>Loading…';
 
   try {
-    const r = await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(email)}/inbox?per_folder=${limit}`);
+    const r = await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(email)}/mailbox?per_folder=${limit}`);
     const d = await r.json();
 
     if (d.status !== 'ok') {
@@ -183,7 +183,6 @@ function renderMessages(msgs) {
       <td class="small text-muted text-nowrap">${fmt(m.date)}</td>
     </tr>`).join('');
 
-  // store messages for modal access
   window._inboxMessages = msgs;
 }
 

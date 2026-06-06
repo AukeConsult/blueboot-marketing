@@ -152,6 +152,16 @@ async function runImport() {
   await trigger('contact-sync', params);
 }
 
+async function trigger(name, params) {
+  try {
+    const r = await fetch(BASE + '/api/crm/' + name + params);
+    const d = await r.json();
+    showFeedback(d.message || 'Job queued — check Jobs for progress.', 'success');
+  } catch(e) {
+    showFeedback('Error: ' + e.message, 'danger');
+  }
+}
+
 async function runCrmSync() {
   const campaignId = document.getElementById('crm-sync-campaign').value.trim();
   const btn = document.getElementById('crm-sync-btn');
@@ -166,7 +176,6 @@ async function runCrmSync() {
     if (!d.job_id) throw new Error(d.message || 'No job_id');
     res.innerHTML = `<div class="small text-muted">Job queued <code>${d.job_id}</code> — polling…</div>`;
     res.style.display = '';
-    // Poll for result
     for (let i = 0; i < 60; i++) {
       await new Promise(r => setTimeout(r, 3000));
       const jr = await fetch(`${BASE}/api/crm/status/${d.job_id}`);
@@ -193,16 +202,6 @@ async function runCrmSync() {
   }
   btn.disabled = false;
   btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Sync campaigns';
-}
-
-async function trigger(name, params) {
-  try {
-    const r = await fetch(BASE + '/api/crm/' + name + params);
-    const d = await r.json();
-    showFeedback(d.message || 'Job queued — check Jobs for progress.', 'success');
-  } catch(e) {
-    showFeedback('Error: ' + e.message, 'danger');
-  }
 }
 </script>
 </body>

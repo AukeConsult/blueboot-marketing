@@ -22,6 +22,17 @@ body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Seg
 .bb-nav .nav-link:hover { color: #111; background: #f4f5f7; }
 .bb-nav .nav-link.active { color: var(--bb-accent); background: #eef0ff; }
 .bb-nav .nav-links { display: flex; gap: .25rem; }
+.nav-dropdown { position: relative; }
+.nav-dropdown-toggle { background: none; border: none; cursor: pointer; }
+.nav-dropdown.active > .nav-dropdown-toggle { color: var(--bb-accent); background: #eef0ff; }
+.nav-dropdown-menu { display: none; position: absolute; top: calc(100% + 4px); left: 0;
+  background: #fff; border: 1px solid var(--bb-border); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.1); min-width: 160px; z-index: 1000; padding: .3rem; }
+.nav-dropdown.open .nav-dropdown-menu { display: block; }
+.nav-dropdown-item { display: flex; align-items: center; gap: .4rem; padding: .3rem .6rem;
+  border-radius: 6px; font-size: .85rem; color: var(--bb-muted); text-decoration: none; }
+.nav-dropdown-item:hover { background: #f4f5f7; color: #111; }
+.nav-dropdown-item.active { color: var(--bb-accent); background: #eef0ff; }
 
 /* Generic card */
 .bb-card { background: #fff; border-radius: 10px; box-shadow: var(--bb-card-shadow); border: 1px solid var(--bb-border); }
