@@ -4,6 +4,10 @@ Automated lead discovery, enrichment and outreach pipeline for BlueSearch — fi
 
 ---
 
+#### Good instruments don't make artists. But artists exploiting new instruments can make great art. 
+
+(it is mosty done with Claude as the programmer buddy)
+
 ## What it does
 
 Two independent discovery pipelines find leads, enrich them with AI classification, and feed them into a CRM-style outreach workflow.
