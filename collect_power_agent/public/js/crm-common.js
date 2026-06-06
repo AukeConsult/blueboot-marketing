@@ -167,9 +167,24 @@ function renderNav(targetId){
     return '<a href="' + l.href + '" class="nav-link' + active + '">'
          + '<i class="ti ' + l.icon + '"></i>' + l.label + '</a>';
   }).join('');
+  // Build user-area — hidden until Firebase confirms a signed-in user
+  const userArea = '<div class="bb-nav-user" id="bb-nav-user" style="display:none">'
+    + '<span id="bb-nav-email" class="small text-muted me-2" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>'
+    + '<button class="btn btn-sm btn-outline-secondary" style="font-size:.78rem;padding:.2rem .6rem" onclick="signOutUser()">'
+    + '<i class="ti ti-logout me-1"></i>Sign out</button></div>';
   el.outerHTML = '<nav class="bb-nav">'
     + '<a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>'
-    + '<div class="nav-links">' + links + '</div></nav>';
+    + '<div class="nav-links">' + links + '</div>'
+    + userArea + '</nav>';
+  // Show user area only when signed in
+  if (typeof firebase !== 'undefined') {
+    firebase.auth().onAuthStateChanged(u => {
+      const area = document.getElementById('bb-nav-user');
+      const label = document.getElementById('bb-nav-email');
+      if (area) area.style.display = u ? '' : 'none';
+      if (label && u) label.textContent = u.displayName || u.email || '';
+    });
+  }
   // Close dropdown when clicking outside
   document.addEventListener('click', e => {
     document.querySelectorAll('.nav-dropdown.open').forEach(d => {
@@ -178,9 +193,16 @@ function renderNav(targetId){
   }, { once: false, capture: true });
 }
 
-// auto-render on any page that has a #nav placeholder
+// auto-render on any page that has a #nav placeholder, and require auth.
+// Public pages (no sign-in required): login.html, index.html, doc-viewer.html
+const PUBLIC_PAGES = new Set(['login.html', 'index.html', 'doc-viewer.html', '']);
 (function(){
-  function go(){ if(document.getElementById('nav')) renderNav(); }
+  function go(){
+    if(!document.getElementById('nav')) return;
+    renderNav();
+    const page = location.pathname.split('/').pop();
+    if(!PUBLIC_PAGES.has(page) && typeof requireAuth === 'function') requireAuth();
+  }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go);
   else go();
 })();

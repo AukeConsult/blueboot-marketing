@@ -53,7 +53,36 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
     --role="roles/run.invoker"
 ```
 
-### 1.3 Download the service account key
+### 1.3 Enable Firebase Authentication
+
+1. In the Firebase console → **Build → Authentication** → Get started
+2. Go to **Sign-in method** and enable **Google** and **Email/Password**
+3. Under **Settings → Authorised domains**, confirm your hosting domain is listed
+   (Firebase automatically adds `*.firebaseapp.com` and `*.web.app`)
+
+### 1.4 Create the web app and save the config
+
+1. In the Firebase console → Project settings (gear icon) ��� **Your apps** → **Add app** → Web (`</>`)
+2. Register the app (nickname e.g. "CRM frontend"), then copy the `firebaseConfig` object shown
+3. In the project, copy the template:
+   ```bash
+   cp public/firebase-config.example.js public/firebase-config.js
+   ```
+4. Open `public/firebase-config.js` and paste your values into `window.FIREBASE_CONFIG`:
+   ```js
+   window.FIREBASE_CONFIG = {
+     apiKey:            "AIzaSy...",
+     authDomain:        "your-project.firebaseapp.com",
+     projectId:         "your-project",
+     storageBucket:     "your-project.appspot.com",
+     messagingSenderId: "123456789",
+     appId:             "1:123456789:web:abc123",
+     measurementId:     "G-XXXXXXX"   // optional
+   };
+   ```
+5. **`firebase-config.js` is gitignored** — never commit it. The template `firebase-config.example.js` is committed instead.
+
+### 1.5 Download the service account key
 
 1. In Firebase console → Project settings → **Service accounts**
 2. Click **Generate new private key** → save the JSON file
@@ -327,7 +356,10 @@ collect_power_agent/
 │   ├── main.py             # API routes + worker
 │   └── requirements.txt
 ├── public/                 # Frontend (Firebase Hosting)
-│   ├── js/crm-common.js    # Shared nav + helpers
+│   ├── firebase-config.js          ← not committed (copy from example)
+│   ├── firebase-config.example.js  ← template, commit this
+│   ├── js/crm-common.js            # Shared nav + helpers
+│   ├── js/auth.js                  # Firebase Auth guard + helpers
 │   └── *.html
 ├── .env                    ← not committed
 ├── .env.example
@@ -348,8 +380,4 @@ collect_power_agent/
 
 **Cloud Function returns 403** — the service account needs `roles/run.invoker` and `roles/cloudtasks.enqueuer` (run `setup_gcp.sh`).
 
-**Sheets not found (404)** — verify the sheet IDs in `sheets_config.py` and that the service account has Editor access on both sheets.
-
-**MailChannels blocks HTML email** — the `MailSender` class inlines CSS via `premailer` automatically. If still blocked, check that the sending domain has SPF and DKIM records configured.
-
-**`_ok() got multiple values for argument 'message'`** — Cloud Function code is outdated. Redeploy: `firebase deploy --only functions:crm`.
+**Sheets not found (404)** — verify the sheet IDs in `sheets_config.py` and that the service account has Editor access 

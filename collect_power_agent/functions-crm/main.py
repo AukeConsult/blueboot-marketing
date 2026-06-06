@@ -1295,39 +1295,42 @@ def read_mailbox(email):
                     return jsonify({"status": "error",
                                     "message": td.get("error_description", "Token refresh failed")})
                 _ma_col(db).document(key).update({"access_token": access_token})
-            auth_str = f"user={key}\x01auth=Bearer {access_token}\x01\x01"
-            auth_b64 = base64.b64encode(auth_str.encode()).decode()
-            conn = imaplib.IMAP4_SSL("imap.gmail.com", 993)
-            conn.authenticate("XOAUTH2", lambda x: auth_b64)
+
         else:
-            return _err(f"Unknown account type: {account_type}", 400)
+            return _err(f"Unsupported account_type '{account_type}'", 400)
 
-        # List all folders
-        typ, folder_list = conn.list()
-        folders = []
-        for item in (folder_list or []):
-            if item is None:
-                continue
-            try:
-                selectable, name = _parse_folder(item)
-                if selectable and name:
-                    folders.append(name)
-            except Exception:
-                continue
-        if not folders:
-            folders = ["INBOX"]
+        return jsonify({"status": "ok", "messages": messages})
 
-        for folder in folders:
-            messages.extend(_fetch_folder(conn, folder, per_folder))
-
-        conn.logout()
-
-        messages.sort(key=lambda m: m.get("date", ""), reverse=True)
-
-        return jsonify({"status": "ok", "email": key,
-                        "count": len(messages), "messages": messages})
-
-    except imaplib.IMAP4.error as e:
-        return jsonify({"status": "error", "message": f"IMAP error: {e}"})
     except Exception as exc:
-        return _err(str(exc), 500)
+        return _err(str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Auth user sync is handled by non-blocking Node.js event triggers in
+# functions-auth/index.js (onCreate / onDelete).
+#
+# This endpoint is kept as an admin convenience — e.g. to manually remove
+# a stale doc when an account was deleted outside the normal flow.
+#   DELETE /api/crm/auth/users/<normalizedEmail>
+# ---------------------------------------------------------------------------
+
+_USERS_COLLECTION = "settings/users/users"
+
+
+def _normalize_email(email: str) -> str | None:
+    """Lower-case + strip; returns None if email is falsy."""
+    return email.strip().lower() if email else None
+
+
+@app.route("/api/crm/auth/users/<path:email_key>", methods=["DELETE"])
+def delete_auth_user_doc(email_key: str):
+    """Remove the Firestore mirror doc for a deleted Firebase Auth user."""
+    try:
+        key = _normalize_email(email_key)
+        if not key:
+            return _err("email_key required", 400)
+        db = _get_db()
+        db.document(f"{_USERS_COLLECTION}/{key}").delete()
+        return _ok(f"User doc '{key}' deleted")
+    except Exception as exc:
+        return _err(str(exc))

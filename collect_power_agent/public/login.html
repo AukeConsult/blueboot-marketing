@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in — Blueboot CRM</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+body { background: #f4f5f7; }
+.login-card {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.1);
+  padding: 2.5rem 2rem;
+  max-width: 400px;
+  width: 100%;
+}
+.brand-logo {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; border-radius: 13px;
+  background: #eef0ff; margin-bottom: 1rem;
+}
+.divider { display: flex; align-items: center; gap: .75rem; color: #9ca3af; font-size: .8rem; margin: 1.25rem 0; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--bb-border); }
+.btn-google {
+  display: flex; align-items: center; justify-content: center; gap: .6rem;
+  background: #fff; border: 1px solid var(--bb-border); color: #111;
+  border-radius: 8px; padding: .55rem 1rem; font-size: .9rem; font-weight: 500;
+  width: 100%; cursor: pointer; transition: background .15s, box-shadow .15s;
+}
+.btn-google:hover { background: #f8f9fa; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+.btn-google svg { flex-shrink: 0; }
+#status { min-height: 1.4rem; }
+</style>
+</head>
+<body class="d-flex align-items-center justify-content-center" style="min-height:100vh">
+
+<div class="login-card text-center">
+
+  <div class="brand-logo mx-auto">
+    <i class="ti ti-bolt" style="font-size:1.5rem;color:var(--bb-accent)"></i>
+  </div>
+  <h1 style="font-size:1.35rem;font-weight:700;margin-bottom:.25rem;color:#111">Blueboot CRM</h1>
+  <p class="text-muted small mb-4" style="line-height:1.5">Sign in to continue</p>
+
+  <!-- Google Sign-In -->
+  <button class="btn-google mb-1" id="btn-google" onclick="signInWithGoogle()">
+    <!-- Google G logo -->
+    <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.7 2.3 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.8 6c1.8-5.4 6.9-9.8 13.6-9.8z"/>
+      <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.5 2.9-2.2 5.4-4.7 7l7.3 5.7c4.3-4 6.7-9.9 6.7-16.7z"/>
+      <path fill="#FBBC05" d="M10.4 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.8-6A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.8-6z"/>
+      <path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.3-5.7c-2 1.4-4.6 2.2-7.9 2.2-6.7 0-12.4-4.5-14.4-10.6l-7.8 6C6.6 42.6 14.6 48 24 48z"/>
+    </svg>
+    Sign in with Google
+  </button>
+
+  <div class="divider">or</div>
+
+  <!-- Email / Password form -->
+  <form id="email-form" onsubmit="signInWithEmail(event)" novalidate>
+    <div class="mb-3 text-start">
+      <label class="form-label small text-muted mb-1" for="inp-email">Email</label>
+      <input id="inp-email" type="email" class="form-control form-control-sm" placeholder="you@example.com" autocomplete="email" required>
+    </div>
+    <div class="mb-3 text-start">
+      <label class="form-label small text-muted mb-1" for="inp-password">Password</label>
+      <input id="inp-password" type="password" class="form-control form-control-sm" placeholder="••••••••" autocomplete="current-password" required>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm w-100" id="btn-email">
+      <i class="ti ti-login me-1"></i>Sign in
+    </button>
+  </form>
+
+  <div id="status" class="small mt-3 text-danger"></div>
+
+</div>
+
+<!-- Firebase SDK (compat mode — works as plain global scripts) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+function redirectAfterLogin() {
+  const params = new URLSearchParams(location.search);
+  const next = params.get('next');
+  // Guard against open-redirect: only allow relative page names.
+  const safe = next && /^[\w\-]+\.html(\?.*)?$/.test(next) ? next : 'index.html';
+  location.replace(safe);
+}
+
+// Handle redirect result (returned after signInWithRedirect flow).
+firebase.auth().getRedirectResult()
+  .then(result => { if (result && result.user) redirectAfterLogin(); })
+  .catch(err   => { if (err.code !== 'auth/no-current-user') setStatus(friendlyError(err)); });
+
+// If already signed in (e.g. session cookie still valid), skip straight to the app.
+firebase.auth().onAuthStateChanged(user => { if (user) redirectAfterLogin(); });
+
+async function signInWithGoogle() {
+  setStatus('');
+  setBusy(true);
+  const provider = new firebase.auth.GoogleAuthProvider();
+  try {
+    // Try popup first (fastest UX). Falls back to redirect if the environment
+    // doesn't support popups (file://, some mobile webviews, storage disabled).
+    await firebase.auth().signInWithPopup(provider);
+    redirectAfterLogin();
+  } catch (err) {
+    const REDIRECT_CODES = [
+      'auth/operation-not-supported-in-this-environment',
+      'auth/popup-blocked',
+      'auth/popup-cancelled-by-user',
+    ];
+    if (REDIRECT_CODES.includes(err.code)) {
+      // Fallback: full-page redirect (works everywhere http/https is served).
+      firebase.auth().signInWithRedirect(provider);
+      return; // page will navigate away; don't re-enable buttons
+    }
+    setStatus(friendlyError(err));
+    setBusy(false);
+  }
+}
+
+async function signInWithEmail(e) {
+  e.preventDefault();
+  setStatus('');
+  const email = document.getElementById('inp-email').value.trim();
+  const pass  = document.getElementById('inp-password').value;
+  if (!email || !pass) { setStatus('Please enter your email and password.'); return; }
+  setBusy(true);
+  try {
+    await firebase.auth().signInWithEmailAndPassword(email, pass);
+    redirectAfterLogin();
+  } catch (err) {
+    setStatus(friendlyError(err));
+    setBusy(false);
+  }
+}
+
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+function setBusy(busy) {
+  document.getElementById('btn-google').disabled = busy;
+  document.getElementById('btn-email').disabled  = busy;
+}
+
+function friendlyError(err) {
+  const code = err.code || '';
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') return '';
+  if (code === 'auth/operation-not-supported-in-this-environment')
+    return 'Sign-in requires a web server (http/https). Run \'firebase serve\' locally or open the deployed URL.';
+  if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential')
+    return 'Incorrect email or password.';
+  if (code === 'auth/invalid-email') return 'That doesn\'t look like a valid email.';
+  if (code === 'auth/too-many-requests') return 'Too many attempts — try again later.';
+  if (code === 'auth/network-request-failed') return 'Network error — check your connection.';
+  if (code === 'auth/popup-blocked') return 'Pop-up blocked — trying redirect…';
+  return err.message || 'Sign-in failed.';
+}
+</script>
+</body>
+</html>

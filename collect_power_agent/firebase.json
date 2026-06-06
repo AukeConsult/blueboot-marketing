@@ -9,9 +9,16 @@
   },
   "functions": [
     {
+      "codebase": "crm",
       "source": "functions-crm",
       "runtime": "python312",
       "ignore": ["venv", ".venv", "**/__pycache__/**"]
+    },
+    {
+      "codebase": "auth",
+      "source": "functions-auth",
+      "runtime": "nodejs22",
+      "ignore": ["node_modules"]
     }
   ]
 }
