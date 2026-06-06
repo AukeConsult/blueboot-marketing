@@ -2,8 +2,6 @@
 
 A multi-stage B2B outreach pipeline: discover websites and web agencies, enrich contacts with AI, manage campaigns, and send personalised emails. Built on Python, Firebase/Firestore, and Google Cloud.
 
-> Includes a web frontend for running campaigns end-to-end — manage and activate outreach, send personalised follow-up emails to individual leads, log actions, and track each contact through the full outreach lifecycle.
-
 > *Good instruments don't make artists. But artists exploiting new instruments can make great art.*
 > — Built mostly with Claude as the programmer buddy.
 
