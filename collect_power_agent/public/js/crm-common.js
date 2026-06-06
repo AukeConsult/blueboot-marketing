@@ -134,8 +134,11 @@ const NAV_LINKS = [
   { href: 'mailbox.html',       icon: 'ti-inbox',             label: 'Mailbox' },
   { dropdown: 'docs',  match: ['doc-viewer.html'],           icon: 'ti-book',              label: 'Documentation',
     children: [
+      { href: 'doc-viewer.html?doc=installation',        icon: 'ti-download',      label: 'Installation' },
       { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user', label: 'User guide' },
       { href: 'doc-viewer.html?doc=system-architecture', icon: 'ti-circuit-board', label: 'System architecture' },
+      { href: 'doc-viewer.html?doc=backend-functions',   icon: 'ti-terminal',      label: 'Backend functions' },
+      { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',    label: 'Pipeline config' },
     ]},
   { href: 'settings.html',      icon: 'ti-settings',          label: 'Settings' },
 ];

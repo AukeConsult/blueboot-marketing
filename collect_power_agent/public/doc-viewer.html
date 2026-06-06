@@ -26,11 +26,11 @@
 .doc-body pre code { background: none; color: #cdd6f4; padding: 0; font-size: .82rem; }
 .doc-body blockquote { border-left: 3px solid var(--bb-accent); padding-left: 1rem; color: var(--bb-muted); margin: 0 0 1rem; }
 .toc { position: sticky; top: 1rem; font-size: .8rem; max-height: calc(100vh - 6rem); overflow-y: auto; }
-.toc a { display: block; padding: .15rem 0; color: var(--bb-muted); text-decoration: none; line-height: 1.4; }
+.toc a { display: block; padding: .08rem 0; color: var(--bb-muted); text-decoration: none; line-height: 1.3; font-size: .7rem; }
 .toc a:hover { color: var(--bb-accent); }
-.toc a.h2 { font-weight: 500; margin-top: .4rem; color: #333; }
-.toc a.h3 { padding-left: .9rem; }
-.toc a.h4 { padding-left: 1.6rem; font-size: .75rem; }
+.toc a.h2 { font-weight: 500; margin-top: .3rem; color: #555; }
+.toc a.h3 { padding-left: .8rem; font-size: .67rem; }
+.toc a.h4 { padding-left: 1.4rem; font-size: .63rem; }
 </style>
 </head>
 <body>
@@ -67,8 +67,11 @@
 <script src="js/crm-common.js"></script>
 <script>
 const DOCS = {
+  'installation':        { title: 'Installation',        path: 'doc/installation.md' },
   'user-guide':          { title: 'User Guide',          path: 'doc/user-guide.md' },
   'system-architecture': { title: 'System Architecture', path: 'doc/system-architecture.md' },
+  'backend-functions':   { title: 'Backend functions',    path: 'doc/backend-functions.md' },
+  'pipeline-config':     { title: 'Pipeline configuration', path: 'doc/pipeline-config.md' },
 };
 
 async function loadDoc() {
@@ -98,7 +101,7 @@ function buildToc() {
   const headings = document.querySelectorAll('#doc-content h1, #doc-content h2, #doc-content h3, #doc-content h4');
   if (headings.length < 3) return;
 
-  let html = '<div class="fw-600 small mb-2" style="color:var(--bb-muted)">Contents</div>';
+  let html = '<div style="font-size:.68rem;font-weight:600;color:var(--bb-muted);margin-bottom:.3rem;text-transform:uppercase;letter-spacing:.05em">Contents</div>';
   headings.forEach((h, i) => {
     const id  = 'h-' + i;
     h.id      = id;
