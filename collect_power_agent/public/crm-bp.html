@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — CRM</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+
+.wf-card { background: #fff; border: 1px solid var(--bb-border); border-radius: 10px; box-shadow: var(--bb-card-shadow); padding: 1rem 1.25rem; display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 10px; }
+.wf-step-num { width: 26px; height: 26px; border-radius: 50%; background: #eef0ff; color: var(--bb-accent); font-size: .75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+.wf-body { flex: 1; min-width: 0; }
+.wf-title { font-size: .9rem; font-weight: 600; margin: 0 0 3px; }
+.wf-desc { font-size: .8rem; color: var(--bb-muted); margin: 0; line-height: 1.5; }
+.wf-action { flex-shrink: 0; display: flex; align-items: center; }
+.wf-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 10px; }
+.wf-form select, .wf-form input { font-size: .8rem; height: 30px; border-radius: 6px; border: 1px solid var(--bb-border); background: #f9fafb; color: #111; padding: 0 8px; }
+.wf-form select { width: 130px; }
+.wf-form input[type=number] { width: 80px; }
+.wf-form input[type=text] { width: 140px; }
+.wf-ext-link { font-size: .8rem; color: var(--bb-accent); text-decoration: none; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.wf-ext-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:860px">
+
+  <h5 class="mb-3 fw-600" style="font-size:1rem"><i class="ti ti-server-2 me-2 text-primary"></i>CRM</h5>
+
+  <div id="action-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
+
+  <!-- Step 1: Import -->
+  <div class="wf-card">
+    <div class="wf-step-num">1</div>
+    <div class="wf-body">
+      <p class="wf-title"><i class="ti ti-arrow-down-circle me-1 text-primary"></i>Import contacts</p>
+      <p class="wf-desc">Pull contacts from Leads Database into the contact sheet. Choose country and size filters.</p>
+      <div class="wf-form">
+        <select id="p-countries">
+          <option value="NO">NO — Norway</option>
+          <option value="SE">SE — Sweden</option>
+          <option value="DK">DK — Denmark</option>
+          <option value="FI">FI — Finland</option>
+        </select>
+        <input type="number" id="p-max" value="500" title="Max rows">
+        <input type="number" id="p-min-pages" placeholder="Min pages" step="500" style="width:110px">
+        <button class="btn btn-primary btn-sm ms-auto" style="height:30px;font-size:.8rem" onclick="runImport()">
+          <i class="ti ti-player-play me-1"></i>Run import
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Review -->
+  <div class="wf-card">
+    <div class="wf-step-num">2</div>
+    <div class="wf-body">
+      <p class="wf-title"><i class="ti ti-table me-1 text-primary"></i>Review &amp; select</p>
+      <p class="wf-desc">Open the contact sheet, review the list and fill the <code>Select</code> column for contacts you want to pursue.</p>
+    </div>
+    <div class="wf-action">
+      <a href="https://docs.google.com/spreadsheets/d/1aMglV53NiMEArjld37HN5cxliyNRGzIP2mrM4kwlupA" target="_blank" class="wf-ext-link">
+        <i class="ti ti-external-link"></i>Contact sheet
+      </a>
+    </div>
+  </div>
+
+  <!-- Step 3: Push -->
+  <div class="wf-card">
+    <div class="wf-step-num">3</div>
+    <div class="wf-body">
+      <p class="wf-title"><i class="ti ti-upload me-1 text-primary"></i>Push selected to CRM</p>
+      <p class="wf-desc">Takes all selected contacts, groups by site, and adds them as new rows in the CRM template.</p>
+    </div>
+    <div class="wf-action">
+      <button class="btn btn-primary btn-sm" style="height:30px;font-size:.8rem" onclick="trigger('push-and-sync','')">
+        <i class="ti ti-upload me-1"></i>Push to CRM
+      </button>
+    </div>
+  </div>
+
+  <!-- Step 4: Work -->
+  <div class="wf-card">
+    <div class="wf-step-num">4</div>
+    <div class="wf-body">
+      <p class="wf-title"><i class="ti ti-pencil me-1 text-primary"></i>Work the CRM</p>
+      <p class="wf-desc">Fill in <code>Status</code> and <code>Selger</code> in the CRM template as you progress with each lead.</p>
+    </div>
+    <div class="wf-action">
+      <a href="https://docs.google.com/spreadsheets/d/1b1kGKIldeawESH3RYiYjOqRFXRR5kG_81qYRFZI1gSY" target="_blank" class="wf-ext-link">
+        <i class="ti ti-external-link"></i>CRM template
+      </a>
+    </div>
+  </div>
+
+  <!-- Step 5: Sync -->
+  <div class="wf-card">
+    <div class="wf-step-num">5</div>
+    <div class="wf-body">
+      <p class="wf-title"><i class="ti ti-refresh me-1 text-primary"></i>Sync CRM to Leads Database</p>
+      <p class="wf-desc">Pushes <code>crm_status</code>, <code>crm_sales_person</code> and <code>crm_date</code> back to the Leads Database. Run after updating Status or Selger in the template.</p>
+    </div>
+    <div class="wf-action">
+      <button class="btn btn-outline-primary btn-sm" style="height:30px;font-size:.8rem" onclick="trigger('template-sync','')">
+        <i class="ti ti-refresh me-1"></i>Sync now
+      </button>
+    </div>
+  </div>
+
+  <!-- Step 6: Campaign Sync -->
+  <div class="wf-card">
+    <div class="wf-step-num">6</div>
+    <div class="wf-body">
+      <p class="wf-title"><i class="ti ti-speakerphone me-1 text-primary"></i>Campaign sync</p>
+      <p class="wf-desc">Reads the master CRM contact sheet and syncs campaigns to Firestore. New campaigns found in the sheet are created automatically.</p>
+      <div class="wf-form">
+        <input type="text" id="crm-sync-campaign" placeholder="Campaign ID (optional)">
+        <button class="btn btn-primary btn-sm ms-auto" style="height:30px;font-size:.8rem" onclick="runCrmSync()" id="crm-sync-btn">
+          <i class="ti ti-refresh me-1"></i>Sync campaigns
+        </button>
+      </div>
+      <div id="crm-sync-result" class="mt-2" style="display:none"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/crm-common.js"></script>
+<script>
+// BASE + helpers from js/crm-common.js
+
+function showFeedback(msg, type) {
+  const el = document.getElementById('action-feedback');
+  el.className = `alert alert-${type} py-2 px-3 small mb-3`;
+  el.textContent = msg;
+  el.style.display = '';
+  setTimeout(() => { el.style.display = 'none'; }, 5000);
+}
+
+async function runImport() {
+  const countries = document.getElementById('p-countries').value || 'NO';
+  const max       = document.getElementById('p-max').value.trim();
+  const minPages  = document.getElementById('p-min-pages').value.trim();
+  let params = `?countries=${encodeURIComponent(countries)}`;
+  if (max)      params += `&max=${max}`;
+  if (minPages) params += `&min_pages=${minPages}`;
+  await trigger('contact-sync', params);
+}
+
+async function trigger(name, params) {
+  try {
+    const r = await fetch(BASE + '/api/crm/' + name + params);
+    const d = await r.json();
+    showFeedback(d.message || 'Job queued — check Jobs for progress.', 'success');
+  } catch(e) {
+    showFeedback('Error: ' + e.message, 'danger');
+  }
+}
+
+async function runCrmSync() {
+  const campaignId = document.getElementById('crm-sync-campaign').value.trim();
+  const btn = document.getElementById('crm-sync-btn');
+  const res = document.getElementById('crm-sync-result');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Syncing…';
+  res.style.display = 'none';
+  try {
+    const url = BASE + '/api/crm/crm-sync' + (campaignId ? `?campaign_id=${encodeURIComponent(campaignId)}` : '');
+    const r = await fetch(url);
+    const d = await r.json();
+    if (!d.job_id) throw new Error(d.message || 'No job_id');
+    res.innerHTML = `<div class="small text-muted">Job queued <code>${d.job_id}</code> — polling…</div>`;
+    res.style.display = '';
+    for (let i = 0; i < 60; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const jr = await fetch(`${BASE}/api/crm/status/${d.job_id}`);
+      const jd = await jr.json();
+      if (jd.status === 'done') {
+        const result = jd.result || {};
+        const newC = (result.new_campaigns || []);
+        res.innerHTML = `<div class="small">
+          <span class="text-success"><i class="ti ti-check me-1"></i>Done</span>
+          — ${result.campaigns_upserted ?? 0} campaigns synced,
+          ${result.contact_select_synced ?? 0} contacts
+          ${newC.length ? `<span class="ms-1 text-success">· ${newC.length} new: <strong>${newC.join(', ')}</strong></span>` : ''}
+        </div>`;
+        break;
+      }
+      if (jd.status === 'error') {
+        res.innerHTML = `<div class="small text-danger"><i class="ti ti-x me-1"></i>${jd.error || 'Job failed'}</div>`;
+        break;
+      }
+    }
+  } catch(e) {
+    res.innerHTML = `<div class="small text-danger">${e.message}</div>`;
+    res.style.display = '';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Sync campaigns';
+}
+</script>
+</body>
+</html>

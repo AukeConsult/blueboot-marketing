@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Campaigns</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+.page-title { font-size: 1rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: .5rem; }
+</style>
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:1000px">
+
+  <div class="page-header">
+    <h5 class="page-title"><i class="ti ti-speakerphone text-primary"></i><span id="page-title-campaign">Campaign</span>
+      <a id="sheet-link" href="#" target="_blank" class="ms-2 small text-decoration-none" style="display:none;font-weight:400;color:var(--bb-muted)">
+        <i class="ti ti-table me-1"></i>Spreadsheet
+      </a>
+    </h5>
+    <div class="d-flex align-items-center gap-2" id="campaign-actions" style="display:none!important">
+      <span class="bb-badge" id="c-status-badge"></span>
+      <span id="c-source-badge" style="display:none" class="bb-badge" title="Created from master CRM sheet"
+            style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;font-size:.68rem">
+        <i class="ti ti-table me-1"></i>master-sheet
+      </span>
+      <button class="btn btn-sm btn-outline-secondary" onclick="syncCampaign()">
+        <i class="ti ti-refresh me-1"></i>Sync
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="confirmFullOverride()">
+        <i class="ti ti-table-export me-1"></i>Full override
+      </button>
+      <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none">
+        <i class="ti ti-rocket me-1"></i>Activate campaign
+      </button>
+    </div>
+  </div>
+
+  <div id="campaign-empty" class="text-center py-5" style="color:var(--bb-muted)">
+    <i class="ti ti-speakerphone" style="font-size:2rem;opacity:.3"></i>
+    <div class="mt-2 small">No campaign selected. <a href="campaigns.html">Go to campaigns</a></div>
+  </div>
+
+  <div id="campaign-detail" style="display:none">
+
+    <!-- Status line -->
+    <div class="mb-3 small" style="color:var(--bb-muted)">
+      <span><strong id="c-contacts" style="color:#111">—</strong> contacts</span>
+      <span class="mx-2">·</span>
+      <span><strong id="c-sites" style="color:#111">—</strong> sites</span>
+      <span class="mx-2">·</span>
+      <span><strong id="c-countries" style="color:#111">—</strong> countries</span>
+      <span class="mx-2">·</span>
+      <span><strong id="c-sent" style="color:#111">—</strong> sent</span>
+      <span class="mx-2">·</span>
+      <span>updated <strong id="c-updated" style="color:#111">—</strong></span>
+    </div>
+
+    <div id="sync-feedback" class="alert py-1 px-2 small mb-3" style="display:none"></div>
+
+    <!-- Campaign details (expandable) -->
+    <div class="bb-card mb-3">
+      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
+           style="cursor:pointer;border-radius:10px 10px 0 0;background:#f9fafb" onclick="toggleDetails()">
+        <span class="fw-500 small"><i class="ti ti-info-circle me-1 text-primary"></i>Campaign details</span>
+        <i class="ti ti-chevron-down" style="color:var(--bb-muted)" id="details-chevron"></i>
+      </div>
+      <div id="details-body" style="display:none" class="px-3 pb-3 pt-3">
+        <div class="row g-3 small">
+          <div class="col-6">
+            <label class="mb-1" style="color:var(--bb-muted)">Email account</label>
+            <div class="d-flex align-items-center gap-1">
+              <select id="c-email-account-select" class="form-select form-select-sm" style="font-size:.82rem" onchange="saveEmailAccount()">
+                <option value="">— none —</option>
+              </select>
+              <button class="btn btn-xs btn-outline-secondary py-0 px-1" onclick="viewMailAccount()" id="view-mail-account-btn" style="display:none" title="View settings">
+                <i class="ti ti-eye"></i>
+              </button>
+            </div>
+          </div>
+          <div class="col-6">
+            <label class="mb-1" style="color:var(--bb-muted)">Owner</label>
+            <input id="c-owner-input" class="form-control form-control-sm" style="font-size:.82rem" placeholder="Owner name" oninput="scheduleOwnerSave()">
+          </div>
+          <div class="col-6" id="c-sent-at-row" style="display:none">
+            <label class="mb-1" style="color:var(--bb-muted)">Activated at</label>
+            <div class="pt-1"><i class="ti ti-rocket me-1"></i><span id="c-sent-at">—</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mail template preview -->
+    <div class="bb-card mb-3" style="overflow:visible">
+      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
+           style="cursor:pointer;border-radius:10px 10px 0 0;background:#f9fafb" onclick="toggleMail()">
+        <span class="fw-500 small"><i class="ti ti-mail me-1 text-primary"></i>Mail template</span>
+        <div class="d-flex align-items-center gap-3">
+          <button class="btn btn-sm btn-outline-secondary py-0" style="font-size:.78rem"
+                  onclick="event.stopPropagation();openCampaignTestMail()">
+            <i class="ti ti-send me-1"></i>Send test
+          </button>
+          <a id="c-edit-mail-link" href="campaign-edit.html" class="small text-primary text-decoration-none" onclick="event.stopPropagation()">
+            <i class="ti ti-edit me-1"></i>Edit
+          </a>
+          <i class="ti ti-chevron-down" style="color:var(--bb-muted)" id="mail-chevron"></i>
+        </div>
+      </div>
+      <div id="mail-body" style="display:none;overflow:visible" class="px-3 pb-3 pt-2">
+        <div class="small mb-2" style="color:var(--bb-muted)">
+          <div><strong>From:</strong> <span id="c-email-account-preview">—</span></div>
+          <div><strong>Subject:</strong> <span id="c-subject-preview">—</span></div>
+        </div>
+        <div id="c-body-preview" class="border rounded p-3" style="background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#333;min-height:40px"></div>
+      </div>
+    </div>
+
+    <!-- Contacts table -->
+    <div class="bb-card">
+      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom" style="background:#f9fafb;border-radius:10px 10px 0 0">
+        <span class="fw-500 small"><i class="ti ti-users me-1 text-primary"></i>Contacts <span class="ms-1" style="color:var(--bb-muted)" id="c-contact-count"></span></span>
+        <div class="d-flex align-items-center gap-2">
+          <button id="remove-excluded-btn" class="btn btn-sm btn-outline-danger" style="display:none" onclick="confirmRemoveExcluded()">
+            <i class="ti ti-trash me-1"></i>Remove excluded
+          </button>
+          <input id="contact-search" class="form-control form-control-sm" style="max-width:200px" placeholder="Search…" oninput="filterContacts()">
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead style="background:#f9fafb"><tr><th>Status</th><th>Name</th><th>Email</th><th>Title</th><th>Website</th><th>Sent at</th><th></th></tr></thead>
+          <tbody id="contacts-body"></tbody>
+        </table>
+      </div>
+      <div id="contacts-empty" class="text-center py-3 small" style="color:var(--bb-muted);display:none">No contacts found.</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Campaign test mail modal -->
+<div class="modal fade" id="campaignTestMailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-send text-primary me-2"></i>Send test email</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <!-- From / To / Subject -->
+        <div class="mb-2 small" style="color:var(--bb-muted)">
+          <span class="fw-500" style="color:#111">From:</span>
+          <span id="ctm-from" class="ms-1">—</span>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label small fw-500">To</label>
+            <input id="ctm-to" class="form-control form-control-sm" type="email" placeholder="recipient@example.com">
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-500">Subject</label>
+            <input id="ctm-subject" class="form-control form-control-sm">
+          </div>
+        </div>
+        <!-- Preview -->
+        <div class="mb-2 d-flex align-items-center justify-content-between">
+          <label class="form-label small fw-500 mb-0">Mail preview</label>
+          <span id="ctm-type-badge" class="badge bg-secondary" style="font-size:.65rem"></span>
+        </div>
+        <div id="ctm-preview" class="border rounded p-3 mb-3"
+             style="background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#333;min-height:60px;max-height:320px;overflow-y:auto"></div>
+        <div id="ctm-feedback" class="alert py-2 small mb-0" style="display:none"></div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="ctm-send-btn" onclick="doSendCampaignTestMail()">
+          <i class="ti ti-send me-1"></i>Send
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Mail account view modal -->
+<div class="modal fade" id="mailAccountViewModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-at text-primary me-2"></i>Mail account settings</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="mail-account-view-body">
+        <div class="text-center py-3 small text-muted"><div class="spinner-border spinner-border-sm me-1"></div>Loading…</div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        <a class="btn btn-primary btn-sm" href="settings.html"><i class="ti ti-settings me-1"></i>Edit in Settings</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Full override modal -->
+<div class="modal fade" id="fullOverrideModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-alert-triangle text-warning me-2"></i>Full override</h6>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">This will overwrite the campaign spreadsheet with all data from the database.</p>
+        <div class="alert alert-warning py-2 small mb-0">
+          <i class="ti ti-eraser me-1"></i>Any manual edits in the sheet — except <strong>Last action</strong> and <strong>Last action status</strong> — will be lost. This cannot be undone.
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-warning btn-sm" onclick="doFullOverride()">
+          <i class="ti ti-table-export me-1"></i>Yes, override
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Send modal -->
+<div class="modal fade" id="sendModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-rocket text-success me-2"></i>Activate campaign</h6>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">You are about to activate campaign <strong id="modal-campaign-id"></strong>.</p>
+        <div class="alert alert-info py-2 small mb-2">
+          <i class="ti ti-info-circle me-1"></i>Activating marks this campaign as <strong>sent</strong> and queues it for outreach delivery. Only campaigns in <strong>dosend</strong> status can be activated.
+        </div>
+        <div class="alert alert-warning py-2 small mb-0">
+          <i class="ti ti-lock me-1"></i>Once activated, the campaign cannot be changed or synced. This cannot be undone.
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-success btn-sm" onclick="doSend()"><i class="ti ti-rocket me-1"></i>Yes, activate</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Remove excluded modal -->
+<div class="modal fade" id="removeExcludedModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-trash text-danger me-2"></i>Remove excluded contacts</h6>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Remove <strong><span id="remove-excluded-count">0</span> excluded</strong> contact(s) from this view?</p>
+        <div class="alert alert-warning py-2 small mb-0">
+          <i class="ti ti-alert-triangle me-1"></i>This only removes them from the current view. No data will be deleted.
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-danger btn-sm" onclick="doRemoveExcluded()"><i class="ti ti-trash me-1"></i>Remove</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="hidden" id="campaign-select">
+
+<script src="js/crm-common.js"></script>
+<script>
+// BASE + helpers from js/crm-common.js
+let allContacts = [];
+
+const fmt = fmtDateTimeShort;   // shared
+
+function statusBadge(s) {
+  return `<span class="bb-badge bb-badge-${s||'draft'}">${s||'draft'}</span>`;
+}
+
+function toggleDetails() {
+  const b = document.getElementById('details-body');
+  const c = document.getElementById('details-chevron');
+  const open = b.style.display === 'block';
+  b.style.display = open ? 'none' : 'block';
+  c.className = open ? 'ti ti-chevron-down' : 'ti ti-chevron-up';
+}
+
+function toggleMail() {
+  const b = document.getElementById('mail-body');
+  const c = document.getElementById('mail-chevron');
+  const open = b.style.display === 'block';
+  b.style.display = open ? 'none' : 'block';
+  c.className = open ? 'ti ti-chevron-down' : 'ti ti-chevron-up';
+}
+
+function renderContacts(list) {
+  const tbody = document.getElementById('contacts-body');
+  const empty = document.getElementById('contacts-empty');
+  if (!list.length) { tbody.innerHTML = ''; empty.style.display = ''; updateRemoveExcludedBtn(); return; }
+  empty.style.display = 'none';
+  const campaignId = document.getElementById('campaign-select').value;
+  tbody.innerHTML = list.map(c => {
+    const isExcluded = c.status === 'excluded';
+    return `<tr>
+    <td>${statusBadge(c.status)}</td>
+    <td>${c.name||'—'}</td>
+    <td><a href="mailto:${c.email}">${c.email||'—'}</a></td>
+    <td class="text-muted small">${c.title||'—'}</td>
+    <td class="small"><a href="${c.website||'#'}" target="_blank">${(c.website||'').replace(/^https?:\/\//,'').slice(0,28)||'—'}</a></td>
+    <td class="small text-muted">${fmt(c.sent_at)}</td>
+    <td>
+      <select class="form-select form-select-sm" style="min-width:110px;font-size:.75rem"
+        data-email="${c.email}"
+        onchange="handleExcludeSelect(this,'${c.contact_id||c.email}','${campaignId}')">
+        <option value="" ${!isExcluded?'selected':''}>— keep —</option>
+        <option value="excluded" ${isExcluded?'selected':''}>Exclude</option>
+      </select>
+    </td>
+  </tr>`;
+  }).join('');
+  updateRemoveExcludedBtn();
+}
+
+function handleExcludeSelect(sel, contactId, campaignId) {
+  const exclude = sel.value === 'excluded';
+  const row = sel.closest('tr');
+  if (row) row.cells[0].innerHTML = statusBadge(exclude ? 'excluded' : 'pending');
+  updateRemoveExcludedBtn();
+}
+
+function updateRemoveExcludedBtn() {
+  const hasExcluded = Array.from(document.querySelectorAll('#contacts-body select')).some(s => s.value === 'excluded');
+  document.getElementById('remove-excluded-btn').style.display = hasExcluded ? '' : 'none';
+}
+
+function confirmRemoveExcluded() {
+  const n = Array.from(document.querySelectorAll('#contacts-body select')).filter(s => s.value === 'excluded').length;
+  document.getElementById('remove-excluded-count').textContent = n;
+  new bootstrap.Modal(document.getElementById('removeExcludedModal')).show();
+}
+
+async function doRemoveExcluded() {
+  const modal = bootstrap.Modal.getInstance(document.getElementById('removeExcludedModal'));
+  if (modal) modal.hide();
+
+  const campaignId = document.getElementById('campaign-select').value;
+  const excludedEmails = [];
+  const excludedRows = [];
+  Array.from(document.querySelectorAll('#contacts-body tr')).forEach(row => {
+    const sel = row.querySelector('select');
+    if (sel && sel.value === 'excluded') {
+      excludedEmails.push(sel.dataset.email);
+      excludedRows.push(row);
+    }
+  });
+  if (!excludedEmails.length) return;
+
+  const fb = document.getElementById('sync-feedback');
+  fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
+  fb.textContent = 'Removing contacts…';
+  fb.style.display = '';
+
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/remove`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ emails: excludedEmails })
+    });
+    const d = await r.json();
+    if (d.status !== 'ok') throw new Error(d.message || 'remove failed');
+
+    excludedRows.forEach(row => row.remove());
+    allContacts = allContacts.filter(c => !excludedEmails.includes(c.email));
+    document.getElementById('remove-excluded-btn').style.display = 'none';
+    document.getElementById('c-contact-count').textContent = `(${d.contact_count ?? allContacts.length})`;
+    fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
+    fb.textContent = `Removed ${d.deleted} contact(s).`;
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = 'Error: ' + e.message;
+  }
+}
+
+function filterContacts() {
+  const q = document.getElementById('contact-search').value.toLowerCase();
+  renderContacts(q ? allContacts.filter(c =>
+    [(c.name||''),(c.email||''),(c.website||''),(c.title||'')].some(v => v.toLowerCase().includes(q))
+  ) : allContacts);
+}
+
+async function loadCampaign() {
+  const id = document.getElementById('campaign-select').value;
+  document.getElementById('sync-feedback').style.display = 'none';
+  document.getElementById('campaign-detail').style.display = 'none';
+  document.getElementById('campaign-actions').style.display = 'none';
+  document.getElementById('campaign-empty').style.display = id ? 'none' : 'block';
+  if (!id) return;
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${id}`);
+    const c = await r.json();
+    document.getElementById('page-title-campaign').textContent = c.campaign_id;
+    const sourceBadge = document.getElementById('c-source-badge');
+    sourceBadge.style.display = c.source === 'master-sheet' ? '' : 'none';
+    const sheetLink = document.getElementById('sheet-link');
+    if (c.sheet_url) { sheetLink.href = c.sheet_url; sheetLink.style.display = ''; }
+    else sheetLink.style.display = 'none';
+    const st = c.status || 'draft';
+    const badge = document.getElementById('c-status-badge');
+    badge.className = `bb-badge bb-badge-${st}`; badge.textContent = st;
+    document.getElementById('c-contacts').textContent = c.contact_count || 0;
+    document.getElementById('c-sites').textContent    = c.sites_count || 0;
+    document.getElementById('c-countries').textContent = (c.countries||[]).length || '—';
+    document.getElementById('c-sent').textContent     = (c.status_breakdown||{}).sent || 0;
+    const ma = c.mail_account || {};
+    const displayName = ma.display_name || '';
+    const fromAddr    = c.outreach_email_account || '';
+    const fromFormatted = displayName ? `${displayName} <${fromAddr}>` : (fromAddr || '—');
+    document.getElementById('c-email-account-preview').textContent = fromFormatted;
+    await populateEmailAccountSelect(c.outreach_email_account || '');
+    document.getElementById('c-owner-input').value = c.owner || '';
+    const hasMailAccount = !!(c.mail_account && c.mail_account.account_type);
+    const viewBtn = document.getElementById('view-mail-account-btn');
+    if (viewBtn) viewBtn.style.display = hasMailAccount ? '' : 'none';
+    document.getElementById('c-updated').textContent  = fmt(c.updated_at);
+    const sentAtRow = document.getElementById('c-sent-at-row');
+    if (st === 'sent' && c.sent_at) { sentAtRow.style.display = ''; document.getElementById('c-sent-at').textContent = fmt(c.sent_at); }
+    else sentAtRow.style.display = 'none';
+    const mail = c.mail || {};
+    window._campaignMail = { ...mail, outreach_email: c.outreach_email_account || '',
+                              _display_name: (c.mail_account || {}).display_name || '' };
+    document.getElementById('c-subject-preview').textContent = mail.subject || '—';
+    const previewDiv = document.getElementById('c-body-preview');
+    const mailCss = mail.css || `.mail-wrap{font-family:Arial,sans-serif;font-size:14px;line-height:1.4;color:#333;max-width:600px}.mail-wrap p{margin-bottom:8px}.mail-wrap a{color:#0066cc;text-decoration:none}`;
+    previewDiv.innerHTML = mail.body
+      ? `<style>${mailCss}</style><div class="mail-wrap">${mail.body}</div>`
+      : '<span style="color:#aaa;font-size:12px">No body set yet.</span>';
+    const editLink = document.getElementById('c-edit-mail-link');
+    if (editLink) editLink.href = `campaign-edit.html?campaign_id=${encodeURIComponent(id)}`;
+    const isSent = st === 'sent' || st === 'cancelled';
+    const sendBtn = document.getElementById('send-btn');
+    sendBtn.style.display = st === 'dosend' ? '' : 'none';
+    const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
+    if (syncBtn) syncBtn.disabled = isSent;
+    allContacts = c.campaign_contacts || [];
+    document.getElementById('c-contact-count').textContent = `(${allContacts.length})`;
+    renderContacts(allContacts);
+    document.getElementById('campaign-detail').style.display = '';
+    document.getElementById('campaign-actions').style.display = '';
+  } catch(e) {
+    document.getElementById('campaign-empty').textContent = `Error: ${e.message}`;
+    document.getElementById('campaign-empty').style.display = '';
+  }
+}
+
+
+function confirmFullOverride() {
+  new bootstrap.Modal(document.getElementById('fullOverrideModal')).show();
+}
+
+function doFullOverride() {
+  const modal = bootstrap.Modal.getInstance(document.getElementById('fullOverrideModal'));
+  if (modal) modal.hide();
+  exportToDrive();
+}
+
+async function exportToDrive() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const fb = document.getElementById('sync-feedback');
+  const btn = document.querySelector('[onclick="exportToDrive()"]');
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Exporting…';
+  fb.style.display = 'none';
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaign-export?campaign_id=${encodeURIComponent(id)}`);
+    const d = await r.json();
+    if (d.status === 'error') throw new Error(d.message || 'export failed');
+    fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
+    fb.innerHTML = `Export job queued (${d.job_id||''}) — building sheet \u201c${id}\u201d…`;
+    fb.style.display = '';
+    if (d.job_id) pollExport(d.job_id, id);
+    else btnReset();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = 'Export failed: ' + (e.message||e);
+    fb.style.display = ''; btnReset();
+  }
+  function btnReset(){ btn.disabled = false; btn.innerHTML = '<i class="ti ti-table-export me-1"></i>Export to Drive'; }
+}
+
+async function pollExport(jobId, id) {
+  const fb = document.getElementById('sync-feedback');
+  const btn = document.querySelector('[onclick="exportToDrive()"]');
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const r = await fetch(`${BASE}/api/crm/status/${jobId}`);
+      const j = await r.json();
+      if (j.status === 'done') {
+        const res = j.result || {};
+        fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
+        fb.innerHTML = `Exported ${res.contacts ?? ''} contacts to sheet \u201c${id}\u201d `
+          + (res.url ? `\u2014 <a href="${res.url}" target="_blank">open sheet</a>` : '');
+        if (res.url) {
+          const sl = document.getElementById('sheet-link');
+          sl.href = res.url; sl.style.display = '';
+        }
+        break;
+      }
+      if (j.status === 'error') {
+        fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+        fb.textContent = 'Export job failed: ' + (j.error || 'unknown');
+        break;
+      }
+    } catch(_) { /* keep polling */ }
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-table-export me-1"></i>Export to Drive';
+}
+
+async function syncCampaign() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const fb = document.getElementById('sync-feedback');
+  const btn = document.querySelector('[onclick="syncCampaign()"]');
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Syncing…';
+  fb.style.display = 'none';
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaign-sync?campaign_id=${encodeURIComponent(id)}`);
+    const d = await r.json();
+    fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
+    fb.textContent = d.status === 'queued' ? `Sync job queued (${d.job_id})` : (d.message || 'Sync triggered');
+    fb.style.display = '';
+    setTimeout(() => loadCampaign(), 3000);
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = e.message; fb.style.display = '';
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Sync from sheet';
+}
+
+function confirmSend() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  document.getElementById('modal-campaign-id').textContent = id;
+  new bootstrap.Modal(document.getElementById('sendModal')).show();
+}
+
+async function doSend() {
+  const id = document.getElementById('campaign-select').value;
+  const modal = bootstrap.Modal.getInstance(document.getElementById('sendModal'));
+  if (modal) modal.hide();
+  const fb = document.getElementById('sync-feedback');
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${id}`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({status: 'sent'})
+    });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      const badge = document.getElementById('c-status-badge');
+      badge.className = 'bb-badge bb-badge-sent'; badge.textContent = 'sent';
+      if (d.campaign && d.campaign.sent_at) {
+        document.getElementById('c-sent-at-row').style.display = '';
+        document.getElementById('c-sent-at').textContent = fmt(d.campaign.sent_at);
+      }
+      document.getElementById('send-btn').style.display = 'none';
+      document.querySelector('[onclick="syncCampaign()"]').disabled = true;
+      fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
+      fb.textContent = 'Campaign marked as sent.'; fb.style.display = '';
+    } else {
+      fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+      fb.textContent = d.message; fb.style.display = '';
+    }
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = e.message; fb.style.display = '';
+  }
+}
+
+async function populateEmailAccountSelect(currentEmail) {
+  const sel = document.getElementById('c-email-account-select');
+  try {
+    const r = await fetch(`${BASE}/api/crm/settings/mail-accounts`);
+    const d = await r.json();
+    const accounts = d.accounts || [];
+    sel.innerHTML = '<option value="">— none —</option>' +
+      accounts.map(a => `<option value="${a.email}"${a.email === currentEmail.toLowerCase() ? ' selected' : ''}>${a.email} (${a.account_type})</option>`).join('');
+    if (!accounts.length) {
+      sel.innerHTML += '<option disabled>No accounts configured — go to Settings</option>';
+    }
+  } catch(e) {
+    sel.innerHTML = '<option value="">Error loading accounts</option>';
+  }
+  const hasAccount = !!sel.value;
+  document.getElementById('view-mail-account-btn').style.display = hasAccount ? '' : 'none';
+  const preview = document.getElementById('c-email-account-preview');
+  if (preview) preview.textContent = sel.value || '—';
+}
+
+async function saveEmailAccount() {
+  const id    = document.getElementById('campaign-select').value;
+  const email = document.getElementById('c-email-account-select').value;
+  if (!id) return;
+  document.getElementById('view-mail-account-btn').style.display = email ? '' : 'none';
+  const preview = document.getElementById('c-email-account-preview');
+  if (preview) preview.textContent = email || '—';
+  try {
+    await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ outreach_email_account: email })
+    });
+  } catch(e) { /* silent */ }
+}
+
+(async () => {
+  const cid = new URLSearchParams(window.location.search).get('campaign_id')
+           || localStorage.getItem('selectedCampaign');
+  document.getElementById('campaign-select').value = cid || '';
+  if (cid) await loadCampaign();
+})();
+</script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+</body>
+</html>

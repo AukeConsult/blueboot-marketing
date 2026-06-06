@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Campaigns</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+
+.camp-card { background: #fff; border: 1px solid var(--bb-border); border-radius: 10px; box-shadow: var(--bb-card-shadow); padding: 1rem 1.25rem; text-decoration: none; color: inherit; display: block; transition: box-shadow .12s, transform .12s; margin-bottom: 10px; }
+.camp-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-1px); color: inherit; }
+.camp-card:hover .camp-arrow { opacity: 1; }
+.camp-arrow { opacity: 0; transition: opacity .15s; color: var(--bb-accent); }
+
+.stat-pill { display: inline-flex; align-items: center; gap: .3rem; font-size: .78rem; color: var(--bb-muted); background: #f4f5f7; border-radius: 20px; padding: .15rem .55rem; }
+</style>
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:860px">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="mb-0 fw-600" style="font-size:1rem"><i class="ti ti-speakerphone me-2 text-primary"></i>Campaigns</h5>
+    <button class="btn btn-sm btn-outline-secondary" onclick="load()">
+      <i class="ti ti-refresh me-1"></i>Refresh
+    </button>
+  </div>
+
+  <div id="discover-bar" class="alert py-2 px-3 small mb-3" style="display:none"></div>
+
+  <!-- Toolbar -->
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <input id="search" class="form-control form-control-sm" style="max-width:220px" placeholder="Search campaigns…" oninput="filter()">
+    <select id="status-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
+      <option value="">All statuses</option>
+      <option value="draft">Draft</option>
+      <option value="dosend">Do send</option>
+      <option value="sent">Sent</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+    <select id="owner-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
+      <option value="">All owners</option>
+    </select>
+    <a href="https://docs.google.com/spreadsheets/d/1aMglV53NiMEArjld37HN5cxliyNRGzIP2mrM4kwlupA" target="_blank"
+       class="btn btn-sm btn-outline-secondary ms-auto text-decoration-none">
+      <i class="ti ti-table me-1"></i>Master sheet
+    </a>
+    <button class="btn btn-sm btn-outline-primary" onclick="discover()" id="discover-btn">
+      <i class="ti ti-search me-1"></i>Discover new
+    </button>
+  </div>
+
+  <div id="list-container">
+    <div class="text-center py-5" style="color:var(--bb-muted)">
+      <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+    </div>
+  </div>
+
+</div>
+
+<script src="js/crm-common.js"></script>
+<script>
+// BASE + helpers from js/crm-common.js
+let allCampaigns = [];
+
+const fmt = fmtDateMedium;      // shared
+
+function statusBadge(s) {
+  return `<span class="bb-badge bb-badge-${s||'draft'}">${s||'draft'}</span>`;
+}
+
+function render(list) {
+  const el = document.getElementById('list-container');
+  if (!list.length) {
+    el.innerHTML = '<div class="text-center py-5 small" style="color:var(--bb-muted)"><i class="ti ti-inbox" style="font-size:2rem;opacity:.3;display:block;margin-bottom:.5rem"></i>No campaigns found</div>';
+    return;
+  }
+  el.innerHTML = list.map(c => {
+    const sb = c.status_breakdown || {};
+    const countries = (c.countries || []).join(', ') || '—';
+    const author = c.owner ? `<span class="stat-pill"><i class="ti ti-user"></i>${c.owner}</span>` : '';
+    const sentPill   = sb.sent ? `<span class="stat-pill" style="color:#15803d;background:#dcfce7"><i class="ti ti-send"></i>${sb.sent} sent</span>` : '';
+    const sourcePill = c.source === 'master-sheet' ? `<span class="stat-pill" style="color:#15803d;background:#f0fdf4"><i class="ti ti-table"></i>master-sheet</span>` : '';
+    return `<a href="campaign.html?campaign_id=${encodeURIComponent(c.campaign_id)}" class="camp-card" onclick="localStorage.setItem('selectedCampaign','${c.campaign_id}')">
+      <div class="d-flex align-items-start justify-content-between mb-2">
+        <div>
+          <span class="fw-600" style="font-size:.95rem">${c.campaign_id}</span>
+          <span class="ms-2">${statusBadge(c.status)}</span>
+        </div>
+        <i class="ti ti-arrow-right camp-arrow" style="font-size:1.1rem;margin-top:2px"></i>
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <span class="stat-pill"><i class="ti ti-users"></i>${c.contact_count || 0} contacts</span>
+        <span class="stat-pill"><i class="ti ti-building-store"></i>${c.sites_count || 0} sites</span>
+        <span class="stat-pill"><i class="ti ti-map-pin"></i>${countries}</span>
+        ${sentPill}
+        ${sourcePill}
+        ${author}
+        <span class="stat-pill ms-auto"><i class="ti ti-clock"></i>${fmt(c.updated_at)}</span>
+      </div>
+      ${c.mail && c.mail.subject ? `<div class="mt-2 small" style="color:var(--bb-muted)"><i class="ti ti-mail me-1"></i>${c.mail.subject}</div>` : ''}
+    </a>`;
+  }).join('');
+}
+
+function filter() {
+  const q  = document.getElementById('search').value.toLowerCase();
+  const st = document.getElementById('status-filter').value;
+  const ow = document.getElementById('owner-filter').value;
+  render(allCampaigns.filter(c => {
+    const matchQ  = !q  || c.campaign_id.toLowerCase().includes(q) || (c.owner||'').toLowerCase().includes(q) || (c.mail?.subject||'').toLowerCase().includes(q);
+    const matchSt = !st || c.status === st;
+    const matchOw = !ow || (c.owner || '') === ow;
+    return matchQ && matchSt && matchOw;
+  }));
+}
+
+function populateOwnerFilter() {
+  const owners = [...new Set(allCampaigns.map(c => c.owner).filter(Boolean))].sort();
+  const sel = document.getElementById('owner-filter');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All owners</option>' +
+    owners.map(o => `<option value="${o}"${o===cur?' selected':''}>${o}</option>`).join('');
+}
+
+async function load() {
+  document.getElementById('list-container').innerHTML = '<div class="text-center py-5" style="color:var(--bb-muted)"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>';
+  try {
+    const r = await fetch(BASE + '/api/crm/campaigns');
+    const d = await r.json();
+    allCampaigns = d.campaigns || [];
+    populateOwnerFilter();
+    filter();
+  } catch(e) {
+    document.getElementById('list-container').innerHTML = `<div class="text-center text-danger py-4 small">Could not load campaigns: ${e.message}</div>`;
+  }
+}
+
+async function discover() {
+  const btn = document.getElementById('discover-btn');
+  const bar = document.getElementById('discover-bar');
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Scanning…';
+  bar.style.display = 'none';
+  try {
+    // Step 1: discover new campaigns
+    const r = await fetch(BASE + '/api/crm/discover-campaigns');
+    const d = await r.json();
+    const newCampaigns = d.created || [];
+
+    bar.className = 'alert alert-info py-2 px-3 small mb-3';
+    bar.innerHTML = newCampaigns.length
+      ? `<i class="ti ti-check me-1 text-success"></i>${d.message} New: <strong>${newCampaigns.map(c=>c.campaign_id).join(', ')}</strong> — syncing contacts from master sheet…`
+      : `<i class="ti ti-refresh me-1"></i>${d.message || 'No new campaigns.'} Syncing all contacts from master sheet…`;
+    bar.style.display = '';
+
+    // Step 2: full crm-sync to pick up new contacts across all campaigns
+    const sr = await fetch(BASE + '/api/crm/crm-sync');
+    const sd = await sr.json();
+    const jobId = sd.job_id;
+    if (jobId) {
+      for (let i = 0; i < 60; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        const jr = await fetch(`${BASE}/api/crm/status/${jobId}`);
+        const jd = await jr.json();
+        if (jd.status === 'done') {
+          const res = jd.result || {};
+          bar.className = 'alert alert-success py-2 px-3 small mb-3';
+          bar.innerHTML = `<i class="ti ti-check me-1"></i>Done — `
+            + `${res.campaigns_upserted ?? 0} campaigns, ${res.contact_select_synced ?? 0} contacts synced`
+            + (newCampaigns.length ? ` · <strong>${newCampaigns.length} new campaign(s) created</strong>` : '');
+          break;
+        }
+        if (jd.status === 'error') {
+          bar.className = 'alert alert-warning py-2 px-3 small mb-3';
+          bar.innerHTML = `<i class="ti ti-alert-triangle me-1"></i>Sync error: ${jd.error || 'unknown'}`;
+          break;
+        }
+      }
+    }
+    await load();
+  } catch(e) {
+    bar.className = 'alert alert-danger py-2 px-3 small mb-3';
+    bar.textContent = 'Error: ' + e.message; bar.style.display = '';
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover new';
+}
+
+load();
+</script>
+</body>
+</html>

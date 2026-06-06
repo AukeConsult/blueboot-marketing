@@ -908,7 +908,23 @@ After a run, the `output/` directory contains:
 
 ---
 
+## Documentation
+
+Additional reference documents live in [`docs/`](docs/):
+
+| Document | Contents |
+|---|---|
+| [`docs/crm_api.md`](docs/crm_api.md) | Full CRM HTTP API reference — every `crmApi` endpoint, params and the job model. |
+| [`docs/gdisk_interface.md`](docs/gdisk_interface.md) | Google Drive (gdisk) interface — all settings, one-time Google setup, class API, HTTP endpoints and troubleshooting. |
+| [`docs/email_contacts_field_reference.docx`](docs/email_contacts_field_reference.docx) | Field-by-field reference for the unified `email_contacts` collection. |
+| [`docs/BlueBoot_Complete_Reference.docx`](docs/BlueBoot_Complete_Reference.docx) | Complete project reference (full pipeline and data model). |
+
 ## Configuration files
+
+> **Google Drive (gdisk) integration:** the `GdiskInterface` lets functions read/write
+> files in a configured Drive folder. All of its settings (the `settings/gdisk` doc,
+> the `GDISK_FOLDER_ID` env var, service-account sharing and Drive API setup) are
+> documented in [`docs/gdisk_interface.md`](docs/gdisk_interface.md).
 
 | File | Purpose |
 |---|---|

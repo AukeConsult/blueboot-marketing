@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Statistics</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+.stat-section { margin-bottom: 1.5rem; }
+.stat-section h6 { font-size: .82rem; font-weight: 600; color: var(--bb-muted);
+  text-transform: uppercase; letter-spacing: .04em; margin-bottom: .6rem; }
+.kv-row { display: flex; justify-content: space-between; align-items: baseline;
+  font-size: .83rem; padding: .2rem 0; border-bottom: 1px solid var(--bb-border); }
+.kv-row:last-child { border-bottom: none; }
+.kv-key   { color: var(--bb-muted); }
+.kv-val   { font-weight: 500; color: #111; }
+.pct-bar  { height: 6px; border-radius: 3px; background: var(--bb-accent);
+  opacity: .6; min-width: 2px; transition: width .3s; }
+.pct-wrap { width: 80px; background: #eef; border-radius: 3px; overflow: hidden; }
+.funnel-row { display: flex; align-items: center; gap: .75rem; font-size: .83rem;
+  padding: .25rem 0; border-bottom: 1px solid var(--bb-border); }
+.funnel-row:last-child { border-bottom: none; }
+.funnel-label { flex: 1; color: var(--bb-muted); }
+.funnel-n  { font-weight: 500; min-width: 50px; text-align: right; }
+.funnel-pct{ min-width: 38px; text-align: right; font-size: .75rem; color: var(--bb-muted); }
+</style>
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:1100px">
+
+  <div class="page-header mb-3">
+    <h5 class="page-title"><i class="ti ti-chart-bar text-primary"></i>Statistics</h5>
+    <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-primary" onclick="collectStats()" id="collect-btn">
+        <i class="ti ti-player-play me-1"></i>Collect statistics
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="load()" id="refresh-btn">
+        <i class="ti ti-refresh me-1"></i>Refresh
+      </button>
+    </div>
+  </div>
+  <div id="collect-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
+
+  <div id="feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
+  <div id="generated" class="small text-muted mb-3"></div>
+
+  <div id="stats-body">
+    <div class="text-center py-5 text-muted">
+      <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+    </div>
+  </div>
+
+</div>
+
+<script src="js/crm-common.js"></script>
+<script>
+const fmt = fmtDateTimeShort;
+
+function pct(n, total) {
+  if (!total) return '—';
+  return Math.round(100 * n / total) + '%';
+}
+
+function pctBar(n, total) {
+  const p = total ? Math.round(100 * n / total) : 0;
+  return `<div class="pct-wrap"><div class="pct-bar" style="width:${p}%"></div></div>`;
+}
+
+function kvTable(rows) {
+  return rows.map(([k, v]) =>
+    `<div class="kv-row"><span class="kv-key">${k}</span><span class="kv-val">${v}</span></div>`
+  ).join('');
+}
+
+function funnelTable(rows, total) {
+  return rows.map(([label, n]) => `
+    <div class="funnel-row">
+      <span class="funnel-label">${label}</span>
+      ${pctBar(n, total)}
+      <span class="funnel-n">${n.toLocaleString()}</span>
+      <span class="funnel-pct">${pct(n, total)}</span>
+    </div>`).join('');
+}
+
+function card(title, icon, content) {
+  return `<div class="bb-card mb-3">
+    <div class="px-3 py-2 border-bottom" style="background:#f9fafb;border-radius:10px 10px 0 0">
+      <span class="fw-500 small"><i class="ti ${icon} me-1 text-primary"></i>${title}</span>
+    </div>
+    <div class="px-3 py-2">${content}</div>
+  </div>`;
+}
+
+function renderPipelineOverview(d) {
+  if (!d) return '<div class="small text-muted">No data — run maint_statistics.py first.</div>';
+  const cols = d.collections || {};
+  const rows = Object.entries(cols).map(([name, info]) => {
+    if (info.error) return `<tr><td>${name}</td><td class="text-danger" colspan="3">${info.error}</td></tr>`;
+    const topCountries = Object.entries(info.by_country || info.by_ai_country || {})
+      .map(([k,v]) => `${k}:${v}`).join('  ');
+    return `<tr>
+      <td class="small fw-500">${name}</td>
+      <td class="small text-end">${(info.count||0).toLocaleString()}</td>
+      <td class="small text-muted">${topCountries || '—'}</td>
+    </tr>`;
+  }).join('');
+  return `<table class="table table-sm small mb-2">
+    <thead style="background:#f9fafb"><tr><th>Collection</th><th class="text-end">Docs</th><th>Countries</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+  ${kvTable([['Rejection rate', (d.exclusion_rate ?? '—') + '%']])}`;
+}
+
+function renderPriority(d) {
+  if (!d) return '';
+  const byPrio = d.by_priority || {};
+  const total = d.total_leads || 0;
+  const prios = funnelTable(
+    Object.entries(byPrio).map(([k, v]) => [k, v.leads]),
+    total
+  );
+  const countries = Object.entries(d.countries || {}).map(([code, c]) =>
+    `<tr><td class="small fw-500">${code}</td><td class="small">${c.country_name||''}</td>
+     <td class="small text-end">${(c.total_leads||0).toLocaleString()}</td>
+     <td class="small text-end">${(c.total_contacts||0).toLocaleString()}</td></tr>`
+  ).join('');
+
+  return `<div class="row g-3">
+    <div class="col-md-5">
+      <div class="stat-section"><h6>By priority (${total.toLocaleString()} leads)</h6>${prios}</div>
+    </div>
+    <div class="col-md-7">
+      <div class="stat-section"><h6>Top countries</h6>
+        <table class="table table-sm small mb-0">
+          <thead style="background:#f9fafb"><tr><th>Code</th><th>Country</th><th class="text-end">Leads</th><th class="text-end">Contacts</th></tr></thead>
+          <tbody>${countries}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderFunnel(d, labels) {
+  if (!d) return '';
+  const total_leads    = d.leads_total || 0;
+  const total_contacts = d.contacts_total || 0;
+  const leadRows    = labels.leads.map(([lbl, key]) => [lbl, d[key] || 0]);
+  const contactRows = labels.contacts.map(([lbl, key]) => [lbl, d[key] || 0]);
+  return `<div class="row g-3">
+    <div class="col-md-6">
+      <div class="stat-section"><h6>Leads (${total_leads.toLocaleString()} total)</h6>
+        ${funnelTable(leadRows, total_leads)}</div>
+    </div>
+    <div class="col-md-6">
+      <div class="stat-section"><h6>Contacts (${total_contacts.toLocaleString()} total)</h6>
+        ${funnelTable(contactRows, total_contacts)}</div>
+    </div>
+  </div>`;
+}
+
+function renderQuality(d) {
+  if (!d) return '';
+  const lt = d.leads_total || 0;
+  const ct = d.contacts_total || 0;
+  return `<div class="row g-3">
+    <div class="col-md-6">
+      <div class="stat-section"><h6>Site leads (${lt.toLocaleString()})</h6>
+        ${funnelTable([
+          ['No sitemap', d.leads_no_sitemap||0],
+          ['Zero page count', d.leads_zero_pages||0],
+          ['Not AI classified', d.leads_not_classified||0],
+        ], lt)}</div>
+    </div>
+    <div class="col-md-6">
+      <div class="stat-section"><h6>Site contacts (${ct.toLocaleString()})</h6>
+        ${funnelTable([
+          ['No name', d.contacts_no_name||0],
+          ['Name/email mismatch', d.contacts_name_mismatch||0],
+        ], ct)}</div>
+    </div>
+  </div>`;
+}
+
+function renderEmailFunnel(d) {
+  if (!d) return '';
+  const total = d.total || 0;
+  const status  = Object.entries(d.by_status  || {}).sort((a,b) => b[1]-a[1]);
+  const pipeline= Object.entries(d.by_pipeline|| {});
+  const etype   = Object.entries(d.by_email_type||{}).sort((a,b)=>b[1]-a[1]);
+  const section = (title, rows) =>
+    `<div class="stat-section mb-2"><h6>${title}</h6>${funnelTable(rows, total)}</div>`;
+  return `<div class="row g-3">
+    <div class="col-md-4">${section('Status', status)}</div>
+    <div class="col-md-4">${section('Pipeline', pipeline)}</div>
+    <div class="col-md-4">${section('Email type', etype)}</div>
+  </div>`;
+}
+
+function renderCoverage(d) {
+  if (!d) return '';
+  const total = d.total || 0;
+  const top = Object.entries(d.by_country||{})
+    .sort((a,b) => b[1].total - a[1].total)
+    .map(([cc, c]) => `<tr>
+      <td class="small fw-500">${cc}</td>
+      <td class="small text-end">${c.total}</td>
+      <td class="small text-end">${c.site}</td>
+      <td class="small text-end">${c.leads}</td>
+      <td class="small text-end">${c.both}</td>
+    </tr>`).join('');
+  return `<div class="row g-3">
+    <div class="col-md-4">
+      <div class="stat-section"><h6>Overall (${total.toLocaleString()} contacts)</h6>
+        ${funnelTable([
+          ['Site pipeline only', d.site_only||0],
+          ['Lead pipeline only', d.leads_only||0],
+          ['Both pipelines',     d.both_pipelines||0],
+        ], total)}</div>
+    </div>
+    <div class="col-md-8">
+      <div class="stat-section"><h6>By country</h6>
+        <table class="table table-sm small mb-0">
+          <thead style="background:#f9fafb">
+            <tr><th>Country</th><th class="text-end">Total</th><th class="text-end">Site</th>
+                <th class="text-end">Leads</th><th class="text-end">Both</th></tr>
+          </thead>
+          <tbody>${top}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+async function collectStats() {
+  const btn = document.getElementById('collect-btn');
+  const fb  = document.getElementById('collect-feedback');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Running…';
+  fb.className = 'alert alert-info py-2 px-3 small mb-3';
+  fb.innerHTML = '<i class="ti ti-clock me-1"></i>Collecting statistics — this may take a few minutes…';
+  fb.style.display = '';
+  try {
+    const r = await fetch(BASE + '/api/crm/statistics/collect', { method: 'POST' });
+    const d = await r.json();
+    if (!d.job_id) throw new Error(d.message || 'No job_id');
+    fb.innerHTML = `<i class="ti ti-clock me-1"></i>Job queued <code>${d.job_id}</code> — polling…`;
+    for (let i = 0; i < 120; i++) {
+      await new Promise(r => setTimeout(r, 5000));
+      const jr = await fetch(`${BASE}/api/crm/status/${d.job_id}`);
+      const jd = await jr.json();
+      if (jd.status === 'done') {
+        fb.className = 'alert alert-success py-2 px-3 small mb-3';
+        fb.innerHTML = '<i class="ti ti-circle-check me-1"></i>Statistics collected. Refreshing…';
+        await load();
+        break;
+      }
+      if (jd.status === 'error') {
+        fb.className = 'alert alert-danger py-2 px-3 small mb-3';
+        fb.innerHTML = '<i class="ti ti-circle-x me-1"></i>Error: ' + (jd.error || 'unknown');
+        break;
+      }
+    }
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 px-3 small mb-3';
+    fb.textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-player-play me-1"></i>Collect statistics';
+}
+
+async function load() {
+  const body = document.getElementById('stats-body');
+  const fb   = document.getElementById('feedback');
+  fb.style.display = 'none';
+  body.innerHTML = '<div class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>';
+
+  try {
+    const r = await fetch(BASE + '/api/crm/statistics');
+    const d = await r.json();
+    if (d.status !== 'ok') throw new Error(d.message || 'Error');
+    const s = d.statistics || {};
+
+    // Show latest generated_at
+    const dates = Object.values(s).map(v => v.generated_at).filter(Boolean).sort();
+    if (dates.length) {
+      document.getElementById('generated').textContent = 'Last updated: ' + fmt(dates[dates.length-1]);
+    }
+
+    const leadCards = [
+      card('Lead pipeline', 'ti-users', renderPipelineOverview(s['leads-overview'])),
+      card('Lead enrichment', 'ti-users', renderFunnel(s['lead-enrichment-funnel'], {
+        leads:    [['AI classified','leads_ai_classified'],['No email','leads_no_email']],
+        contacts: [['Social enriched','contacts_social'],['Email checked','contacts_email_checked'],['Both ready','contacts_both']],
+      })),
+    ].join('');
+
+    const siteCards = [
+      card('Site lead pipeline', 'ti-building-store', renderPipelineOverview(s['site-leads-overview'])),
+      card('Site enrichment', 'ti-building-store', renderFunnel(s['site-enrichment-funnel'], {
+        leads:    [['AI classified','leads_ai_classified'],['Location enriched','leads_location_enriched'],['Fully enriched','leads_both_enriched']],
+        contacts: [['Brave enriched','contacts_brave_enriched'],['Email checked','contacts_email_checked'],['Fully ready','contacts_fully_ready'],['Missing name','contacts_no_name'],['Missing email','contacts_no_email']],
+      })),
+      card('Data quality', 'ti-shield-check', renderQuality(s['data-quality'])),
+    ].join('');
+
+    const commonCards = [
+      card('Priority × country', 'ti-flag', renderPriority(s['priority-pr-country'])),
+      card('email_contacts funnel', 'ti-mail', renderEmailFunnel(s['email-contacts-funnel'])),
+      card('Pipeline cross-coverage', 'ti-git-merge', renderCoverage(s['pipeline-coverage'])),
+    ].join('');
+
+    body.innerHTML = `
+      <ul class="nav nav-tabs mb-3" id="stats-tabs">
+        <li class="nav-item"><button class="nav-link active" data-tab="lead">Leads</button></li>
+        <li class="nav-item"><button class="nav-link" data-tab="site">Site leads</button></li>
+        <li class="nav-item"><button class="nav-link" data-tab="common">Common</button></li>
+      </ul>
+      <div id="tab-lead">${leadCards}</div>
+      <div id="tab-site" style="display:none">${siteCards}</div>
+      <div id="tab-common" style="display:none">${commonCards}</div>
+    `;
+
+    document.querySelectorAll('#stats-tabs .nav-link').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#stats-tabs .nav-link').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        ['lead','site','common'].forEach(t =>
+          document.getElementById('tab-' + t).style.display = t === btn.dataset.tab ? '' : 'none'
+        );
+      });
+    });
+
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 px-3 small mb-3';
+    fb.textContent = 'Error: ' + e.message; fb.style.display = '';
+    body.innerHTML = '';
+  }
+}
+
+load();
+</script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+</body>
+</html>

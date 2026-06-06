@@ -1,0 +1,52 @@
+/* styles.css -- shared design system for the Blueboot CRM pages.
+ * Link after Bootstrap + Tabler:
+ *   <link rel="stylesheet" href="css/styles.css">
+ * Page-specific rules stay in each page's own <style> block.
+ */
+
+:root {
+  --bb-navy: #1a2035;
+  --bb-accent: #4f6ef7;
+  --bb-border: #e8eaee;
+  --bb-muted: #6b7280;
+  --bb-card-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.04);
+}
+
+body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+/* Top navigation */
+.bb-nav { background: #fff; border-bottom: 1px solid var(--bb-border); padding: .6rem 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0; }
+.bb-nav .brand { color: #111; font-weight: 700; font-size: .95rem; text-decoration: none; display: flex; align-items: center; gap: .5rem; margin-right: 2rem; }
+.bb-nav .brand i { color: var(--bb-accent); }
+.bb-nav .nav-link { color: var(--bb-muted); font-size: .85rem; text-decoration: none; padding: .3rem .65rem; border-radius: 6px; transition: color .15s, background .15s; display: flex; align-items: center; gap: .35rem; }
+.bb-nav .nav-link:hover { color: #111; background: #f4f5f7; }
+.bb-nav .nav-link.active { color: var(--bb-accent); background: #eef0ff; }
+.bb-nav .nav-links { display: flex; gap: .25rem; }
+.nav-dropdown { position: relative; }
+.nav-dropdown-toggle { background: none; border: none; cursor: pointer; }
+.nav-dropdown.active > .nav-dropdown-toggle { color: var(--bb-accent); background: #eef0ff; }
+.nav-dropdown-menu { display: none; position: absolute; top: calc(100% + 4px); left: 0;
+  background: #fff; border: 1px solid var(--bb-border); border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.1); min-width: max-content; z-index: 1000; padding: .3rem; }
+.nav-dropdown.open .nav-dropdown-menu { display: block; }
+.nav-dropdown-item { display: flex; align-items: center; gap: .4rem; padding: .3rem .75rem;
+  border-radius: 6px; font-size: .85rem; color: var(--bb-muted); text-decoration: none;
+  white-space: nowrap; }
+.nav-dropdown-item:hover { background: #f4f5f7; color: #111; }
+.nav-dropdown-item.active { color: var(--bb-accent); background: #eef0ff; }
+
+/* Generic card */
+.bb-card { background: #fff; border-radius: 10px; box-shadow: var(--bb-card-shadow); border: 1px solid var(--bb-border); }
+
+/* Status badges (superset of all variants used across pages) */
+.bb-badge { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 600; padding: .2rem .55rem; border-radius: 20px; }
+.bb-badge-draft     { background: #f1f1f1; color: #555; }
+.bb-badge-dosend    { background: #dbeafe; color: #1d4ed8; }
+.bb-badge-sent      { background: #dcfce7; color: #15803d; }
+.bb-badge-cancelled { background: #fee2e2; color: #b91c1c; }
+.bb-badge-pending   { background: #fef9c3; color: #854d0e; }
+.bb-badge-error     { background: #fee2e2; color: #b91c1c; }
+
+/* Misc shared */
+.spinner-xs { width: 14px; height: 14px; border-width: 2px; }
+pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size: 11px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; border: 1px solid var(--bb-border); }

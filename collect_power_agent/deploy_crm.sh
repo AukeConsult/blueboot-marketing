@@ -4,12 +4,15 @@ set -e
 echo "=== CRM Firebase Function Deploy ==="
 echo ""
 
-echo "[1/4] Recreating venv..."
-rm -rf functions-crm/venv
-python -m venv functions-crm/venv
-echo "  venv created"
+echo "[1/4] Setting up functions-crm venv..."
+if [ ! -f "functions-crm/venv/Scripts/activate" ] && [ ! -f "functions-crm/venv/bin/activate" ]; then
+    python -m venv functions-crm/venv
+    echo "  venv created"
+else
+    echo "  venv exists, updating packages"
+fi
 
-echo "[2/4] Installing requirements..."
+echo "[2/4] Installing/updating requirements..."
 functions-crm/venv/Scripts/pip.exe install -r functions-crm/requirements.txt -q 2>/dev/null || \
 functions-crm/venv/bin/pip install -r functions-crm/requirements.txt -q
 

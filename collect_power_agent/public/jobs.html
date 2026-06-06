@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Jobs</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+.job-card { cursor: pointer; transition: border-color .15s; }
+.job-card:hover { border-color: #adb5bd !important; }
+.detail { display: none; }
+.jp { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 600; padding: .2rem .55rem; border-radius: 20px; }
+.jp-queued  { background: #dbeafe; color: #1d4ed8; }
+.jp-running { background: #fef9c3; color: #854d0e; }
+.jp-done    { background: #dcfce7; color: #15803d; }
+.jp-error   { background: #fee2e2; color: #b91c1c; }
+</style>
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:900px">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="mb-0 fw-600" style="font-size:1rem"><i class="ti ti-list-check me-2 text-primary"></i>Jobs</h5>
+    <div class="d-flex align-items-center gap-2">
+      <label class="small mb-0" style="color:var(--bb-muted)" for="job-limit">Show</label>
+      <input id="job-limit" type="number" min="1" max="500" value="50"
+             class="form-control form-control-sm" style="width:80px"
+             onchange="loadJobs()">
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadJobs()">
+        <i class="ti ti-refresh me-1"></i>Refresh
+      </button>
+    </div>
+  </div>
+
+  <div id="jobs-list">
+    <div class="text-center py-4" style="color:var(--bb-muted)">
+      <div class="spinner-border spinner-border-sm me-2"></div>Loading jobs…
+    </div>
+  </div>
+
+</div>
+
+<script src="js/crm-common.js"></script>
+<script>
+// BASE + helpers from js/crm-common.js
+
+const fmt = fmtTime;            // shared; elapsed() also from the library
+
+function jobPill(status){
+  return `<span class="jp jp-${status||'queued'}">${status}</span>`;
+}
+
+const JOB_NAMES = {'contact-sync':'Import contacts','push-and-sync':'Push selected to CRM','template-sync':'Sync CRM to Leads Database','campaign-sync':'Campaign sync'};
+
+function renderJobs(jobs){
+  const el = document.getElementById('jobs-list');
+  if(!jobs.length){
+    el.innerHTML='<div class="text-center py-4 small" style="color:var(--bb-muted)"><i class="ti ti-inbox me-1"></i>No jobs yet</div>';
+    return;
+  }
+  el.innerHTML = jobs.map(j=>{
+    const spin = (j.status==='running'||j.status==='queued')
+      ? '<div class="spinner-border spinner-xs text-warning me-2" role="status"></div>' : '';
+    const result = j.result ? JSON.stringify(j.result,null,2) : '';
+    const err = j.error || '';
+    const duration = elapsed(j.started_at, j.finished_at);
+    const params = j.params && Object.keys(j.params).length ? JSON.stringify(j.params) : '';
+    return `<div class="bb-card mb-2 job-card">
+      <div class="px-3 py-2">
+        <div class="d-flex align-items-center gap-2" onclick="toggle('${j.id}')" style="cursor:pointer">
+          ${spin}
+          ${jobPill(j.status)}
+          <span class="fw-500 flex-grow-1 small">${JOB_NAMES[j.name]||j.name}</span>
+          <small style="color:var(--bb-muted)">${fmt(j.queued_at)}${duration?' · '+duration:''}</small>
+          <i class="ti ti-chevron-down" style="color:var(--bb-muted);font-size:.8rem"></i>
+        </div>
+        <div class="detail mt-2 pt-2 border-top" id="d-${j.id}">
+          <div class="small mb-1" style="color:var(--bb-muted)">id: <code>${j.id}</code>${params?' &nbsp; params: <code>'+params+'</code>':''}</div>
+          ${result?'<pre>'+result+'</pre>':''}
+          ${err?'<pre class="text-danger">'+err+'</pre>':''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+const _openRows = new Set();
+
+function toggle(id){
+  const el = document.getElementById('d-'+id);
+  const open = el.style.display === 'block';
+  el.style.display = open ? 'none' : 'block';
+  open ? _openRows.delete(id) : _openRows.add(id);
+}
+
+async function loadJobs(){
+  try{
+    const limit = Math.min(Math.max(parseInt(document.getElementById('job-limit').value) || 50, 1), 500);
+    const r = await fetch(BASE+'/api/crm/jobs?limit='+limit);
+    const d = await r.json();
+    renderJobs(d.jobs||[]);
+    // Restore previously open rows
+    _openRows.forEach(id => {
+      const el = document.getElementById('d-'+id);
+      if (el) el.style.display = 'block';
+    });
+  } catch(e){
+    document.getElementById('jobs-list').innerHTML=`<div class="text-center text-danger py-4 small">Could not reach API: ${e.message}</div>`;
+  }
+}
+
+loadJobs();
+setInterval(loadJobs, 5000);
+</script>
+</body>
+</html>

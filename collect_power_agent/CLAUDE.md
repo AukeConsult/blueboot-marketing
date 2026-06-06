@@ -548,3 +548,23 @@ showing:
 - email_contacts → Contact Sheet → CRM Template → Firestore + site_leads
 - API flow: crmApi → Cloud Tasks → crmWorker → crm_jobs
 - Dashboard URL: https://blueboot-market.web.app/
+
+---
+
+## Frontend / HTML rules
+
+### RULE: Always use Bootstrap for HTML pages
+
+All HTML pages in the `public/` folder must use Bootstrap 5 for layout and UI.
+Load it from CDN:
+
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+```
+
+Also use Tabler Icons for icons:
+```html
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+```
+
+Only write custom `.css` when Bootstrap utilities cannot cover it.
