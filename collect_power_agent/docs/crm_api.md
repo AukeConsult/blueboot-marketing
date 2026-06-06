@@ -3,7 +3,7 @@
 All endpoints are served by the `crmApi` Cloud Function. Base URL:
 
 ```
-https://us-central1-blueboot-market.cloudfunctions.net/crmApi
+https://us-central1-<YOUR_PROJECT_ID>.cloudfunctions.net/crmApi
 ```
 
 CORS is open (the static pages in `public/` call these directly). Responses are JSON
@@ -102,7 +102,7 @@ Returns `400` if no folder is configured. Names are matched exactly, case-sensit
 
 - **Deploy:** `firebase deploy --only functions:crm` (deploys both `crmApi` and `crmWorker`).
 - **Auth:** the functions run as the project service account
-  (`blueboot-market@appspot.gserviceaccount.com`); Sheets/Drive resources must be shared
+  (`<YOUR_PROJECT_ID>@appspot.gserviceaccount.com`); Sheets/Drive resources must be shared
   with it, and the relevant Google APIs enabled.
 - **Trigger endpoints are GET** for easy use from links/the dashboard; they only enqueue
   work, the actual run happens in `crmWorker`.

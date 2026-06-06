@@ -225,7 +225,10 @@ Paste a Drive folder ID (the part after `/folders/` in the URL) and click **Save
 | Collection | `leads` | `site_leads` |
 | Contacts | `contacts` (subcollection) | `site_contacts` (subcollection) |
 | Excluded | `leads_excluded` | `sites_excluded` |
+| Discovery | Bing search + agency **catalog services** | Bing search only |
 | Enrichment | AI, social, email check | AI, location, Brave, email check |
+
+The lead pipeline's catalog services (Sortlist, DesignRush, Proff, DAN, TopDevelopers, and country-specific business directories) are configured in `config/catalogs.json` and give it broader agency coverage than Bing search alone.
 
 Both pipelines feed into `email_contacts` — the unified outreach contact list.
 

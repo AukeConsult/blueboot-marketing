@@ -60,7 +60,7 @@ GPT maps `ai_country` to a standardised `"City, Country"` location string used b
 
 #### `lead_enrich_agent.py` — Agency classification
 
-The same enrichment pattern applies to the lead pipeline. GPT classifies each agency by sector, reseller potential score, and company type.
+The lead pipeline discovers agencies through two channels — Bing search and agency catalog services (Sortlist, DesignRush, Proff, DAN, TopDevelopers, etc.) — before AI enrichment runs. Both sources are deduplicated by domain. The same enrichment pattern then applies to all discovered agencies. GPT classifies each agency by sector, reseller potential score, and company type.
 
 #### `leads_email_check.py` — Contact classification
 

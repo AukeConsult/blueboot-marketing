@@ -160,6 +160,8 @@ python app/site_smart_export.py --countries NO --write-contacts --campaign NO_ju
 
 Discovers web agencies and digital resellers — companies that could re-sell BlueSearch to their clients.
 
+> **Key difference from the site pipeline:** the lead pipeline uses two complementary discovery methods — Bing search AND curated agency catalog services (Sortlist, DesignRush, Proff, DAN, TopDevelopers, and country-specific business directories configured in `config/catalogs.json`). This gives broader and more targeted coverage than search alone.
+
 ### 2.1 Discovery — `lead_agent.py`
 
 Searches for agencies by country using a configured query set, fetches their websites, and writes to the `leads` Firestore collection.
@@ -389,6 +391,7 @@ python app/build_filter_facets.py --cap 300 --no-write   # JSON preview only
 | AI enrichment | OpenAI GPT-5.4 |
 | Contact enrichment | Brave Search API |
 | Web discovery | Bing Search API · aiohttp · asyncio |
+| Agency catalogs | Sortlist · DesignRush · Proff · DAN · TopDevelopers · local directories *(lead pipeline only)* |
 | Frontend | Vanilla HTML · Bootstrap 5 · Tabler Icons |
 | Hosting | Firebase Hosting |
 | Email sending | smtplib · imaplib · premailer |
@@ -405,5 +408,7 @@ python app/build_filter_facets.py --cap 300 --no-write   # JSON preview only
 **Sheet as working surface** — the Google Drive spreadsheet is the human interface. The DB is the source of truth for protected fields (`status`, `sent_at`); all other fields are sheet-controlled via the Sync operation.
 
 **Single source for mail** — all outbound email goes through `MailSender`. CSS inlining, header injection, sent-folder append, and display-name formatting are applied once, everywhere.
+
+**Dual discovery in the lead pipeline** — agencies are found through two independent channels: Bing search queries (controlled by `config/countries.json`) and paginated agency catalog scraping (controlled by `config/catalogs.json`). Both sources are deduplicated by domain before enrichment.
 
 **Stateless API** — the CRM API (Flask on Cloud Functions) is stateless. All state lives in Firestore. Long operations are queued as Cloud Tasks jobs and polled by the frontend.

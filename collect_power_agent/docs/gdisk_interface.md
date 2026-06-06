@@ -67,7 +67,7 @@ https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz
 These are platform settings, not code — without them every call fails with a permission
 or "API not enabled" error.
 
-1. **Enable the Google Drive API** on the `blueboot-market` GCP project
+1. **Enable the Google Drive API** on the `<YOUR_PROJECT_ID>` GCP project
    (APIs & Services → Enable APIs → "Google Drive API"). The Sheets API is already on;
    Drive is a separate API.
 
@@ -75,7 +75,7 @@ or "API not enabled" error.
    *Share* → add the service-account email as **Editor**:
 
    ```
-   blueboot-market@appspot.gserviceaccount.com
+   <YOUR_PROJECT_ID>@appspot.gserviceaccount.com
    ```
 
    (This is the Application Default identity the functions run as. Read-only is enough
@@ -137,7 +137,7 @@ Notes:
 
 ## 5. HTTP API (crmApi)
 
-Base URL: `https://us-central1-blueboot-market.cloudfunctions.net/crmApi`
+Base URL: `https://us-central1-<YOUR_PROJECT_ID>.cloudfunctions.net/crmApi`
 
 | Method | Path | Purpose |
 |---|---|---|

@@ -21,7 +21,7 @@ This guide covers setting up the full Blueboot CRM system from scratch — Googl
 ### 1.1 Create the Firebase project
 
 1. Go to [console.firebase.google.com](https://console.firebase.google.com)
-2. Click **Add project** → give it a name (e.g. `blueboot-market`)
+2. Click **Add project** → give it a name (e.g. `my-crm-project`)
 3. Enable **Google Analytics** if desired, then create
 4. In the project dashboard, go to **Build → Firestore Database** → create in **production mode**, choose a region (e.g. `us-central1`)
 5. Go to **Build → Hosting** → Get started (follow the wizard; you'll deploy later)

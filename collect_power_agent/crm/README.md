@@ -47,7 +47,7 @@ crmWorker (Cloud Run, 15min) ← runs actual job (1GB RAM)
 crm_jobs/{job_id} (Firestore) ← poll GET /api/crm/status/{job_id}
 ```
 
-Dashboard: https://blueboot-market.web.app/
+Dashboard: https://<YOUR_PROJECT_ID>.web.app/
 
 ---
 
@@ -95,10 +95,10 @@ in `crm/` set up OAuth2 auth and call the same libs. When deployed, all of
 
 | Sheet | ID | Tab |
 |---|---|---|
-| Contact Sheet | `1aMglV53NiMEArjld37HN5cxliyNRGzIP2mrM4kwlupA` | `contacts` |
-| CRM Template | `1b1kGKIldeawESH3RYiYjOqRFXRR5kG_81qYRFZI1gSY` | `Outreach` |
+| Contact Sheet | `<YOUR_CONTACT_SHEET_ID>` | `contacts` |
+| CRM Template | `<YOUR_CRM_TEMPLATE_SHEET_ID>` | `Outreach` |
 
-Share both with: `77823673522-compute@developer.gserviceaccount.com` (Editor)
+Share both with: `<YOUR_PROJECT_ID>@developer.gserviceaccount.com` (Editor)
 
 ---
 
@@ -219,7 +219,7 @@ python crm\crm_template_sync.py --enrich
 Stores the Google Sheet IDs used by all CRM scripts:
 
 ```python
-CRM_TEMPLATE_ID = "1b1kGKIldeawESH3RYiYjOqRFXRR5kG_81qYRFZI1gSY"
+CRM_TEMPLATE_ID = "<YOUR_CRM_TEMPLATE_SHEET_ID>"
 ```
 
 ### `setup_outreach_sheet.py` — one-time sheet creation
@@ -237,7 +237,7 @@ python crm\setup_outreach_sheet.py --title "My Outreach Sheet"
 
 ## API (Firebase Cloud Functions)
 
-Base URL: `https://us-central1-blueboot-market.cloudfunctions.net/crmApi`
+Base URL: `https://us-central1-<YOUR_PROJECT_ID>.cloudfunctions.net/crmApi`
 
 ### Architecture — two Cloud Functions, one Flask app
 
@@ -296,7 +296,7 @@ GET /api/crm/whoami
 
 ## Dashboard
 
-URL: `https://blueboot-market.web.app/`
+URL: `https://<YOUR_PROJECT_ID>.web.app/`
 
 Bootstrap single-page app. Features:
 - Collapsible import form with all parameters
