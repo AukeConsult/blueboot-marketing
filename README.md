@@ -91,45 +91,100 @@ pending → approved → sent → replied / bounced / unsubscribed / converted
 
 ```
 collect_power_agent/
-├── app/                        # Local Python pipeline scripts
-│   ├── site_agent.py           # Site discovery (async, Bing + sitemaps)
-│   ├── site_enrich_agent.py    # AI classification of sites
-│   ├── site_contact_enrich.py  # Contact enrichment via Brave Search
-│   ├── site_location_enrich.py # Location normalisation
-│   ├── site_email_check.py     # Email + contact type classification
-│   ├── site_smart_export.py    # Tiered export to email_contacts
-│   ├── lead_agent.py           # Agency discovery (Bing + catalogs)
-│   ├── lead_enrich_agent.py    # AI classification of agencies
-│   ├── lead_enrich_contacts.py # Contact enrichment
-│   ├── leads_email_check.py    # Email classification
-│   ├── leads_smart_export.py   # Export agencies to email_contacts
-│   ├── build_filter_facets.py  # Precompute filter facets
-│   ├── maint_statistics.py     # Regenerate statistics aggregations
-│   └── functions/              # Shared utilities (config, firebase, utils)
-├── config/                     # Query files, blocklists, API keys
-│   ├── site_agent_queries.json # Bing queries × country (site pipeline)
-│   ├── countries.json          # Agency keywords × country (lead pipeline)
-│   ├── catalogs.json           # Agency directory sites to scrape
-│   ├── blocklist_domains.txt   # Lead pipeline blocklist (~1000 entries)
-│   └── site_agent_blocklist.txt# Site pipeline blocklist (~385 entries)
-├── crm/                        # Local CRM sync CLI scripts
-│   ├── contact_sync.py         # Import contacts to Google Sheet
-│   ├── push_and_sync.py        # Push selected → CRM template
-│   └── template_sync.py        # Sync CRM template → Firestore
-├── functions-crm/              # Firebase Cloud Function (Flask API)
-│   ├── main.py                 # Routes + async job worker
+├── app/                            # Local Python pipeline scripts
+│   ├── site_agent.py               # Site discovery (async, Bing + sitemaps)
+│   ├── site_enrich_agent.py        # AI classification of sites
+│   ├── site_contact_enrich.py      # Contact enrichment via Brave Search
+│   ├── site_location_enrich.py     # Location normalisation
+│   ├── site_email_check.py         # Email + contact type classification
+│   ├── site_smart_export.py        # Tiered export to email_contacts
+│   ├── lead_agent.py               # Agency discovery (Bing + catalogs)
+│   ├── lead_enrich_agent.py        # AI classification of agencies
+│   ├── lead_enrich_contacts.py     # Contact enrichment
+│   ├── leads_email_check.py        # Email classification
+│   ├── leads_smart_export.py       # Export agencies to email_contacts
+│   ├── wp_plugin_leads.py          # WordPress plugin catalogue discovery
+│   ├── campaign_manager.py         # Campaign management CLI
+│   ├── campaign_exporter.py        # Export campaign contacts to Drive sheet
+│   ├── campaign_importer.py        # Import campaign contacts from sheet
+│   ├── email_contacts_export.py    # Export email_contacts to Excel
+│   ├── filter_site_leads.py        # Filter and query site_leads
+│   ├── gmail_outreach.py           # Gmail-based outreach sender
+│   ├── mail_sender.py              # SMTP/IMAP mail sender
+│   ├── mail_reader.py              # IMAP mailbox reader
+│   ├── send_mail.py                # CLI wrapper for sending mail
+│   ├── build_filter_facets.py      # Precompute filter facets
+│   ├── maint_statistics.py         # Regenerate statistics aggregations
+│   ├── maint_firestore_index_sync.py
+│   ├── maint_firestore_snapshot.py
+│   ├── maint_fix_contact_country.py
+│   ├── maint_fix_rescrape_contacts.py
+│   ├── maint_site_excluded_recheck.py
+│   ├── maint_site_leads_export.py
+│   ├── maint_site_sitemap_backfill.py
+│   └── functions/                  # Shared utilities (config, firebase, utils)
+├── config/                         # Query files, blocklists, API keys
+│   ├── site_agent_queries.json     # Bing queries × country (site pipeline)
+│   ├── countries.json              # Agency keywords × country (lead pipeline)
+│   ├── catalogs.json               # Agency directory sites to scrape
+│   ├── wp_plugin_queries.json      # WordPress plugin catalogue config
+│   ├── blocklist_domains.txt       # Lead pipeline blocklist (~1000 entries)
+│   └── site_agent_blocklist.txt    # Site pipeline blocklist (~385 entries)
+├── crm/                            # Local CRM sync CLI scripts
+│   ├── contact_sync.py             # Import contacts to Google Sheet
+│   ├── push_and_sync.py            # Push selected → CRM template
+│   ├── template_sync.py            # Sync CRM template → Firestore
+│   ├── crm_template_sync.py        # Template sync with enrich option
+│   ├── contact_to_template.py      # Push selected (no sync back)
+│   └── setup_outreach_sheet.py     # One-time: create CRM Google Sheet
+├── functions-crm/                  # Firebase Cloud Function (Flask API)
+│   ├── main.py                     # Routes + async job worker
 │   ├── requirements.txt
-│   └── crm/                    # CRM business logic libraries
-├── public/                     # Frontend (Firebase Hosting)
-│   ├── campaigns.html
-│   ├── settings.html
-│   ├── js/crm-common.js        # Shared nav + BASE URL
-│   └── doc/                    # System documentation
+│   └── crm/                        # CRM business logic libraries
+│       ├── campaign_export_lib.py
+│       ├── campaign_sync_lib.py
+│       ├── contact_sync_lib.py
+│       ├── crm_sync_lib.py
+│       ├── crm_template_sync_lib.py
+│       ├── filter_count_lib.py
+│       ├── gdisk_interface.py
+│       ├── mail_sender.py
+│       ├── push_and_sync_lib.py
+│       ├── sheets_config.py
+│       └── statistics_builder.py
+├── public/                         # Frontend (Firebase Hosting)
+│   ├── index.html                  # Dashboard / home
+│   ├── campaigns.html              # Campaign list
+│   ├── campaign.html               # Single campaign view
+│   ├── campaign-edit.html          # Edit campaign + send outreach
+│   ├── crm-bp.html                 # CRM workflow steps 1–6
+│   ├── crm-sync.html               # Standalone CRM sync page
+│   ├── filter-facets.html          # Lead filter / facet browser
+│   ├── gdisk.html                  # Google Drive folder management
+│   ├── jobs.html                   # Background job monitor
+│   ├── mailbox.html                # IMAP mailbox viewer
+│   ├── settings.html               # Mail accounts + Drive config
+│   ├── statistics.html             # Pipeline statistics
+│   ├── doc-viewer.html             # In-app documentation viewer
+│   ├── js/crm-common.js            # Shared nav + BASE URL
+│   ├── css/styles.css              # Custom styles
+│   ├── vendor/                     # Bootstrap 5 + Tabler Icons (local)
+│   └── doc/                        # System documentation (markdown)
+│       ├── system-architecture.md
+│       ├── installation.md
+│       ├── pipeline-config.md
+│       ├── backend-functions.md
+│       ├── user-guide.md
+│       └── ai-assistance.md
+├── docs/                           # API reference docs
+│   ├── crm_api.md
+│   └── gdisk_interface.md
 ├── .env.example
 ├── firebase.json
 ├── firestore.indexes.json
-├── setup_gcp.sh / .bat         # One-time GCP setup
-└── deploy_crm.sh / .bat        # Deploy functions + hosting
+├── firestore.rules
+├── setup_gcp.sh / .bat             # One-time GCP setup
+└── deploy_crm.sh / .bat            # Deploy functions + hosting
 ```
 
 ---
@@ -272,76 +327,4 @@ The system includes a fully featured web frontend hosted on Firebase. It is the 
 
 **Campaign management** — create and manage outreach campaigns, sync contacts from Google Sheets, review and approve leads, activate sending, and track delivery status per campaign.
 
-**Individual lead follow-up** — drill into any lead to send personalised emails directly from the UI, log follow-up actions, update lead status (replied, converted, bounced, unsubscribed), and track the full outreach history per contact.
-
-**Settings & mail accounts** — configure IMAP and Gmail OAuth2 sending accounts, send test emails, and manage the Google Drive folder for campaign spreadsheets.
-
-The dashboard runs at your Firebase Hosting URL (e.g. `https://<YOUR_PROJECT_ID>.web.app/`).
-
----
-
-## API
-
-Base URL: `https://us-central1-<project>.cloudfunctions.net/crmApi`
-
-Key endpoints:
-
-```
-GET  /api/crm/campaigns                  — list campaigns
-GET  /api/crm/campaigns/<id>             — single campaign
-POST /api/crm/campaigns/<id>             — update campaign
-GET  /api/crm/contact-sync?countries=NO  — import contacts (async job)
-GET  /api/crm/push-and-sync              — push selected (async job)
-GET  /api/crm/template-sync              — sync CRM template (async job)
-GET  /api/crm/status/<job_id>            — poll job status
-GET  /api/crm/jobs?limit=10              — recent jobs
-GET  /api/crm/settings/mail-accounts     — list mail accounts
-```
-
-Long-running jobs are queued via Google Cloud Tasks and polled by the frontend. Full API reference: [`docs/crm_api.md`](docs/crm_api.md)
-
----
-
-## Configuration
-
-Pipeline behaviour is controlled by files in `config/`:
-
-| File | Pipeline | Purpose |
-|---|---|---|
-| `site_agent_queries.json` | Site | Bing queries + target types per country |
-| `site_agent_blocklist.txt` | Site | Lean blocklist (~385 entries) |
-| `countries.json` | Lead | Agency keywords + Bing queries per country |
-| `catalogs.json` | Lead | Agency directory sites to scrape |
-| `blocklist_domains.txt` | Lead | Broad blocklist (~1000 entries) |
-
-Full configuration reference: [`public/doc/pipeline-config.md`](public/doc/pipeline-config.md)
-
----
-
-## Design principles
-
-**Isolation** — every parallel unit of work (site crawl, contact enrichment) runs in its own class with a hard timeout. One failure cannot stall or corrupt siblings. See `app/functions/async_worker.py`.
-
-**Idempotency** — all Firestore writes use `merge=True`. Re-running any pipeline step is safe.
-
-**Sheet as working surface** — Google Drive spreadsheets are the human interface. The DB is source of truth for protected fields (`status`, `sent_at`).
-
-**Single source for mail** — all outbound email goes through `MailSender`. CSS inlining, header injection, and sent-folder append are applied once, everywhere.
-
----
-
-## Documentation
-
-- [`public/doc/system-architecture.md`](public/doc/system-architecture.md) — full system architecture
-- [`public/doc/installation.md`](public/doc/installation.md) — installation guide
-- [`public/doc/pipeline-config.md`](public/doc/pipeline-config.md) — pipeline configuration reference
-- [`public/doc/backend-functions.md`](public/doc/backend-functions.md) — Cloud Function internals
-- [`crm/README.md`](crm/README.md) — CRM module reference
-
----
-
-## License
-
-This program is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License v3.0](LICENSE) as published by the Free Software Foundation.
-
-This program is distributed in the hope that it will be useful, but **without any warranty**; without even the implied warranty of merchantability or fitness for a particular purpose. See the GNU General Public License for more details.
+**Individual lead follow-up** — drill into any lead to send personalised emails directly from the UI, log follow-up actions
