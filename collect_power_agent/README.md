@@ -360,6 +360,7 @@ Firestore
 | `app/site_contact_enrich.py` | Enriches `site_contacts` via Brave Search + GPT |
 | `app/site_email_check.py` | Classifies `site_contacts` by email type and contact role (OpenAI) |
 | `app/site_smart_export.py` | Tiered Excel (6 tiers) + writes to `email_contacts` via `--write-contacts` |
+| `app/facet_campaign.py` | Create or refresh a campaign from a saved filter-facets preset — filters `email_contacts`, deduplicates against existing campaigns, writes `campaign_contacts` |
 | `site_scrape.bat` | Runs site_agent + site_enrich_agent for all countries |
 | `run_site_pipeline.bat` | **Full Site Pipeline starter** — runs all 6 steps, edit `COUNTRIES` + `CAMPAIGN` at top |
 

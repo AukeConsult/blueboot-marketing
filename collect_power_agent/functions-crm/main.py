@@ -390,10 +390,13 @@ def update_campaign(campaign_id):
             valid = {"draft", "dosend", "sent", "cancelled"}
             if body["status"] not in valid:
                 return _err(f"Invalid status. Must be one of: {', '.join(sorted(valid))}", 400)
-            update["status"] = body["status"]
-            # Auto-set sent_at when status becomes sent
-            if body["status"] == "sent" and not body.get("sent_at"):
-                update["sent_at"] = datetime.now(timezone.utc).isoformat()
+            current_status = (doc.to_dict() or {}).get("status", "draft")
+            if current_status == "draft":
+                update["status"] = body["status"]
+                # Auto-set sent_at when status becomes sent
+                if body["status"] == "sent" and not body.get("sent_at"):
+                    update["sent_at"] = datetime.now(timezone.utc).isoformat()
+            # else: campaign is not draft — status change silently ignored
 
         if "sent_at" in body:
             update["sent_at"] = body["sent_at"]

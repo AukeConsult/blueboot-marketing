@@ -155,12 +155,14 @@ const NAV_LINKS = [
   { href: 'mailbox.html',       icon: 'ti-inbox',             label: 'Mailbox',     roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'docs',  match: ['doc-viewer.html'],           icon: 'ti-book',              label: 'Documentation',
     children: [
-      { href: 'doc-viewer.html?doc=installation',        icon: 'ti-download',      label: 'Installation' },
-      { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user', label: 'User guide' },
+      { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user',           label: 'User guide' },
+      { href: 'doc-viewer.html?doc=filter-to-campaign',  icon: 'ti-filter',         label: 'Filter to campaign' },
+      { href: 'doc-viewer.html?doc=backend-functions',   icon: 'ti-terminal',       label: 'Backend functions' },
+      { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',     label: 'Pipeline config' },
+      { href: 'doc-viewer.html?doc=ai-assistance',       icon: 'ti-brain',          label: 'AI assistance' },
+      { divider: true },
       { href: 'doc-viewer.html?doc=system-architecture', icon: 'ti-topology-star-3', label: 'System architecture' },
-      { href: 'doc-viewer.html?doc=backend-functions',   icon: 'ti-terminal',      label: 'Backend functions' },
-      { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',    label: 'Pipeline config' },
-      { href: 'doc-viewer.html?doc=ai-assistance',       icon: 'ti-brain',         label: 'AI assistance' },
+      { href: 'doc-viewer.html?doc=installation',        icon: 'ti-download',       label: 'Installation' },
     ]},
   { dropdown: 'settings', icon: 'ti-settings', label: 'Settings', roles: ['admin'],
     match: ['settings.html', 'users.html'],
@@ -181,6 +183,7 @@ function renderNav(targetId){
       // Dropdown group
       const childActive = l.children.some(c => (c.match || [c.href]).includes(cur));
       const items = l.children.map(c => {
+        if (c.divider) return '<div class="nav-dropdown-divider"></div>';
         const a = (c.match || [c.href]).includes(cur) ? ' active' : '';
         return '<a href="' + c.href + '" class="nav-dropdown-item' + a + '">'
              + '<i class="ti ' + c.icon + '"></i>' + c.label + '</a>';

@@ -251,7 +251,7 @@
       <div class="modal-body">
         <p class="mb-2">You are about to activate campaign <strong id="modal-campaign-id"></strong>.</p>
         <div class="alert alert-info py-2 small mb-2">
-          <i class="ti ti-info-circle me-1"></i>Activating marks this campaign as <strong>sent</strong> and queues it for outreach delivery. Only campaigns in <strong>dosend</strong> status can be activated.
+          <i class="ti ti-info-circle me-1"></i>Activating marks this campaign as <strong>dosend</strong> — queued for outreach delivery. The outreach sender picks up campaigns in this status.
         </div>
         <div class="alert alert-warning py-2 small mb-0">
           <i class="ti ti-lock me-1"></i>Once activated, the campaign cannot be changed or synced. This cannot be undone.
@@ -511,7 +511,7 @@ async function loadCampaign() {
 
     const isSent = st === 'sent' || st === 'cancelled';
     const sendBtn = document.getElementById('send-btn');
-    sendBtn.style.display = st === 'dosend' ? '' : 'none';
+    sendBtn.style.display = (st === 'draft' || st === 'dosend') ? '' : 'none';
     document.getElementById('delete-btn').style.display = st === 'draft' ? '' : 'none';
     const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
     if (syncBtn) syncBtn.disabled = isSent;
@@ -626,12 +626,12 @@ async function doSend() {
   try {
     const r = await fetch(`${BASE}/api/crm/campaigns/${id}`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({status: 'sent'})
+      body: JSON.stringify({status: 'dosend'})
     });
     const d = await r.json();
     if (d.status === 'ok') {
       const badge = document.getElementById('c-status-badge');
-      badge.className = 'bb-badge bb-badge-sent'; badge.textContent = 'sent';
+      badge.className = 'bb-badge bb-badge-dosend'; badge.textContent = 'dosend';
       if (d.campaign && d.campaign.sent_at) {
         document.getElementById('c-sent-at-row').style.display = '';
         document.getElementById('c-sent-at').textContent = fmt(d.campaign.sent_at);
@@ -639,7 +639,7 @@ async function doSend() {
       document.getElementById('send-btn').style.display = 'none';
       document.querySelector('[onclick="syncCampaign()"]').disabled = true;
       fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
-      fb.textContent = 'Campaign marked as sent.'; fb.style.display = '';
+      fb.textContent = 'Campaign marked as dosend — queued for outreach delivery.'; fb.style.display = '';
     } else {
       fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
       fb.textContent = d.message; fb.style.display = '';

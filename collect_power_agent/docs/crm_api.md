@@ -63,6 +63,7 @@ GET /api/crm/contact-sync?countries=NO,SE&max=500&min_pages=500
 | GET | `/api/crm/campaigns/<id>` | — | Get one campaign incl. its `campaign_contacts`. |
 | POST | `/api/crm/campaigns/<id>/create` | `{outreach_email_account?}` | Create a campaign (409 if it exists). |
 | POST·PATCH | `/api/crm/campaigns/<id>` | campaign fields (status, mail, …) | Update a campaign. |
+| DELETE | `/api/crm/campaigns/<id>` | — | Delete a **draft** campaign. Atomically flips status to `deleting` in a Firestore transaction, then enqueues a `campaign-delete` job that batch-deletes all `campaign_contacts` and the campaign doc. Returns `{job_id, poll}`. Returns 409 if status is not `draft`. |
 
 ---
 
@@ -76,7 +77,8 @@ The selectable-value catalog used by the Filter Facets page. See also
 |---|---|---|---|
 | GET | `/api/crm/filter-facets` | — | List facet docs (catalog + saved presets). |
 | GET | `/api/crm/filter-facets/<name>` | — | Get one facet doc (e.g. `site_leads`). |
-| POST·PATCH | `/api/crm/filter-facets/<name>` | full facets object (must contain `filters`) | Save a preset; also **enqueues a `filter-count` job** that refreshes keywords, counts matching sites/contacts and stores `counts` back. Returns `{job_id, poll}`. |
+| POST·PATCH | `/api/crm/filter-facets/<name>` | full facets object (must contain `filters`) | Save a preset; also **enqueues a `filter-count` job** that refreshes keywords, counts matching sites/contacts and stores `counts` (including `selected_count` per value) back. Returns `{job_id, poll}`. |
+| POST | `/api/crm/filter-facets/<name>/create-campaign` | `{campaign_id, dry_run?}` | Create (or refresh) a campaign from a saved facet preset. Streams `email_contacts`, applies the saved filter selections, deduplicates against existing campaign contacts, and writes matching contacts to `campaigns/<campaign_id>/campaign_contacts`. Stores `source_facet_path`, `source_facet_filters` (selection snapshot), and `source_facet_built_at` on the campaign doc. Enqueues a `facet-campaign` job; returns `{job_id, poll}`. Button is only enabled on the UI when `contacts_in_email_contacts > 0`. |
 
 ---
 

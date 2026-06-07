@@ -63,6 +63,7 @@ A compact one-line summary: **N contacts · N sites · N countries · N sent · 
 - **Email account** — dropdown of configured mail accounts. Changing this saves immediately and updates which account the campaign uses for outreach. An eye icon opens a read-only popup showing the account's IMAP/Gmail settings.
 - **Owner** — auto-saves 1.2 s after typing.
 - **Activated at** — shown once the campaign has been activated.
+- **Built from facet filter** — shown when the campaign was created from a filter-facets preset. Displays the preset name (linked to `filter-facets.html`), the timestamp it was last built, and each active filter field as a pill badge (e.g. `ai_company_type: b2b`, `email_type: personal`). Updated every time the facet-campaign job runs.
 
 ### Mail template (expandable)
 
@@ -82,6 +83,10 @@ Overwrites the campaign spreadsheet completely from the database. A confirmation
 ### Activate button
 
 Only visible when campaign status is `dosend`. Marks the campaign as sent and queues it for outreach delivery. Requires confirmation.
+
+### Delete button
+
+Only visible when campaign status is `draft`. Opens a confirmation popup showing the contact count. On confirm, atomically marks the campaign as `deleting` (Firestore transaction) and enqueues a background `campaign-delete` job that batch-deletes all `campaign_contacts` then the campaign document. Redirects to the campaigns list on completion. Campaigns with any other status cannot be deleted.
 
 ### Contacts table
 
@@ -163,6 +168,17 @@ Displays and manages the filter facet catalog — the selectable values used by 
 ```
 python app/build_filter_facets.py
 ```
+
+### Toolbar
+
+- **Load facets** — dropdown of saved presets. Switching presets clears the Save as field.
+- **Load** — reloads the selected preset.
+- **Save as / Save & count** — saves the current selections under a new preset name and enqueues a `filter-count` job. The job refreshes the keyword list, counts matching sites and contacts, and writes `selected_count` back onto every facet value.
+- **Create campaign** — only enabled after a count job has confirmed `contacts_in_email_contacts > 0`. Opens a modal to enter a campaign ID and optional dry-run flag; enqueues a `facet-campaign` job. Rerun on an existing campaign refreshes matching contacts (preserves outreach history on non-pending contacts) and removes stale pending contacts.
+
+### selected_count
+
+After a count job completes, each facet value shows two numbers: **N / M** where N (blue) is `selected_count` — how many matched sites/contacts have that value — and M is the total across all sites. This lets you see the distribution of your filter results without leaving the page.
 
 ---
 

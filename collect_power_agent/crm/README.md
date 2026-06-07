@@ -362,6 +362,29 @@ python crm\contact_sync.py --countries NO --max 5 --min-pages 500 --max-pages 50
 
 ---
 
+## Facet-to-campaign (filter-based campaign builder)
+
+Create or refresh a campaign directly from a saved filter-facets preset. Filters `email_contacts`, deduplicates against all other existing campaigns, and writes matching contacts to `campaigns/<id>/campaign_contacts`.
+
+```bash
+python app\facet_campaign.py --facet leif_test_b2b_personal --campaign NO_b2b_jul01
+python app\facet_campaign.py --facet NO_ecom --campaign NO_ecom_jul01 --dry-run
+```
+
+| Flag | Description |
+|---|---|
+| `--facet` | Name of the `filter_facets` Firestore document to use (e.g. a saved preset name) |
+| `--campaign` | Target campaign ID — created if absent, contacts refreshed if it already exists |
+| `--dry-run` | Count and print results without writing anything to Firestore |
+
+**Rerun behaviour:** existing contacts keep their outreach history (`status`, `sent_at`, `last_action`, `last_action_status`). Stale `pending` contacts that no longer match the filter are removed. Contacts with any other status are preserved untouched.
+
+The campaign document stores `source_facet`, `source_facet_path`, `source_facet_filters` (selection snapshot), and `source_facet_built_at` so you can always audit which filter produced it.
+
+This function also runs as a background job (`facet-campaign`) via the Filter Facets page → **Create campaign** button, or via `POST /api/crm/filter-facets/<name>/create-campaign`.
+
+---
+
 ## CRM Template Columns
 
 | # | Column | Source | Notes |
