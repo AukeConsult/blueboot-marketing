@@ -161,19 +161,21 @@ def discover_subcollections(db, top_collections: list[str]) -> dict[str, list[st
 # Fetch live indexes from Firestore via firebase CLI
 # ---------------------------------------------------------------------------
 
-def _fetch_live_indexes(key_dict: dict) -> list[dict]:
+def _fetch_live_indexes(key_dict: dict, hint_cgs: set | None = None) -> list[dict]:
     """Fetch all deployed composite indexes via the Firestore Admin REST API.
 
-    Uses the raw service-account dict returned by _load_key_dict() —
-    no firebase CLI or Node.js required.
-    Returns a list of index dicts compatible with firestore.indexes.json format.
+    The wildcard collectionGroups/- endpoint is unreliable, so collection groups
+    are discovered two ways:
+      1. From the /fields endpoint (finds CGs with custom field overrides).
+      2. From hint_cgs — CG names already present in the local index file
+         (covers CGs that have composite indexes but no field overrides).
+    Both sets are unioned before querying indexes per CG.
     """
     try:
         from google.oauth2 import service_account
         from google.auth.transport.requests import AuthorizedSession
-    except ImportError:
-        print("  [index-sync] google-auth not installed — run: pip install google-auth")
-        return []
+    except ImportError as _e:
+        raise RuntimeError("google-auth not installed — run: pip install google-auth requests") from _e
 
     print("  [index-sync] Fetching live indexes via Firestore Admin REST API…")
 
@@ -183,64 +185,52 @@ def _fetch_live_indexes(key_dict: dict) -> list[dict]:
             scopes=["https://www.googleapis.com/auth/cloud-platform"],
         )
         project_id = key_dict.get("project_id", "")
-
         if not project_id:
-            print("  [index-sync] Could not determine project_id from credentials")
-            return []
+            raise RuntimeError("Could not determine project_id from credentials")
 
-        session  = AuthorizedSession(creds)
-        base     = (f"https://firestore.googleapis.com/v1/projects/{project_id}"
-                    f"/databases/(default)")
+        session = AuthorizedSession(creds)
+        base    = (f"https://firestore.googleapis.com/v1beta2/projects/{project_id}"
+                   f"/databases/(default)")
 
-        # ── 1. List all collectionGroups ─────────────────────────────────────
-        cg_url   = f"{base}/collectionGroups/-/fields"
+        # ── 1. Collect collection group names via the working /fields endpoint ─
+        fields_resp = session.get(
+            f"{base}/collectionGroups/-/fields",
+            params={"pageSize": 0, "filter": "indexConfig.usesAncestorConfig:false"},
+            timeout=60,
+        )
+        if not fields_resp.ok:
+            raise RuntimeError(
+                f"Could not list collection groups: "
+                f"{fields_resp.status_code} — {fields_resp.text[:300]}"
+            )
         cg_names: set[str] = set()
-        cg_token = None
-        try:
-            while True:
-                params = {"pageSize": 200}
-                if cg_token:
-                    params["pageToken"] = cg_token
-                cg_resp = session.get(cg_url, params=params, timeout=30)
-                if cg_resp.ok:
-                    cg_data = cg_resp.json()
-                    for f in cg_data.get("fields", []):
-                        name = f.get("name", "")
-                        # name: .../collectionGroups/{cg}/fields/{field}
-                        if "/collectionGroups/" in name:
-                            cg = name.split("/collectionGroups/")[1].split("/")[0]
-                            if cg != "__default__":
-                                cg_names.add(cg)
-                    cg_token = cg_data.get("nextPageToken")
-                    if not cg_token:
-                        break
-                else:
-                    break
-        except Exception:
-            pass  # non-fatal — index fetch is the important part
+        for f in fields_resp.json().get("fields", []):
+            name = f.get("name", "")
+            if "/collectionGroups/" in name:
+                cg = name.split("/collectionGroups/")[1].split("/")[0]
+                if cg not in ("__default__", "*"):
+                    cg_names.add(cg)
+        if hint_cgs:
+            before = len(cg_names)
+            cg_names |= hint_cgs
+            extra = len(cg_names) - before
+            if extra:
+                print(f"  [index-sync] +{extra} CG(s) from existing index file")
+        print(f"  [index-sync] Collection groups to query: {', '.join(sorted(cg_names)) or '(none)'}")
 
-        if cg_names:
-            print(f"  [index-sync] CollectionGroups found: {', '.join(sorted(cg_names))}")
-
-        # ── 2. Fetch all composite indexes (paginated) ───────────────────────
-        idx_url    = f"{base}/collectionGroups/-/indexes"
+        # ── 2. Fetch composite indexes per collection group ────────────────────
         raw_indexes: list[dict] = []
-        page_token = None
-        while True:
-            params = {"pageSize": 200}
-            if page_token:
-                params["pageToken"] = page_token
-            resp = session.get(idx_url, params=params, timeout=30)
-            resp.raise_for_status()
-            page = resp.json()
-            raw_indexes.extend(page.get("indexes", []))
-            page_token = page.get("nextPageToken")
-            if not page_token:
-                break
+        for cg in sorted(cg_names):
+            url  = f"{base}/collectionGroups/{cg}/indexes"
+            resp = session.get(url, timeout=30)
+            if not resp.ok:
+                print(f"  [index-sync] Warning: could not fetch indexes for {cg}: "
+                      f"{resp.status_code} — {resp.text[:200]}")
+                continue
+            raw_indexes.extend(resp.json().get("indexes", []))
 
     except Exception as exc:
-        print(f"  [index-sync] REST API fetch failed: {exc}")
-        return []
+        raise RuntimeError(f"Composite index fetch failed: {exc}") from exc
     clean: list[dict] = []
     skipped_states: list[str] = []
     for idx in raw_indexes:
@@ -303,7 +293,7 @@ def _deploy_indexes(indexes_path: Path, key_dict: dict) -> None:
         return
 
     session   = AuthorizedSession(creds)
-    base_url  = f"https://firestore.googleapis.com/v1/projects/{project_id}/databases/(default)"
+    base_url  = f"https://firestore.googleapis.com/v1beta2/projects/{project_id}/databases/(default)"
     created = skipped = failed = 0
 
     for idx in data.get("indexes", []):
@@ -341,9 +331,8 @@ def _fetch_live_field_overrides(key_dict: dict) -> list[dict]:
     try:
         from google.oauth2 import service_account
         from google.auth.transport.requests import AuthorizedSession
-    except ImportError:
-        print("  [index-sync] google-auth not installed — run: pip install google-auth")
-        return []
+    except ImportError as _e:
+        raise RuntimeError("google-auth not installed — run: pip install google-auth requests") from _e
 
     print("  [index-sync] Fetching live field overrides via Firestore Admin REST API…")
 
@@ -358,32 +347,36 @@ def _fetch_live_field_overrides(key_dict: dict) -> list[dict]:
             return []
 
         session  = AuthorizedSession(creds)
-        base     = (f"https://firestore.googleapis.com/v1/projects/{project_id}"
+        # Firestore Admin field operations require v1beta2, not v1
+        base     = (f"https://firestore.googleapis.com/v1beta2/projects/{project_id}"
                     f"/databases/(default)")
         url      = f"{base}/collectionGroups/-/fields"
 
-        raw_fields: list[dict] = []
-        page_token = None
-        while True:
-            # The fields endpoint requires this filter — without it the API only
-            # returns the database-wide default entry and nothing else.
-            params = {
-                "pageSize": 300,
-                "filter":   "indexConfig.usesAncestorConfig:false",
-            }
-            if page_token:
-                params["pageToken"] = page_token
-            resp = session.get(url, params=params, timeout=30)
-            resp.raise_for_status()
-            page = resp.json()
-            raw_fields.extend(page.get("fields", []))
-            page_token = page.get("nextPageToken")
-            if not page_token:
-                break
+        # The fields endpoint requires this filter — without it the API only
+        # returns the database-wide default entry and nothing else.
+        # The wildcard collectionGroups/- endpoint also does not support pageSize.
+        resp = session.get(
+            url,
+            params={"pageSize": 0, "filter": "indexConfig.usesAncestorConfig:false"},
+            timeout=60,
+        )
+        if not resp.ok:
+            raise RuntimeError(
+                f"{resp.status_code} {resp.reason} — {resp.text[:400]}"
+            )
+        raw_fields: list[dict] = resp.json().get("fields", [])
+        print(f"  [index-sync] Raw fields from API: {len(raw_fields)}")
+        # Print unique collection groups seen in raw response for debugging
+        raw_cgs: set[str] = set()
+        for _f in raw_fields:
+            _n = _f.get("name", "")
+            if "/collectionGroups/" in _n:
+                raw_cgs.add(_n.split("/collectionGroups/")[1].split("/")[0])
+        if raw_cgs:
+            print(f"  [index-sync] CGs in raw fields response: {', '.join(sorted(raw_cgs))}")
 
     except Exception as exc:
-        print(f"  [index-sync] Field overrides REST fetch failed: {exc}")
-        return []
+        raise RuntimeError(f"Field override fetch failed: {exc}") from exc
 
     overrides: list[dict] = []
     for field in raw_fields:
@@ -409,10 +402,20 @@ def _fetch_live_field_overrides(key_dict: dict) -> list[dict]:
             if state not in ("READY", ""):
                 continue
             entry: dict = {"queryScope": idx.get("queryScope", "COLLECTION")}
+            # v1 format: order/arrayConfig directly on the index object
             if "order" in idx:
                 entry["order"] = idx["order"]
             elif "arrayConfig" in idx:
                 entry["arrayConfig"] = idx["arrayConfig"]
+            # v1beta2 format: order/arrayConfig nested inside fields[0]
+            elif idx.get("fields"):
+                f0 = idx["fields"][0]
+                if "order" in f0:
+                    entry["order"] = f0["order"]
+                elif "arrayConfig" in f0:
+                    entry["arrayConfig"] = f0["arrayConfig"]
+                else:
+                    continue
             else:
                 continue
             clean_indexes.append(entry)
@@ -504,87 +507,124 @@ def _print_summary(merged: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
-def main(argv=None) -> None:
+def main(argv=None) -> int:
+    """Return 0 on success, 1 on any failure (so Firebase predeploy hook aborts deploy)."""
+    import sys
     try:
         from dotenv import load_dotenv
         load_dotenv()
     except ImportError:
         pass
 
-    p = argparse.ArgumentParser(
-        description="Merge new Firestore indexes into firestore.indexes.json"
+    ap = argparse.ArgumentParser(
+        description="Sync live Firestore indexes into firestore.indexes.json"
     )
-    p.add_argument("--output",        default=None, metavar="FILE",
-                   help="Path to firestore.indexes.json  "
-                        "(default: project root / firestore.indexes.json)")
-    p.add_argument("--dry-run",       action="store_true",
-                   help="Print merged JSON without writing the file")
-    p.add_argument("--discover-only", action="store_true",
-                   help="List collections/subcollections, merge + write index file, then exit")
-    p.add_argument("--no-discover",   action="store_true",
-                   help="Skip collection/subcollection browsing — live index fetch still runs")
-    p.add_argument("--deploy",        action="store_true",
-                   help="Run 'firebase deploy --only firestore:indexes' after writing")
-    args = p.parse_args(argv)
+    ap.add_argument("--output",        default=None, metavar="FILE",
+                    help="Path to firestore.indexes.json  "
+                         "(default: project root / firestore.indexes.json)")
+    ap.add_argument("--dry-run",       action="store_true",
+                    help="Print merged JSON without writing the file")
+    ap.add_argument("--discover-only", action="store_true",
+                    help="List collections/subcollections, merge + write index file, then exit")
+    ap.add_argument("--no-discover",   action="store_true",
+                    help="Skip collection/subcollection browsing — index fetch still runs")
+    ap.add_argument("--deploy",        action="store_true",
+                    help="Deploy indexes via REST API after writing the file")
+    args = ap.parse_args(argv)
 
     output_path = Path(args.output) if args.output else (
         Path(__file__).resolve().parent / "firestore.indexes.json"
     )
 
-    # ── Load credentials ────────────────────────────────────────────────────
-    key_dict = _load_key_dict()   # raw dict — for REST API calls
-    cert     = _load_secrets()    # Certificate — for Admin SDK
+    # ── Load credentials — hard-fail so predeploy aborts immediately ────────
+    try:
+        key_dict = _load_key_dict()   # raw dict — for REST API calls
+        cert     = _load_secrets()    # Certificate — for Admin SDK
+    except Exception as exc:
+        print(f"  [index-sync] FATAL: could not load credentials: {exc}", flush=True)
+        return 1
 
-    # ── Firestore collection discovery (Admin SDK) ──────────────────────────
+    # ── Firestore collection discovery (Admin SDK, optional) ─────────────────
     if not args.no_discover:
         try:
             db  = _init_firestore(cert)
             top = discover_collections(db)
             discover_subcollections(db, list(top.keys()))
         except Exception as exc:
-            print(f"\n  [index-sync] Discovery failed: {exc}")
+            print(f"\n  [index-sync] Discovery failed (non-fatal): {exc}")
 
-    # ── Fetch live indexes + field overrides via REST API ──────────────────
-    print(f"\n  [index-sync] Merging indexes into {output_path.name}…")
-    existing          = _load_existing(output_path)
-    live_indexes      = _fetch_live_indexes(key_dict)
-    live_overrides    = _fetch_live_field_overrides(key_dict)
+    # ── Load existing file first so we can seed CG discovery ───────────────
+    print(f"  [index-sync] Loading {output_path.name}…", flush=True)
+    existing     = _load_existing(output_path)
+    existing_cgs = {idx["collectionGroup"] for idx in existing.get("indexes", [])}
 
-    # Merge: local file → live Firestore (adds anything in Firestore not yet local)
+    # ── Fetch live indexes + field overrides — hard-fail on any error ────────
+    print("\n  [index-sync] Fetching live data from Firestore…", flush=True)
+    try:
+        live_indexes = _fetch_live_indexes(key_dict, hint_cgs=existing_cgs)
+    except Exception as exc:
+        print(f"  [index-sync] FATAL: {exc}", flush=True)
+        return 1
+    try:
+        live_overrides = _fetch_live_field_overrides(key_dict)
+    except Exception as exc:
+        print(f"  [index-sync] FATAL: {exc}", flush=True)
+        return 1
+
+    if not live_indexes and not live_overrides:
+        print("  [index-sync] FATAL: Firestore returned 0 indexes and 0 field overrides — "
+              "aborting to avoid overwriting the index file with empty data.", flush=True)
+        return 1
+
+    # ── Merge into local file ───────────────────────────────────────────────
     merged,   added_idx, _ = _merge(existing, live_indexes)
     merged, added_ovr, _   = _merge_overrides(merged, live_overrides)
 
-    merged_json = json.dumps(merged, indent=2, ensure_ascii=False)
-
-    from_idx = len(existing.get("indexes", []))
-    from_ovr = len(existing.get("fieldOverrides", []))
-    print(f"  [index-sync] Composite indexes — file: {from_idx}  new from Firestore: {added_idx}  "
-          f"total: {len(merged['indexes'])}")
-    print(f"  [index-sync] Field overrides   — file: {from_ovr}  new from Firestore: {added_ovr}  "
-          f"total: {len(merged['fieldOverrides'])}")
+    from_idx   = len(existing.get("indexes", []))
+    from_ovr   = len(existing.get("fieldOverrides", []))
+    total_idx  = len(merged["indexes"])
+    total_ovr  = len(merged["fieldOverrides"])
+    print(f"  [index-sync] Composite indexes — was: {from_idx}  added: {added_idx}  total: {total_idx}")
+    print(f"  [index-sync] Field overrides   — was: {from_ovr}  added: {added_ovr}  total: {total_ovr}")
 
     if args.dry_run:
         print("\n── firestore.indexes.json (dry-run — not written) ─────────────")
-        print(merged_json)
+        print(json.dumps(merged, indent=2, ensure_ascii=False))
         _print_summary(merged)
-        return
+        return 0
 
-    # Write file
-    output_path.write_text(merged_json + "\n", encoding="utf-8")
-    print(f"  [index-sync] Written → {output_path}")
+    # ── Write file ──────────────────────────────────────────────────────────
+    try:
+        merged_json = json.dumps(merged, indent=2, ensure_ascii=False)
+        output_path.write_text(merged_json + "\n", encoding="utf-8")
+    except Exception as exc:
+        print(f"  [index-sync] FATAL: could not write {output_path}: {exc}", flush=True)
+        return 1
 
-    # Always print summary
+    # ── Verify the file is valid and complete before proceeding ─────────────
+    try:
+        written = json.loads(output_path.read_text(encoding="utf-8"))
+        assert len(written.get("indexes", [])) == total_idx, "index count mismatch after write"
+        assert len(written.get("fieldOverrides", [])) == total_ovr, "override count mismatch after write"
+    except Exception as exc:
+        print(f"  [index-sync] FATAL: post-write verification failed: {exc}", flush=True)
+        return 1
+
+    print(f"  [index-sync] ✓ {output_path.name} written and verified "
+          f"({total_idx} indexes, {total_ovr} overrides)", flush=True)
+
     _print_summary(merged)
 
     if args.discover_only:
-        return
+        return 0
 
-    # ── Deploy ───────────────────────────────────────────────────────────────
+    # ── Optional REST deploy ─────────────────────────────────────────────────
     if args.deploy:
         _deploy_indexes(output_path, key_dict)
-    else:
-        print("  Deploy with:  firebase deploy --only firestore:indexes")
+
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    import sys as _sys
+    _sys.exit(main())

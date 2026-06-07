@@ -2,7 +2,7 @@
   "firestore": {
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json",
-    "predeploy": ["python firestore_sync.py --no-discover"]
+    "predeploy": ["py firestore_sync.py --no-discover"]
   },
   "hosting": {
     "public": "public",
