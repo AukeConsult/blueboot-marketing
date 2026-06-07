@@ -16,16 +16,21 @@
 
   <div class="d-flex align-items-center gap-2 mb-3">
     <a href="index.html" class="btn btn-sm btn-outline-secondary" onclick="return goBack()"><i class="ti ti-arrow-left"></i></a>
-    <h5 class="mb-0"><i class="ti ti-settings me-2"></i>Settings</h5>
+    <h5 class="page-title"><i class="ti ti-settings me-2"></i>Settings</h5>
   </div>
 
   <!-- Mail accounts -->
   <div class="card p-3 mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <h6 class="fw-semibold mb-0"><i class="ti ti-at me-1 text-primary"></i>Mail accounts</h6>
-      <button class="btn btn-sm btn-outline-primary" onclick="openMailAccountModal()">
-        <i class="ti ti-plus me-1"></i>Add account
-      </button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" onclick="openTagStatusModal()">
+          <i class="ti ti-tag me-1"></i>Tag statuses
+        </button>
+        <button class="btn btn-sm btn-outline-primary" onclick="openMailAccountModal()">
+          <i class="ti ti-plus me-1"></i>Add account
+        </button>
+      </div>
     </div>
     <p class="small text-muted mb-3">Outreach mail accounts used by campaigns. Each account is keyed by its email address.</p>
     <div id="mail-accounts-list">
@@ -55,6 +60,33 @@
     <div id="access-status" class="mt-2"></div>
   </div>
 
+</div>
+
+<!-- Tag statuses modal -->
+<div class="modal fade" id="tagStatusModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-tag me-1 text-primary"></i>Mail tag statuses</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <p class="small text-muted mb-3">These statuses appear in the Mailbox tag popover and filter bar.
+           Drag to reorder.</p>
+        <div id="status-list" class="mb-3" style="max-height:320px;overflow-y:auto"></div>
+        <button class="btn btn-sm btn-outline-secondary w-100 mb-3" onclick="addStatusRow()">
+          <i class="ti ti-plus me-1"></i>Add status
+        </button>
+      </div>
+      <div class="modal-footer border-0 pt-0 d-flex align-items-center gap-2">
+        <button class="btn btn-primary btn-sm" onclick="saveStatuses()">
+          <i class="ti ti-device-floppy me-1"></i>Save
+        </button>
+        <span id="status-save-msg" class="small" style="color:var(--bb-muted)"></span>
+        <button class="btn btn-outline-secondary btn-sm ms-auto" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Send test mail modal -->
@@ -199,6 +231,8 @@
       </div>
     </div>
   </div>
+
+
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -454,6 +488,117 @@ async function deleteMailAccount(email) {
     loadMailAccounts();
   } catch(e) { alert('Delete failed: ' + e.message); }
 }
+// ── mail tag statuses ───────────────────────────────────────────────────────
+function openTagStatusModal() {
+  loadTagStatuses();
+  new bootstrap.Modal(document.getElementById('tagStatusModal')).show();
+}
+
+async function loadTagStatuses() {
+  try {
+    const r = await fetch(BASE + '/api/crm/settings/mail-tag-statuses');
+    const d = await r.json();
+    renderStatusList(d.statuses || []);
+  } catch(e) {
+    document.getElementById('status-list').innerHTML =
+      '<div class="small text-danger">Error loading statuses: ' + e.message + '</div>';
+  }
+}
+
+function renderStatusList(statuses) {
+  const el = document.getElementById('status-list');
+  if (!statuses.length) {
+    el.innerHTML = '<div class="small text-muted">No statuses yet — add one above.</div>';
+    return;
+  }
+  el.innerHTML = statuses.map((s, i) => `
+    <div class="d-flex align-items-center gap-2 mb-2 status-row" draggable="true" data-idx="${i}">
+      <i class="ti ti-grip-vertical text-muted" style="cursor:grab;font-size:1rem"></i>
+      <input class="form-control form-control-sm" value="${esc(s)}"
+             style="max-width:260px" placeholder="Status name"
+             oninput="markUnsaved()">
+      <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="removeStatusRow(this)" title="Remove">
+        <i class="ti ti-x"></i>
+      </button>
+    </div>`).join('');
+  setupDragSort();
+}
+
+function addStatusRow() {
+  const el = document.getElementById('status-list');
+  // clear empty-state placeholder if present
+  if (el.querySelector('.text-muted')) el.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'status-row d-flex align-items-center gap-2 mb-2';
+  div.draggable = true;
+  div.dataset.idx = el.querySelectorAll('.status-row').length;
+  div.innerHTML = `
+    <i class="ti ti-grip-vertical text-muted" style="cursor:grab;font-size:1rem"></i>
+    <input class="form-control form-control-sm" style="max-width:260px" placeholder="Status name"
+           oninput="markUnsaved()">
+    <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="removeStatusRow(this)" title="Remove">
+      <i class="ti ti-x"></i>
+    </button>`;
+  el.appendChild(div);
+  div.querySelector('input').focus();
+  setupDragSort();
+  markUnsaved();
+}
+
+function removeStatusRow(btn) {
+  btn.closest('.status-row').remove();
+  markUnsaved();
+}
+
+function markUnsaved() {
+  document.getElementById('status-save-msg').textContent = 'Unsaved changes';
+}
+
+async function saveStatuses() {
+  const inputs = document.querySelectorAll('#status-list .status-row input');
+  const statuses = [...inputs].map(i => i.value.trim()).filter(Boolean);
+  if (!statuses.length) { alert('Add at least one status.'); return; }
+  try {
+    const r = await fetch(BASE + '/api/crm/settings/mail-tag-statuses', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ statuses }),
+    });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      renderStatusList(d.statuses);
+      const msg = document.getElementById('status-save-msg');
+      msg.textContent = 'Saved!';
+      msg.style.color = 'var(--bb-success, #10b981)';
+      setTimeout(() => { msg.textContent = ''; msg.style.color = ''; }, 2500);
+    } else {
+      alert('Save failed: ' + d.message);
+    }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// drag-to-reorder
+function setupDragSort() {
+  const rows = document.querySelectorAll('#status-list .status-row');
+  let dragSrc = null;
+  rows.forEach(row => {
+    row.addEventListener('dragstart', () => { dragSrc = row; row.style.opacity = '.4'; });
+    row.addEventListener('dragend',   () => { dragSrc = null; row.style.opacity = ''; });
+    row.addEventListener('dragover',  e => { e.preventDefault(); });
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!dragSrc || dragSrc === row) return;
+      const parent = row.parentNode;
+      const rows   = [...parent.querySelectorAll('.status-row')];
+      const si = rows.indexOf(dragSrc), ti = rows.indexOf(row);
+      if (si < ti) parent.insertBefore(dragSrc, row.nextSibling);
+      else         parent.insertBefore(dragSrc, row);
+      markUnsaved();
+    });
+  });
+}
+
+
 </script>
 <script src="vendor/bootstrap.bundle.min.js"></script>
 </body>

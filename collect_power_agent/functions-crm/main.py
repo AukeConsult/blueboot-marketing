@@ -1136,7 +1136,8 @@ def read_mailbox(email):
     """Read recent emails from all folders of a mail account.
 
     Query params:
-      per_folder  int  max messages per folder (default 10, max 50)
+      limit        int  total messages to return (default 50, no cap)
+      folder_scope str  inbox|sent|inbox_sent|all (default inbox)
 
     Returns list of messages sorted newest first:
       { uid, folder, subject, from, to, date, preview, body }
@@ -1175,72 +1176,172 @@ def read_mailbox(email):
         if name_part.startswith('"') and name_part.endswith('"'):
             name_part = name_part[1:-1]
         return selectable, name_part
-    def _get_body(msg):
-        body = ""
+    def _get_body_parts(msg):
+        """Return (plain_text, html_body). Both may be empty strings."""
+        text_body = ""
+        html_body = ""
         if msg.is_multipart():
             for part in msg.walk():
                 ct = part.get_content_type()
                 cd = str(part.get("Content-Disposition", ""))
-                if ct == "text/plain" and "attachment" not in cd:
-                    charset = part.get_content_charset() or "utf-8"
-                    raw = part.get_payload(decode=True)
-                    body = raw.decode(charset, errors="replace") if raw else ""
-                    break
-            if not body:
-                for part in msg.walk():
-                    ct = part.get_content_type()
-                    cd = str(part.get("Content-Disposition", ""))
-                    if ct == "text/html" and "attachment" not in cd:
-                        charset = part.get_content_charset() or "utf-8"
-                        raw = part.get_payload(decode=True)
-                        html = raw.decode(charset, errors="replace") if raw else ""
-                        body = _re.sub(r"<[^>]+>", " ", html)
-                        body = _re.sub(r"\s+", " ", body).strip()
-                        break
+                if "attachment" in cd:
+                    continue
+                charset = part.get_content_charset() or "utf-8"
+                raw = part.get_payload(decode=True) or b""
+                content = raw.decode(charset, errors="replace")
+                if ct == "text/plain" and not text_body:
+                    text_body = content
+                elif ct == "text/html" and not html_body:
+                    html_body = content
         else:
-            raw = msg.get_payload(decode=True)
+            ct = msg.get_content_type()
+            raw = msg.get_payload(decode=True) or b""
             charset = msg.get_content_charset() or "utf-8"
-            body = raw.decode(charset, errors="replace") if raw else ""
-        return body.strip()
+            content = raw.decode(charset, errors="replace")
+            if ct == "text/html":
+                html_body = content
+            else:
+                text_body = content
+        return text_body.strip(), html_body.strip()
+
+    # Folders to skip — no outreach value
+    _SKIP_FOLDERS = {
+        "trash", "spam", "junk", "deleted items", "deleted messages",
+        "[gmail]/trash", "[gmail]/spam", "[gmail]/important",
+        "[gmail]/all mail", "[gmail]/starred",
+    }
+
+    def _select_folder(conn, fname):
+        quoted = '"' + fname.replace('"', '\\"') + '"'
+        typ, _ = conn.select(quoted, readonly=True)
+        if typ != "OK":
+            typ, _ = conn.select(fname, readonly=True)
+        return typ == "OK"
 
     def _fetch_folder(conn, folder_name, per_folder):
+        """Batch-fetch headers + short text preview in one IMAP round-trip.
+        Groups the multi-literal response by message so we get both
+        HEADER.FIELDS and BODY[TEXT] per UID."""
         msgs = []
+        if folder_name.lower() in _SKIP_FOLDERS:
+            return msgs
         try:
-            quoted = '"' + folder_name.replace('"', '\\"') + '"'
-            typ, _ = conn.select(quoted, readonly=True)
-            if typ != "OK":
-                typ, _ = conn.select(folder_name, readonly=True)
-            if typ != "OK":
+            if not _select_folder(conn, folder_name):
                 return msgs
-        except Exception:
-            return msgs
-        typ, data = conn.uid("search", None, "ALL")
-        if typ != "OK" or not data[0]:
-            return msgs
-        uids = data[0].split()
-        for uid in uids[-per_folder:][::-1]:
-            try:
-                typ, raw = conn.uid("fetch", uid, "(RFC822)")
-                if typ != "OK" or not raw or not raw[0]:
+            typ, data = conn.uid("search", None, "ALL")
+            if typ != "OK" or not data[0]:
+                return msgs
+            all_uids = data[0].split()
+            if not all_uids:
+                return msgs
+
+            batch   = all_uids[-per_folder:]
+            uid_set = b",".join(batch)
+            # Two literals per message: HEADER.FIELDS + TEXT preview
+            typ, raw_data = conn.uid(
+                "fetch", uid_set,
+                "(UID FLAGS INTERNALDATE"
+                " BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)]"
+                " BODY.PEEK[TEXT]<0.350>)"
+            )
+            if typ != "OK" or not raw_data:
+                return msgs
+
+            # Group raw_data items by message — each group ends with b')' 
+            import re as _r2
+            groups, cur = [], []
+            for item in raw_data:
+                if item == b")":
+                    if cur:
+                        groups.append(cur)
+                    cur = []
+                else:
+                    cur.append(item)
+            if cur:
+                groups.append(cur)
+
+            for group in groups:
+                # group[0] = (meta_bytes_with_uid+internaldate+header_size, header_literal)
+                # group[1] = (text_section_meta, text_literal)  — may be absent
+                if not group or not isinstance(group[0], tuple) or len(group[0]) < 2:
                     continue
-                msg = _email.message_from_bytes(raw[0][1])
-                body = _get_body(msg)
+                # Identify each literal by its section name in the meta line so
+                # we're resilient to servers that return sections in a different
+                # order than requested.
+                meta_raw = b""
+                hdr_raw  = b""
+                text_raw = b""
+                for g_item in group:
+                    if not isinstance(g_item, tuple) or len(g_item) < 2:
+                        continue
+                    g_meta = g_item[0] if isinstance(g_item[0], bytes) else b""
+                    g_lit  = g_item[1] if isinstance(g_item[1], bytes) else b""
+                    if b"HEADER.FIELDS" in g_meta or b"header.fields" in g_meta.lower():
+                        hdr_raw  = g_lit
+                        if not meta_raw:
+                            meta_raw = g_meta  # UID/INTERNALDATE are on this line
+                    elif b"BODY[TEXT]" in g_meta or b"body[text]" in g_meta.lower():
+                        text_raw = g_lit
+                    else:
+                        # First tuple carries UID/FLAGS/INTERNALDATE regardless
+                        if not meta_raw:
+                            meta_raw = g_meta
+                        if not hdr_raw and g_lit:
+                            hdr_raw = g_lit   # fallback: first literal is headers
                 try:
-                    date_str = parsedate_to_datetime(msg.get("Date", "")).isoformat()
+                    uid_m   = _r2.search(rb"UID\s+(\d+)", meta_raw)
+                    uid_str = uid_m.group(1).decode() if uid_m else ""
+
+                    id_m = _r2.search(rb'INTERNALDATE\s+"([^"]+)"', meta_raw)
+                    date_received = ""
+                    if id_m:
+                        try:
+                            import imaplib as _il2, datetime as _dt
+                            tup = _il2.Internaldate2tuple(
+                                b'INTERNALDATE "' + id_m.group(1) + b'"'
+                            )
+                            if tup:
+                                date_received = _dt.datetime(
+                                    *tup[:6], tzinfo=_dt.timezone.utc
+                                ).isoformat()
+                        except Exception:
+                            pass
+
+                    hdr_msg    = _email.message_from_bytes(hdr_raw)
+                    subject    = _decode_str(hdr_msg.get("Subject", "(no subject)")) or "(no subject)"
+                    from_str   = _decode_str(hdr_msg.get("From", ""))
+                    to_str     = _decode_str(hdr_msg.get("To", ""))
+                    raw_date   = hdr_msg.get("Date", "")
+                    message_id = hdr_msg.get("Message-ID", "").strip()
+                    try:
+                        date_sent = parsedate_to_datetime(raw_date).isoformat()
+                    except Exception:
+                        date_sent = raw_date
+
+                    preview = ""
+                    if text_raw:
+                        preview = text_raw.decode("utf-8", errors="replace")
+                        preview = _re.sub(r"<[^>]+>", " ", preview)
+                        preview = _re.sub(r"\s+", " ", preview).strip()[:200]
+
+                    msgs.append({
+                        "uid":           uid_str,
+                        "folder":        folder_name,
+                        "subject":       subject,
+                        "from":          from_str,
+                        "to":            to_str,
+                        "date_sent":     date_sent,
+                        "date_received": date_received,
+                        "message_id":    message_id,
+                        "preview":       preview,
+                        "body":          "",   # full body loaded on demand
+                    })
                 except Exception:
-                    date_str = msg.get("Date", "")
-                msgs.append({
-                    "uid":     uid.decode(),
-                    "folder":  folder_name,
-                    "subject": _decode_str(msg.get("Subject", "(no subject)")),
-                    "from":    _decode_str(msg.get("From", "")),
-                    "to":      _decode_str(msg.get("To", "")),
-                    "date":    date_str,
-                    "preview": body[:200],
-                    "body":    body[:8000],
-                })
-            except Exception:
-                continue
+                    pass
+
+            msgs.sort(key=lambda m: m.get("date_received") or m.get("date_sent", ""), reverse=True)
+        except Exception:
+            pass
         return msgs
 
     try:
@@ -1250,7 +1351,8 @@ def read_mailbox(email):
         if not ma:
             return _err(f"Mail account '{key}' not found", 404)
 
-        per_folder   = min(int(request.args.get("per_folder", 10)), 50)
+        limit        = max(10, int(request.args.get("limit", 50)))   # no upper cap
+        folder_scope = request.args.get("folder_scope", "inbox")    # inbox|sent|inbox_sent|all
         account_type = ma.get("account_type", "imap")
         messages     = []
 
@@ -1306,41 +1408,502 @@ def read_mailbox(email):
                                      ssl_context=_ssl.create_default_context())
             conn.authenticate("XOAUTH2", lambda _: auth_str.encode())
 
+        # --- resolve folders based on scope ---
+        _SENT_CANDIDATES = [
+            "Sent", "Sent Items", "Sent Messages",
+            "[Gmail]/Sent Mail", "INBOX.Sent",
+        ]
+
+        def _find_sent(conn):
+            """Return the first selectable sent-folder name found on the server."""
+            for name in _SENT_CANDIDATES:
+                try:
+                    quoted = '"' + name.replace('"', '\\"') + '"'
+                    typ, _ = conn.select(quoted, readonly=True)
+                    if typ == "OK":
+                        conn.close()
+                        return name
+                except Exception:
+                    pass
+            return None
+
         # --- list selectable folders and fetch messages ---
         try:
-            typ, raw_list = conn.list()
-            folders = []
-            if typ == "OK":
-                for item in raw_list:
-                    selectable, fname = _parse_folder(item)
-                    if selectable and fname:
-                        folders.append(fname)
-            if not folders:
+            if folder_scope == "inbox":
                 folders = ["INBOX"]
+            elif folder_scope == "sent":
+                sent = _find_sent(conn)
+                folders = [sent] if sent else []
+            elif folder_scope == "inbox_sent":
+                sent = _find_sent(conn)
+                folders = ["INBOX"] + ([sent] if sent else [])
+            else:  # "all"
+                typ, raw_list = conn.list()
+                folders = []
+                if typ == "OK":
+                    for item in raw_list:
+                        selectable, fname = _parse_folder(item)
+                        if selectable and fname:
+                            folders.append(fname)
+                if not folders:
+                    folders = ["INBOX"]
 
             for folder in folders:
-                messages.extend(_fetch_folder(conn, folder, per_folder))
+                messages.extend(_fetch_folder(conn, folder, limit))
         finally:
             try:
                 conn.logout()
             except Exception:
                 pass
 
-        # sort newest first
-        def _msg_key(m):
-            try:
-                from email.utils import parsedate_to_datetime as _p
-                return _p(m["date"]) if not m["date"].endswith("+00:00") else m["date"]
-            except Exception:
-                return m.get("date", "")
-
-        messages.sort(key=lambda m: m.get("date", ""), reverse=True)
+        messages.sort(
+            key=lambda m: m.get("date_received") or m.get("date_sent", ""),
+            reverse=True
+        )
+        messages = messages[:limit]   # trim merged results to requested limit
 
         return jsonify({"status": "ok", "messages": messages})
 
     except Exception as exc:
         return _err(str(exc))
 
+
+
+# ---------------------------------------------------------------------------
+# Mail message tags
+# Firestore path: mail_tags/{account_email}/messages/{folder}__{uid}
+# Fields: status (str), labels (list[str]), folder, uid, subject, from_addr,
+#         updated_at (ISO)
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# IMAP keyword helpers (used by tag sync)
+# ---------------------------------------------------------------------------
+
+def _sanitize_imap_keyword(s: str) -> str:
+    """Convert a string to a valid IMAP keyword atom (no spaces/special chars)."""
+    import re as _r
+    return _r.sub(r"[^A-Za-z0-9_\-]", "_", s)[:64]
+
+
+def _imap_connect(ma: dict, account_email: str):
+    """Return an authenticated imaplib connection for imap or gmail accounts.
+    Caller is responsible for conn.logout().  Raises on failure."""
+    import imaplib as _il, ssl as _ssl
+    account_type = ma.get("account_type", "imap")
+    if account_type == "imap":
+        host    = ma.get("host", "").strip()
+        port    = int(ma.get("port") or 993)
+        use_ssl = ma.get("ssl", True)
+        if not host:
+            raise ValueError("IMAP host is not configured")
+        if use_ssl:
+            conn = _il.IMAP4_SSL(host, port, ssl_context=_ssl.create_default_context())
+        else:
+            conn = _il.IMAP4(host, port)
+        conn.login(ma.get("username", ""), ma.get("password", ""))
+        return conn
+    elif account_type == "gmail":
+        access_token = ma.get("access_token", "").strip()
+        if not access_token:
+            raise ValueError("Gmail access_token not available — refresh first")
+        auth_str = f"user={account_email}\x01auth=Bearer {access_token}\x01\x01"
+        conn = _il.IMAP4_SSL("imap.gmail.com", 993,
+                             ssl_context=_ssl.create_default_context())
+        conn.authenticate("XOAUTH2", lambda _: auth_str.encode())
+        return conn
+    else:
+        raise ValueError(f"Unsupported account_type '{account_type}'")
+
+
+def _sync_tags_to_imap(ma: dict, account_email: str,
+                        folder: str, uid: str,
+                        status: str, labels: list) -> str | None:
+    """Apply status + label tags as IMAP keyword flags on the given message.
+
+    Removes all existing Blueboot_* flags first, then adds new ones.
+    Returns None on success, error string on failure (best-effort).
+    """
+    if not folder or not uid:
+        return "folder/uid missing — cannot sync to IMAP"
+    try:
+        conn = _imap_connect(ma, account_email)
+        try:
+            quoted = '"' + folder.replace('"', '\\"') + '"'
+            typ, _ = conn.select(quoted)
+            if typ != "OK":
+                typ, _ = conn.select(folder)
+            if typ != "OK":
+                return f"Could not select folder {folder!r}"
+
+            uid_b = uid.encode() if isinstance(uid, str) else uid
+
+            # Fetch current flags to find existing Blueboot_* keywords to remove
+            import re as _r
+            typ, fdata = conn.uid("fetch", uid_b, "(FLAGS)")
+            old_bb = []
+            if typ == "OK" and fdata:
+                for item in fdata:
+                    raw = (item[0] if isinstance(item, tuple) else item) or b""
+                    text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
+                    old_bb.extend(_r.findall(r"Blueboot_\S+", text))
+            if old_bb:
+                conn.uid("store", uid_b, "-FLAGS",
+                         "(" + " ".join(dict.fromkeys(old_bb)) + ")")
+
+            # Add new Blueboot_* flags
+            new_flags = []
+            if status:
+                new_flags.append("Blueboot_" + _sanitize_imap_keyword(status))
+            for lbl in labels:
+                if lbl:
+                    new_flags.append("Blueboot_" + _sanitize_imap_keyword(lbl))
+            if new_flags:
+                conn.uid("store", uid_b, "+FLAGS",
+                         "(" + " ".join(new_flags) + ")")
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+        return None
+    except Exception as exc:
+        return str(exc)
+
+
+# Default statuses seeded into Firestore on first GET if the doc is absent.
+_MAIL_TAG_STATUSES_DEFAULT = ["New", "Replied", "Interested", "Not interested", "Closed"]
+_MAIL_TAG_STATUSES_DOC = ("settings", "mail_tag_statuses")   # collection, document id
+
+
+def _get_mail_tag_statuses(db) -> list[str]:
+    """Return the current status list from Firestore, seeding defaults if missing."""
+    ref  = db.collection(_MAIL_TAG_STATUSES_DOC[0]).document(_MAIL_TAG_STATUSES_DOC[1])
+    snap = ref.get()
+    if snap.exists:
+        return snap.to_dict().get("statuses", _MAIL_TAG_STATUSES_DEFAULT)
+    # first run — seed defaults
+    ref.set({"statuses": _MAIL_TAG_STATUSES_DEFAULT})
+    return list(_MAIL_TAG_STATUSES_DEFAULT)
+
+
+@app.route("/api/crm/settings/mail-tag-statuses", methods=["GET"])
+def get_mail_tag_statuses():
+    """Return the configured mail-tag status list."""
+    try:
+        db       = _get_db()
+        statuses = _get_mail_tag_statuses(db)
+        return jsonify({"status": "ok", "statuses": statuses})
+    except Exception as exc:
+        return _err(str(exc))
+
+
+@app.route("/api/crm/settings/mail-tag-statuses", methods=["PUT"])
+def put_mail_tag_statuses():
+    """Replace the mail-tag status list.
+
+    Body: { "statuses": ["New", "Replied", ...] }
+    Each entry must be a non-empty string; list must have at least one item.
+    """
+    try:
+        db   = _get_db()
+        body = request.get_json(silent=True) or {}
+        raw  = body.get("statuses", [])
+        if not isinstance(raw, list):
+            return _err("'statuses' must be a list", 400)
+        statuses = [str(s).strip() for s in raw if str(s).strip()]
+        if not statuses:
+            return _err("At least one status is required", 400)
+        if len(statuses) > 50:
+            return _err("Maximum 50 statuses", 400)
+        ref = db.collection(_MAIL_TAG_STATUSES_DOC[0]).document(_MAIL_TAG_STATUSES_DOC[1])
+        ref.set({"statuses": statuses, "updated_at": datetime.now(timezone.utc).isoformat()})
+        return jsonify({"status": "ok", "statuses": statuses})
+    except Exception as exc:
+        return _err(str(exc))
+
+
+@app.route("/api/crm/settings/mail-accounts/<email>/message", methods=["GET"])
+def read_message_body(email):
+    """Fetch the full body of a single message on demand.
+
+    Query params:
+      folder  str  IMAP folder name
+      uid     str  IMAP UID
+
+    Returns: { status: "ok", body: "..." }
+    """
+    import imaplib
+    import email as _email
+    import ssl as _ssl
+    import re as _re
+    from email.header import decode_header as _dh
+
+    def _decode_str(val):
+        if not val:
+            return ""
+        parts = _dh(val)
+        out = []
+        for raw, enc in parts:
+            if isinstance(raw, bytes):
+                out.append(raw.decode(enc or "utf-8", errors="replace"))
+            else:
+                out.append(raw)
+        return " ".join(out)
+
+    def _get_body_parts(msg):
+        """Return (plain_text, html_body). Prefers text/plain; also extracts text/html."""
+        text_body, html_body = "", ""
+        if msg.is_multipart():
+            for part in msg.walk():
+                ct = part.get_content_type()
+                cd = str(part.get("Content-Disposition", ""))
+                if "attachment" in cd:
+                    continue
+                charset = part.get_content_charset() or "utf-8"
+                raw = part.get_payload(decode=True) or b""
+                content = raw.decode(charset, errors="replace")
+                if ct == "text/plain" and not text_body:
+                    text_body = content
+                elif ct == "text/html" and not html_body:
+                    html_body = content
+        else:
+            ct = msg.get_content_type()
+            raw = msg.get_payload(decode=True) or b""
+            charset = msg.get_content_charset() or "utf-8"
+            content = raw.decode(charset, errors="replace")
+            if ct == "text/html":
+                html_body = content
+            else:
+                text_body = content
+        return text_body.strip(), html_body.strip()
+
+    try:
+        folder = request.args.get("folder", "").strip()
+        uid    = request.args.get("uid", "").strip()
+        if not folder or not uid:
+            return _err("folder and uid are required", 400)
+
+        db  = _get_db()
+        key = email.strip().lower()
+        ma  = _get_mail_account(db, key)
+        if not ma:
+            return _err(f"Mail account '{key}' not found", 404)
+
+        account_type = ma.get("account_type", "imap")
+        if account_type == "imap":
+            host    = ma.get("host", "").strip()
+            port    = int(ma.get("port") or 993)
+            use_ssl = ma.get("ssl", True)
+            if not host:
+                return _err("IMAP host not configured", 400)
+            if use_ssl:
+                conn = imaplib.IMAP4_SSL(host, port, ssl_context=_ssl.create_default_context())
+            else:
+                conn = imaplib.IMAP4(host, port)
+            conn.login(ma.get("username", ""), ma.get("password", ""))
+        elif account_type == "gmail":
+            access_token = ma.get("access_token", "").strip()
+            if not access_token:
+                return _err("Gmail access_token not available", 400)
+            auth_str = f"user={key}\x01auth=Bearer {access_token}\x01\x01"
+            conn = imaplib.IMAP4_SSL("imap.gmail.com", 993,
+                                     ssl_context=_ssl.create_default_context())
+            conn.authenticate("XOAUTH2", lambda _: auth_str.encode())
+        else:
+            return _err(f"Unsupported account_type", 400)
+
+        try:
+            quoted = '"' + folder.replace('"', '\\"') + '"'
+            typ, _ = conn.select(quoted, readonly=True)
+            if typ != "OK":
+                conn.select(folder, readonly=True)
+            typ, raw = conn.uid("fetch", uid.encode(), "(RFC822)")
+            if typ != "OK" or not raw or not raw[0]:
+                return _err("Message not found", 404)
+            msg  = _email.message_from_bytes(raw[0][1])
+            text_body, html_body = _get_body_parts(msg)
+
+            # Replace cid: image references with inline base64 data URIs
+            if html_body:
+                import base64 as _b64, re as _ri
+                cid_map = {}
+                for part in msg.walk():
+                    for hdr in ("Content-ID", "X-Attachment-Id"):
+                        raw_cid = part.get(hdr, "").strip()
+                        if not raw_cid:
+                            continue
+                        cid_clean = raw_cid.strip("<>").strip()
+                        if not cid_clean:
+                            continue
+                        ct      = part.get_content_type()
+                        raw_img = part.get_payload(decode=True)
+                        if raw_img and len(raw_img) <= 600_000:
+                            data_uri = (
+                                "data:" + ct + ";base64,"
+                                + _b64.b64encode(raw_img).decode("ascii")
+                            )
+                            cid_map[cid_clean] = data_uri
+                            local = cid_clean.split("@")[0]
+                            if local != cid_clean:
+                                cid_map.setdefault(local, data_uri)
+                if cid_map:
+                    def _sub_cid(m):
+                        key = m.group(2).strip()
+                        repl = (
+                            cid_map.get(key)
+                            or cid_map.get(key.split("@")[0])
+                            or ("cid:" + key)
+                        )
+                        return m.group(1) + repl + m.group(3)
+                    html_body = _ri.sub(
+                        r'(src=["\'"])cid:([^"\' ]+)(["\'"])',
+                        _sub_cid, html_body, flags=_ri.IGNORECASE
+                    )
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+
+        return jsonify({
+            "status":    "ok",
+            "body":      text_body[:20000],
+            "body_html": html_body[:5_000_000],
+        })
+    except Exception as exc:
+        return _err(str(exc))
+
+
+
+def _msg_id_to_key(message_id: str) -> str:
+    """Sanitize a Message-ID into a safe Firestore document ID.
+    Strips angle brackets, replaces '/' (invalid in Firestore IDs), caps length.
+    Falls back to empty string if message_id is blank.
+    """
+    key = (message_id or "").strip().strip("<>").replace("/", "_").replace("\\", "_")
+    return key[:500]
+
+
+def _mail_tags_col(db, account_email: str):
+    return (
+        db.collection("mail_tags")
+        .document(account_email.strip().lower())
+        .collection("messages")
+    )
+
+
+@app.route("/api/crm/mailbox-tags/<path:account_email>", methods=["GET"])
+def list_mail_tags(account_email):
+    """Return all tagged messages for an account.
+
+    Returns: { status: "ok", tags: [ {msg_key, status, labels, folder, uid,
+               subject, from_addr, updated_at}, ... ] }
+    """
+    try:
+        db  = _get_db()
+        col = _mail_tags_col(db, account_email)
+        docs = col.limit(500).stream()
+        tags = []
+        for d in docs:
+            rec = d.to_dict()
+            rec["msg_key"] = d.id
+            tags.append(rec)
+        return jsonify({"status": "ok", "tags": tags})
+    except Exception as exc:
+        return _err(str(exc))
+
+
+@app.route("/api/crm/mailbox-tags/<path:account_email>/<path:msg_key>", methods=["PUT"])
+def upsert_mail_tag(account_email, msg_key):
+    """Create or update tags on a message.
+
+    Body (JSON, all optional):
+      status   str   one of MAIL_TAG_STATUSES or "" to clear
+      labels   list  free-form strings
+      subject  str   denormalised for display
+      from_addr str  denormalised for display
+      folder   str
+      uid      str
+    """
+    try:
+        db   = _get_db()
+        body = request.get_json(silent=True) or {}
+        col  = _mail_tags_col(db, account_email)
+        ref  = col.document(msg_key)
+        existing = ref.get()
+        data = existing.to_dict() if existing.exists else {}
+
+        if "status" in body:
+            st = body["status"]
+            if st:
+                allowed = _get_mail_tag_statuses(db)
+                if st not in allowed:
+                    return _err(f"Invalid status '{st!r}'. Allowed: {allowed}", 400)
+            data["status"] = st
+        if "labels" in body:
+            raw = body["labels"]
+            data["labels"] = [l.strip() for l in (raw if isinstance(raw, list) else []) if l.strip()]
+        for field in ("subject", "from_addr", "folder", "uid", "message_id"):
+            if field in body:
+                data[field] = body[field]
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        ref.set(data)
+
+        # best-effort IMAP flag sync
+        imap_err = None
+        try:
+            ma = _get_mail_account(db, account_email.strip().lower())
+            if ma:
+                imap_err = _sync_tags_to_imap(
+                    ma, account_email,
+                    data.get("folder", ""), data.get("uid", ""),
+                    data.get("status", ""), data.get("labels", []),
+                )
+        except Exception as _ie:
+            imap_err = str(_ie)
+
+        resp = {"status": "ok", "msg_key": msg_key, "data": data}
+        if imap_err:
+            resp["imap_warning"] = imap_err
+        return jsonify(resp)
+    except Exception as exc:
+        return _err(str(exc))
+
+
+@app.route("/api/crm/mailbox-tags/<path:account_email>/<path:msg_key>", methods=["DELETE"])
+def delete_mail_tag(account_email, msg_key):
+    """Remove all tags from a message (Firestore + IMAP flags)."""
+    try:
+        db  = _get_db()
+        col = _mail_tags_col(db, account_email)
+        ref = col.document(msg_key)
+
+        # Read doc first so we know folder/uid for IMAP cleanup
+        snap   = ref.get()
+        stored = snap.to_dict() if snap.exists else {}
+        ref.delete()
+
+        # best-effort IMAP flag removal
+        imap_err = None
+        try:
+            ma = _get_mail_account(db, account_email.strip().lower())
+            if ma and stored.get("folder") and stored.get("uid"):
+                imap_err = _sync_tags_to_imap(
+                    ma, account_email,
+                    stored["folder"], stored["uid"],
+                    status="", labels=[],
+                )
+        except Exception as _ie:
+            imap_err = str(_ie)
+
+        resp = {"status": "ok"}
+        if imap_err:
+            resp["imap_warning"] = imap_err
+        return jsonify(resp)
+    except Exception as exc:
+        return _err(str(exc))
 
 # ---------------------------------------------------------------------------
 # Auth user sync is handled by non-blocking Node.js event triggers in

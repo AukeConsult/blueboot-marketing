@@ -152,10 +152,24 @@ def run_filter_count(db, name: str) -> dict:
     # 1. lead-level candidates (sites whose own fields match the selection)
     lead_fields = list(LEAD_SCALAR_FIELDS) + list(LEAD_ARRAY_FIELDS) + [GROUP_FIELD, "lead_id"]
     candidate_leads: set = set()
+    # per-value counters for matched leads -- used to write selected_count back
+    lead_val_counts: dict[str, Counter] = {
+        f: Counter() for f in list(LEAD_SCALAR_FIELDS) + list(LEAD_ARRAY_FIELDS) + [GROUP_FIELD]
+    }
     for d in db.collection(LEADS_COLLECTION).select(lead_fields).stream():
         data = d.to_dict() or {}
         if lead_match(data):
             candidate_leads.add(data.get("lead_id") or d.id)
+            for f in LEAD_SCALAR_FIELDS:
+                v = str(data.get(f) or "").strip().lower()
+                if v:
+                    lead_val_counts[f][v] += 1
+            for f in LEAD_ARRAY_FIELDS:
+                for kw in (data.get(f) or []):
+                    w = str(kw).strip().lower()
+                    if w:
+                        lead_val_counts[f][w] += 1
+            lead_val_counts[GROUP_FIELD][_page_key(data.get("page_count"))] += 1
 
     # 2. email_contacts doc-ids (existence check)
     email_ids: set = set()
@@ -170,6 +184,7 @@ def run_filter_count(db, name: str) -> dict:
     matched_sites: set = set()          # sites that have >=1 matching contact
     seen_in: set = set()
     seen_not: set = set()
+    contact_val_counts: dict[str, Counter] = {f: Counter() for f in CONTACT_FIELDS}
     for d in db.collection_group(CONTACTS_SUBCOLLECTION).select(
             ["lead_id", "email", "occupation", "title", "email_type"]).stream():
         data = d.to_dict() or {}
@@ -182,6 +197,11 @@ def run_filter_count(db, name: str) -> dict:
         matched_sites.add(lid)
         cid = _email_doc_id(data.get("email"))
         (seen_in if cid in email_ids else seen_not).add(cid)
+        for f in CONTACT_FIELDS:
+            raw = str(data.get(f) or "").strip().lower()
+            v = _first_word(raw) if f == "title" else raw
+            if v:
+                contact_val_counts[f][v] += 1
 
     counts = {
         "leads":                          len(matched_sites),
@@ -190,10 +210,23 @@ def run_filter_count(db, name: str) -> dict:
         "contacts_in_email_contacts":     len(seen_in),
         "contacts_not_in_email_contacts": len(seen_not),
     }
-    # Step 3: store the refreshed filter (keywords) together with the counts.
+    # Step 3: write selected_count onto every facet value from the matched set.
+    for f in list(LEAD_SCALAR_FIELDS) + list(LEAD_ARRAY_FIELDS):
+        for val in (filters.get(f) or {}).get("values", []):
+            v = str(val.get("value") or "").strip().lower()
+            val["selected_count"] = lead_val_counts[f].get(v, 0)
+    for grp in (filters.get(GROUP_FIELD) or {}).get("groups", []):
+        k = str(grp.get("key") or "").strip().lower()
+        grp["selected_count"] = lead_val_counts[GROUP_FIELD].get(k, 0)
+    for f in CONTACT_FIELDS:
+        for val in (filters.get(f) or {}).get("values", []):
+            v = str(val.get("value") or "").strip().lower()
+            val["selected_count"] = contact_val_counts[f].get(v, 0)
+
+    # Step 4: store the refreshed filters (with selected_count + keyword list) and counts.
     doc_ref.update({
-        "filters":             filters,
-        "counts":              counts,
-        "counts_generated_at": datetime.now(timezone.utc).isoformat(),
+        "filters":              filters,
+        "counts":               counts,
+        "counts_generated_at":  datetime.now(timezone.utc).isoformat(timespec="seconds"),
     })
     return counts

@@ -14,15 +14,31 @@
 .msg-body { background: #fff; border: 1px solid var(--bb-border); border-radius: 8px;
             padding: 1rem; font-size: .85rem; line-height: 1.6; white-space: pre-wrap;
             word-break: break-word; max-height: 400px; overflow-y: auto; }
-.from-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.subject-cell { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-iframe { width:100%; border:1px solid var(--bb-border); border-radius:8px;
+              min-height:300px; max-height:700px; background:#fff; }
+.from-cell    { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subject-cell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag-cell     { min-width: 160px; }
+
+/* status badge colours — cycle through a palette by data-attr */
+.bb-status-badge { font-size:.65rem; border-radius:4px; padding:2px 7px; color:#fff; }
+
+.label-chip { display:inline-block; background:#e5e7eb; color:#374151;
+              border-radius:999px; padding:1px 8px; font-size:.65rem; margin:1px; }
+
+/* tag popover */
+#tag-popover { position:fixed; z-index:2000; background:#fff;
+               border:1px solid var(--bb-border); border-radius:10px;
+               box-shadow:0 6px 24px rgba(0,0,0,.13); padding:1rem;
+               min-width:270px; display:none; }
+#tag-popover h6 { font-size:.8rem; margin-bottom:.5rem; color:var(--bb-muted); }
 </style>
 </head>
 <body>
 
 <div id="nav"></div>
 
-<div class="container py-4" style="max-width:1000px">
+<div class="container py-4" style="max-width:1100px">
 
   <div class="page-header mb-3">
     <h5 class="page-title"><i class="ti ti-inbox text-primary"></i>Mailbox</h5>
@@ -36,13 +52,22 @@
         <option value="">— select account —</option>
       </select>
       <div class="d-flex align-items-center gap-2 ms-2">
-        <label class="small mb-0" style="color:var(--bb-muted)">Per folder</label>
-        <select id="limit-select" class="form-select form-select-sm" style="max-width:90px" onchange="loadMailbox()">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
-          <option value="20">20</option>
-          <option value="50">50</option>
+        <label class="small mb-0 text-nowrap" style="color:var(--bb-muted)">Folder</label>
+        <select id="folder-scope" class="form-select form-select-sm" style="max-width:150px" onchange="loadMailbox()">
+          <option value="inbox" selected>INBOX only</option>
+          <option value="sent">Sent only</option>
+          <option value="inbox_sent">INBOX + Sent</option>
+          <option value="all">All folders</option>
         </select>
+      </div>
+      <div class="d-flex align-items-center gap-2 ms-1">
+        <label class="small mb-0 text-nowrap" style="color:var(--bb-muted)">Limit</label>
+        <div class="d-flex align-items-center" style="gap:2px">
+          <button class="btn btn-outline-secondary btn-sm px-2 py-0" style="line-height:1.6" onclick="stepLimit(-50)">−</button>
+          <input id="limit-input" type="number" class="form-control form-control-sm text-center"
+                 style="width:64px" value="50" min="50" step="50" onchange="loadMailbox()">
+          <button class="btn btn-outline-secondary btn-sm px-2 py-0" style="line-height:1.6" onclick="stepLimit(50)">+</button>
+        </div>
       </div>
       <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="loadMailbox()" id="refresh-btn">
         <i class="ti ti-refresh me-1"></i>Refresh
@@ -50,6 +75,36 @@
       <a href="settings.html" class="btn btn-sm btn-outline-secondary">
         <i class="ti ti-settings me-1"></i>Manage accounts
       </a>
+    </div>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="bb-card p-3 mb-3" id="filter-bar" style="display:none">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <div class="input-group input-group-sm" style="max-width:260px">
+        <span class="input-group-text"><i class="ti ti-search" style="font-size:.8rem"></i></span>
+        <input id="filter-search" type="text" class="form-control form-control-sm"
+               placeholder="Search from / to / subject…" oninput="applyFilters()">
+      </div>
+      <select id="filter-status" class="form-select form-select-sm" style="max-width:160px" onchange="applyFilters()">
+        <option value="">All statuses</option>
+        <option value="__untagged__">Untagged</option>
+      </select>
+      <input id="filter-label" type="text" class="form-control form-control-sm" style="max-width:140px"
+             placeholder="Label…" oninput="applyFilters()">
+      <select id="filter-date" class="form-select form-select-sm" style="max-width:140px" onchange="applyFilters()">
+        <option value="">All time</option>
+        <option value="today">Today</option>
+        <option value="7d">Last 7 days</option>
+        <option value="30d">Last 30 days</option>
+      </select>
+      <select id="filter-folder" class="form-select form-select-sm" style="max-width:150px;display:none" onchange="applyFilters()">
+        <option value="">All folders</option>
+      </select>
+      <button class="btn btn-sm btn-outline-secondary" onclick="clearFilters()">
+        <i class="ti ti-x me-1"></i>Clear
+      </button>
+      <span id="filter-count" class="small ms-auto" style="color:var(--bb-muted)"></span>
     </div>
   </div>
 
@@ -62,13 +117,14 @@
     </div>
     <div class="table-responsive">
       <table class="table table-sm mb-0">
-        <thead class="bb-thead">
+        <thead class="bb-thead" id="msg-thead">
           <tr>
-            <th class="small">Folder</th>
-            <th class="small">From</th>
-            <th class="small">To</th>
-            <th class="small">Subject</th>
-            <th class="small text-nowrap">Date</th>
+            <th class="small sort-col" data-col="folder" style="cursor:pointer;user-select:none">Folder <span class="sort-icon"></span></th>
+            <th class="small sort-col" data-col="from"   style="cursor:pointer;user-select:none">From <span class="sort-icon"></span></th>
+            <th class="small sort-col" data-col="to"     style="cursor:pointer;user-select:none">To <span class="sort-icon"></span></th>
+            <th class="small sort-col" data-col="subject" style="cursor:pointer;user-select:none">Subject <span class="sort-icon"></span></th>
+            <th class="small sort-col text-nowrap" data-col="date" style="cursor:pointer;user-select:none">Date <span class="sort-icon"></span></th>
+            <th class="small sort-col" data-col="tags"   style="cursor:pointer;user-select:none">Tags <span class="sort-icon"></span></th>
           </tr>
         </thead>
         <tbody id="inbox-body"></tbody>
@@ -108,6 +164,26 @@
   </div>
 </div>
 
+<!-- Tag popover -->
+<div id="tag-popover">
+  <h6><i class="ti ti-tag me-1"></i>Tag message</h6>
+  <div class="mb-2">
+    <label class="small fw-500 mb-1 d-block">Status</label>
+    <select id="tp-status" class="form-select form-select-sm">
+      <option value="">— none —</option>
+    </select>
+  </div>
+  <div class="mb-3">
+    <label class="small fw-500 mb-1 d-block">Labels <span class="fw-normal" style="color:var(--bb-muted)">(comma-separated)</span></label>
+    <input id="tp-labels" type="text" class="form-control form-control-sm" placeholder="e.g. hot lead, follow up">
+  </div>
+  <div class="d-flex gap-2">
+    <button class="btn btn-sm btn-primary flex-fill" onclick="saveTag()">Save</button>
+    <button class="btn btn-sm btn-outline-danger" onclick="deleteTag()" title="Remove all tags"><i class="ti ti-trash"></i></button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="closePopover()">Cancel</button>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
@@ -116,6 +192,73 @@
 <script>
 const fmt = fmtDateTimeShort;
 
+// ── state ──────────────────────────────────────────────────────────────────
+let _allMessages   = [];
+let _tagMap        = {};
+let _currentMsgKey = null;
+let _statuses      = [];
+let _sortCol       = 'date';
+let _sortDir       = -1;   // -1 = desc, 1 = asc
+
+// palette for status badges — cycles if more statuses than colours
+const STATUS_COLORS = ['#3b82f6','#8b5cf6','#10b981','#ef4444','#6b7280',
+                       '#f59e0b','#06b6d4','#ec4899','#84cc16','#f97316'];
+
+// ── helpers ────────────────────────────────────────────────────────────────
+function msgKey(m) {
+  if (m.message_id) return m.message_id.trim().replace(/^<|>$/g, '').replace(/\//g, '_').slice(0, 500);
+  return (m.folder + '__' + m.uid).replace(/\//g, '_');
+}
+
+function escapeHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function statusColor(st) {
+  const idx = _statuses.indexOf(st);
+  return STATUS_COLORS[idx >= 0 ? idx % STATUS_COLORS.length : STATUS_COLORS.length - 1];
+}
+
+function renderTagCell(m) {
+  const key = msgKey(m);
+  const tag = _tagMap[key] || {};
+  const parts = [];
+  if (tag.status) {
+    const color = statusColor(tag.status);
+    parts.push(`<span class="bb-status-badge me-1" style="background:${color}">${escapeHtml(tag.status)}</span>`);
+  }
+  (tag.labels||[]).forEach(l => parts.push(`<span class="label-chip">${escapeHtml(l)}</span>`));
+  const inner = parts.length ? parts.join('') : '<span class="text-muted" style="font-size:.75rem">—</span>';
+  return `<td class="tag-cell" onclick="openTagPopover(event,'${escapeHtml(key)}',${_allMessages.indexOf(m)})">${inner}</td>`;
+}
+
+// ── status loading ──────────────────────────────────────────────────────────
+async function loadStatuses() {
+  try {
+    const r = await fetch(BASE + '/api/crm/settings/mail-tag-statuses');
+    const d = await r.json();
+    _statuses = d.statuses || [];
+  } catch(e) {
+    console.warn('Could not load statuses:', e);
+  }
+  populateStatusSelects();
+}
+
+function populateStatusSelects() {
+  const opts = _statuses.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+
+  const fsel = document.getElementById('filter-status');
+  const fCur = fsel.value;
+  fsel.innerHTML = '<option value="">All statuses</option>' + opts + '<option value="__untagged__">Untagged</option>';
+  if (_statuses.includes(fCur)) fsel.value = fCur;
+
+  const psel = document.getElementById('tp-status');
+  const pCur = psel.value;
+  psel.innerHTML = '<option value="">— none —</option>' + opts;
+  if (_statuses.includes(pCur)) psel.value = pCur;
+}
+
+// ── account loading ─────────────────────────────────────────────────────────
 async function loadAccounts() {
   const sel = document.getElementById('account-select');
   try {
@@ -130,31 +273,49 @@ async function loadAccounts() {
   }
 }
 
+// ── mailbox loading ─────────────────────────────────────────────────────────
+function stepLimit(delta) {
+  const inp = document.getElementById('limit-input');
+  inp.value = Math.max(50, (parseInt(inp.value) || 50) + delta);
+  loadMailbox();
+}
+
 async function loadMailbox() {
   const email = document.getElementById('account-select').value;
-  const limit = document.getElementById('limit-select').value;
+  const scope = document.getElementById('folder-scope').value;
+  const limit = Math.max(50, parseInt(document.getElementById('limit-input').value) || 50);
   const fb    = document.getElementById('inbox-feedback');
   const card  = document.getElementById('inbox-card');
   const btn   = document.getElementById('refresh-btn');
 
   fb.style.display = 'none';
   card.style.display = 'none';
+  document.getElementById('filter-bar').style.display = 'none';
   if (!email) return;
 
   btn.disabled = true;
   btn.innerHTML = '<i class="ti ti-loader me-1"></i>Loading…';
 
   try {
-    const r = await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(email)}/mailbox?per_folder=${limit}`);
-    const d = await r.json();
+    const [mailRes, tagRes] = await Promise.all([
+      fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(email)}/mailbox?limit=${limit}&folder_scope=${scope}`),
+      fetch(`${BASE}/api/crm/mailbox-tags/${encodeURIComponent(email)}`)
+    ]);
+    const mailData = await mailRes.json();
+    const tagData  = await tagRes.json();
 
-    if (d.status !== 'ok') {
+    if (mailData.status !== 'ok') {
       fb.className = 'alert alert-danger py-2 px-3 small mb-3';
-      fb.innerHTML = `<i class="ti ti-circle-x me-1"></i>${d.message}`;
+      fb.innerHTML = `<i class="ti ti-circle-x me-1"></i>${mailData.message}`;
       fb.style.display = ''; return;
     }
 
-    renderMessages(d.messages || []);
+    _tagMap = {};
+    (tagData.tags || []).forEach(t => { _tagMap[t.msg_key] = t; });
+    _allMessages = mailData.messages || [];
+    document.getElementById('filter-bar').style.display = _allMessages.length ? '' : 'none';
+    refreshFolderFilter();
+    applyFilters();
     card.style.display = '';
   } catch(e) {
     fb.className = 'alert alert-danger py-2 px-3 small mb-3';
@@ -164,6 +325,116 @@ async function loadMailbox() {
   btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Refresh';
 }
 
+// ── filtering ───────────────────────────────────────────────────────────────
+function sortVal(m, col) {
+  if (col === 'folder')  return (m.folder  || '').toLowerCase();
+  if (col === 'from')    return (m.from    || '').toLowerCase();
+  if (col === 'to')      return (m.to      || '').toLowerCase();
+  if (col === 'subject') return (m.subject || '').toLowerCase();
+  if (col === 'date')    return m.date_received || m.date_sent || '';
+  if (col === 'tags')    return (_tagMap[msgKey(m)]?.status || '').toLowerCase();
+  return '';
+}
+
+function setSort(col) {
+  if (_sortCol === col) _sortDir *= -1;
+  else { _sortCol = col; _sortDir = (col === 'date') ? -1 : 1; }
+  applyFilters();
+}
+
+function updateSortIcons() {
+  document.querySelectorAll('#msg-thead .sort-col').forEach(th => {
+    const icon = th.querySelector('.sort-icon');
+    if (th.dataset.col === _sortCol) icon.textContent = _sortDir === 1 ? ' ▲' : ' ▼';
+    else icon.textContent = '';
+  });
+}
+
+function applyFilters() {
+  const search      = document.getElementById('filter-search').value.trim().toLowerCase();
+  const stFilter    = document.getElementById('filter-status').value;
+  const labelFilter = document.getElementById('filter-label').value.trim().toLowerCase();
+  const dateFilter  = document.getElementById('filter-date').value;
+  const folderFilter= document.getElementById('filter-folder').value;
+
+  // date cutoff
+  let cutoff = null;
+  if (dateFilter === 'today') {
+    cutoff = new Date(); cutoff.setHours(0,0,0,0);
+  } else if (dateFilter === '7d') {
+    cutoff = new Date(Date.now() - 7*86400000);
+  } else if (dateFilter === '30d') {
+    cutoff = new Date(Date.now() - 30*86400000);
+  }
+
+  let filtered = _allMessages.filter(m => {
+    // text search across from/to/subject
+    if (search) {
+      const hay = ((m.from||'') + ' ' + (m.to||'') + ' ' + (m.subject||'')).toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    // status / tag filter
+    const tag = _tagMap[msgKey(m)] || {};
+    if (stFilter === '__untagged__') {
+      if (tag.status || (tag.labels||[]).length) return false;
+    } else if (stFilter) {
+      if ((tag.status||'') !== stFilter) return false;
+    }
+    // label filter
+    if (labelFilter) {
+      const labels = (tag.labels||[]).map(l => l.toLowerCase());
+      if (!labels.some(l => l.includes(labelFilter))) return false;
+    }
+    // date filter
+    if (cutoff) {
+      const d = new Date(m.date_received || m.date_sent || 0);
+      if (isNaN(d) || d < cutoff) return false;
+    }
+    // folder filter (only active when "all" scope)
+    if (folderFilter && (m.folder||'') !== folderFilter) return false;
+    return true;
+  });
+
+  filtered.sort((a, b) => {
+    const va = sortVal(a, _sortCol), vb = sortVal(b, _sortCol);
+    return va < vb ? -_sortDir : va > vb ? _sortDir : 0;
+  });
+
+  document.getElementById('filter-count').textContent =
+    filtered.length < _allMessages.length
+      ? `Showing ${filtered.length} of ${_allMessages.length}`
+      : `${_allMessages.length} message${_allMessages.length !== 1 ? 's' : ''}`;
+
+  renderMessages(filtered);
+  updateSortIcons();
+}
+
+function clearFilters() {
+  document.getElementById('filter-search').value = '';
+  document.getElementById('filter-status').value = '';
+  document.getElementById('filter-label').value  = '';
+  document.getElementById('filter-date').value   = '';
+  document.getElementById('filter-folder').value = '';
+  applyFilters();
+}
+
+function refreshFolderFilter() {
+  const scope  = document.getElementById('folder-scope').value;
+  const fsel   = document.getElementById('filter-folder');
+  if (scope !== 'all') {
+    fsel.style.display = 'none';
+    fsel.value = '';
+    return;
+  }
+  // populate from loaded messages
+  const folders = [...new Set(_allMessages.map(m => m.folder).filter(Boolean))].sort();
+  const cur = fsel.value;
+  fsel.innerHTML = '<option value="">All folders</option>' +
+    folders.map(f => `<option${f===cur?' selected':''}>${f}</option>`).join('');
+  fsel.style.display = folders.length > 1 ? '' : 'none';
+}
+
+// ── rendering ───────────────────────────────────────────────────────────────
 function renderMessages(msgs) {
   const tbody = document.getElementById('inbox-body');
   const empty = document.getElementById('inbox-empty');
@@ -175,37 +446,170 @@ function renderMessages(msgs) {
     return;
   }
   empty.style.display = 'none';
-  tbody.innerHTML = msgs.map((m, i) => `
-    <tr class="msg-row" onclick="openMessage(${i})" data-idx="${i}">
-      <td class="small text-nowrap"><span class="badge bg-secondary" style="font-size:.65rem;font-weight:500">${escapeHtml(m.folder||'')}</span></td>
-      <td class="from-cell small">${escapeHtml(m.from)}</td>
-      <td class="from-cell small text-muted">${escapeHtml(m.to)}</td>
-      <td class="subject-cell small">
-        ${escapeHtml(m.subject)}
-        ${m.preview ? `<span class="text-muted fw-normal"> — ${escapeHtml(m.preview.slice(0,80))}</span>` : ''}
+  tbody.innerHTML = msgs.map(m => `
+    <tr class="msg-row" data-key="${escapeHtml(msgKey(m))}">
+      <td class="small text-nowrap" onclick="openMessage(${_allMessages.indexOf(m)})">
+        <span class="badge bg-secondary" style="font-size:.65rem;font-weight:500">${escapeHtml(m.folder||'')}</span>
       </td>
-      <td class="small text-muted text-nowrap">${fmt(m.date)}</td>
+      <td class="from-cell small" onclick="openMessage(${_allMessages.indexOf(m)})">${escapeHtml(m.from)}</td>
+      <td class="from-cell small text-muted" onclick="openMessage(${_allMessages.indexOf(m)})">${escapeHtml(m.to)}</td>
+      <td class="subject-cell small" onclick="openMessage(${_allMessages.indexOf(m)})">${escapeHtml(m.subject)}</td>
+      <td class="small text-muted text-nowrap" onclick="openMessage(${_allMessages.indexOf(m)})">${fmt(m.date_received || m.date_sent)}</td>
+      ${renderTagCell(m)}
     </tr>`).join('');
-
-  window._inboxMessages = msgs;
 }
 
-function openMessage(idx) {
-  const m = window._inboxMessages[idx];
+// ── message detail ──────────────────────────────────────────────────────────
+function _renderBody(bodyEl, m) {
+  if (m.body_html) {
+    bodyEl.innerHTML = '';
+    const iframe = document.createElement('iframe');
+    iframe.className = 'msg-iframe';
+    iframe.setAttribute('sandbox', 'allow-popups allow-popups-to-escape-sandbox allow-same-origin');
+    // inject responsive image + base layout CSS so email doesn't overflow
+    const _css = '<style>*{max-width:100%!important;box-sizing:border-box}'
+               + 'img{height:auto!important}body{margin:8px;font-family:sans-serif;font-size:14px}</style>';
+    iframe.srcdoc = _css + m.body_html;
+    // auto-size to content
+    iframe.onload = () => {
+      try {
+        const h = iframe.contentDocument.body.scrollHeight;
+        if (h > 100) iframe.style.minHeight = Math.min(h + 20, 500) + 'px';
+      } catch(e) {}
+    };
+    bodyEl.appendChild(iframe);
+  } else {
+    bodyEl.className = 'msg-body';
+    bodyEl.textContent = m.body || '(empty)';
+  }
+}
+
+async function openMessage(idx) {
+  const m = _allMessages[idx];
   if (!m) return;
   document.getElementById('msg-modal-subject').textContent = m.subject || '(no subject)';
   document.getElementById('msg-modal-from').textContent    = m.from || '';
   document.getElementById('msg-modal-to').textContent      = m.to || '';
   document.getElementById('msg-modal-folder').textContent  = m.folder || '';
-  document.getElementById('msg-modal-date').textContent    = fmt(m.date);
-  document.getElementById('msg-modal-body').textContent    = m.body || '(empty)';
+  document.getElementById('msg-modal-date').textContent    = fmt(m.date_received || m.date_sent);
+
+  const bodyEl = document.getElementById('msg-modal-body');
+  bodyEl.className = 'msg-body';
+
+  // _bodyLoaded is set to true after the first successful fetch
+  if (m._bodyLoaded) {
+    _renderBody(bodyEl, m);
+    new bootstrap.Modal(document.getElementById('msgModal')).show();
+    return;
+  }
+
+  // Show modal immediately with spinner, then fetch body
+  bodyEl.innerHTML = '<span class="text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Loading…</span>';
   new bootstrap.Modal(document.getElementById('msgModal')).show();
+  try {
+    const acct = document.getElementById('account-select').value;
+    const r = await fetch(
+      `${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(acct)}/message` +
+      `?folder=${encodeURIComponent(m.folder)}&uid=${encodeURIComponent(m.uid)}`
+    );
+    const d = await r.json();
+    if (d.status !== 'ok') {
+      bodyEl.textContent = 'Error: ' + (d.message || 'Failed to load message');
+      return;
+    }
+    m.body       = d.body      || '';
+    m.body_html  = d.body_html || '';
+    m._bodyLoaded = true;
+    _renderBody(bodyEl, m);
+  } catch(e) {
+    bodyEl.textContent = 'Error loading message: ' + e.message;
+  }
 }
 
-function escapeHtml(s) {
-  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// ── tag popover ─────────────────────────────────────────────────────────────
+function openTagPopover(event, key, msgIdx) {
+  event.stopPropagation();
+  _currentMsgKey = key;
+  const tag = _tagMap[key] || {};
+  document.getElementById('tp-status').value = tag.status || '';
+  document.getElementById('tp-labels').value = (tag.labels||[]).join(', ');
+
+  const pop = document.getElementById('tag-popover');
+  pop.style.display = 'block';
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let x = event.clientX + 8, y = event.clientY + 8;
+  if (x + 290 > vw) x = vw - 298;
+  if (y + 230 > vh) y = vh - 238;
+  pop.style.left = x + 'px';
+  pop.style.top  = y + 'px';
 }
 
+function closePopover() {
+  document.getElementById('tag-popover').style.display = 'none';
+  _currentMsgKey = null;
+}
+
+async function saveTag() {
+  if (!_currentMsgKey) return;
+  const email  = document.getElementById('account-select').value;
+  const status = document.getElementById('tp-status').value;
+  const labels = document.getElementById('tp-labels').value
+    .split(',').map(s => s.trim()).filter(Boolean);
+
+  const m = _allMessages.find(m => msgKey(m) === _currentMsgKey);
+  const body = {
+    status, labels,
+    folder:     m ? m.folder     : '',
+    uid:        m ? m.uid        : '',
+    subject:    m ? m.subject    : '',
+    from_addr:  m ? m.from       : '',
+    message_id: m ? (m.message_id || '') : '',
+  };
+
+  try {
+    const r = await fetch(
+      `${BASE}/api/crm/mailbox-tags/${encodeURIComponent(email)}/${encodeURIComponent(_currentMsgKey)}`,
+      { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) }
+    );
+    const d = await r.json();
+    if (d.status === 'ok') {
+      _tagMap[_currentMsgKey] = d.data;
+      closePopover();
+      applyFilters();
+    } else {
+      alert('Save failed: ' + d.message);
+    }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function deleteTag() {
+  if (!_currentMsgKey) return;
+  const email = document.getElementById('account-select').value;
+  try {
+    await fetch(
+      `${BASE}/api/crm/mailbox-tags/${encodeURIComponent(email)}/${encodeURIComponent(_currentMsgKey)}`,
+      { method:'DELETE' }
+    );
+    delete _tagMap[_currentMsgKey];
+    closePopover();
+    applyFilters();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// close popover on outside click
+document.addEventListener('click', e => {
+  const pop = document.getElementById('tag-popover');
+  if (pop.style.display !== 'none' && !pop.contains(e.target)) closePopover();
+});
+
+// ── init ────────────────────────────────────────────────────────────────────
+// sort header clicks
+document.getElementById('msg-thead').addEventListener('click', e => {
+  const th = e.target.closest('.sort-col');
+  if (th) setSort(th.dataset.col);
+});
+
+loadStatuses();
 loadAccounts();
 </script>
 <script src="vendor/bootstrap.bundle.min.js"></script>

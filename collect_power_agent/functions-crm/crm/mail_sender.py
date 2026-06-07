@@ -79,14 +79,58 @@ class MailSender:
         text = re.sub(r"<[^>]+>", "", text)
         return re.sub(r"\n{3,}", "\n\n", text).strip()
 
+    @staticmethod
+    def _extract_inline_images(html: str):
+        """Replace data: URI images with cid: references.
+        Returns (new_html, [(cid, mime_type, raw_bytes), ...]).
+        """
+        import re as _re, base64 as _b64
+        parts = []
+        def _replace(m):
+            quote    = m.group(1)   # ' or "
+            mime_type = m.group(2)  # e.g. image/png
+            b64data   = m.group(3)
+            try:
+                raw = _b64.b64decode(b64data)
+            except Exception:
+                return m.group(0)   # leave untouched on decode error
+            cid = f"img_{uuid.uuid4().hex}@blueboot.ai"
+            parts.append((cid, mime_type, raw))
+            return f"{quote}cid:{cid}{quote}"
+        new_html = _re.sub(
+            r"""(?:src=)(["'])data:(image/[^;]+);base64,([A-Za-z0-9+/=]+)\1""",
+            _replace, html
+        )
+        return new_html, parts
+
     def _build_message(self, *, to: str, subject: str,
                        body_plain: str, body_html: str):
         if body_html:
             clean_html = self._inline_css(body_html)
-            plain      = body_plain or self._html_to_plain(clean_html)
-            msg = MIMEMultipart("alternative")
-            msg.attach(MIMEText(plain,      "plain", "utf-8"))
-            msg.attach(MIMEText(clean_html, "html",  "utf-8"))
+            # Convert any data: URI images → CID MIME attachments so they
+            # survive email servers (e.g. Gmail) that strip inline base64.
+            clean_html, inline_images = self._extract_inline_images(clean_html)
+            plain = body_plain or self._html_to_plain(clean_html)
+
+            if inline_images:
+                # multipart/related wraps html + inline images
+                from email.mime.image import MIMEImage
+                related = MIMEMultipart("related")
+                alt = MIMEMultipart("alternative")
+                alt.attach(MIMEText(plain,      "plain", "utf-8"))
+                alt.attach(MIMEText(clean_html, "html",  "utf-8"))
+                related.attach(alt)
+                for cid, mime_type, raw in inline_images:
+                    subtype = mime_type.split("/", 1)[1] if "/" in mime_type else mime_type
+                    img_part = MIMEImage(raw, _subtype=subtype)
+                    img_part["Content-ID"]          = f"<{cid}>"
+                    img_part["Content-Disposition"] = "inline"
+                    related.attach(img_part)
+                msg = related
+            else:
+                msg = MIMEMultipart("alternative")
+                msg.attach(MIMEText(plain,      "plain", "utf-8"))
+                msg.attach(MIMEText(clean_html, "html",  "utf-8"))
         else:
             msg = MIMEText(body_plain or "(no body)", "plain", "utf-8")
         msg["Subject"]    = subject
@@ -266,9 +310,9 @@ class MailSender:
     def _ping_gmail(self) -> dict:
         if not self.ma.get("refresh_token"):
             return {"status": "error",
-                    "message": "client_id, client_secret and refresh_token are required"}
+                    "message": "client_id, client_secret and refresh_token are required for Gmail"}
         try:
             self._get_access_token()
-            return {"status": "ok", "message": "OAuth2 token refreshed successfully"}
+            return {"status": "ok", "message": f"Gmail auth OK for {self.email}"}
         except Exception as e:
-            return {"status": "error", "message": f"Google OAuth2 error: {e}"}
+            return {"status": "error", "message": str(e)}

@@ -81,8 +81,11 @@
             </div>
           </div>
           <div class="col-6">
-            <label class="mb-1" style="color:var(--bb-muted)">Owner</label>
-            <input id="c-owner-input" class="form-control form-control-sm" style="font-size:.82rem" placeholder="Owner name" oninput="scheduleOwnerSave()">
+            <label class="mb-1 text-muted">Owner</label>
+            <select id="c-owner-select" class="form-select form-select-sm"
+                    onchange="ownerChanged()">
+              <option value="">— none —</option>
+            </select>
           </div>
           <div class="col-6" id="c-sent-at-row" style="display:none">
             <label class="mb-1" style="color:var(--bb-muted)">Activated at</label>
@@ -119,7 +122,7 @@
 
     <!-- Contacts table -->
     <div class="bb-card">
-      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom" style="background:#f9fafb;border-radius:10px 10px 0 0">
+      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom bb-card-header">
         <span class="fw-500 small"><i class="ti ti-users me-1 text-primary"></i>Contacts <span class="ms-1" style="color:var(--bb-muted)" id="c-contact-count"></span></span>
         <div class="d-flex align-items-center gap-2">
           <button id="remove-excluded-btn" class="btn btn-sm btn-outline-danger" style="display:none" onclick="confirmRemoveExcluded()">
@@ -130,7 +133,7 @@
       </div>
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
-          <thead class="bb-thead"><tr><th>Status</th><th>Name</th><th>Email</th><th>Title</th><th>Website</th><th>Sent at</th><th></th></tr></thead>
+          <thead class="bb-thead"><tr><th class="small">Status</th><th class="small">Name</th><th class="small">Email</th><th class="small">Title</th><th class="small">Website</th><th class="small">Sent at</th><th></th></tr></thead>
           <tbody id="contacts-body"></tbody>
         </table>
       </div>
@@ -313,13 +316,13 @@ function renderContacts(list) {
     const isExcluded = c.status === 'excluded';
     return `<tr>
     <td>${statusBadge(c.status)}</td>
-    <td>${c.name||'—'}</td>
-    <td><a href="mailto:${c.email}">${c.email||'—'}</a></td>
-    <td class="text-muted small">${c.title||'—'}</td>
+    <td class="small">${c.name||'—'}</td>
+    <td class="small"><a href="mailto:${c.email}">${c.email||'—'}</a></td>
+    <td class="small text-muted">${c.title||'—'}</td>
     <td class="small"><a href="${c.website||'#'}" target="_blank">${(c.website||'').replace(/^https?:\/\//,'').slice(0,28)||'—'}</a></td>
     <td class="small text-muted">${fmt(c.sent_at)}</td>
     <td>
-      <select class="form-select form-select-sm" style="min-width:110px;font-size:.75rem"
+      <select class="form-select form-select-sm bb-contact-select"
         data-email="${c.email}"
         onchange="handleExcludeSelect(this,'${c.contact_id||c.email}','${campaignId}')">
         <option value="" ${!isExcluded?'selected':''}>— keep —</option>
@@ -427,7 +430,7 @@ async function loadCampaign() {
     const fromFormatted = displayName ? `${displayName} <${fromAddr}>` : (fromAddr || '—');
     document.getElementById('c-email-account-preview').textContent = fromFormatted;
     await populateEmailAccountSelect(c.outreach_email_account || '');
-    document.getElementById('c-owner-input').value = c.owner || '';
+    await populateOwnerSelect(c.owner || '');
     const hasMailAccount = !!(c.mail_account && c.mail_account.account_type);
     const viewBtn = document.getElementById('view-mail-account-btn');
     if (viewBtn) viewBtn.style.display = hasMailAccount ? '' : 'none';
@@ -585,6 +588,144 @@ async function doSend() {
     fb.textContent = e.message; fb.style.display = '';
   }
 }
+
+
+// ── Campaign test mail ───────────────────────────────────────────────────
+
+function openCampaignTestMail() {
+  const mail = window._campaignMail || {};
+  const from = mail._display_name
+    ? `${mail._display_name} <${mail.outreach_email}>`
+    : (mail.outreach_email || '—');
+  document.getElementById('ctm-from').textContent    = from;
+  document.getElementById('ctm-subject').value       = mail.subject || '';
+  document.getElementById('ctm-type-badge').textContent = mail.type  || 'html';
+  document.getElementById('ctm-feedback').style.display = 'none';
+  document.getElementById('ctm-send-btn').disabled   = false;
+  document.getElementById('ctm-send-btn').innerHTML  = '<i class="ti ti-send me-1"></i>Send';
+  // Render preview
+  const css = mail.css || '';
+  const body = mail.body || '';
+  document.getElementById('ctm-preview').innerHTML = body
+    ? (css ? `<style>${css}</style>` : '') + `<div class="mail-wrap">${body}</div>`
+    : '<span class="text-muted small">No mail body set.</span>';
+  new bootstrap.Modal(document.getElementById('campaignTestMailModal')).show();
+}
+
+async function doSendCampaignTestMail() {
+  const id  = document.getElementById('campaign-select').value;
+  const btn = document.getElementById('ctm-send-btn');
+  const fb  = document.getElementById('ctm-feedback');
+  const to      = document.getElementById('ctm-to').value.trim();
+  const subject = document.getElementById('ctm-subject').value.trim();
+  if (!to) {
+    fb.className = 'alert alert-warning py-2 small mb-0';
+    fb.textContent = 'Recipient email is required.';
+    fb.style.display = '';
+    return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Sending…';
+  fb.style.display = 'none';
+  try {
+    const mail = window._campaignMail || {};
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/send-test-mail`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to,
+        subject:    subject || mail.subject || 'Test email',
+        body_html:  mail.body  || '',
+        body_plain: mail.body_plain || '',
+      })
+    });
+    const d = await r.json();
+    fb.className = d.status === 'ok'
+      ? 'alert alert-success py-2 small mb-0'
+      : 'alert alert-danger py-2 small mb-0';
+    fb.innerHTML = (d.status === 'ok'
+      ? '<i class="ti ti-circle-check me-1"></i>'
+      : '<i class="ti ti-circle-x me-1"></i>')
+      + escapeHtml(d.message || (d.status === 'ok' ? 'Sent!' : 'Failed'));
+    fb.style.display = '';
+  } catch(err) {
+    fb.className   = 'alert alert-danger py-2 small mb-0';
+    fb.textContent = 'Error: ' + err.message;
+    fb.style.display = '';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-send me-1"></i>Send';
+}
+
+// ── Owner select ─────────────────────────────────────────────────────────
+// Users are fetched directly from the Firestore REST API (no function deploy needed).
+let _usersForOwner = [];   // [{email, displayName, defaultMailbox}]
+
+async function populateOwnerSelect(currentOwner) {
+  const sel = document.getElementById('c-owner-select');
+  if (_usersForOwner.length === 0) {
+    try {
+      const projectId = (window.FIREBASE_CONFIG || {}).projectId || 'blueboot-market';
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}`
+                + `/databases/(default)/documents/settings/users/users`;
+      const r   = await fetch(url, { cache: 'no-store' });
+      const d   = await r.json();
+      _usersForOwner = (d.documents || []).map(doc => {
+        const f = doc.fields || {};
+        return {
+          email:          f.email?.stringValue        || '',
+          displayName:    f.displayName?.stringValue  || '',
+          defaultMailbox: f.defaultMailbox?.stringValue || '',
+        };
+      }).filter(u => u.email || u.displayName);
+    } catch(_) { /* keep empty */ }
+  }
+  sel.innerHTML = '<option value="">— none —</option>' +
+    _usersForOwner.map(u => {
+      const label = u.displayName
+                ? `${u.displayName} (${u.email})`
+                : u.email;
+      const val   = u.displayName || u.email;   // store display name for compat
+      const sel_  = val === currentOwner ? ' selected' : '';
+      return `<option value="${escapeHtml(val)}"${sel_}>${escapeHtml(label)}</option>`;
+    }).join('');
+  // If currentOwner not in list, add as a manual entry so it isn't lost
+  if (currentOwner && !_usersForOwner.find(u => (u.displayName||u.email) === currentOwner)) {
+    sel.innerHTML += `<option value="${escapeHtml(currentOwner)}" selected>${escapeHtml(currentOwner)} (manual)</option>`;
+  }
+}
+
+async function ownerChanged() {
+  const ownerVal = document.getElementById('c-owner-select').value;
+  // Auto-fill email account from user's defaultMailbox (only if currently empty)
+  const user = _usersForOwner.find(u => (u.displayName || u.email) === ownerVal);
+  if (user && user.defaultMailbox) {
+    const mailSel = document.getElementById('c-email-account-select');
+    const currentMail = mailSel.value;
+    if (!currentMail) {
+      // Populate mail accounts first if empty, then set the default
+      await populateEmailAccountSelect('');
+      if ([...mailSel.options].some(o => o.value === user.defaultMailbox)) {
+        mailSel.value = user.defaultMailbox;
+        await saveEmailAccount();
+      }
+    }
+  }
+  await saveOwner(ownerVal);
+}
+
+async function saveOwner(ownerVal) {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  try {
+    await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner: ownerVal })
+    });
+  } catch(_) { /* silent */ }
+}
+
+// Legacy alias (was referenced by oninput but function was missing)
+function scheduleOwnerSave() { saveOwner(document.getElementById('c-owner-select')?.value || ''); }
 
 async function populateEmailAccountSelect(currentEmail) {
   const sel = document.getElementById('c-email-account-select');

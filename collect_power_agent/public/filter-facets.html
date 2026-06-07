@@ -25,7 +25,7 @@
 <div class="container py-4" style="max-width:1200px">
 
   <div class="d-flex align-items-center justify-content-between mb-3">
-    <h5 class="mb-0 fw-600" style="font-size:1rem"><i class="ti ti-filter me-2 text-primary"></i>Filter Facets</h5>
+    <h5 class="page-title"><i class="ti ti-filter me-2 text-primary"></i>Filter Facets</h5>
 <span id="meta" class="small" style="color:var(--bb-muted)"></span>
   </div>
 
@@ -234,12 +234,16 @@ function renderFacet(name, f, selOnly = false){
     const checked = item.selected ? 'checked' : '';
     const label = isGroup ? item.label : item.value;
     const count = item.count != null ? item.count : '';
+    const selCnt = item.selected_count != null ? item.selected_count : null;
+    const countHtml = selCnt != null
+      ? `<span style="color:var(--bb-accent);font-weight:600">${selCnt}</span><span style="color:var(--bb-muted)"> / ${count}</span>`
+      : `<span style="color:var(--bb-muted)">${count}</span>`;
     return `<div class="form-check">
       <input class="form-check-input" type="checkbox" id="${id}" ${checked}
              onchange="onToggle('${name}', ${i_real}, ${isGroup}, this.checked)">
       <label class="form-check-label d-flex justify-content-between" for="${id}">
         <span>${escapeHtml(String(label))}</span>
-        <span class="count-badge ms-2" style="color:var(--bb-muted);font-size:.78rem">${count}</span>
+        <span class="count-badge ms-2" style="font-size:.78rem">${countHtml}</span>
       </label>
     </div>`;
   }).join('');
