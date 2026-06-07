@@ -11,11 +11,6 @@
 .job-card { cursor: pointer; transition: border-color .15s; }
 .job-card:hover { border-color: #adb5bd !important; }
 .detail { display: none; }
-.jp { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 600; padding: .2rem .55rem; border-radius: 20px; }
-.jp-queued  { background: #dbeafe; color: #1d4ed8; }
-.jp-running { background: #fef9c3; color: #854d0e; }
-.jp-done    { background: #dcfce7; color: #15803d; }
-.jp-error   { background: #fee2e2; color: #b91c1c; }
 </style>
 </head>
 <body>
@@ -56,7 +51,7 @@
 const fmt = fmtTime;            // shared; elapsed() also from the library
 
 function jobPill(status){
-  return `<span class="jp jp-${status||'queued'}">${status}</span>`;
+  return `<span class="bb-badge bb-badge-${({queued:'dosend',running:'pending',done:'sent',error:'error'})[status]||'dosend'}">${status}</span>`;
 }
 
 const JOB_NAMES = {'contact-sync':'Import contacts','push-and-sync':'Push selected to CRM','template-sync':'Sync CRM to Leads Database','campaign-sync':'Campaign sync'};

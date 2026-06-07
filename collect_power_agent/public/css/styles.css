@@ -10,9 +10,11 @@
   --bb-border: #e8eaee;
   --bb-muted: #6b7280;
   --bb-card-shadow: 0 1px 4px rgba(0,0,0,.07), 0 0 0 1px rgba(0,0,0,.04);
+  --bb-bg-alt: #f8f9fa;
 }
 
 body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+body.bg-alt { background: var(--bb-bg-alt); }
 
 /* Top navigation */
 .bb-nav { background: #fff; border-bottom: 1px solid var(--bb-border); padding: .6rem 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0; position: relative; }
@@ -47,7 +49,27 @@ body { background: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Seg
 .bb-badge-cancelled { background: #fee2e2; color: #b91c1c; }
 .bb-badge-pending   { background: #fef9c3; color: #854d0e; }
 .bb-badge-error     { background: #fee2e2; color: #b91c1c; }
+.bb-badge-muted     { background: #f4f5f7; color: var(--bb-muted); }
 
 /* Misc shared */
 .spinner-xs { width: 14px; height: 14px; border-width: 2px; }
 pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size: 11px; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; border: 1px solid var(--bb-border); }
+
+/* Page header (title bar with back button) */
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+.page-title  { font-size: 1rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: .5rem; }
+
+/* Section label — uppercase heading used above card groups */
+.bb-section-label { font-size: .82rem; font-weight: 600; color: var(--bb-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: .6rem; }
+
+/* Key-value list */
+.kv-row { display: flex; justify-content: space-between; align-items: baseline; font-size: .83rem; padding: .2rem 0; border-bottom: 1px solid var(--bb-border); }
+.kv-row:last-child { border-bottom: none; }
+.kv-key { color: var(--bb-muted); }
+.kv-val { font-weight: 500; color: #111; }
+
+/* Drag-and-drop zone */
+.drop-zone { border: 2px dashed #ced4da; border-radius: 12px; transition: border-color .15s, background .15s; }
+.drop-zone.drag { border-color: #0d6efd; background: #e7f1ff; }
+
+

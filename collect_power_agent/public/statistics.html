@@ -9,8 +9,6 @@
 <link rel="stylesheet" href="css/styles.css">
 <style>
 .stat-section { margin-bottom: 1.5rem; }
-.stat-section h6 { font-size: .82rem; font-weight: 600; color: var(--bb-muted);
-  text-transform: uppercase; letter-spacing: .04em; margin-bottom: .6rem; }
 .kv-row { display: flex; justify-content: space-between; align-items: baseline;
   font-size: .83rem; padding: .2rem 0; border-bottom: 1px solid var(--bb-border); }
 .kv-row:last-child { border-bottom: none; }
@@ -136,10 +134,10 @@ function renderPriority(d) {
 
   return `<div class="row g-3">
     <div class="col-md-5">
-      <div class="stat-section"><h6>By priority (${total.toLocaleString()} leads)</h6>${prios}</div>
+      <div class="stat-section"><h6 class="bb-section-label">By priority (${total.toLocaleString()} leads)</h6>${prios}</div>
     </div>
     <div class="col-md-7">
-      <div class="stat-section"><h6>Top countries</h6>
+      <div class="stat-section"><h6 class="bb-section-label">Top countries</h6>
         <table class="table table-sm small mb-0">
           <thead style="background:#f9fafb"><tr><th>Code</th><th>Country</th><th class="text-end">Leads</th><th class="text-end">Contacts</th></tr></thead>
           <tbody>${countries}</tbody>
@@ -157,11 +155,11 @@ function renderFunnel(d, labels) {
   const contactRows = labels.contacts.map(([lbl, key]) => [lbl, d[key] || 0]);
   return `<div class="row g-3">
     <div class="col-md-6">
-      <div class="stat-section"><h6>Leads (${total_leads.toLocaleString()} total)</h6>
+      <div class="stat-section"><h6 class="bb-section-label">Leads (${total_leads.toLocaleString()} total)</h6>
         ${funnelTable(leadRows, total_leads)}</div>
     </div>
     <div class="col-md-6">
-      <div class="stat-section"><h6>Contacts (${total_contacts.toLocaleString()} total)</h6>
+      <div class="stat-section"><h6 class="bb-section-label">Contacts (${total_contacts.toLocaleString()} total)</h6>
         ${funnelTable(contactRows, total_contacts)}</div>
     </div>
   </div>`;
@@ -173,7 +171,7 @@ function renderQuality(d) {
   const ct = d.contacts_total || 0;
   return `<div class="row g-3">
     <div class="col-md-6">
-      <div class="stat-section"><h6>Site leads (${lt.toLocaleString()})</h6>
+      <div class="stat-section"><h6 class="bb-section-label">Site leads (${lt.toLocaleString()})</h6>
         ${funnelTable([
           ['No sitemap', d.leads_no_sitemap||0],
           ['Zero page count', d.leads_zero_pages||0],
@@ -181,7 +179,7 @@ function renderQuality(d) {
         ], lt)}</div>
     </div>
     <div class="col-md-6">
-      <div class="stat-section"><h6>Site contacts (${ct.toLocaleString()})</h6>
+      <div class="stat-section"><h6 class="bb-section-label">Site contacts (${ct.toLocaleString()})</h6>
         ${funnelTable([
           ['No name', d.contacts_no_name||0],
           ['Name/email mismatch', d.contacts_name_mismatch||0],
@@ -197,7 +195,7 @@ function renderEmailFunnel(d) {
   const pipeline= Object.entries(d.by_pipeline|| {});
   const etype   = Object.entries(d.by_email_type||{}).sort((a,b)=>b[1]-a[1]);
   const section = (title, rows) =>
-    `<div class="stat-section mb-2"><h6>${title}</h6>${funnelTable(rows, total)}</div>`;
+    `<div class="stat-section mb-2"><h6 class="bb-section-label">${title}</h6>${funnelTable(rows, total)}</div>`;
   return `<div class="row g-3">
     <div class="col-md-4">${section('Status', status)}</div>
     <div class="col-md-4">${section('Pipeline', pipeline)}</div>
@@ -219,7 +217,7 @@ function renderCoverage(d) {
     </tr>`).join('');
   return `<div class="row g-3">
     <div class="col-md-4">
-      <div class="stat-section"><h6>Overall (${total.toLocaleString()} contacts)</h6>
+      <div class="stat-section"><h6 class="bb-section-label">Overall (${total.toLocaleString()} contacts)</h6>
         ${funnelTable([
           ['Site pipeline only', d.site_only||0],
           ['Lead pipeline only', d.leads_only||0],
@@ -227,7 +225,7 @@ function renderCoverage(d) {
         ], total)}</div>
     </div>
     <div class="col-md-8">
-      <div class="stat-section"><h6>By country</h6>
+      <div class="stat-section"><h6 class="bb-section-label">By country</h6>
         <table class="table table-sm small mb-0">
           <thead style="background:#f9fafb">
             <tr><th>Country</th><th class="text-end">Total</th><th class="text-end">Site</th>

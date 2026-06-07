@@ -1,16 +1,18 @@
-"""firestore_index_sync.py — Merge new Firestore indexes into firestore.indexes.json.
+"""firestore_sync.py — Sync live Firestore indexes into firestore.indexes.json.
 
-Reads the existing firestore.indexes.json (if present), merges in the NEW_INDEXES
-defined below, de-duplicates, and writes the result back.
+Reads the existing firestore.indexes.json (if present), fetches live indexes from
+Firestore via the Admin REST API, merges them, de-duplicates, and writes the result back.
+
+Run from the project root — used as a predeploy hook in firebase.json.
 
 Also introspects Firestore via the Admin SDK to discover collections and
 collectionGroups actually present, and prints a report.
 
 Usage:
-    python app/firestore_index_sync.py                  # merge + write
-    python app/firestore_index_sync.py --dry-run        # print merged JSON, don't write
-    python app/firestore_index_sync.py --discover-only  # just list collections
-    python app/firestore_index_sync.py --output path/to/firestore.indexes.json
+    python firestore_sync.py                  # merge + write
+    python firestore_sync.py --dry-run        # print merged JSON, don't write
+    python firestore_sync.py --discover-only  # just list collections
+    python firestore_sync.py --output path/to/firestore.indexes.json
 """
 from __future__ import annotations
 
@@ -19,152 +21,15 @@ import threading as _threading
 # Guards firebase_admin.initialize_app against concurrent init
 _local_fb_lock = _threading.Lock()
 import argparse
-import importlib.util
 import json
 import os
 from pathlib import Path
 
+# Bootstrap: add app/ to sys.path so _pathsetup and internal modules resolve
+# when this script is run from the project root.
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent / "app"))
 import _pathsetup  # noqa: F401
-from functions.config import cfg
-
-# ---------------------------------------------------------------------------
-# New indexes to add
-# ---------------------------------------------------------------------------
-
-NEW_INDEXES = [
-    # ── site_campaigns / site_leads ─────────────────────────────────────────
-    {
-        "collectionGroup": "site_leads",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country", "order": "ASCENDING"},
-            {"fieldPath": "crawled_at", "order": "DESCENDING"},
-        ],
-    },
-    {
-        "collectionGroup": "site_leads",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country",  "order": "ASCENDING"},
-            {"fieldPath": "ai_sector",   "order": "ASCENDING"},
-            {"fieldPath": "crawled_at",  "order": "DESCENDING"},
-        ],
-    },
-    {
-        "collectionGroup": "site_leads",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country",    "order": "ASCENDING"},
-            {"fieldPath": "ai_confidence", "order": "DESCENDING"},
-        ],
-    },
-    {
-        "collectionGroup": "site_leads",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country",      "order": "ASCENDING"},
-            {"fieldPath": "ai_sector",       "order": "ASCENDING"},
-            {"fieldPath": "ai_confidence",   "order": "DESCENDING"},
-        ],
-    },
-    # ── site_campaigns / site_campaign_sites ────────────────────────────────
-    {
-        "collectionGroup": "site_campaign_sites",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country", "order": "ASCENDING"},
-            {"fieldPath": "crawled_at", "order": "DESCENDING"},
-        ],
-    },
-    {
-        "collectionGroup": "site_campaign_sites",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country",  "order": "ASCENDING"},
-            {"fieldPath": "ai_sector",   "order": "ASCENDING"},
-            {"fieldPath": "ai_confidence", "order": "DESCENDING"},
-        ],
-    },
-    # ── site_campaigns / site_campaign_sites / site_campaign_contacts ────────
-    {
-        "collectionGroup": "site_campaign_contacts",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country", "order": "ASCENDING"},
-            {"fieldPath": "name",       "order": "ASCENDING"},
-        ],
-    },
-    {
-        "collectionGroup": "site_campaign_contacts",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country",        "order": "ASCENDING"},
-            {"fieldPath": "email",             "order": "ASCENDING"},
-            {"fieldPath": "brave_enriched_at", "order": "DESCENDING"},
-        ],
-    },
-    {
-        "collectionGroup": "site_campaign_contacts",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country",  "order": "ASCENDING"},
-            {"fieldPath": "occupation",  "order": "ASCENDING"},
-            {"fieldPath": "name",        "order": "ASCENDING"},
-        ],
-    },
-    # ── leads_extract / contacts_extracted ─────────────────────────────────────
-    {
-        "collectionGroup": "contacts_extracted",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "extract_id", "order": "ASCENDING"},
-            {"fieldPath": "country",    "order": "ASCENDING"},
-        ],
-    },
-    {
-        "collectionGroup": "contacts_extracted",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "extract_id", "order": "ASCENDING"},
-            {"fieldPath": "email",      "order": "ASCENDING"},
-        ],
-    },
-    # ── site_leads / site_contacts (top-level collections) ───────────────────
-    {
-        "collectionGroup": "site_contacts",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country", "order": "ASCENDING"},
-            {"fieldPath": "name",       "order": "ASCENDING"},
-        ],
-    },
-    {
-        "collectionGroup": "site_contacts",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country",         "order": "ASCENDING"},
-            {"fieldPath": "email",              "order": "ASCENDING"},
-            {"fieldPath": "brave_enriched_at",  "order": "DESCENDING"},
-        ],
-    },
-    {
-        "collectionGroup": "site_contacts",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country",  "order": "ASCENDING"},
-            {"fieldPath": "occupation",  "order": "ASCENDING"},
-            {"fieldPath": "name",        "order": "ASCENDING"},
-        ],
-    },
-    {
-        "collectionGroup": "site_contacts",
-        "queryScope": "COLLECTION_GROUP",
-        "fields": [
-            {"fieldPath": "ai_country",        "order": "ASCENDING"},
-            {"fieldPath": "brave_enriched_at", "order": "DESCENDING"},
-        ],
-    },
-]
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -219,8 +84,21 @@ def _merge(existing: dict, new_indexes: list[dict]) -> tuple[dict, int, int]:
 # Firestore discovery
 # ---------------------------------------------------------------------------
 
+def _load_key_dict() -> dict:
+    """Return the raw service-account JSON dict (needed for google-auth REST calls)."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    key_json = os.getenv("FIREBASE_KEY_JSON", "").strip()
+    if key_json:
+        return json.loads(key_json)
+    creds_path = os.getenv("FIREBASE_CREDENTIALS", "") or str(
+        Path(__file__).resolve().parent / "config" / "serviceAccountKey.json"
+    )
+    return json.loads(Path(creds_path).read_text(encoding="utf-8"))
+
+
 def _load_secrets():
-    """Load Firebase credentials from env (FIREBASE_KEY_JSON or FIREBASE_CREDENTIALS)."""
+    """Return a firebase_admin Certificate (for Admin SDK / Firestore client)."""
     from dotenv import load_dotenv
     load_dotenv()
     from functions.firebase_cred import get_firebase_cred
@@ -283,10 +161,10 @@ def discover_subcollections(db, top_collections: list[str]) -> dict[str, list[st
 # Fetch live indexes from Firestore via firebase CLI
 # ---------------------------------------------------------------------------
 
-def _fetch_live_indexes(fb_key_dict: dict | None) -> list[dict]:
+def _fetch_live_indexes(key_dict: dict) -> list[dict]:
     """Fetch all deployed composite indexes via the Firestore Admin REST API.
 
-    Uses the same service-account credentials as the rest of the project —
+    Uses the raw service-account dict returned by _load_key_dict() —
     no firebase CLI or Node.js required.
     Returns a list of index dicts compatible with firestore.indexes.json format.
     """
@@ -300,21 +178,11 @@ def _fetch_live_indexes(fb_key_dict: dict | None) -> list[dict]:
     print("  [index-sync] Fetching live indexes via Firestore Admin REST API…")
 
     try:
-        if fb_key_dict:
-            creds = service_account.Credentials.from_service_account_info(
-                fb_key_dict,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"],
-            )
-            project_id = fb_key_dict.get("project_id", "")
-        else:
-            import json as _json
-            key_path = cfg.FIREBASE_CREDENTIALS or "config/serviceAccountKey.json"
-            key_data = _json.loads(Path(key_path).read_text())
-            creds = service_account.Credentials.from_service_account_info(
-                key_data,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"],
-            )
-            project_id = key_data.get("project_id", "")
+        creds = service_account.Credentials.from_service_account_info(
+            key_dict,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+        project_id = key_dict.get("project_id", "")
 
         if not project_id:
             print("  [index-sync] Could not determine project_id from credentials")
@@ -402,7 +270,7 @@ def _fetch_live_indexes(fb_key_dict: dict | None) -> list[dict]:
     return clean
 
 
-def _deploy_indexes(indexes_path: Path, fb_key_dict: dict | None) -> None:
+def _deploy_indexes(indexes_path: Path, key_dict: dict) -> None:
     """Deploy indexes from firestore.indexes.json via the Firestore Admin REST API.
 
     Creates any index not yet present in Firestore.
@@ -425,21 +293,11 @@ def _deploy_indexes(indexes_path: Path, fb_key_dict: dict | None) -> None:
         return
 
     try:
-        if fb_key_dict:
-            creds = service_account.Credentials.from_service_account_info(
-                fb_key_dict,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"],
-            )
-            project_id = fb_key_dict.get("project_id", "")
-        else:
-            import json as _json
-            key_path = cfg.FIREBASE_CREDENTIALS or "config/serviceAccountKey.json"
-            key_data = _json.loads(Path(key_path).read_text())
-            creds = service_account.Credentials.from_service_account_info(
-                key_data,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"],
-            )
-            project_id = key_data.get("project_id", "")
+        creds = service_account.Credentials.from_service_account_info(
+            key_dict,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+        project_id = key_dict.get("project_id", "")
     except Exception as exc:
         print(f"  [index-sync] Credentials error: {exc}")
         return
@@ -470,6 +328,129 @@ def _deploy_indexes(indexes_path: Path, fb_key_dict: dict | None) -> None:
             print(f"    ! error: {cg}: {exc}")
 
     print(f"  [index-sync] Deploy done — created: {created}  already existed: {skipped}  failed: {failed}")
+
+
+def _fetch_live_field_overrides(key_dict: dict) -> list[dict]:
+    """Fetch single-field index overrides via the Firestore Admin REST API.
+
+    Calls /collectionGroups/-/fields with filter=indexConfig.usesAncestorConfig:false
+    (required — without this filter the API returns only the database-wide default
+    sentinel and nothing else). Skips the wildcard * field path and returns entries
+    ready for the fieldOverrides section of firestore.indexes.json.
+    """
+    try:
+        from google.oauth2 import service_account
+        from google.auth.transport.requests import AuthorizedSession
+    except ImportError:
+        print("  [index-sync] google-auth not installed — run: pip install google-auth")
+        return []
+
+    print("  [index-sync] Fetching live field overrides via Firestore Admin REST API…")
+
+    try:
+        creds = service_account.Credentials.from_service_account_info(
+            key_dict,
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
+        )
+        project_id = key_dict.get("project_id", "")
+        if not project_id:
+            print("  [index-sync] Could not determine project_id — skipping field overrides")
+            return []
+
+        session  = AuthorizedSession(creds)
+        base     = (f"https://firestore.googleapis.com/v1/projects/{project_id}"
+                    f"/databases/(default)")
+        url      = f"{base}/collectionGroups/-/fields"
+
+        raw_fields: list[dict] = []
+        page_token = None
+        while True:
+            # The fields endpoint requires this filter — without it the API only
+            # returns the database-wide default entry and nothing else.
+            params = {
+                "pageSize": 300,
+                "filter":   "indexConfig.usesAncestorConfig:false",
+            }
+            if page_token:
+                params["pageToken"] = page_token
+            resp = session.get(url, params=params, timeout=30)
+            resp.raise_for_status()
+            page = resp.json()
+            raw_fields.extend(page.get("fields", []))
+            page_token = page.get("nextPageToken")
+            if not page_token:
+                break
+
+    except Exception as exc:
+        print(f"  [index-sync] Field overrides REST fetch failed: {exc}")
+        return []
+
+    overrides: list[dict] = []
+    for field in raw_fields:
+        name = field.get("name", "")
+        # name: .../collectionGroups/{cg}/fields/{fieldPath}
+        if "/collectionGroups/" not in name or "/fields/" not in name:
+            continue
+        cg        = name.split("/collectionGroups/")[1].split("/")[0]
+        field_path = name.split("/fields/")[1]
+
+        # Skip the database-wide __default__ sentinel
+        if field_path == "*":
+            continue
+
+        idx_cfg = field.get("indexConfig", {})
+        indexes = idx_cfg.get("indexes", [])
+        if not indexes:
+            continue
+
+        clean_indexes = []
+        for idx in indexes:
+            state = idx.get("state", "READY")
+            if state not in ("READY", ""):
+                continue
+            entry: dict = {"queryScope": idx.get("queryScope", "COLLECTION")}
+            if "order" in idx:
+                entry["order"] = idx["order"]
+            elif "arrayConfig" in idx:
+                entry["arrayConfig"] = idx["arrayConfig"]
+            else:
+                continue
+            clean_indexes.append(entry)
+
+        if clean_indexes:
+            overrides.append({
+                "collectionGroup": cg,
+                "fieldPath":       field_path,
+                "indexes":         clean_indexes,
+            })
+
+    print(f"  [index-sync] {len(overrides)} field overrides fetched from Firestore")
+    return overrides
+
+
+def _override_key(ov: dict) -> str:
+    return f"{ov['collectionGroup']}:{ov['fieldPath']}"
+
+
+def _merge_overrides(existing: dict, live: list[dict]) -> tuple[dict, int, int]:
+    """Merge live field overrides into existing, return (merged, added, skipped)."""
+    seen    = {_override_key(ov): True for ov in existing.get("fieldOverrides", [])}
+    added   = 0
+    skipped = 0
+    merged  = list(existing.get("fieldOverrides", []))
+
+    for ov in live:
+        key = _override_key(ov)
+        if key in seen:
+            skipped += 1
+        else:
+            merged.append(ov)
+            seen[key] = True
+            added += 1
+
+    result = dict(existing)
+    result["fieldOverrides"] = merged
+    return result, added, skipped
 
 # ---------------------------------------------------------------------------
 # Summary printer
@@ -502,8 +483,18 @@ def _print_summary(merged: dict) -> None:
 
     if overrides:
         print(f"\n  fieldOverrides: {len(overrides)}")
+        from collections import defaultdict as _dd
+        ov_groups: dict = _dd(list)
         for ov in overrides:
-            print(f"    · {ov.get('collectionGroup')} / {ov.get('fieldPath')}")
+            ov_groups[ov.get("collectionGroup")].append(ov)
+        for cg in sorted(ov_groups):
+            print(f"\n  {cg}  [field overrides]")
+            for ov in ov_groups[cg]:
+                modes = "  ".join(
+                    f"({'↑' if i.get('order') == 'ASCENDING' else '↓' if i.get('order') == 'DESCENDING' else i.get('arrayConfig','?')})"
+                    for i in ov.get("indexes", [])
+                )
+                print(f"    · {ov.get('fieldPath'):<40} {modes}")
 
     print("══════════════════════════════════════════════════════════════════\n")
 
@@ -537,44 +528,40 @@ def main(argv=None) -> None:
     args = p.parse_args(argv)
 
     output_path = Path(args.output) if args.output else (
-        Path(__file__).parent.parent / "firestore.indexes.json"
+        Path(__file__).resolve().parent / "firestore.indexes.json"
     )
 
+    # ── Load credentials ────────────────────────────────────────────────────
+    key_dict = _load_key_dict()   # raw dict — for REST API calls
+    cert     = _load_secrets()    # Certificate — for Admin SDK
+
     # ── Firestore collection discovery (Admin SDK) ──────────────────────────
-    _fb_key_for_discover = None
     if not args.no_discover:
         try:
-            _fb_key_for_discover = _load_secrets()
-            db  = _init_firestore(_fb_key_for_discover)
+            db  = _init_firestore(cert)
             top = discover_collections(db)
             discover_subcollections(db, list(top.keys()))
         except Exception as exc:
             print(f"\n  [index-sync] Discovery failed: {exc}")
 
-    # ── Fetch live indexes via REST API (always — protects against deletions) ──
-    # This runs even with --no-discover so deployed indexes are never dropped.
+    # ── Fetch live indexes + field overrides via REST API ──────────────────
     print(f"\n  [index-sync] Merging indexes into {output_path.name}…")
-    existing     = _load_existing(output_path)
-    fb_key       = _fb_key_for_discover or _load_secrets()
-    live_indexes = _fetch_live_indexes(fb_key)
+    existing          = _load_existing(output_path)
+    live_indexes      = _fetch_live_indexes(key_dict)
+    live_overrides    = _fetch_live_field_overrides(key_dict)
 
-    # Merge order: existing file → live Firestore → NEW_INDEXES
-    # Each pass only adds what isn't already present
-    step1, added1, _ = _merge(existing,        live_indexes)
-    step2, added2, _ = _merge(step1,           NEW_INDEXES)
-    merged           = step2
-    total_added      = added1 + added2
-    total_present    = len(merged["indexes"]) - total_added
+    # Merge: local file → live Firestore (adds anything in Firestore not yet local)
+    merged,   added_idx, _ = _merge(existing, live_indexes)
+    merged, added_ovr, _   = _merge_overrides(merged, live_overrides)
 
     merged_json = json.dumps(merged, indent=2, ensure_ascii=False)
 
-    from_file     = len(existing.get("indexes", []))
-    from_firestore = added1
-    from_new       = added2
-    print(f"  [index-sync] From file: {from_file}  "
-          f"From Firestore (new): {from_firestore}  "
-          f"From NEW_INDEXES (new): {from_new}  "
-          f"Total: {len(merged['indexes'])} indexes")
+    from_idx = len(existing.get("indexes", []))
+    from_ovr = len(existing.get("fieldOverrides", []))
+    print(f"  [index-sync] Composite indexes — file: {from_idx}  new from Firestore: {added_idx}  "
+          f"total: {len(merged['indexes'])}")
+    print(f"  [index-sync] Field overrides   — file: {from_ovr}  new from Firestore: {added_ovr}  "
+          f"total: {len(merged['fieldOverrides'])}")
 
     if args.dry_run:
         print("\n── firestore.indexes.json (dry-run — not written) ─────────────")
@@ -594,7 +581,7 @@ def main(argv=None) -> None:
 
     # ── Deploy ───────────────────────────────────────────────────────────────
     if args.deploy:
-        _deploy_indexes(output_path, fb_key)
+        _deploy_indexes(output_path, key_dict)
     else:
         print("  Deploy with:  firebase deploy --only firestore:indexes")
 

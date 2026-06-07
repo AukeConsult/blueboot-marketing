@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="css/styles.css">
 <style>
 
-.facet-card { break-inside: avoid; display: inline-block; width: 100%; margin-bottom: 1rem; border-radius: 10px; background: #fff; box-shadow: var(--bb-card-shadow); border: 1px solid var(--bb-border); }
+.facet-card { break-inside: avoid; display: inline-block; width: 100%; margin-bottom: 1rem; }
 .facet-values { max-height: 260px; overflow-y: auto; }
 .facet-values .form-check { margin-bottom: .15rem; }
 .count-badge { font-variant-numeric: tabular-nums; }
@@ -244,7 +244,7 @@ function renderFacet(name, f, selOnly = false){
     </div>`;
   }).join('');
 
-  return `<div class="facet-card">
+  return `<div class="facet-card bb-card">
     <div class="px-3 py-2 d-flex justify-content-between align-items-center border-bottom" style="background:#f9fafb;border-radius:10px 10px 0 0">
       <span class="fw-600 small">${name}
         <span class="badge bg-light text-muted ms-1" style="font-size:.68rem">${f.type}</span></span>

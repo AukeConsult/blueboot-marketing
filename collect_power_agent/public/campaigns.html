@@ -9,12 +9,11 @@
 <link rel="stylesheet" href="css/styles.css">
 <style>
 
-.camp-card { background: #fff; border: 1px solid var(--bb-border); border-radius: 10px; box-shadow: var(--bb-card-shadow); padding: 1rem 1.25rem; text-decoration: none; color: inherit; display: block; transition: box-shadow .12s, transform .12s; margin-bottom: 10px; }
+.camp-card { padding: 1rem 1.25rem; text-decoration: none; color: inherit; display: block; transition: box-shadow .12s, transform .12s; margin-bottom: 10px; }
 .camp-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-1px); color: inherit; }
 .camp-card:hover .camp-arrow { opacity: 1; }
 .camp-arrow { opacity: 0; transition: opacity .15s; color: var(--bb-accent); }
 
-.stat-pill { display: inline-flex; align-items: center; gap: .3rem; font-size: .78rem; color: var(--bb-muted); background: #f4f5f7; border-radius: 20px; padding: .15rem .55rem; }
 </style>
 </head>
 <body>
@@ -86,10 +85,10 @@ function render(list) {
   el.innerHTML = list.map(c => {
     const sb = c.status_breakdown || {};
     const countries = (c.countries || []).join(', ') || '—';
-    const author = c.owner ? `<span class="stat-pill"><i class="ti ti-user"></i>${c.owner}</span>` : '';
-    const sentPill   = sb.sent ? `<span class="stat-pill" style="color:#15803d;background:#dcfce7"><i class="ti ti-send"></i>${sb.sent} sent</span>` : '';
-    const sourcePill = c.source === 'master-sheet' ? `<span class="stat-pill" style="color:#15803d;background:#f0fdf4"><i class="ti ti-table"></i>master-sheet</span>` : '';
-    return `<a href="campaign.html?campaign_id=${encodeURIComponent(c.campaign_id)}" class="camp-card" onclick="localStorage.setItem('selectedCampaign','${c.campaign_id}')">
+    const author = c.owner ? `<span class="bb-badge bb-badge-muted"><i class="ti ti-user"></i>${c.owner}</span>` : '';
+    const sentPill   = sb.sent ? `<span class="bb-badge bb-badge-muted" style="color:#15803d;background:#dcfce7"><i class="ti ti-send"></i>${sb.sent} sent</span>` : '';
+    const sourcePill = c.source === 'master-sheet' ? `<span class="bb-badge bb-badge-muted" style="color:#15803d;background:#f0fdf4"><i class="ti ti-table"></i>master-sheet</span>` : '';
+    return `<a href="campaign.html?campaign_id=${encodeURIComponent(c.campaign_id)}" class="camp-card bb-card" onclick="localStorage.setItem('selectedCampaign','${c.campaign_id}')">
       <div class="d-flex align-items-start justify-content-between mb-2">
         <div>
           <span class="fw-600" style="font-size:.95rem">${c.campaign_id}</span>
@@ -98,9 +97,9 @@ function render(list) {
         <i class="ti ti-arrow-right camp-arrow" style="font-size:1.1rem;margin-top:2px"></i>
       </div>
       <div class="d-flex flex-wrap gap-2 align-items-center">
-        <span class="stat-pill"><i class="ti ti-users"></i>${c.contact_count || 0} contacts</span>
-        <span class="stat-pill"><i class="ti ti-building-store"></i>${c.sites_count || 0} sites</span>
-        <span class="stat-pill"><i class="ti ti-map-pin"></i>${countries}</span>
+        <span class="bb-badge bb-badge-muted"><i class="ti ti-users"></i>${c.contact_count || 0} contacts</span>
+        <span class="bb-badge bb-badge-muted"><i class="ti ti-building-store"></i>${c.sites_count || 0} sites</span>
+        <span class="bb-badge bb-badge-muted"><i class="ti ti-map-pin"></i>${countries}</span>
         ${sentPill}
         ${sourcePill}
         ${author}

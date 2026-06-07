@@ -8,4 +8,4 @@
 /config/google_token.json
 /functions-crm/venv/
 /functions-auth/package-lock.json
-/functions-auth/node_modules/
+**/node_modules/
