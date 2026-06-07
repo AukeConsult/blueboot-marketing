@@ -471,6 +471,48 @@ def update_campaign(campaign_id):
 
 
 
+@app.route("/api/crm/campaigns/<campaign_id>", methods=["DELETE"])
+def delete_campaign(campaign_id):
+    """Delete a draft campaign (and all its contacts) via a background job.
+
+    Atomically flips campaign status to 'deleting' inside a Firestore
+    transaction, then enqueues a campaign-delete job for the bulk work.
+    Returns 409 if the campaign is not in draft status.
+    """
+    try:
+        db       = _get_db()
+        doc      = db.collection("campaigns").document(campaign_id).get()
+        if not doc.exists:
+            return _err(f"Campaign '{campaign_id}' not found", 404)
+        status   = (doc.to_dict() or {}).get("status", "")
+        if status not in ("draft",):
+            return _err(
+                f"Campaign '{campaign_id}' has status '{status}' — "
+                "only draft campaigns can be deleted.", 409)
+
+        # Atomic guard: flip to "deleting" before enqueuing
+        camp_ref = db.collection("campaigns").document(campaign_id)
+        @db.transaction()
+        def _claim(tx):
+            snap = camp_ref.get(transaction=tx)
+            if (snap.to_dict() or {}).get("status") != "draft":
+                raise ValueError("Status changed — delete aborted")
+            tx.update(camp_ref, {"status": "deleting"})
+        _claim()
+
+        job_params = {"campaign_id": campaign_id}
+        job_id     = _new_job("campaign-delete", job_params)
+        _enqueue_task("campaign-delete", job_id, job_params)
+        return _ok(
+            f"Campaign '{campaign_id}' marked as deleting — job queued",
+            campaign_id=campaign_id,
+            job_id=job_id,
+            poll=f"/api/crm/status/{job_id}",
+        )
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @app.route("/api/crm/campaigns/<campaign_id>/ping-mail-account", methods=["POST"])
 def ping_mail_account(campaign_id):
     """Test the mail account configured on a campaign."""
@@ -866,6 +908,32 @@ def save_filter_facets(name):
         return _err(str(exc), 500)
 
 
+@app.route("/api/crm/filter-facets/<name>/create-campaign", methods=["POST"])
+def create_campaign_from_facet(name):
+    """Create (or refill) a campaign from a saved filter-facets preset.
+
+    Body (JSON):
+        campaign_id  required  Target campaign document ID.
+        dry_run      optional  If true, compute but write nothing (default false).
+    """
+    try:
+        body        = request.get_json(silent=True) or {}
+        campaign_id = (body.get("campaign_id") or "").strip()
+        if not campaign_id:
+            return _err("'campaign_id' is required in the request body", 400)
+        dry_run    = bool(body.get("dry_run", False))
+        job_params = {"facet_name": name, "campaign_id": campaign_id, "dry_run": dry_run}
+        job_id     = _new_job("facet-campaign", job_params)
+        _enqueue_task("facet-campaign", job_id, job_params)
+        return _ok(
+            f"Queued facet-campaign job for facet='{name}' → campaign='{campaign_id}'",
+            job_id=job_id,
+            poll=f"/api/crm/status/{job_id}",
+        )
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @app.route("/api/crm/discover-campaigns", methods=["GET"])
 def discover_campaigns():
     """Scan the contact sheet for campaign IDs. Create + sync any new ones.
@@ -1019,6 +1087,19 @@ def worker(name, job_id):
             from crm.filter_count_lib import run_filter_count
             counts = run_filter_count(db=db, name=body.get("name", ""))
             result = {"name": body.get("name", ""), "counts": counts}
+
+        elif name == "campaign-delete":
+            from crm.campaign_delete_lib import run_campaign_delete
+            result = run_campaign_delete(db=db, campaign_id=body.get("campaign_id", ""))
+
+        elif name == "facet-campaign":
+            from crm.facet_campaign_lib import run_facet_campaign
+            result = run_facet_campaign(
+                db=db,
+                facet_name=body.get("facet_name", ""),
+                campaign_id=body.get("campaign_id", ""),
+                dry_run=bool(body.get("dry_run", False)),
+            )
 
         elif name == "campaign-export":
             from crm.campaign_export_lib import run_campaign_export
