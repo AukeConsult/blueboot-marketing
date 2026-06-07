@@ -45,9 +45,11 @@ def run_campaign_delete(db, campaign_id: str) -> dict:
     camp_ref = db.collection(CAMPAIGNS_COLLECTION).document(campaign_id)
 
     # ── 1. Atomic guard — flip to "deleting" if still in draft ───────────────
-    @db.transaction()
-    def _claim(tx):
-        snap = camp_ref.get(transaction=tx)
+    from google.cloud import firestore as _fs
+
+    @_fs.transactional
+    def _claim(tx, ref):
+        snap = ref.get(transaction=tx)
         if not snap.exists:
             raise ValueError(f"Campaign '{campaign_id}' not found")
         status = (snap.to_dict() or {}).get("status", "")
@@ -57,9 +59,9 @@ def run_campaign_delete(db, campaign_id: str) -> dict:
                 "only draft campaigns can be deleted"
             )
         if status == "draft":
-            tx.update(camp_ref, {"status": "deleting"})
+            tx.update(ref, {"status": "deleting"})
 
-    _claim()
+    _claim(db.transaction(), camp_ref)
     print(f"[campaign-delete] status locked to 'deleting' for '{campaign_id}'",
           flush=True)
 

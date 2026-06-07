@@ -302,6 +302,7 @@ def run_facet_campaign(
             "contacts_refreshed":        None,
             "contacts_removed":          None,
             "contacts_protected":        None,
+            "dedup_by_campaign":         dedup_by_campaign,
             "sites_count":               len(sites),
             "countries":                 countries_list,
             "dry_run":                   True,

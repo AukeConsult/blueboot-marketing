@@ -50,6 +50,11 @@
           <i class="ti ti-device-floppy me-1"></i>Save &amp; count
         </button>
       </div>
+      <div class="col-md-2">
+        <button class="btn btn-outline-success btn-sm w-100" onclick="openCreateCampaign()" id="create-campaign-btn" disabled title="Load a facet first">
+          <i class="ti ti-speakerphone me-1"></i>Create campaign
+        </button>
+      </div>
     </div>
     <div id="status" class="small mt-2"></div>
     <div id="counts" class="mt-2"></div>
@@ -78,6 +83,43 @@
     </div>
   </div>
 
+</div>
+
+<!-- Create campaign modal -->
+<div class="modal fade" id="createCampaignModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-speakerphone text-success me-2"></i>Create campaign from facet</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small fw-500">Facet preset</label>
+          <div class="form-control form-control-sm bg-light" id="ccm-facet-name" style="color:var(--bb-muted)"></div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-500">Campaign ID <span class="text-danger">*</span></label>
+          <input id="ccm-campaign-id" class="form-control form-control-sm" placeholder="e.g. NO_b2b_personal_jul01">
+          <div class="form-text">Created if new; contacts refreshed if it already exists.</div>
+        </div>
+        <div class="mb-3 form-check">
+          <input class="form-check-input" type="checkbox" id="ccm-dry-run">
+          <label class="form-check-label small" for="ccm-dry-run">Dry run — count only, no writes</label>
+        </div>
+        <div class="alert alert-secondary py-2 small mb-0">
+          <i class="ti ti-info-circle me-1"></i>Contacts already in other campaigns are excluded automatically.
+        </div>
+        <div id="ccm-feedback" class="mt-2" style="display:none"></div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" id="ccm-cancel-btn">Cancel</button>
+        <button class="btn btn-success btn-sm" id="ccm-create-btn" onclick="doCreateCampaign()">
+          <i class="ti ti-speakerphone me-1"></i>Create
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -131,6 +173,8 @@ async function loadFacets(name){
       saveName.value = (name === DEFAULT_SOURCE) ? '' : name;
     }
     setStatus('Loaded ' + name, 'ok');
+    document.getElementById('create-campaign-btn').disabled = false;
+    document.getElementById('create-campaign-btn').title = '';
   }catch(e){
     console.error('[facets] error:', e);
     const msg = e.name === 'AbortError' ? 'Request timed out — API may be unreachable.' : e.message;
@@ -368,14 +412,95 @@ function renderCounts(c){
 
 // escapeHtml provided by js/crm-common.js
 
+function openCreateCampaign() {
+  if (!facets) return;
+  const name = document.getElementById('load-select').value || DEFAULT_SOURCE;
+  document.getElementById('ccm-facet-name').textContent = name;
+  // Pre-fill campaign ID from save-name or facet name
+  const preset = document.getElementById('save-name').value.trim() || name;
+  document.getElementById('ccm-campaign-id').value = preset !== DEFAULT_SOURCE ? preset : '';
+  document.getElementById('ccm-dry-run').checked = false;
+  document.getElementById('ccm-feedback').style.display = 'none';
+  document.getElementById('ccm-create-btn').disabled = false;
+  document.getElementById('ccm-create-btn').innerHTML = '<i class="ti ti-speakerphone me-1"></i>Create';
+  document.getElementById('ccm-cancel-btn').textContent = 'Cancel';
+  new bootstrap.Modal(document.getElementById('createCampaignModal')).show();
+}
+
+async function doCreateCampaign() {
+  const facetName   = document.getElementById('load-select').value || DEFAULT_SOURCE;
+  const campaignId  = document.getElementById('ccm-campaign-id').value.trim();
+  const dryRun      = document.getElementById('ccm-dry-run').checked;
+  const btn         = document.getElementById('ccm-create-btn');
+  const fb          = document.getElementById('ccm-feedback');
+
+  if (!campaignId) {
+    fb.innerHTML = '<div class="alert alert-warning py-2 small mb-0"><i class="ti ti-alert-triangle me-1"></i>Campaign ID is required.</div>';
+    fb.style.display = '';
+    return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>' + (dryRun ? 'Counting…' : 'Creating…');
+  fb.innerHTML = '<div class="alert alert-info py-2 small mb-0"><div class="spinner-border spinner-border-sm me-1"></div>Queuing job…</div>';
+  fb.style.display = '';
+
+  try {
+    const r = await fetchWithTimeout(
+      BASE + '/api/crm/filter-facets/' + encodeURIComponent(facetName) + '/create-campaign',
+      { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({campaign_id: campaignId, dry_run: dryRun}) }
+    );
+    const d = await r.json();
+    if (d.status !== 'ok') throw new Error(d.message || r.status);
+    fb.innerHTML = `<div class="alert alert-info py-2 small mb-0"><div class="spinner-border spinner-border-sm me-1"></div>Job queued (${d.job_id}) — processing…</div>`;
+    await pollCreateCampaign(d.job_id, campaignId, dryRun);
+  } catch(e) {
+    fb.innerHTML = `<div class="alert alert-danger py-2 small mb-0"><i class="ti ti-circle-x me-1"></i>${escapeHtml(e.message)}</div>`;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-speakerphone me-1"></i>Create';
+  }
+}
+
+async function pollCreateCampaign(jobId, campaignId, dryRun) {
+  const btn = document.getElementById('ccm-create-btn');
+  const fb  = document.getElementById('ccm-feedback');
+  for (let i = 0; i < 90; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const r = await fetch(BASE + '/api/crm/status/' + jobId);
+      const j = await r.json();
+      if (j.status === 'done') {
+        const res = j.result || {};
+        const lines = [
+          `<strong>${dryRun ? 'Dry run — no writes' : 'Done'}</strong>`,
+          `Matched: <strong>${res.contacts_matched ?? '?'}</strong> contacts`,
+          dryRun ? '' : `+${res.contacts_added ?? 0} new &nbsp; ~${res.contacts_refreshed ?? 0} refreshed &nbsp; -${res.contacts_removed ?? 0} removed`,
+          `Dedup: ${res.emails_in_other_campaigns ?? 0} in other campaigns, ${res.contacts_skipped_dedup ?? 0} overlapped`,
+          res.dedup_by_campaign && Object.keys(res.dedup_by_campaign).length
+            ? 'Blocked from: ' + Object.entries(res.dedup_by_campaign).map(([c,n]) => `${escapeHtml(c)} (${n})`).join(', ')
+            : '',
+        ].filter(Boolean).join('<br>');
+        const link = !dryRun
+          ? `<div class="mt-2"><a href="campaign.html?campaign_id=${encodeURIComponent(campaignId)}" class="btn btn-sm btn-outline-primary"><i class="ti ti-speakerphone me-1"></i>Open campaign</a></div>`
+          : '';
+        fb.innerHTML = `<div class="alert alert-success py-2 small mb-0">${lines}${link}</div>`;
+        document.getElementById('ccm-cancel-btn').textContent = 'Close';
+        btn.style.display = 'none';
+        return;
+      }
+      if (j.status === 'error') {
+        fb.innerHTML = `<div class="alert alert-danger py-2 small mb-0"><i class="ti ti-circle-x me-1"></i>${escapeHtml(j.error || 'Job failed')}</div>`;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-speakerphone me-1"></i>Retry';
+        return;
+      }
+    } catch(_) { /* keep polling */ }
+  }
+  fb.innerHTML = '<div class="alert alert-warning py-2 small mb-0">Taking longer than expected — <a href="crm-bp.html" target="_blank">check CRM Jobs</a>.</div>';
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-speakerphone me-1"></i>Create';
+}
+
 console.log('[facets] page script loaded, starting…');
 loadList().then(() => {
-  const saved = localStorage.getItem('selectedFacet') || DEFAULT_SOURCE;
-  const sel = document.getElementById('load-select');
-  const opt = Array.from(sel.options).find(o => o.value === saved);
-  if (opt) { sel.value = saved; }
-  loadFacets(sel.value || DEFAULT_SOURCE);
-});
-</script>
-</body>
-</html>
+  const s

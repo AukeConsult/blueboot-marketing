@@ -491,14 +491,17 @@ def delete_campaign(campaign_id):
                 "only draft campaigns can be deleted.", 409)
 
         # Atomic guard: flip to "deleting" before enqueuing
+        from google.cloud import firestore as _fs
         camp_ref = db.collection("campaigns").document(campaign_id)
-        @db.transaction()
-        def _claim(tx):
-            snap = camp_ref.get(transaction=tx)
+
+        @_fs.transactional
+        def _claim(tx, ref):
+            snap = ref.get(transaction=tx)
             if (snap.to_dict() or {}).get("status") != "draft":
                 raise ValueError("Status changed — delete aborted")
-            tx.update(camp_ref, {"status": "deleting"})
-        _claim()
+            tx.update(ref, {"status": "deleting"})
+
+        _claim(db.transaction(), camp_ref)
 
         job_params = {"campaign_id": campaign_id}
         job_id     = _new_job("campaign-delete", job_params)
