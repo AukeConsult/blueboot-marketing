@@ -278,6 +278,12 @@ def run_facet_campaign(
     print(f"[facet-campaign] matched={len(matched)}  "
           f"skipped_filter={skipped_filter}  skipped_dedup={skipped_dedup}", flush=True)
 
+    if not matched:
+        raise ValueError(
+            f"No email_contacts match the filter for facet '{facet_name}' "
+            "— campaign not created. Adjust the filter selections and try again."
+        )
+
     # ── 4. Compute campaign-level stats ─────────────────────────────────────
     sites: set[str] = set()
     country_counter: Counter = Counter()

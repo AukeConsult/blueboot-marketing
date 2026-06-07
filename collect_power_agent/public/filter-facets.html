@@ -173,8 +173,7 @@ async function loadFacets(name){
       saveName.value = (name === DEFAULT_SOURCE) ? '' : name;
     }
     setStatus('Loaded ' + name, 'ok');
-    document.getElementById('create-campaign-btn').disabled = false;
-    document.getElementById('create-campaign-btn').title = '';
+    // button state is managed entirely by renderCounts
   }catch(e){
     console.error('[facets] error:', e);
     const msg = e.name === 'AbortError' ? 'Request timed out — API may be unreachable.' : e.message;
@@ -190,7 +189,7 @@ async function loadFacets(name){
   }
 }
 
-function loadSelected(){ loadFacets(document.getElementById('load-select').value); }
+function loadSelected(){ document.getElementById('save-name').value = ''; loadFacets(document.getElementById('load-select').value); }
 
 function facetTotal(f){
   if(f.type === 'group') return (f.groups || []).length;
@@ -390,12 +389,25 @@ async function pollCount(jobId, name){
 function renderCounts(c){
   if(facets && c && Object.keys(c).length) facets.counts = c;
   const el = document.getElementById('counts');
+  const ccBtn = document.getElementById('create-campaign-btn');
   if(!c || Object.keys(c).length === 0){
     el.innerHTML =
       `<div class="alert alert-secondary py-2 px-3 mb-0 small">`
       + `<i class="ti ti-calculator me-1"></i>No counts yet — save this selection to count matching sites &amp; contacts.`
       + `</div>`;
+    if(ccBtn){
+      ccBtn.disabled = true;
+      ccBtn.title = 'Save & count first to verify contacts';
+    }
     return;
+  }
+  // Enable/disable based on whether contacts matched
+  if(ccBtn){
+    // contacts_in_email_contacts is the count that actually matters for
+    // campaign creation (facet_campaign_lib filters email_contacts directly).
+    const hasContacts = (c.contacts_in_email_contacts ?? 0) > 0;
+    ccBtn.disabled = !hasContacts;
+    ccBtn.title = hasContacts ? '' : 'No contacts in email_contacts match this filter — adjust selections first';
   }
   const when = (facets && facets.counts_generated_at)
     ? ` <span style="color:var(--bb-muted)" class="ms-auto">counted ${facets.counts_generated_at.replace('T',' ').slice(0,16)}</span>`
@@ -503,4 +515,13 @@ async function pollCreateCampaign(jobId, campaignId, dryRun) {
 
 console.log('[facets] page script loaded, starting…');
 loadList().then(() => {
-  const s
+  const saved = localStorage.getItem('selectedFacet') || DEFAULT_SOURCE;
+  const sel = document.getElementById('load-select');
+  const opt = Array.from(sel.options).find(o => o.value === saved);
+  if (opt) { sel.value = saved; }
+  loadFacets(sel.value || DEFAULT_SOURCE);
+});
+</script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+</body>
+</html>
