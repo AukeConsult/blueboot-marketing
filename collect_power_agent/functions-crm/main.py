@@ -1299,6 +1299,43 @@ def read_mailbox(email):
         else:
             return _err(f"Unsupported account_type '{account_type}'", 400)
 
+        # --- IMAP: build connection for Gmail via XOAUTH2 ---
+        if account_type == "gmail":
+            auth_str = f"user={key}auth=Bearer {access_token}"
+            conn = imaplib.IMAP4_SSL("imap.gmail.com", 993,
+                                     ssl_context=_ssl.create_default_context())
+            conn.authenticate("XOAUTH2", lambda _: auth_str.encode())
+
+        # --- list selectable folders and fetch messages ---
+        try:
+            typ, raw_list = conn.list()
+            folders = []
+            if typ == "OK":
+                for item in raw_list:
+                    selectable, fname = _parse_folder(item)
+                    if selectable and fname:
+                        folders.append(fname)
+            if not folders:
+                folders = ["INBOX"]
+
+            for folder in folders:
+                messages.extend(_fetch_folder(conn, folder, per_folder))
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+
+        # sort newest first
+        def _msg_key(m):
+            try:
+                from email.utils import parsedate_to_datetime as _p
+                return _p(m["date"]) if not m["date"].endswith("+00:00") else m["date"]
+            except Exception:
+                return m.get("date", "")
+
+        messages.sort(key=lambda m: m.get("date", ""), reverse=True)
+
         return jsonify({"status": "ok", "messages": messages})
 
     except Exception as exc:
@@ -1320,6 +1357,38 @@ _USERS_COLLECTION = "settings/users/users"
 def _normalize_email(email: str) -> str | None:
     """Lower-case + strip; returns None if email is falsy."""
     return email.strip().lower() if email else None
+
+
+@app.route("/api/crm/auth/users", methods=["GET"])
+def list_auth_users():
+    """Return all user docs from settings/users/users, sorted by email."""
+    try:
+        db    = _get_db()
+        docs  = db.collection("settings").document("users").collection("users")                   .order_by("email").limit(500).stream()
+        users = [d.to_dict() | {"id": d.id} for d in docs]
+        return _ok("ok", users=users)
+    except Exception as exc:
+        return _err(str(exc))
+
+
+@app.route("/api/crm/auth/users/<path:email_key>", methods=["PATCH"])
+def update_auth_user_doc(email_key: str):
+    """Update editable fields on a user doc (displayName, role, notes)."""
+    try:
+        key = _normalize_email(email_key)
+        if not key:
+            return _err("email_key required", 400)
+        body = request.get_json(silent=True) or {}
+        allowed = {"displayName", "role", "notes", "defaultMailbox"}
+        updates = {k: v for k, v in body.items() if k in allowed}
+        if not updates:
+            return _err("No editable fields provided (allowed: displayName, role, notes)", 400)
+        updates["updatedAt"] = datetime.now(timezone.utc).isoformat()
+        db = _get_db()
+        db.document(f"{_USERS_COLLECTION}/{key}").update(updates)
+        return _ok(f"User '{key}' updated")
+    except Exception as exc:
+        return _err(str(exc))
 
 
 @app.route("/api/crm/auth/users/<path:email_key>", methods=["DELETE"])

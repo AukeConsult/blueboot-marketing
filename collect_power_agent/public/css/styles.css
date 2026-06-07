@@ -72,4 +72,5 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 .drop-zone { border: 2px dashed #ced4da; border-radius: 12px; transition: border-color .15s, background .15s; }
 .drop-zone.drag { border-color: #0d6efd; background: #e7f1ff; }
 
-
+/* Table section header */
+.bb-thead { background: #f9fafb; }

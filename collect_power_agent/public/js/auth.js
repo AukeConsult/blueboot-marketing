@@ -77,3 +77,66 @@ async function getAuthToken() {
   if (!user) return null;
   return user.getIdToken();
 }
+
+// ---------------------------------------------------------------------------
+// Role management
+//   window._userRole  — set after requireAuth() resolves
+//   requireRole(roles) — call after requireAuth(); redirects if not allowed
+// ---------------------------------------------------------------------------
+
+// Fetch the user's role from the Firestore user doc via the REST API.
+// Returns 'user' if the doc is missing or the role field is empty.
+async function _fetchRole(user) {
+  const projectId = (window.FIREBASE_CONFIG || {}).projectId || 'blueboot-market';
+  const email     = (user.email || '').toLowerCase().trim();
+  if (!email) { console.warn('[auth] _fetchRole: no email on user'); return 'user'; }
+
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}`
+            + `/databases/(default)/documents/settings/users/users/${encodeURIComponent(email)}`;
+  console.log('[auth] fetching role for', email, url);
+  try {
+    // Rules are "allow read: if true" so no auth header needed for reads
+    const r = await fetch(url, { cache: 'no-store' });
+    console.log('[auth] role fetch status:', r.status);
+    if (!r.ok) { console.warn('[auth] role doc not found or error'); return 'user'; }
+    const doc = await r.json();
+    console.log('[auth] role doc fields:', JSON.stringify(doc.fields));
+    const role = (doc.fields && doc.fields.role && doc.fields.role.stringValue) || 'user';
+    console.log('[auth] resolved role:', role);
+    return role;
+  } catch(err) {
+    console.error('[auth] _fetchRole error:', err);
+    return 'user';
+  }
+}
+
+window._userRole = null;
+
+// Override requireAuth to also load the role before resolving.
+const _requireAuthBase = requireAuth;
+function requireAuth() {
+  return new Promise(resolve => {
+    _auth.onAuthStateChanged(async user => {
+      if (user) {
+        window._authUser = user;
+        window._userRole = await _fetchRole(user);
+        resolve(user);
+      } else {
+        const next = encodeURIComponent(location.pathname.split('/').pop() + location.search);
+        location.replace('login.html?next=' + next);
+      }
+    });
+  });
+}
+
+// requireRole(allowedRoles)
+//   Call after requireAuth() resolves.
+//   Redirects to index.html if the user's role is not in the list.
+//   Admin always passes regardless of the list.
+function requireRole(allowedRoles) {
+  if (!allowedRoles) return;                              // null → open to all
+  if (window._userRole === 'admin') return;              // admin bypasses all
+  if (!allowedRoles.includes(window._userRole)) {
+    location.replace('index.html');
+  }
+}

@@ -568,3 +568,31 @@ Also use Tabler Icons for icons:
 ```
 
 Only write custom `.css` when Bootstrap utilities cannot cover it.
+
+---
+
+## Frontend / CSS rules
+
+### RULE: No inline styles on HTML elements — use CSS classes instead
+
+Do not write `style="..."` directly on HTML elements unless there is absolutely no
+other option (e.g. a truly one-off dynamic value set from JavaScript).
+
+**Never write:**
+```html
+<thead style="background:#f9fafb">
+<div style="font-size:.82rem;color:#6b7280;text-transform:uppercase">
+```
+
+**Always write:**
+```html
+<thead class="bb-thead">
+<div class="bb-section-label">
+```
+
+If no suitable class exists yet, add one to `public/css/styles.css` first, then use
+it. This keeps all visual decisions in one place and makes global changes trivial.
+
+The only exceptions:
+- Truly dynamic values set by JavaScript (e.g. `el.style.width = px + 'px'`)
+- Bootstrap utility classes that already cover the case (prefer those over custom CSS)

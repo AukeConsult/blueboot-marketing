@@ -120,18 +120,39 @@ function prettyError(msg){
 // --- shared top navigation (single source of truth) -------------------------
 // Pages include  <div id="nav"></div>  and load this file; the nav renders
 // automatically with the active link highlighted from the current URL.
+// ---------------------------------------------------------------------------
+// Role-based access.  null = public (no restriction beyond auth).
+// Admin always has access to everything.
+// ---------------------------------------------------------------------------
+const PAGE_ROLES = {
+  'campaigns.html':     ['admin', 'campaign-user', 'user'],
+  'campaign.html':      ['admin', 'campaign-user', 'user'],
+  'campaign-edit.html': ['admin', 'campaign-user', 'user'],
+  'mailbox.html':       ['admin', 'campaign-user', 'user'],
+  'crm-bp.html':        ['admin', 'user'],
+  'crm-sync.html':      ['admin', 'user'],
+  'jobs.html':          ['admin', 'campaign-user', 'user'],
+  'statistics.html':    ['admin', 'campaign-user', 'user'],
+  'filter-facets.html': ['admin', 'campaign-user', 'user'],
+  'gdisk.html':         ['admin', 'campaign-user', 'user'],
+  'settings.html':      ['admin'],
+  'users.html':         ['admin'],
+  // doc-viewer.html and index.html are PUBLIC_PAGES — no role check
+};
+
 const NAV_LINKS = [
   { href: 'campaigns.html',     icon: 'ti-speakerphone',      label: 'Campaigns',
-    match: ['campaigns.html', 'campaign.html', 'campaign-edit.html'] },
-  { href: 'crm-bp.html',        icon: 'ti-server-2',          label: 'CRM' },
-  { href: 'jobs.html',          icon: 'ti-list-check',        label: 'Jobs' },
-  { dropdown: 'data-sources',   icon: 'ti-database',          label: 'Data collect',
+    match: ['campaigns.html', 'campaign.html', 'campaign-edit.html'],
+    roles: ['admin', 'campaign-user', 'user'] },
+  { href: 'crm-bp.html',        icon: 'ti-server-2',          label: 'CRM',        roles: ['admin', 'user'] },
+  { href: 'jobs.html',          icon: 'ti-list-check',        label: 'Jobs',        roles: ['admin', 'campaign-user', 'user'] },
+  { dropdown: 'data-sources',   icon: 'ti-database',          label: 'Data collect', roles: ['admin', 'campaign-user', 'user'],
     children: [
       { href: 'statistics.html',    icon: 'ti-chart-bar', label: 'Statistics' },
       { href: 'filter-facets.html', icon: 'ti-filter',    label: 'Filter facets' },
     ]},
-  { href: 'gdisk.html',         icon: 'ti-brand-google-drive',label: 'Drive Folder' },
-  { href: 'mailbox.html',       icon: 'ti-inbox',             label: 'Mailbox' },
+  { href: 'gdisk.html',         icon: 'ti-brand-google-drive',label: 'Drive Folder', roles: ['admin', 'campaign-user', 'user'] },
+  { href: 'mailbox.html',       icon: 'ti-inbox',             label: 'Mailbox',     roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'docs',  match: ['doc-viewer.html'],           icon: 'ti-book',              label: 'Documentation',
     children: [
       { href: 'doc-viewer.html?doc=installation',        icon: 'ti-download',      label: 'Installation' },
@@ -141,14 +162,21 @@ const NAV_LINKS = [
       { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',    label: 'Pipeline config' },
       { href: 'doc-viewer.html?doc=ai-assistance',       icon: 'ti-brain',         label: 'AI assistance' },
     ]},
-  { href: 'settings.html',      icon: 'ti-settings',          label: 'Settings' },
+  { dropdown: 'settings', icon: 'ti-settings', label: 'Settings', roles: ['admin'],
+    match: ['settings.html', 'users.html'],
+    children: [
+      { href: 'settings.html', icon: 'ti-adjustments-horizontal', label: 'Settings' },
+      { href: 'users.html',    icon: 'ti-users',                  label: 'Users' },
+    ]},
 ];
 
 function renderNav(targetId){
   const el = document.getElementById(targetId || 'nav');
   if(!el) return;
   const cur = (location.pathname.split('/').pop() || 'index.html') || 'index.html';
-  const links = NAV_LINKS.map(l => {
+  const role    = window._userRole || null;
+  const visible = l => !l.roles || l.roles.includes(role) || role === 'admin';
+  const links = NAV_LINKS.filter(visible).map(l => {
     if (l.dropdown) {
       // Dropdown group
       const childActive = l.children.some(c => (c.match || [c.href]).includes(cur));
@@ -172,19 +200,20 @@ function renderNav(targetId){
     + '<span id="bb-nav-email" class="small text-muted me-2" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>'
     + '<button class="btn btn-sm btn-outline-secondary" style="font-size:.78rem;padding:.2rem .6rem" onclick="signOutUser()">'
     + '<i class="ti ti-logout me-1"></i>Sign out</button></div>';
-  el.outerHTML = '<nav class="bb-nav">'
+  el.outerHTML = '<nav id="nav" class="bb-nav">'
     + '<a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>'
     + '<div class="nav-links">' + links + '</div>'
     + userArea + '</nav>';
-  // Show user area only when signed in
+  // Show user area only when signed in; add role badge when available
   if (typeof firebase !== 'undefined') {
     firebase.auth().onAuthStateChanged(u => {
-      const area = document.getElementById('bb-nav-user');
+      const area  = document.getElementById('bb-nav-user');
       const label = document.getElementById('bb-nav-email');
       if (area) area.style.display = u ? '' : 'none';
       if (label && u) label.textContent = u.displayName || u.email || '';
     });
   }
+
   // Close dropdown when clicking outside
   document.addEventListener('click', e => {
     document.querySelectorAll('.nav-dropdown.open').forEach(d => {
@@ -201,7 +230,22 @@ const PUBLIC_PAGES = new Set(['login.html', 'index.html', 'doc-viewer.html', '']
     if(!document.getElementById('nav')) return;
     renderNav();
     const page = location.pathname.split('/').pop();
-    if(!PUBLIC_PAGES.has(page) && typeof requireAuth === 'function') requireAuth();
+    if(!PUBLIC_PAGES.has(page) && typeof requireAuth === 'function'){
+      // Protected page: require sign-in, then load role and re-render
+      requireAuth().then(() => {
+        renderNav();
+        if(typeof requireRole === 'function') requireRole(PAGE_ROLES[page] || null);
+      });
+    } else if(typeof firebase !== 'undefined') {
+      // Public page: softly load role if already signed in (for nav display only)
+      firebase.auth().onAuthStateChanged(async user => {
+        if(user && typeof _fetchRole === 'function'){
+          window._authUser = user;
+          window._userRole = await _fetchRole(user);
+          renderNav();
+        }
+      });
+    }
   }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go);
   else go();

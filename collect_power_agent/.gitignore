@@ -9,3 +9,4 @@
 /functions-crm/venv/
 /functions-auth/package-lock.json
 **/node_modules/
+/.firebase/

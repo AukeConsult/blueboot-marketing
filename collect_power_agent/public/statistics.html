@@ -112,7 +112,7 @@ function renderPipelineOverview(d) {
     </tr>`;
   }).join('');
   return `<table class="table table-sm small mb-2">
-    <thead style="background:#f9fafb"><tr><th>Collection</th><th class="text-end">Docs</th><th>Countries</th></tr></thead>
+    <thead class="bb-thead"><tr><th>Collection</th><th class="text-end">Docs</th><th>Countries</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>
   ${kvTable([['Rejection rate', (d.exclusion_rate ?? '—') + '%']])}`;
@@ -139,7 +139,7 @@ function renderPriority(d) {
     <div class="col-md-7">
       <div class="stat-section"><h6 class="bb-section-label">Top countries</h6>
         <table class="table table-sm small mb-0">
-          <thead style="background:#f9fafb"><tr><th>Code</th><th>Country</th><th class="text-end">Leads</th><th class="text-end">Contacts</th></tr></thead>
+          <thead class="bb-thead"><tr><th>Code</th><th>Country</th><th class="text-end">Leads</th><th class="text-end">Contacts</th></tr></thead>
           <tbody>${countries}</tbody>
         </table>
       </div>
@@ -227,7 +227,7 @@ function renderCoverage(d) {
     <div class="col-md-8">
       <div class="stat-section"><h6 class="bb-section-label">By country</h6>
         <table class="table table-sm small mb-0">
-          <thead style="background:#f9fafb">
+          <thead class="bb-thead">
             <tr><th>Country</th><th class="text-end">Total</th><th class="text-end">Site</th>
                 <th class="text-end">Leads</th><th class="text-end">Both</th></tr>
           </thead>
