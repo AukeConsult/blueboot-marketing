@@ -33,6 +33,7 @@
   animation: dot-blink .6s ease-in-out infinite;
 }
 .save-dot.err { background: #dc2626; animation: none; }
+.save-dot.ok  { background: #16a34a; animation: none; }
 @keyframes dot-blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 
 /* Comment row — visually attached to the row above it */
@@ -57,6 +58,16 @@
   text-overflow: ellipsis; }
 .hist-entry-text { color: #111; }
 
+/* Importance select */
+.imp-select { border: 1px solid transparent; background: transparent;
+  font-size: .8rem; padding: 2px 4px; border-radius: 4px; cursor: pointer;
+  font-weight: 600; transition: border-color .15s, background .15s; }
+.imp-select:focus { outline: none; }
+.imp-none   { color: var(--bb-muted); }
+.imp-low    { color: #4b5563; background: #f3f4f6; border-color: #d1d5db; }
+.imp-medium { color: #92400e; background: #fef3c7; border-color: #fde68a; }
+.imp-high   { color: #991b1b; background: #fee2e2; border-color: #fca5a5; }
+
 /* Batch bar */
 .batch-bar { display: flex; align-items: center; gap: .6rem;
   background: #eef0ff; border: 1px solid #c7ceff; border-radius: 8px;
@@ -70,7 +81,7 @@
 
 <div id="nav"></div>
 
-<div class="container py-4" style="max-width:1100px">
+<div class="container-fluid py-4 px-4" style="max-width:1600px">
 
   <div class="page-header mb-3">
     <h5 class="page-title"><i class="ti ti-phone-check text-primary"></i>CRM Follow-up</h5>
@@ -81,8 +92,8 @@
 
   <!-- Filters -->
   <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-    <input id="search" class="form-control form-control-sm" style="max-width:210px"
-      placeholder="Search name, email, site…" oninput="applyFilter()">
+    <input id="search" class="form-control form-control-sm" style="max-width:240px"
+      placeholder="Search name, email, website or title…" oninput="applyFilter()">
 
     <select id="owner-filter" class="form-select form-select-sm" style="max-width:160px" onchange="applyFilter()">
       <option value="">All owners</option>
@@ -101,6 +112,14 @@
       <option value="meeting">Meeting booked</option>
       <option value="closed">Closed</option>
       <option value="not_interested">Not interested</option>
+    </select>
+
+    <select id="importance-filter" class="form-select form-select-sm" style="max-width:145px" onchange="applyFilter()">
+      <option value="">All importances</option>
+      <option value="high">High</option>
+      <option value="medium">Medium</option>
+      <option value="low">Low</option>
+      <option value="__none__">Not set</option>
     </select>
 
     <select id="contact-status-filter" class="form-select form-select-sm" style="max-width:155px" onchange="applyFilter()">
@@ -157,10 +176,11 @@
           <th class="small bb-sortable" data-col="email"            onclick="sortBy('email')">Email <span class="sort-icon"></span></th>
           <th class="small bb-sortable" data-col="website"          onclick="sortBy('website')" style="min-width:150px">Website <span class="sort-icon"></span></th>
           <th class="small bb-sortable" data-col="followup_date"    onclick="sortBy('followup_date')" style="min-width:135px">Follow-up date <span class="sort-icon"></span></th>
-          <th class="small bb-sortable" data-col="followup_status"  onclick="sortBy('followup_status')" style="min-width:150px">Follow-up status <span class="sort-icon"></span></th>
+          <th class="small bb-sortable" data-col="followup_status"     onclick="sortBy('followup_status')" style="min-width:150px">Follow-up status <span class="sort-icon"></span></th>
+          <th class="small bb-sortable" data-col="followup_importance" onclick="sortBy('followup_importance')" style="min-width:100px">Importance <span class="sort-icon"></span></th>
         </tr></thead>
         <tbody id="follow-tbody">
-          <tr><td colspan="7" class="text-center py-5" style="color:var(--bb-muted)">
+          <tr><td colspan="8" class="text-center py-5" style="color:var(--bb-muted)">
             <div class="spinner-border spinner-border-sm me-2"></div>Loading…
           </td></tr>
         </tbody>
@@ -251,7 +271,7 @@ async function fsRunQuery(collectionId, limit) {
 // ── Load ──────────────────────────────────────────────────────────────────────
 
 async function load() {
-  setTbody('<tr><td colspan="7" class="text-center py-5" style="color:var(--bb-muted)">'
+  setTbody('<tr><td colspan="8" class="text-center py-5" style="color:var(--bb-muted)">'
     + '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>');
   document.getElementById('follow-empty').style.display = 'none';
   document.getElementById('count-badge').textContent = '';
@@ -292,8 +312,9 @@ async function load() {
         status:           fsRead(f.status) || 'pending',
         followup_date:    fsRead(f.followup_date),
         followup_status:  fsRead(f.followup_status),
-        followup_comment:  fsRead(f.followup_comment),
-        comment_history:   fsReadHistory(f.comment_history),
+        followup_comment:    fsRead(f.followup_comment),
+        followup_importance: fsRead(f.followup_importance),
+        comment_history:     fsReadHistory(f.comment_history),
         campaign_id,
         doc_id,
         doc_path: `campaigns/${campaign_id}/campaign_contacts/${doc_id}`,
@@ -306,7 +327,7 @@ async function load() {
     populateSelect('outreach-filter',[...outreachEmails].sort(), 'All outreach emails');
     applyFilter();
   } catch (e) {
-    setTbody(`<tr><td colspan="7" class="text-center py-5 text-danger small">
+    setTbody(`<tr><td colspan="8" class="text-center py-5 text-danger small">
       <i class="ti ti-alert-circle me-1"></i>${escapeHtml(e.message)}</td></tr>`);
     console.error('[crm_follow] load error:', e);
   }
@@ -357,6 +378,7 @@ function applyFilter() {
   const own = document.getElementById('owner-filter').value;
   const out = document.getElementById('outreach-filter').value;
   const fu  = document.getElementById('followup-filter').value;
+  const imp = document.getElementById('importance-filter').value;
   const cst = document.getElementById('contact-status-filter').value;
 
   let list = allRows.filter(r => {
@@ -364,10 +386,12 @@ function applyFilter() {
     if (out && r.outreach_email !== out) return false;
     if (fu === '__none__') { if (r.followup_status) return false; }
     else if (fu && r.followup_status !== fu) return false;
+    if (imp === '__none__') { if (r.followup_importance) return false; }
+    else if (imp && r.followup_importance !== imp) return false;
     if (cst === 'open' && r.status === 'sent') return false;
     else if (cst && cst !== 'open' && r.status !== cst) return false;
     if (q) {
-      const hay = [r.name, r.email, r.website, r.campaign_id, r.owner, r.title].join(' ').toLowerCase();
+      const hay = [r.name, r.email, r.website, r.title].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -381,6 +405,13 @@ function applyFilter() {
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
+
+const IMPORTANCE_LEVELS = [
+  { value: '',       label: '— —',    cls: 'imp-none'   },
+  { value: 'low',    label: 'Low',    cls: 'imp-low'    },
+  { value: 'medium', label: 'Medium', cls: 'imp-medium' },
+  { value: 'high',   label: 'High',   cls: 'imp-high'   }
+];
 
 const FU_STATUSES = [
   { value: '',               label: '— none —' },
@@ -452,16 +483,24 @@ function render(list) {
           ${fuOpts}
         </select>
       </td>
+      <td>
+        <select class="imp-select ${(IMPORTANCE_LEVELS.find(i=>i.value===r.followup_importance)||IMPORTANCE_LEVELS[0]).cls}"
+          data-gidx="${gidx}" data-field="followup_importance"
+          onchange="saveField(this);this.className='imp-select '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
+          ${IMPORTANCE_LEVELS.map(i=>`<option value="${i.value}"${r.followup_importance===i.value?' selected':''}>${i.label}</option>`).join('')}
+        </select>
+      </td>
     </tr>
     <tr class="follow-comment-row">
       <td></td><td></td><td></td>
-      <td colspan="4">
+      <td colspan="5">
         <div class="d-flex align-items-center gap-1">
           <input type="text" class="follow-input flex-grow-1"
             value="${escapeHtml(r.followup_comment || '')}"
             placeholder="Add comment…"
             data-gidx="${gidx}" data-field="followup_comment"
-            onchange="saveField(this)">
+            onchange="saveField(this)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
           <button class="hist-toggle" onclick="toggleHistory(this,${gidx})" title="Show comment history">
             <i class="ti ti-chevron-down"></i>
             <span class="hist-count${r.comment_history.length ? ' has-entries' : ''}">${r.comment_history.length}</span>
@@ -471,7 +510,7 @@ function render(list) {
     </tr>
     <tr class="follow-history-row" id="hist-${gidx}" style="display:none">
       <td></td><td></td><td></td>
-      <td colspan="4">${renderHistoryContent(r.comment_history)}</td>
+      <td colspan="5">${renderHistoryContent(r.comment_history)}</td>
     </tr>`;
   }).join(''));
   restoreChecks();
@@ -488,12 +527,14 @@ async function saveField(el) {
 
   // Skip if nothing changed
   if ((row[field] || '') === value) return;
-  row[field] = value;
+
+  const oldValue = row[field] || '';
+  row[field] = value;   // optimistic update
 
   const td = el.closest('td');
   let dot  = td.querySelector('.save-dot');
   if (!dot) { dot = document.createElement('span'); dot.className = 'save-dot'; td.appendChild(dot); }
-  dot.classList.remove('err');
+  dot.classList.remove('err', 'ok');
   dot.title = '';
 
   try {
@@ -502,15 +543,21 @@ async function saveField(el) {
     } else if (field === 'followup_status') {
       const label = (FU_STATUSES.find(s => s.value === value) || {}).label || value || '(none)';
       await fsCommitWithHistory(row, { followup_status: value }, `Status → ${label}`, 'STATUS');
+    } else if (field === 'followup_importance') {
+      const label = (IMPORTANCE_LEVELS.find(i => i.value === value) || {}).label || value || '(none)';
+      await fsCommitWithHistory(row, { followup_importance: value }, `Importance → ${label}`, 'IMPORTANCE');
     } else if (field === 'followup_date') {
       const label = value ? `Follow-up date set to ${value}` : 'Follow-up date cleared';
       await fsCommitWithHistory(row, { followup_date: value }, label, 'FOLLOWUP');
     } else {
       await fsPatch(row.doc_path, { [field]: value });
     }
-    dot.remove();
+    // Brief green confirmation, then remove
+    dot.classList.add('ok');
+    setTimeout(() => dot.remove(), 900);
   } catch (e) {
     console.error('[crm_follow] save failed:', e.message);
+    row[field] = oldValue;   // revert in-memory on failure
     dot.classList.add('err');
     dot.title = 'Save failed: ' + e.message;
   }
@@ -668,7 +715,11 @@ async function applyBatchDate() {
     statusEl.textContent = `${done} contact${done === 1 ? '' : 's'} updated.`;
   }
 
-  applyFilter();   // re-render to show new dates
+  applyFilter();       // re-render to show new dates
+  if (!errors) {
+    hideBatchDatePanel();
+    clearSelection();
+  }
 }
 
 // ── Comment history UI ────────────────────────────────────────────────────────

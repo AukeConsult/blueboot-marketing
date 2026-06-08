@@ -43,19 +43,31 @@ ACTION_CODES = [
 ACTION_CODE_VALUES = [c for c, _desc in ACTION_CODES]
 
 # (header label, contact field) -- Follow up columns, in order.
-# Status is backend-owned; last_action* are user-editable (preserved on re-export).
+# Status/sent_at are backend-owned.
+# last_action* are user-editable sheet fields (preserved on re-export).
+# followup_* are managed by the CRM Follow-up page (source of truth: Firestore);
+#   they are written from Firestore on every export and are NOT preserved from the sheet.
 CONTACT_COLUMNS = [
-    ("Status",             "status"),
-    ("Name",               "name"),
-    ("Email",              "email"),
-    ("Title",              "title"),
-    ("Website",            "website"),
-    ("Sent at",            "sent_at"),
-    ("Last action",        "last_action"),
-    ("Last action status", "last_action_status"),
-    ("Lead ID",            "lead_id"),
-    ("Doc ID",             "doc_id"),
+    ("Status",               "status"),
+    ("Name",                 "name"),
+    ("Email",                "email"),
+    ("Title",                "title"),
+    ("Website",              "website"),
+    ("Sent at",              "sent_at"),
+    ("Last action",          "last_action"),
+    ("Last action status",   "last_action_status"),
+    ("Follow-up date",       "followup_date"),
+    ("Follow-up status",     "followup_status"),
+    ("Follow-up importance", "followup_importance"),
+    ("Follow-up comment",    "followup_comment"),
+    ("Lead ID",              "lead_id"),
+    ("Doc ID",               "doc_id"),
 ]
+
+# Dropdown values for the new follow-up columns.
+FOLLOWUP_STATUS_VALUES     = ["open", "contacted", "replied", "meeting", "closed", "not_interested"]
+FOLLOWUP_IMPORTANCE_VALUES = ["low", "medium", "high"]
+
 # Follow up fields preserved from the existing sheet across re-exports.
 PRESERVE_FIELDS = {
     "Last action":        "last_action",
@@ -138,24 +150,34 @@ def _write_tab(svc, sheet_id: str, tab: str, rows: list[list]) -> None:
         valueInputOption="RAW", body={"values": rows}).execute()
 
 
-def _apply_status_dropdown(svc, sheet_id: str, fu_sheet_id: int, n_contacts: int) -> None:
-    """Data-validation dropdown of ACTION_CODE_VALUES on the Last action status column."""
+def _apply_dropdown(svc, sheet_id: str, fu_sheet_id: int, n_contacts: int,
+                    field: str, values: list[str]) -> None:
+    """Add a data-validation dropdown to the column that maps to *field*."""
     if fu_sheet_id is None or n_contacts <= 0:
         return
-    col = [f for _l, f in CONTACT_COLUMNS].index("last_action_status")
+    fields = [f for _l, f in CONTACT_COLUMNS]
+    if field not in fields:
+        return
+    col = fields.index(field)
     req = {"setDataValidation": {
         "range": {"sheetId": fu_sheet_id, "startRowIndex": 1, "endRowIndex": 1 + n_contacts,
                   "startColumnIndex": col, "endColumnIndex": col + 1},
         "rule": {
             "condition": {"type": "ONE_OF_LIST",
-                          "values": [{"userEnteredValue": v} for v in ACTION_CODE_VALUES]},
+                          "values": [{"userEnteredValue": v} for v in values]},
             "showCustomUi": True, "strict": False,
         }}}
     try:
         svc.spreadsheets().batchUpdate(
             spreadsheetId=sheet_id, body={"requests": [req]}).execute()
     except Exception as exc:
-        print(f"[campaign-export] dropdown skipped: {exc}", flush=True)
+        print(f"[campaign-export] dropdown skipped ({field}): {exc}", flush=True)
+
+
+def _apply_status_dropdown(svc, sheet_id: str, fu_sheet_id: int, n_contacts: int) -> None:
+    """Data-validation dropdown of ACTION_CODE_VALUES on the Last action status column."""
+    _apply_dropdown(svc, sheet_id, fu_sheet_id, n_contacts,
+                    "last_action_status", ACTION_CODE_VALUES)
 
 
 def run_campaign_export(db, svc, gd, campaign_id: str) -> dict:
@@ -211,7 +233,12 @@ def run_campaign_export(db, svc, gd, campaign_id: str) -> dict:
 
     _write_tab(svc, sheet_id, TAB_FOLLOWUP, followup_rows)
     _write_tab(svc, sheet_id, TAB_SUMMARY, summary_rows)
-    _apply_status_dropdown(svc, sheet_id, _followup_sheet_id(svc, sheet_id), len(contacts))
+    fu_sheet_id = _followup_sheet_id(svc, sheet_id)
+    _apply_status_dropdown(svc, sheet_id, fu_sheet_id, len(contacts))
+    _apply_dropdown(svc, sheet_id, fu_sheet_id, len(contacts),
+                    "followup_status",     FOLLOWUP_STATUS_VALUES)
+    _apply_dropdown(svc, sheet_id, fu_sheet_id, len(contacts),
+                    "followup_importance", FOLLOWUP_IMPORTANCE_VALUES)
 
     return {
         "campaign_id":  campaign_id,

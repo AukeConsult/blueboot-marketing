@@ -29,16 +29,20 @@ TAB_FOLLOWUP = "Follow up"
 
 # Canonical header → Firestore field mapping (same as export_lib.CONTACT_COLUMNS).
 _HEADER_TO_FIELD: dict[str, str] = {
-    "Status":             "status",
-    "Name":               "name",
-    "Email":              "email",
-    "Title":              "title",
-    "Website":            "website",
-    "Sent at":            "sent_at",
-    "Last action":        "last_action",
-    "Last action status": "last_action_status",
-    "Lead ID":            "lead_id",
-    "Doc ID":             "doc_id",
+    "Status":               "status",
+    "Name":                 "name",
+    "Email":                "email",
+    "Title":                "title",
+    "Website":              "website",
+    "Sent at":              "sent_at",
+    "Last action":          "last_action",
+    "Last action status":   "last_action_status",
+    "Follow-up date":       "followup_date",
+    "Follow-up status":     "followup_status",
+    "Follow-up importance": "followup_importance",
+    "Follow-up comment":    "followup_comment",
+    "Lead ID":              "lead_id",
+    "Doc ID":               "doc_id",
 }
 
 # Firestore field → sheet header (reverse, for building new sheet rows).
