@@ -103,60 +103,6 @@ def campaign_export():
         return _err(str(exc), 500)
 
 
-@bp.route("/api/crm/campaigns", methods=["GET"])
-def list_campaigns():
-    """List all campaigns, ordered by updated_at descending.
-    Optional: ?status=draft  to filter by status
-    """
-    try:
-        db     = _get_db()
-        status = request.args.get("status", "").strip()
-        col    = db.collection("campaigns")
-        query  = col.order_by("updated_at", direction="DESCENDING")
-        if status:
-            from google.cloud.firestore_v1.base_query import FieldFilter
-            query = col.where(filter=FieldFilter("status", "==", status))
-        docs = list(query.stream())
-        campaigns = [d.to_dict() for d in docs]
-        return jsonify({"campaigns": campaigns, "count": len(campaigns)})
-    except Exception as exc:
-        return _err(str(exc), 500)
-
-@bp.route("/api/crm/campaign-sync", methods=["GET"])
-def campaign_sync():
-    """Sync campaign data from contact sheet -> Firestore.
-    Required: ?campaign_id=NO_jun
-    Optional: ?force=true
-    """
-    campaign_id = request.args.get("campaign_id", "").strip()
-    if not campaign_id:
-        return _err("campaign_id is required e.g. ?campaign_id=NO_jun", 400)
-    force = request.args.get("force", "").lower() in ("1", "true", "yes")
-    try:
-        job_id = _new_job("campaign-sync", {"campaign_id": campaign_id, "force": force})
-        _enqueue_task("campaign-sync", job_id, {"campaign_id": campaign_id, "force": force})
-        return _accepted(job_id, "campaign-sync")
-    except Exception as exc:
-        return _err(str(exc), 500)
-
-
-@bp.route("/api/crm/campaign-export", methods=["GET"])
-def campaign_export():
-    """Export a campaign + its contacts to a Sheet (named after the campaign)
-    in the gdisk Drive folder. Required: ?campaign_id=NO_jun"""
-    campaign_id = request.args.get("campaign_id", "").strip()
-    if not campaign_id:
-        return _err("campaign_id is required")
-    try:
-        params = {"campaign_id": campaign_id}
-        job_id = _new_job("campaign-export", params)
-        _enqueue_task("campaign-export", job_id, params)
-        return _accepted(job_id, "campaign-export")
-    except Exception as exc:
-        return _err(str(exc), 500)
-
-# -- Worker endpoint ----------------------------------------------------------
-
 @bp.route("/api/crm/worker/<name>/<job_id>", methods=["POST"])
 def worker(name, job_id):
     try:
