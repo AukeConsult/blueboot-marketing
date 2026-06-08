@@ -68,6 +68,21 @@
 .imp-medium { color: #92400e; background: #fef3c7; border-color: #fde68a; }
 .imp-high   { color: #991b1b; background: #fee2e2; border-color: #fca5a5; }
 
+/* Email sync button on each row */
+.sync-btn { background: none; border: none; cursor: pointer; padding: 1px 3px;
+  border-radius: 4px; color: var(--bb-muted); font-size: .78rem; line-height: 1; }
+.sync-btn:hover { color: var(--bb-accent); background: #eef0ff; }
+.sync-btn.spinning i { display: inline-block; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Email history entries */
+.hist-entry-email-in  { background: #f0fdf4; border-color: #bbf7d0; }
+.hist-entry-email-out { background: #eff6ff; border-color: #bfdbfe; }
+.hist-type-badge { font-size: .65rem; font-weight: 700; padding: 1px 5px;
+  border-radius: 4px; white-space: nowrap; flex-shrink: 0; }
+.hist-type-in  { background: #dcfce7; color: #15803d; }
+.hist-type-out { background: #dbeafe; color: #1d4ed8; }
+
 /* Batch bar */
 .batch-bar { display: flex; align-items: center; gap: .6rem;
   background: #eef0ff; border: 1px solid #c7ceff; border-radius: 8px;
@@ -85,9 +100,21 @@
 
   <div class="page-header mb-3">
     <h5 class="page-title"><i class="ti ti-phone-check text-primary"></i>CRM Follow-up</h5>
-    <button class="btn btn-sm btn-outline-secondary" onclick="load()">
-      <i class="ti ti-refresh me-1"></i>Refresh
-    </button>
+    <div class="d-flex align-items-center gap-2">
+      <select id="sync-period" class="form-select form-select-sm" style="max-width:120px" title="Email sync lookback period">
+        <option value="7">Last 7 days</option>
+        <option value="14">Last 14 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="90">Last 90 days</option>
+        <option value="0">All time</option>
+      </select>
+      <button class="btn btn-sm btn-outline-secondary" id="sync-all-btn" onclick="syncAllEmails()">
+        <i class="ti ti-mail-bolt me-1"></i>Sync all emails
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="load()">
+        <i class="ti ti-refresh me-1"></i>Refresh
+      </button>
+    </div>
   </div>
 
   <!-- Filters -->
@@ -110,6 +137,8 @@
       <option value="contacted">Contacted</option>
       <option value="replied">Replied</option>
       <option value="meeting">Meeting booked</option>
+      <option value="offer_sent">Offer sent</option>
+      <option value="accepted">Accepted offer</option>
       <option value="closed">Closed</option>
       <option value="not_interested">Not interested</option>
     </select>
@@ -162,6 +191,9 @@
     </div>
   </div>
 
+  <!-- Job status feedback -->
+  <div id="sync-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
+
   <!-- Table -->
   <div class="bb-card">
     <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom bb-card-header">
@@ -201,130 +233,46 @@
 <script>
 'use strict';
 
-const PROJECT = (window.FIREBASE_CONFIG || {}).projectId || 'blueboot-market';
-const FS_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
-
-let allRows   = [];
-let _sortCol  = '';
-let _sortAsc  = true;
+let allRows  = [];
+let _sortCol = '';
+let _sortAsc = true;
 const selected = new Set();   // doc_path strings
 
-// ── Firestore REST helpers ────────────────────────────────────────────────────
-
-function fsRead(f) {
-  if (!f) return '';
-  if ('stringValue'    in f) return f.stringValue;
-  if ('integerValue'   in f) return String(f.integerValue);
-  if ('doubleValue'    in f) return String(f.doubleValue);
-  if ('booleanValue'   in f) return f.booleanValue;
-  if ('timestampValue' in f) return f.timestampValue;
-  return '';
-}
-
-function fsReadHistory(f) {
-  if (!f || !f.arrayValue || !f.arrayValue.values) return [];
-  return f.arrayValue.values.map(v => {
-    const m = (v.mapValue && v.mapValue.fields) || {};
-    return { date: fsRead(m.date), user: fsRead(m.user), text: fsRead(m.text), type: fsRead(m.type) };
-  });
-}
-
-function fsVal(v) {
-  if (v === null || v === undefined || v === '') return { nullValue: null };
-  return { stringValue: String(v) };
-}
-
-async function fsPatch(docPath, fields) {
-  const token = await getAuthToken();
-  const keys  = Object.keys(fields);
-  const mask  = keys.map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
-  const body  = { name: `projects/${PROJECT}/databases/(default)/documents/${docPath}`, fields: {} };
-  keys.forEach(k => { body.fields[k] = fsVal(fields[k]); });
-  const r = await fetch(`${FS_BASE}/${docPath}?${mask}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
-    body: JSON.stringify(body)
-  });
-  if (!r.ok) {
-    const e = await r.json().catch(() => ({}));
-    throw new Error((e.error && e.error.message) || 'HTTP ' + r.status);
-  }
-}
-
-async function fsRunQuery(collectionId, limit) {
-  const token = await getAuthToken();
-  const r = await fetch(`${FS_BASE}:runQuery`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
-    body: JSON.stringify({ structuredQuery: {
-      from: [{ collectionId, allDescendants: true }],
-      limit: limit || 2000
-    }})
-  });
-  if (!r.ok) {
-    const e = await r.json().catch(() => ({}));
-    throw new Error((e.error && e.error.message) || 'HTTP ' + r.status);
-  }
-  return r.json();
-}
-
-// ── Load ──────────────────────────────────────────────────────────────────────
+// ── Load contacts via API (no direct Firestore reads) ─────────────────────────
 
 async function load() {
   setTbody('<tr><td colspan="8" class="text-center py-5" style="color:var(--bb-muted)">'
     + '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>');
   document.getElementById('follow-empty').style.display = 'none';
   document.getElementById('count-badge').textContent = '';
+  setFeedback(null);
 
   try {
-    // 1. Campaigns → build owner/outreach map for filters
-    const cd    = await fetchJSON(BASE + '/api/crm/campaigns');
-    const camps = Array.isArray(cd) ? cd : (cd.campaigns || []);
-    const campMap = {};
-    const owners  = new Set();
-    const outreachEmails = new Set();
-    camps.forEach(c => {
-      campMap[c.campaign_id] = { owner: c.owner || '', outreach_email: c.outreach_email_account || '' };
-      if (c.owner)                  owners.add(c.owner);
-      if (c.outreach_email_account) outreachEmails.add(c.outreach_email_account);
-    });
+    const data     = await fetchJSON(BASE + '/api/crm/followup-contacts');
+    const contacts = data.contacts || [];
 
-    // 2. CollectionGroup query: all campaign_contacts
-    const results = await fsRunQuery('campaign_contacts', 2000);
+    allRows = contacts.map(c => ({
+      name:               c.name               || '',
+      email:              c.email              || '',
+      title:              c.title              || '',
+      website:            c.website            || '',
+      status:             c.status             || 'pending',
+      followup_date:      c.followup_date      || '',
+      followup_status:    c.followup_status    || '',
+      followup_comment:   c.followup_comment   || '',
+      followup_importance: c.followup_importance || '',
+      comment_history:    c.comment_history    || [],
+      campaign_id:        c.campaign_id,
+      doc_id:             c.doc_id,
+      doc_path:           c.doc_path,
+      owner:              c.owner              || '',
+      outreach_email:     c.outreach_email     || '',
+    }));
 
-    allRows = [];
-    (results || []).forEach(item => {
-      if (!item.document) return;
-      const f     = item.document.fields || {};
-      const parts = (item.document.name || '').split('/');
-      const ccIdx = parts.indexOf('campaign_contacts');
-      const campaign_id = ccIdx > 0 ? parts[ccIdx - 1] : '';
-      const doc_id      = parts[parts.length - 1];
-      const info  = campMap[campaign_id] || {};
-      if (info.owner)          owners.add(info.owner);
-      if (info.outreach_email) outreachEmails.add(info.outreach_email);
-
-      allRows.push({
-        name:             fsRead(f.name),
-        email:            fsRead(f.email),
-        title:            fsRead(f.title),
-        website:          fsRead(f.website),
-        status:           fsRead(f.status) || 'pending',
-        followup_date:    fsRead(f.followup_date),
-        followup_status:  fsRead(f.followup_status),
-        followup_comment:    fsRead(f.followup_comment),
-        followup_importance: fsRead(f.followup_importance),
-        comment_history:     fsReadHistory(f.comment_history),
-        campaign_id,
-        doc_id,
-        doc_path: `campaigns/${campaign_id}/campaign_contacts/${doc_id}`,
-        owner:          info.owner || '',
-        outreach_email: info.outreach_email || ''
-      });
-    });
-
-    populateSelect('owner-filter',   [...owners].sort(),         'All owners');
-    populateSelect('outreach-filter',[...outreachEmails].sort(), 'All outreach emails');
+    const owners        = [...new Set(allRows.map(r => r.owner).filter(Boolean))].sort();
+    const outreachEmails = [...new Set(allRows.map(r => r.outreach_email).filter(Boolean))].sort();
+    populateSelect('owner-filter',    owners,         'All owners');
+    populateSelect('outreach-filter', outreachEmails, 'All outreach emails');
     applyFilter();
   } catch (e) {
     setTbody(`<tr><td colspan="8" class="text-center py-5 text-danger small">
@@ -340,24 +288,44 @@ function populateSelect(id, values, placeholder) {
     + values.map(v => `<option value="${escapeHtml(v)}"${v === cur ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('');
 }
 
+// Refresh a single contact's history via API after an async job completes.
+async function refreshContactHistory(gidx) {
+  const row = allRows[gidx];
+  if (!row) return;
+  try {
+    const data = await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(row.campaign_id)}/contacts/${encodeURIComponent(row.doc_id)}`
+    );
+    row.comment_history = data.comment_history || [];
+    refreshHistoryPanel(gidx);
+  } catch(e) {
+    console.warn('[refresh-history]', e);
+  }
+}
+
+// ── API write helper ──────────────────────────────────────────────────────────
+
+async function apiPatchContact(row, fields) {
+  const user = (window._authUser && (window._authUser.email || window._authUser.uid)) || 'unknown';
+  return fetchJSON(
+    `${BASE}/api/crm/campaigns/${encodeURIComponent(row.campaign_id)}/contacts/${encodeURIComponent(row.doc_id)}`,
+    {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ ...fields, _user: user }),
+    }
+  );
+}
+
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
 function sortBy(col) {
-  if (_sortCol === col) {
-    _sortAsc = !_sortAsc;
-  } else {
-    _sortCol = col;
-    _sortAsc = true;
-  }
+  if (_sortCol === col) { _sortAsc = !_sortAsc; }
+  else { _sortCol = col; _sortAsc = true; }
   document.querySelectorAll('.bb-sortable').forEach(th => {
     const ic = th.querySelector('.sort-icon');
-    if (th.dataset.col === col) {
-      ic.textContent = _sortAsc ? ' ▲' : ' ▼';
-      th.style.color = 'var(--bb-accent)';
-    } else {
-      ic.textContent = '';
-      th.style.color = '';
-    }
+    if (th.dataset.col === col) { ic.textContent = _sortAsc ? ' ▲' : ' ▼'; th.style.color = 'var(--bb-accent)'; }
+    else { ic.textContent = ''; th.style.color = ''; }
   });
   applyFilter();
 }
@@ -398,7 +366,6 @@ function applyFilter() {
   });
 
   list = applySort(list);
-
   document.getElementById('count-badge').textContent =
     `${list.length} contact${list.length === 1 ? '' : 's'}`;
   render(list);
@@ -419,6 +386,8 @@ const FU_STATUSES = [
   { value: 'contacted',      label: 'Contacted' },
   { value: 'replied',        label: 'Replied' },
   { value: 'meeting',        label: 'Meeting booked' },
+  { value: 'offer_sent',     label: 'Offer sent' },
+  { value: 'accepted',       label: 'Accepted offer' },
   { value: 'closed',         label: 'Closed' },
   { value: 'not_interested', label: 'Not interested' }
 ];
@@ -431,14 +400,9 @@ function statusBadge(s) {
 
 function render(list) {
   const empty = document.getElementById('follow-empty');
-  if (!list.length) {
-    setTbody('');
-    empty.style.display = '';
-    return;
-  }
+  if (!list.length) { setTbody(''); empty.style.display = ''; return; }
   empty.style.display = 'none';
 
-  // Restore check state after re-render
   const restoreChecks = () => {
     document.querySelectorAll('.row-chk').forEach(c => {
       const row = allRows[parseInt(c.dataset.gidx, 10)];
@@ -450,19 +414,25 @@ function render(list) {
   };
 
   setTbody(list.map(r => {
-    const gidx     = allRows.indexOf(r);
+    const gidx      = allRows.indexOf(r);
     const siteShort = r.website
       ? r.website.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 30) : '';
-    const fuOpts = FU_STATUSES.map(s =>
+    const fuOpts    = FU_STATUSES.map(s =>
       `<option value="${s.value}"${r.followup_status === s.value ? ' selected' : ''}>${escapeHtml(s.label)}</option>`
     ).join('');
+    const impCls = (IMPORTANCE_LEVELS.find(i => i.value === r.followup_importance) || IMPORTANCE_LEVELS[0]).cls;
 
     return `<tr data-doc="${escapeHtml(r.doc_path)}">
       <td class="text-center"><input type="checkbox" class="form-check-input row-chk"
         data-gidx="${gidx}" onchange="onRowCheck(this)"></td>
       <td>${statusBadge(r.status)}</td>
       <td>
-        <div class="small fw-500">${escapeHtml(r.name || '—')}</div>
+        <div class="d-flex align-items-center gap-1">
+          <span class="small fw-500">${escapeHtml(r.name || '—')}</span>
+          <button class="sync-btn" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
+            <i class="ti ti-mail-bolt"></i>
+          </button>
+        </div>
         ${r.title ? `<div style="font-size:.73rem;color:var(--bb-muted)">${escapeHtml(r.title)}</div>` : ''}
       </td>
       <td class="small"><a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email || '—')}</a></td>
@@ -484,7 +454,7 @@ function render(list) {
         </select>
       </td>
       <td>
-        <select class="imp-select ${(IMPORTANCE_LEVELS.find(i=>i.value===r.followup_importance)||IMPORTANCE_LEVELS[0]).cls}"
+        <select class="imp-select ${impCls}"
           data-gidx="${gidx}" data-field="followup_importance"
           onchange="saveField(this);this.className='imp-select '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
           ${IMPORTANCE_LEVELS.map(i=>`<option value="${i.value}"${r.followup_importance===i.value?' selected':''}>${i.label}</option>`).join('')}
@@ -516,7 +486,7 @@ function render(list) {
   restoreChecks();
 }
 
-// ── Save directly to Firestore ────────────────────────────────────────────────
+// ── Save follow-up field via API ──────────────────────────────────────────────
 
 async function saveField(el) {
   const gidx  = parseInt(el.dataset.gidx, 10);
@@ -525,11 +495,9 @@ async function saveField(el) {
   const row   = allRows[gidx];
   if (!row) return;
 
-  // Skip if nothing changed
   if ((row[field] || '') === value) return;
-
   const oldValue = row[field] || '';
-  row[field] = value;   // optimistic update
+  row[field] = value;
 
   const td = el.closest('td');
   let dot  = td.querySelector('.save-dot');
@@ -538,86 +506,91 @@ async function saveField(el) {
   dot.title = '';
 
   try {
-    if (field === 'followup_comment') {
-      await fsCommitWithHistory(row, { followup_comment: value }, value, 'COMMENT');
-    } else if (field === 'followup_status') {
-      const label = (FU_STATUSES.find(s => s.value === value) || {}).label || value || '(none)';
-      await fsCommitWithHistory(row, { followup_status: value }, `Status → ${label}`, 'STATUS');
-    } else if (field === 'followup_importance') {
-      const label = (IMPORTANCE_LEVELS.find(i => i.value === value) || {}).label || value || '(none)';
-      await fsCommitWithHistory(row, { followup_importance: value }, `Importance → ${label}`, 'IMPORTANCE');
-    } else if (field === 'followup_date') {
-      const label = value ? `Follow-up date set to ${value}` : 'Follow-up date cleared';
-      await fsCommitWithHistory(row, { followup_date: value }, label, 'FOLLOWUP');
-    } else {
-      await fsPatch(row.doc_path, { [field]: value });
-    }
-    // Brief green confirmation, then remove
+    await apiPatchContact(row, { [field]: value });
+
+    const user = (window._authUser && (window._authUser.email || window._authUser.uid)) || 'unknown';
+    const entry = buildLocalHistoryEntry(field, value, user);
+    if (entry) { row.comment_history.push(entry); refreshHistoryPanel(gidx); }
+
     dot.classList.add('ok');
     setTimeout(() => dot.remove(), 900);
   } catch (e) {
     console.error('[crm_follow] save failed:', e.message);
-    row[field] = oldValue;   // revert in-memory on failure
+    row[field] = oldValue;
     dot.classList.add('err');
     dot.title = 'Save failed: ' + e.message;
   }
 }
 
-// Atomically update one or more fields AND append a log entry to comment_history.
-// updateFields: { fieldName: value, … }   historyText: string shown in the log
-// type: 'COMMENT' | 'STATUS'  (stored on the entry, not displayed)
-async function fsCommitWithHistory(row, updateFields, historyText, type) {
-  const token   = await getAuthToken();
-  const user    = (window._authUser && (window._authUser.email || window._authUser.uid)) || 'unknown';
-  const docName = `projects/${PROJECT}/databases/(default)/documents/${row.doc_path}`;
-
-  const fsFields = {};
-  Object.keys(updateFields).forEach(k => { fsFields[k] = fsVal(updateFields[k]); });
-
-  const body = {
-    writes: [
-      {
-        update: { name: docName, fields: fsFields },
-        updateMask: { fieldPaths: Object.keys(updateFields) }
-      },
-      {
-        transform: {
-          document: docName,
-          fieldTransforms: [{
-            fieldPath: 'comment_history',
-            appendMissingElements: {
-              values: [{
-                mapValue: { fields: {
-                  date: { timestampValue: new Date().toISOString() },
-                  user: { stringValue: user },
-                  text: { stringValue: historyText },
-                  type: { stringValue: type || 'COMMENT' }
-                }}
-              }]
-            }
-          }]
-        }
-      }
-    ]
+function buildLocalHistoryEntry(field, value, user) {
+  const typeMap = {
+    followup_status:     'STATUS',
+    followup_comment:    'COMMENT',
+    followup_date:       'FOLLOWUP',
+    followup_importance: 'IMPORTANCE',
   };
+  const textMap = {
+    followup_status:     v => { const l = (FU_STATUSES.find(s => s.value === v) || {}).label || v || '(none)'; return `Status → ${l}`; },
+    followup_comment:    v => v || '(comment cleared)',
+    followup_date:       v => v ? `Follow-up date set to ${v}` : 'Follow-up date cleared',
+    followup_importance: v => { const l = (IMPORTANCE_LEVELS.find(i => i.value === v) || {}).label || v || '(none)'; return `Importance → ${l}`; },
+  };
+  if (!typeMap[field]) return null;
+  return { date: new Date().toISOString(), user, text: textMap[field](value), type: typeMap[field] };
+}
 
-  const r = await fetch(
-    `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents:commit`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
-      body: JSON.stringify(body)
-    }
-  );
-  if (!r.ok) {
-    const e = await r.json().catch(() => ({}));
-    throw new Error((e.error && e.error.message) || 'HTTP ' + r.status);
-  }
+// ── Batch date update ─────────────────────────────────────────────────────────
 
-  // Update in-memory history and refresh panel if open
-  row.comment_history.push({ date: new Date().toISOString(), user, text: historyText, type: type || 'COMMENT' });
-  const gidx = allRows.indexOf(row);
-  if (gidx >= 0) refreshHistoryPanel(gidx);
+function getSyncCutoff() {
+  const days = parseInt(document.getElementById('sync-period')?.value || '7', 10);
+  if (!days) return null;
+  const d = new Date(); d.setDate(d.getDate() - days); return d;
+}
+
+function showBatchDatePanel() {
+  document.getElementById('batch-apply-count').textContent = selected.size;
+  document.getElementById('batch-date-status').textContent = '';
+  document.getElementById('batch-date-panel').style.display = '';
+  document.getElementById('batch-date-input').focus();
+}
+
+function hideBatchDatePanel() {
+  document.getElementById('batch-date-panel').style.display = 'none';
+}
+
+async function applyBatchDate() {
+  const date    = document.getElementById('batch-date-input').value;
+  const comment = document.getElementById('batch-date-comment').value.trim();
+  const statusEl = document.getElementById('batch-date-status');
+  if (!date) { statusEl.style.color = '#dc2626'; statusEl.textContent = 'Please pick a date first.'; return; }
+
+  const rows = allRows.filter(r => selected.has(r.doc_path));
+  if (!rows.length) return;
+
+  statusEl.style.color = 'var(--bb-muted)';
+  statusEl.textContent = `Updating ${rows.length} contact${rows.length === 1 ? '' : 's'}…`;
+
+  let done = 0, errors = 0;
+  await Promise.all(rows.map(async r => {
+    try {
+      const fields = { followup_date: date };
+      if (comment) fields.followup_comment = comment;
+      await apiPatchContact(r, fields);
+      r.followup_date = date;
+      if (comment) r.followup_comment = comment;
+      const user = (window._authUser && (window._authUser.email || window._authUser.uid)) || 'unknown';
+      r.comment_history.push({ date: new Date().toISOString(), user,
+        text: comment ? `Follow-up date set to ${date} — ${comment}` : `Follow-up date set to ${date}`,
+        type: 'FOLLOWUP' });
+      done++;
+    } catch (e) { errors++; console.error('[batch-date]', r.email, e.message); }
+  }));
+
+  if (errors) { statusEl.style.color = '#dc2626'; statusEl.textContent = `${done} updated, ${errors} failed.`; }
+  else        { statusEl.style.color = '#15803d'; statusEl.textContent = `${done} contact${done === 1 ? '' : 's'} updated.`; }
+
+  applyFilter();
+  if (!errors) { hideBatchDatePanel(); clearSelection(); }
 }
 
 // ── Selection ─────────────────────────────────────────────────────────────────
@@ -625,8 +598,7 @@ async function fsCommitWithHistory(row, updateFields, historyText, type) {
 function onRowCheck(chk) {
   const row = allRows[parseInt(chk.dataset.gidx, 10)];
   if (!row) return;
-  if (chk.checked) selected.add(row.doc_path);
-  else             selected.delete(row.doc_path);
+  if (chk.checked) selected.add(row.doc_path); else selected.delete(row.doc_path);
   updateSelectionUI();
 }
 
@@ -635,8 +607,7 @@ function toggleSelectAll(chk) {
     c.checked = chk.checked;
     const row = allRows[parseInt(c.dataset.gidx, 10)];
     if (!row) return;
-    if (chk.checked) selected.add(row.doc_path);
-    else             selected.delete(row.doc_path);
+    if (chk.checked) selected.add(row.doc_path); else selected.delete(row.doc_path);
   });
   updateSelectionUI();
 }
@@ -650,18 +621,547 @@ function clearSelection() {
 }
 
 function updateSelectionUI() {
-  const n   = selected.size;
-  const bar = document.getElementById('batch-bar');
+  const n = selected.size;
   document.getElementById('batch-count').textContent = n;
-  bar.style.display = n > 0 ? '' : 'none';
-  // Keep the apply-button count in sync if panel is open
-  const applyCount = document.getElementById('batch-apply-count');
-  if (applyCount) applyCount.textContent = n;
-  // Hide panel when nothing is selected
+  document.getElementById('batch-bar').style.display = n > 0 ? '' : 'none';
+  const ac = document.getElementById('batch-apply-count');
+  if (ac) ac.textContent = n;
   if (n === 0) hideBatchDatePanel();
 }
 
+// ── Feedback div (matches pattern on crm-sync.html / campaign.html) ───────────
+
+function setFeedback(msg, type) {
+  const fb = document.getElementById('sync-feedback');
+  if (!type) { fb.style.display = 'none'; return; }
+  fb.className = `alert alert-${type} py-2 px-3 small mb-3`;
+  fb.innerHTML = msg;
+  fb.style.display = '';
+}
+
+// ── Email sync (backend job + poll) ──────────────────────────────────────────
+
+async function syncContactEmails(gidx, btn) {
+  const row = allRows[gidx];
+  if (!row || !row.email) { alert('Contact has no email address.'); return; }
+  btn.classList.add('spinning'); btn.disabled = true;
+  try {
+    const days = parseInt(document.getElementById('sync-period')?.value || '7', 10);
+    const res  = await fetchJSON(`${BASE}/api/crm/followup-email-sync`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ campaign_id: row.campaign_id, contact_doc_id: row.doc_id, days }),
+    });
+    setFeedback(
+      `<i class="ti ti-clock me-1"></i>Email sync queued <code>${res.job_id}</code>`
+      + ` for <strong>${escapeHtml(row.email)}</strong> — polling…`,
+      'info'
+    );
+    await pollJob(res.job_id, {
+      onDone: async result => {
+        const n = result.synced_entries || 0;
+        setFeedback(
+          `<i class="ti ti-check me-1"></i><strong>${escapeHtml(row.email)}</strong>`
+          + ` — ${n} new email${n === 1 ? '' : 's'} synced.`,
+          n > 0 ? 'success' : 'info'
+        );
+        if (n > 0) await refreshContactHistory(gidx);
+      },
+      onError: msg => setFeedback(
+        `<i class="ti ti-circle-x me-1"></i>Sync failed for <strong>${escapeHtml(row.email)}</strong>: ${escapeHtml(msg)}`,
+        'danger'
+      ),
+    });
+  } catch (e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Error: ${escapeHtml(e.message)}`, 'danger');
+  } finally {
+    btn.classList.remove('spinning'); btn.disabled = false;
+  }
+}
+
+async function syncAllEmails() {
+  const btn = document.getElementById('sync-all-btn');
+  btn.disabled  = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1" style="animation:spin .7s linear infinite;display:inline-block"></i>Queuing…';
+  setFeedback(null);
+  try {
+    const days = parseInt(document.getElementById('sync-period')?.value || '7', 10);
+    const res  = await fetchJSON(`${BASE}/api/crm/followup-email-sync`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ days }),
+    });
+    setFeedback(
+      `<i class="ti ti-clock me-1"></i>Email sync queued <code>${res.job_id}</code>`
+      + ` (last ${days} day${days === 1 ? '' : 's'}) — polling…`,
+      'info'
+    );
+    await pollJob(res.job_id, {
+      onDone: result => {
+        const n = result.synced_entries || 0;
+        const c = result.synced_contacts || 0;
+        setFeedback(
+          `<i class="ti ti-check me-1"></i>Sync complete — `
+          + `<strong>${n}</strong> new email${n === 1 ? '' : 's'} across `
+          + `<strong>${c}</strong> contact${c === 1 ? '' : 's'}.`
+          + (result.errors && result.errors.length ? ` <span class="text-danger">${result.errors.length} error(s).</span>` : ''),
+          n > 0 ? 'success' : 'info'
+        );
+        if (n > 0) load();
+      },
+      onError: msg => setFeedback(
+        `<i class="ti ti-circle-x me-1"></i>Sync failed: ${escapeHtml(msg)}`, 'danger'
+      ),
+    });
+  } catch (e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Error: ${escapeHtml(e.message)}`, 'danger');
+  } finally {
+    btn.disabled  = false;
+    btn.innerHTML = '<i class="ti ti-mail-bolt me-1"></i>Sync all emails';
+  }
+}
+
+// ── Comment history UI ────────────────────────────────────────────────────────
+
+function toggleHistory(btn, gidx) {
+  const row = document.getElementById('hist-' + gidx);
+  if (!row) return;
+  const open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : '';
+  btn.querySelector('i').className = open ? 'ti ti-chevron-down' : 'ti ti-chevron-up';
+}
+
+function renderHistoryContent(history) {
+  if (!history.length) return '<span class="small" style="color:var(--bb-muted)">No history yet.</span>';
+  return '<div class="hist-list">'
+    + [...history].reverse().map(h => {
+        const d = h.date ? new Date(h.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—';
+        const isEmailIn  = h.type === 'EMAIL_IN';
+        const isEmailOut = h.type === 'EMAIL_OUT';
+        const isEmail    = isEmailIn || isEmailOut;
+        const extraCls   = isEmailIn ? 'hist-entry-email-in' : isEmailOut ? 'hist-entry-email-out' : '';
+        const typeBadge  = isEmailIn
+          ? `<span class="hist-type-badge hist-type-in">IN</span>`
+          : isEmailOut ? `<span class="hist-type-badge hist-type-out">OUT</span>` : '';
+        return `<div class="hist-entry ${extraCls}" style="grid-template-columns:${isEmail ? '60px 120px 130px 1fr' : '120px 140px 1fr'}">
+          ${typeBadge}
+          <span class="hist-entry-date">${escapeHtml(d)}</span>
+          <span class="hist-entry-user">${escapeHtml(isEmail ? (h.from || h.user) : h.user)}</span>
+          <span class="hist-entry-text">${escapeHtml(h.text)}</span>
+        </div>`;
+      }).join('') + '</div>';
+}
+
+function refreshHistoryPanel(gidx) {
+  const row = document.getElementById('hist-' + gidx);
+  if (!row) return;
+  const td = row.querySelector('td:last-child');
+  if (td) td.innerHTML = renderHistoryContent(allRows[gidx].comment_history);
+  const count = allRows[gidx].comment_history.length;
+  const btn   = document.querySelector(`[onclick="toggleHistory(this,${gidx})"] .hist-count`);
+  if (btn) { btn.textContent = count; btn.classList.toggle('has-entries', count > 0); }
+}
+
+function setTbody(html) {
+  document.getElementById('follow-tbody').innerHTML = html;
+}
+
+load();
+</script>
+<script>
+'use strict';
+
+const PROJECT = (window.FIREBASE_CONFIG || {}).projectId || 'blueboot-market';
+const FS_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+
+let allRows   = [];
+let _sortCol  = '';
+let _sortAsc  = true;
+const selected = new Set();   // doc_path strings
+
+// ── Firestore READ helpers (used only for loading contacts) ───────────────────
+
+function fsRead(f) {
+  if (!f) return '';
+  if ('stringValue'    in f) return f.stringValue;
+  if ('integerValue'   in f) return String(f.integerValue);
+  if ('doubleValue'    in f) return String(f.doubleValue);
+  if ('booleanValue'   in f) return f.booleanValue;
+  if ('timestampValue' in f) return f.timestampValue;
+  return '';
+}
+
+function fsReadHistory(f) {
+  if (!f || !f.arrayValue || !f.arrayValue.values) return [];
+  return f.arrayValue.values.map(v => {
+    const m = (v.mapValue && v.mapValue.fields) || {};
+    return {
+      date:     fsRead(m.date),
+      user:     fsRead(m.user),
+      text:     fsRead(m.text),
+      type:     fsRead(m.type),
+      email_id: fsRead(m.email_id),
+      from:     fsRead(m.from),
+      to:       fsRead(m.to),
+    };
+  });
+}
+
+async function fsRunQuery(collectionId, limit) {
+  const token = await getAuthToken();
+  const r = await fetch(`${FS_BASE}:runQuery`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+    body: JSON.stringify({ structuredQuery: {
+      from: [{ collectionId, allDescendants: true }],
+      limit: limit || 2000
+    }})
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error((e.error && e.error.message) || 'HTTP ' + r.status);
+  }
+  return r.json();
+}
+
+// Reload a single contact's comment_history from Firestore after async job
+async function refreshContactHistory(gidx) {
+  const row = allRows[gidx];
+  if (!row) return;
+  try {
+    const token = await getAuthToken();
+    const r = await fetch(`${FS_BASE}/${row.doc_path}?mask.fieldPaths=comment_history`, {
+      headers: token ? { Authorization: 'Bearer ' + token } : {}
+    });
+    if (!r.ok) return;
+    const doc = await r.json();
+    row.comment_history = fsReadHistory((doc.fields || {}).comment_history);
+    refreshHistoryPanel(gidx);
+  } catch(e) {
+    console.warn('[refresh-history]', e);
+  }
+}
+
+// ── API write helper ──────────────────────────────────────────────────────────
+
+// All follow-up field writes go through the CRM API PATCH endpoint.
+// The backend validates, writes to Firestore, and appends the history entry —
+// no direct Firestore writes from the frontend for mutations.
+async function apiPatchContact(row, fields) {
+  const user = (window._authUser && (window._authUser.email || window._authUser.uid)) || 'unknown';
+  return fetchJSON(
+    `${BASE}/api/crm/campaigns/${encodeURIComponent(row.campaign_id)}/contacts/${encodeURIComponent(row.doc_id)}`,
+    {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ ...fields, _user: user }),
+    }
+  );
+}
+
+// ── Load ──────────────────────────────────────────────────────────────────────
+
+async function load() {
+  setTbody('<tr><td colspan="8" class="text-center py-5" style="color:var(--bb-muted)">'
+    + '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>');
+  document.getElementById('follow-empty').style.display = 'none';
+  document.getElementById('count-badge').textContent = '';
+
+  try {
+    const cd    = await fetchJSON(BASE + '/api/crm/campaigns');
+    const camps = Array.isArray(cd) ? cd : (cd.campaigns || []);
+    const campMap = {};
+    const owners  = new Set();
+    const outreachEmails = new Set();
+    camps.forEach(c => {
+      campMap[c.campaign_id] = { owner: c.owner || '', outreach_email: c.outreach_email_account || '' };
+      if (c.owner)                  owners.add(c.owner);
+      if (c.outreach_email_account) outreachEmails.add(c.outreach_email_account);
+    });
+
+    const results = await fsRunQuery('campaign_contacts', 2000);
+
+    allRows = [];
+    (results || []).forEach(item => {
+      if (!item.document) return;
+      const f     = item.document.fields || {};
+      const parts = (item.document.name || '').split('/');
+      const ccIdx = parts.indexOf('campaign_contacts');
+      const campaign_id = ccIdx > 0 ? parts[ccIdx - 1] : '';
+      const doc_id      = parts[parts.length - 1];
+      const info  = campMap[campaign_id] || {};
+      if (info.owner)          owners.add(info.owner);
+      if (info.outreach_email) outreachEmails.add(info.outreach_email);
+
+      allRows.push({
+        name:               fsRead(f.name),
+        email:              fsRead(f.email),
+        title:              fsRead(f.title),
+        website:            fsRead(f.website),
+        status:             fsRead(f.status) || 'pending',
+        followup_date:      fsRead(f.followup_date),
+        followup_status:    fsRead(f.followup_status),
+        followup_comment:   fsRead(f.followup_comment),
+        followup_importance: fsRead(f.followup_importance),
+        comment_history:    fsReadHistory(f.comment_history),
+        campaign_id,
+        doc_id,
+        doc_path: `campaigns/${campaign_id}/campaign_contacts/${doc_id}`,
+        owner:          info.owner || '',
+        outreach_email: info.outreach_email || ''
+      });
+    });
+
+    populateSelect('owner-filter',   [...owners].sort(),         'All owners');
+    populateSelect('outreach-filter',[...outreachEmails].sort(), 'All outreach emails');
+    applyFilter();
+  } catch (e) {
+    setTbody(`<tr><td colspan="8" class="text-center py-5 text-danger small">
+      <i class="ti ti-alert-circle me-1"></i>${escapeHtml(e.message)}</td></tr>`);
+    console.error('[crm_follow] load error:', e);
+  }
+}
+
+function populateSelect(id, values, placeholder) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>`
+    + values.map(v => `<option value="${escapeHtml(v)}"${v === cur ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('');
+}
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+
+function sortBy(col) {
+  if (_sortCol === col) { _sortAsc = !_sortAsc; }
+  else { _sortCol = col; _sortAsc = true; }
+  document.querySelectorAll('.bb-sortable').forEach(th => {
+    const ic = th.querySelector('.sort-icon');
+    if (th.dataset.col === col) { ic.textContent = _sortAsc ? ' ▲' : ' ▼'; th.style.color = 'var(--bb-accent)'; }
+    else { ic.textContent = ''; th.style.color = ''; }
+  });
+  applyFilter();
+}
+
+function applySort(list) {
+  if (!_sortCol) return list;
+  return [...list].sort((a, b) => {
+    const va = String(a[_sortCol] || '').toLowerCase();
+    const vb = String(b[_sortCol] || '').toLowerCase();
+    return _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+  });
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+
+function applyFilter() {
+  const q   = document.getElementById('search').value.toLowerCase();
+  const own = document.getElementById('owner-filter').value;
+  const out = document.getElementById('outreach-filter').value;
+  const fu  = document.getElementById('followup-filter').value;
+  const imp = document.getElementById('importance-filter').value;
+  const cst = document.getElementById('contact-status-filter').value;
+
+  let list = allRows.filter(r => {
+    if (own && r.owner !== own) return false;
+    if (out && r.outreach_email !== out) return false;
+    if (fu === '__none__') { if (r.followup_status) return false; }
+    else if (fu && r.followup_status !== fu) return false;
+    if (imp === '__none__') { if (r.followup_importance) return false; }
+    else if (imp && r.followup_importance !== imp) return false;
+    if (cst === 'open' && r.status === 'sent') return false;
+    else if (cst && cst !== 'open' && r.status !== cst) return false;
+    if (q) {
+      const hay = [r.name, r.email, r.website, r.title].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  list = applySort(list);
+  document.getElementById('count-badge').textContent =
+    `${list.length} contact${list.length === 1 ? '' : 's'}`;
+  render(list);
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+
+const IMPORTANCE_LEVELS = [
+  { value: '',       label: '— —',    cls: 'imp-none'   },
+  { value: 'low',    label: 'Low',    cls: 'imp-low'    },
+  { value: 'medium', label: 'Medium', cls: 'imp-medium' },
+  { value: 'high',   label: 'High',   cls: 'imp-high'   }
+];
+
+const FU_STATUSES = [
+  { value: '',               label: '— none —' },
+  { value: 'open',           label: 'Open' },
+  { value: 'contacted',      label: 'Contacted' },
+  { value: 'replied',        label: 'Replied' },
+  { value: 'meeting',        label: 'Meeting booked' },
+  { value: 'offer_sent',     label: 'Offer sent' },
+  { value: 'accepted',       label: 'Accepted offer' },
+  { value: 'closed',         label: 'Closed' },
+  { value: 'not_interested', label: 'Not interested' }
+];
+
+function statusBadge(s) {
+  const map = { pending: 'bb-badge-pending', sent: 'bb-badge-sent',
+                excluded: 'bb-badge-excluded', dosend: 'bb-badge-dosend', error: 'bb-badge-error' };
+  return `<span class="bb-badge ${map[s] || 'bb-badge-muted'}">${escapeHtml(s || 'pending')}</span>`;
+}
+
+function render(list) {
+  const empty = document.getElementById('follow-empty');
+  if (!list.length) { setTbody(''); empty.style.display = ''; return; }
+  empty.style.display = 'none';
+
+  const restoreChecks = () => {
+    document.querySelectorAll('.row-chk').forEach(c => {
+      const row = allRows[parseInt(c.dataset.gidx, 10)];
+      if (row && selected.has(row.doc_path)) c.checked = true;
+    });
+    const sa = document.getElementById('select-all');
+    const all = document.querySelectorAll('.row-chk');
+    if (sa && all.length) sa.checked = all.length > 0 && [...all].every(c => c.checked);
+  };
+
+  setTbody(list.map(r => {
+    const gidx      = allRows.indexOf(r);
+    const siteShort = r.website
+      ? r.website.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 30) : '';
+    const fuOpts    = FU_STATUSES.map(s =>
+      `<option value="${s.value}"${r.followup_status === s.value ? ' selected' : ''}>${escapeHtml(s.label)}</option>`
+    ).join('');
+    const impCls = (IMPORTANCE_LEVELS.find(i => i.value === r.followup_importance) || IMPORTANCE_LEVELS[0]).cls;
+
+    return `<tr data-doc="${escapeHtml(r.doc_path)}">
+      <td class="text-center"><input type="checkbox" class="form-check-input row-chk"
+        data-gidx="${gidx}" onchange="onRowCheck(this)"></td>
+      <td>${statusBadge(r.status)}</td>
+      <td>
+        <div class="d-flex align-items-center gap-1">
+          <span class="small fw-500">${escapeHtml(r.name || '—')}</span>
+          <button class="sync-btn" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
+            <i class="ti ti-mail-bolt"></i>
+          </button>
+        </div>
+        ${r.title ? `<div style="font-size:.73rem;color:var(--bb-muted)">${escapeHtml(r.title)}</div>` : ''}
+      </td>
+      <td class="small"><a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email || '—')}</a></td>
+      <td class="small">${siteShort
+        ? `<a href="${escapeHtml(r.website)}" target="_blank"
+              style="color:var(--bb-muted);text-decoration:none" title="${escapeHtml(r.website)}">${escapeHtml(siteShort)}</a>`
+        : '—'}</td>
+      <td>
+        <input type="date" class="follow-input"
+          value="${escapeHtml(r.followup_date || '')}"
+          data-gidx="${gidx}" data-field="followup_date"
+          onchange="saveField(this)">
+      </td>
+      <td>
+        <select class="follow-select"
+          data-gidx="${gidx}" data-field="followup_status"
+          onchange="saveField(this)">
+          ${fuOpts}
+        </select>
+      </td>
+      <td>
+        <select class="imp-select ${impCls}"
+          data-gidx="${gidx}" data-field="followup_importance"
+          onchange="saveField(this);this.className='imp-select '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
+          ${IMPORTANCE_LEVELS.map(i=>`<option value="${i.value}"${r.followup_importance===i.value?' selected':''}>${i.label}</option>`).join('')}
+        </select>
+      </td>
+    </tr>
+    <tr class="follow-comment-row">
+      <td></td><td></td><td></td>
+      <td colspan="5">
+        <div class="d-flex align-items-center gap-1">
+          <input type="text" class="follow-input flex-grow-1"
+            value="${escapeHtml(r.followup_comment || '')}"
+            placeholder="Add comment…"
+            data-gidx="${gidx}" data-field="followup_comment"
+            onchange="saveField(this)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+          <button class="hist-toggle" onclick="toggleHistory(this,${gidx})" title="Show comment history">
+            <i class="ti ti-chevron-down"></i>
+            <span class="hist-count${r.comment_history.length ? ' has-entries' : ''}">${r.comment_history.length}</span>
+          </button>
+        </div>
+      </td>
+    </tr>
+    <tr class="follow-history-row" id="hist-${gidx}" style="display:none">
+      <td></td><td></td><td></td>
+      <td colspan="5">${renderHistoryContent(r.comment_history)}</td>
+    </tr>`;
+  }).join(''));
+  restoreChecks();
+}
+
+// ── Save follow-up field via API ──────────────────────────────────────────────
+
+async function saveField(el) {
+  const gidx  = parseInt(el.dataset.gidx, 10);
+  const field = el.dataset.field;
+  const value = el.value;
+  const row   = allRows[gidx];
+  if (!row) return;
+
+  if ((row[field] || '') === value) return;   // no change
+  const oldValue = row[field] || '';
+  row[field] = value;                          // optimistic update
+
+  const td = el.closest('td');
+  let dot  = td.querySelector('.save-dot');
+  if (!dot) { dot = document.createElement('span'); dot.className = 'save-dot'; td.appendChild(dot); }
+  dot.classList.remove('err', 'ok');
+  dot.title = '';
+
+  try {
+    await apiPatchContact(row, { [field]: value });
+
+    // Optimistic in-memory history entry (matches what backend appends)
+    const user = (window._authUser && (window._authUser.email || window._authUser.uid)) || 'unknown';
+    const histEntry = buildLocalHistoryEntry(field, value, user);
+    if (histEntry) {
+      row.comment_history.push(histEntry);
+      refreshHistoryPanel(gidx);
+    }
+
+    dot.classList.add('ok');
+    setTimeout(() => dot.remove(), 900);
+  } catch (e) {
+    console.error('[crm_follow] save failed:', e.message);
+    row[field] = oldValue;
+    dot.classList.add('err');
+    dot.title = 'Save failed: ' + e.message;
+  }
+}
+
+function buildLocalHistoryEntry(field, value, user) {
+  const typeMap = {
+    followup_status:     'STATUS',
+    followup_comment:    'COMMENT',
+    followup_date:       'FOLLOWUP',
+    followup_importance: 'IMPORTANCE',
+  };
+  const textMap = {
+    followup_status:     v => { const l = (FU_STATUSES.find(s => s.value === v) || {}).label || v || '(none)'; return `Status → ${l}`; },
+    followup_comment:    v => v || '(comment cleared)',
+    followup_date:       v => v ? `Follow-up date set to ${v}` : 'Follow-up date cleared',
+    followup_importance: v => { const l = (IMPORTANCE_LEVELS.find(i => i.value === v) || {}).label || v || '(none)'; return `Importance → ${l}`; },
+  };
+  if (!typeMap[field]) return null;
+  return { date: new Date().toISOString(), user, text: textMap[field](value), type: typeMap[field] };
+}
+
 // ── Batch date update ─────────────────────────────────────────────────────────
+
+function getSyncCutoff() {
+  const days = parseInt(document.getElementById('sync-period')?.value || '7', 10);
+  if (!days) return null;
+  const d = new Date(); d.setDate(d.getDate() - days); return d;
+}
 
 function showBatchDatePanel() {
   document.getElementById('batch-apply-count').textContent = selected.size;
@@ -679,11 +1179,7 @@ async function applyBatchDate() {
   const comment = document.getElementById('batch-date-comment').value.trim();
   const statusEl = document.getElementById('batch-date-status');
 
-  if (!date) {
-    statusEl.style.color = '#dc2626';
-    statusEl.textContent = 'Please pick a date first.';
-    return;
-  }
+  if (!date) { statusEl.style.color = '#dc2626'; statusEl.textContent = 'Please pick a date first.'; return; }
 
   const rows = allRows.filter(r => selected.has(r.doc_path));
   if (!rows.length) return;
@@ -691,34 +1187,158 @@ async function applyBatchDate() {
   statusEl.style.color = 'var(--bb-muted)';
   statusEl.textContent = `Updating ${rows.length} contact${rows.length === 1 ? '' : 's'}…`;
 
-  const logText = comment
-    ? `Follow-up date set to ${date} — ${comment}`
-    : `Follow-up date set to ${date}`;
-
   let done = 0, errors = 0;
   await Promise.all(rows.map(async r => {
     try {
-      await fsCommitWithHistory(r, { followup_date: date }, logText, 'FOLLOWUP');
+      const fields = { followup_date: date };
+      if (comment) fields.followup_comment = comment;
+      await apiPatchContact(r, fields);
       r.followup_date = date;
+      if (comment) r.followup_comment = comment;
+      const user = (window._authUser && (window._authUser.email || window._authUser.uid)) || 'unknown';
+      r.comment_history.push({ date: new Date().toISOString(), user,
+        text: comment ? `Follow-up date set to ${date} — ${comment}` : `Follow-up date set to ${date}`,
+        type: 'FOLLOWUP' });
       done++;
-    } catch (e) {
-      errors++;
-      console.error('[batch-date] failed for', r.email, e.message);
-    }
+    } catch (e) { errors++; console.error('[batch-date]', r.email, e.message); }
   }));
 
-  if (errors) {
-    statusEl.style.color = '#dc2626';
-    statusEl.textContent = `${done} updated, ${errors} failed.`;
-  } else {
-    statusEl.style.color = '#15803d';
-    statusEl.textContent = `${done} contact${done === 1 ? '' : 's'} updated.`;
-  }
+  if (errors) { statusEl.style.color = '#dc2626'; statusEl.textContent = `${done} updated, ${errors} failed.`; }
+  else        { statusEl.style.color = '#15803d'; statusEl.textContent = `${done} contact${done === 1 ? '' : 's'} updated.`; }
 
-  applyFilter();       // re-render to show new dates
-  if (!errors) {
-    hideBatchDatePanel();
-    clearSelection();
+  applyFilter();
+  if (!errors) { hideBatchDatePanel(); clearSelection(); }
+}
+
+// ── Selection ─────────────────────────────────────────────────────────────────
+
+function onRowCheck(chk) {
+  const row = allRows[parseInt(chk.dataset.gidx, 10)];
+  if (!row) return;
+  if (chk.checked) selected.add(row.doc_path); else selected.delete(row.doc_path);
+  updateSelectionUI();
+}
+
+function toggleSelectAll(chk) {
+  document.querySelectorAll('.row-chk').forEach(c => {
+    c.checked = chk.checked;
+    const row = allRows[parseInt(c.dataset.gidx, 10)];
+    if (!row) return;
+    if (chk.checked) selected.add(row.doc_path); else selected.delete(row.doc_path);
+  });
+  updateSelectionUI();
+}
+
+function clearSelection() {
+  selected.clear();
+  document.querySelectorAll('.row-chk').forEach(c => { c.checked = false; });
+  const sa = document.getElementById('select-all');
+  if (sa) sa.checked = false;
+  updateSelectionUI();
+}
+
+function updateSelectionUI() {
+  const n = selected.size;
+  document.getElementById('batch-count').textContent = n;
+  document.getElementById('batch-bar').style.display = n > 0 ? '' : 'none';
+  const ac = document.getElementById('batch-apply-count');
+  if (ac) ac.textContent = n;
+  if (n === 0) hideBatchDatePanel();
+}
+
+// ── Feedback div helper (matches pattern used on crm-sync.html / campaign.html) ──
+
+function setFeedback(msg, type) {
+  // type: 'info' | 'success' | 'danger' | null (hide)
+  const fb = document.getElementById('sync-feedback');
+  if (!type) { fb.style.display = 'none'; return; }
+  fb.className = `alert alert-${type} py-2 px-3 small mb-3`;
+  fb.innerHTML = msg;
+  fb.style.display = '';
+}
+
+// ── Email sync (via backend job) ──────────────────────────────────────────────
+
+// Trigger email sync for a single contact; poll until done then refresh history.
+async function syncContactEmails(gidx, btn) {
+  const row = allRows[gidx];
+  if (!row || !row.email) { alert('Contact has no email address.'); return; }
+  btn.classList.add('spinning'); btn.disabled = true;
+  try {
+    const days = parseInt(document.getElementById('sync-period')?.value || '7', 10);
+    const res  = await fetchJSON(`${BASE}/api/crm/followup-email-sync`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ campaign_id: row.campaign_id, contact_doc_id: row.doc_id, days }),
+    });
+    setFeedback(
+      `<i class="ti ti-clock me-1"></i>Email sync job queued <code>${res.job_id}</code>`
+      + ` for <strong>${escapeHtml(row.email)}</strong> — polling…`,
+      'info'
+    );
+    await pollJob(res.job_id, {
+      onDone: async result => {
+        const n = result.synced_entries || 0;
+        setFeedback(
+          `<i class="ti ti-check me-1"></i><strong>${escapeHtml(row.email)}</strong>`
+          + ` — ${n} new email${n === 1 ? '' : 's'} synced.`,
+          n > 0 ? 'success' : 'info'
+        );
+        if (n > 0) await refreshContactHistory(gidx);
+      },
+      onError: msg => setFeedback(
+        `<i class="ti ti-circle-x me-1"></i>Sync failed for <strong>${escapeHtml(row.email)}</strong>: ${escapeHtml(msg)}`,
+        'danger'
+      ),
+    });
+  } catch (e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Error: ${escapeHtml(e.message)}`, 'danger');
+  } finally {
+    btn.classList.remove('spinning'); btn.disabled = false;
+  }
+}
+
+// Trigger email sync for all contacts; reload when done.
+async function syncAllEmails() {
+  const btn = document.getElementById('sync-all-btn');
+  btn.disabled  = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1" style="animation:spin .7s linear infinite;display:inline-block"></i>Queuing…';
+  setFeedback(null);
+  try {
+    const days = parseInt(document.getElementById('sync-period')?.value || '7', 10);
+    const res  = await fetchJSON(`${BASE}/api/crm/followup-email-sync`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ days }),
+    });
+    setFeedback(
+      `<i class="ti ti-clock me-1"></i>Email sync job queued <code>${res.job_id}</code>`
+      + ` (last ${days} day${days === 1 ? '' : 's'}) — polling for result…`,
+      'info'
+    );
+    await pollJob(res.job_id, {
+      onDone: result => {
+        const n = result.synced_entries || 0;
+        const c = result.synced_contacts || 0;
+        setFeedback(
+          `<i class="ti ti-check me-1"></i>Sync complete — `
+          + `<strong>${n}</strong> new email${n === 1 ? '' : 's'} across `
+          + `<strong>${c}</strong> contact${c === 1 ? '' : 's'}.`
+          + (result.errors && result.errors.length ? ` <span class="text-danger">${result.errors.length} error(s).</span>` : ''),
+          n > 0 ? 'success' : 'info'
+        );
+        if (n > 0) load();
+      },
+      onError: msg => setFeedback(
+        `<i class="ti ti-circle-x me-1"></i>Sync job failed: ${escapeHtml(msg)}`,
+        'danger'
+      ),
+    });
+  } catch (e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Error: ${escapeHtml(e.message)}`, 'danger');
+  } finally {
+    btn.disabled  = false;
+    btn.innerHTML = '<i class="ti ti-mail-bolt me-1"></i>Sync all emails';
   }
 }
 
@@ -733,21 +1353,24 @@ function toggleHistory(btn, gidx) {
 }
 
 function renderHistoryContent(history) {
-  if (!history.length) {
-    return '<span class="small" style="color:var(--bb-muted)">No history yet.</span>';
-  }
+  if (!history.length) return '<span class="small" style="color:var(--bb-muted)">No history yet.</span>';
   return '<div class="hist-list">'
     + [...history].reverse().map(h => {
-        const d = h.date
-          ? new Date(h.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
-          : '—';
-        return `<div class="hist-entry">
+        const d = h.date ? new Date(h.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—';
+        const isEmailIn  = h.type === 'EMAIL_IN';
+        const isEmailOut = h.type === 'EMAIL_OUT';
+        const isEmail    = isEmailIn || isEmailOut;
+        const extraCls   = isEmailIn ? 'hist-entry-email-in' : isEmailOut ? 'hist-entry-email-out' : '';
+        const typeBadge  = isEmailIn
+          ? `<span class="hist-type-badge hist-type-in">IN</span>`
+          : isEmailOut ? `<span class="hist-type-badge hist-type-out">OUT</span>` : '';
+        return `<div class="hist-entry ${extraCls}" style="grid-template-columns:${isEmail ? '60px 120px 130px 1fr' : '120px 140px 1fr'}">
+          ${typeBadge}
           <span class="hist-entry-date">${escapeHtml(d)}</span>
-          <span class="hist-entry-user">${escapeHtml(h.user)}</span>
+          <span class="hist-entry-user">${escapeHtml(isEmail ? (h.from || h.user) : h.user)}</span>
           <span class="hist-entry-text">${escapeHtml(h.text)}</span>
         </div>`;
-      }).join('')
-    + '</div>';
+      }).join('') + '</div>';
 }
 
 function refreshHistoryPanel(gidx) {
@@ -755,13 +1378,9 @@ function refreshHistoryPanel(gidx) {
   if (!row) return;
   const td = row.querySelector('td:last-child');
   if (td) td.innerHTML = renderHistoryContent(allRows[gidx].comment_history);
-  // Update count badge
   const count = allRows[gidx].comment_history.length;
-  const btn = document.querySelector(`[onclick="toggleHistory(this,${gidx})"] .hist-count`);
-  if (btn) {
-    btn.textContent = count;
-    btn.classList.toggle('has-entries', count > 0);
-  }
+  const btn   = document.querySelector(`[onclick="toggleHistory(this,${gidx})"] .hist-count`);
+  if (btn) { btn.textContent = count; btn.classList.toggle('has-entries', count > 0); }
 }
 
 function setTbody(html) {

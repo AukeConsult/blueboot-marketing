@@ -567,26 +567,76 @@ def send_test_mail(campaign_id):
     except Exception as exc:
         return _err(str(exc), 500)
 
+# Follow-up fields accepted by the contact PATCH endpoint.
+_FOLLOWUP_FIELDS = {"followup_date", "followup_status", "followup_comment", "followup_importance"}
+
+_FOLLOWUP_HISTORY_TYPE = {
+    "followup_status":     "STATUS",
+    "followup_comment":    "COMMENT",
+    "followup_date":       "FOLLOWUP",
+    "followup_importance": "IMPORTANCE",
+}
+
+def _followup_history_text(field: str, value: str) -> str:
+    if field == "followup_status":
+        return f"Status → {value}" if value else "Status cleared"
+    if field == "followup_comment":
+        return value or "(comment cleared)"
+    if field == "followup_date":
+        return f"Follow-up date set to {value}" if value else "Follow-up date cleared"
+    if field == "followup_importance":
+        return f"Importance → {value}" if value else "Importance cleared"
+    return value
+
+
 @app.route("/api/crm/campaigns/<campaign_id>/contacts/<doc_id>", methods=["PATCH", "POST"])
 def update_campaign_contact(campaign_id, doc_id):
     """Update editable fields on a single campaign_contact doc.
 
-    Allowed fields: name, title.
-    Body: { "name": "...", "title": "..." }
+    Standard fields: name, title, status.
+    Follow-up fields: followup_date, followup_status, followup_comment, followup_importance.
+      When a follow-up field is updated the backend automatically appends an entry to
+      comment_history using Firestore ArrayUnion (idempotent, deduped by content).
+
+    Body:
+      { "name": "...", "followup_status": "contacted", "_user": "user@example.com" }
+
+    _user  optional  logged as the history entry author (defaults to "api")
     """
     try:
+        from google.cloud import firestore as _gfs
         db   = _get_db()
         body = request.get_json(silent=True) or {}
-        allowed = {"name", "title", "status"}
+
+        allowed = {"name", "title", "status"} | _FOLLOWUP_FIELDS
         update  = {k: str(v).strip() for k, v in body.items() if k in allowed}
         if not update:
-            return _err("No editable fields provided. Allowed: name, title, status.", 400)
+            return _err("No editable fields provided.", 400)
+
         ref = (db.collection("campaigns").document(campaign_id)
                  .collection("campaign_contacts").document(doc_id))
         if not ref.get().exists:
             return _err(f"Contact '{doc_id}' not found in campaign '{campaign_id}'", 404)
+
+        # Auto-append a history entry for every follow-up field change
+        changed_fu = [f for f in _FOLLOWUP_FIELDS if f in update]
+        if changed_fu:
+            user = (body.get("_user") or "api").strip()
+            now  = datetime.now(timezone.utc).isoformat()
+            entries = [
+                {
+                    "date":  now,
+                    "user":  user,
+                    "text":  _followup_history_text(f, update[f]),
+                    "type":  _FOLLOWUP_HISTORY_TYPE[f],
+                }
+                for f in changed_fu
+            ]
+            update["comment_history"] = _gfs.ArrayUnion(entries)
+
         ref.update(update)
-        return _ok(f"Contact '{doc_id}' updated", updated=update)
+        safe = {k: v for k, v in update.items() if k != "comment_history"}
+        return _ok(f"Contact '{doc_id}' updated", updated=safe)
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -1220,6 +1270,148 @@ def discover_campaigns():
         return _err(str(exc), 500)
 
 
+# -- Follow-up contacts (collection-group read + campaign join) ---------------
+
+def _safe_history(h_list) -> list:
+    """Coerce comment_history entries to plain JSON-serialisable dicts."""
+    if not isinstance(h_list, list):
+        return []
+    out = []
+    for entry in h_list:
+        if not isinstance(entry, dict):
+            continue
+        out.append({k: (str(v) if v is not None else "") for k, v in entry.items()})
+    return out
+
+
+@app.route("/api/crm/followup-contacts", methods=["GET"])
+def followup_contacts():
+    """Return all campaign_contacts with campaign owner + outreach_email joined.
+
+    Performs a Firestore collection-group query server-side so the frontend
+    never needs to call Firestore directly.
+
+    Query params:
+      campaign_id  str   Filter to a single campaign (optional)
+      limit        int   Max contacts to return (default 2000, max 5000)
+    """
+    try:
+        db          = _get_db()
+        campaign_id = request.args.get("campaign_id", "").strip()
+        limit       = min(int(request.args.get("limit", 2000)), 5000)
+
+        # Build campaign map: campaign_id → {owner, outreach_email}
+        camp_map: dict[str, dict] = {}
+        for doc in db.collection("campaigns").stream():
+            d = doc.to_dict() or {}
+            camp_map[doc.id] = {
+                "owner":          d.get("owner", ""),
+                "outreach_email": d.get("outreach_email_account", ""),
+            }
+
+        # Contact query — single campaign or collection-group across all
+        if campaign_id:
+            contacts_iter = (
+                db.collection("campaigns")
+                  .document(campaign_id)
+                  .collection("campaign_contacts")
+                  .stream()
+            )
+        else:
+            contacts_iter = (
+                db.collection_group("campaign_contacts")
+                  .limit(limit)
+                  .stream()
+            )
+
+        contacts = []
+        for doc in contacts_iter:
+            d    = doc.to_dict() or {}
+            # ref.path = "campaigns/{cid}/campaign_contacts/{did}"
+            parts = doc.reference.path.split("/")
+            cid   = parts[1] if len(parts) >= 4 else campaign_id
+            info  = camp_map.get(cid, {})
+            contacts.append({
+                "campaign_id":         cid,
+                "doc_id":              doc.id,
+                "doc_path":            f"campaigns/{cid}/campaign_contacts/{doc.id}",
+                "name":                d.get("name", ""),
+                "email":               d.get("email", ""),
+                "title":               d.get("title", ""),
+                "website":             d.get("website", ""),
+                "status":              d.get("status", "pending"),
+                "followup_date":       d.get("followup_date", "") or "",
+                "followup_status":     d.get("followup_status", "") or "",
+                "followup_comment":    d.get("followup_comment", "") or "",
+                "followup_importance": d.get("followup_importance", "") or "",
+                "comment_history":     _safe_history(d.get("comment_history", [])),
+                "owner":               info.get("owner", ""),
+                "outreach_email":      info.get("outreach_email", ""),
+            })
+
+        return jsonify({"contacts": contacts, "count": len(contacts)})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@app.route("/api/crm/campaigns/<campaign_id>/contacts/<doc_id>", methods=["GET"])
+def get_campaign_contact(campaign_id, doc_id):
+    """Return a single campaign_contact doc (used to refresh history after async jobs)."""
+    try:
+        db  = _get_db()
+        ref = (db.collection("campaigns").document(campaign_id)
+                 .collection("campaign_contacts").document(doc_id))
+        doc = ref.get()
+        if not doc.exists:
+            return _err(f"Contact '{doc_id}' not found in campaign '{campaign_id}'", 404)
+        d = doc.to_dict() or {}
+        return jsonify({
+            "campaign_id":         campaign_id,
+            "doc_id":              doc_id,
+            "name":                d.get("name", ""),
+            "email":               d.get("email", ""),
+            "title":               d.get("title", ""),
+            "website":             d.get("website", ""),
+            "status":              d.get("status", "pending"),
+            "followup_date":       d.get("followup_date", "") or "",
+            "followup_status":     d.get("followup_status", "") or "",
+            "followup_comment":    d.get("followup_comment", "") or "",
+            "followup_importance": d.get("followup_importance", "") or "",
+            "comment_history":     _safe_history(d.get("comment_history", [])),
+        })
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+# -- Follow-up email sync job -------------------------------------------------
+
+@app.route("/api/crm/followup-email-sync", methods=["POST"])
+def followup_email_sync():
+    """Trigger a background job that syncs email history into contact follow-up logs.
+
+    For each outreach account, fetches inbox + sent messages (IMAP), matches
+    by contact email address, and appends EMAIL_IN / EMAIL_OUT entries to each
+    matching contact's comment_history array (idempotent via ArrayUnion).
+
+    Body (all optional):
+      campaign_id     str   Only sync contacts in this campaign
+      contact_doc_id  str   Only sync this specific contact (requires campaign_id)
+      days            int   Lookback window in days (default 7, 0 = all time)
+    """
+    try:
+        body   = request.get_json(silent=True) or {}
+        params = {
+            "campaign_id":    (body.get("campaign_id")    or "").strip(),
+            "contact_doc_id": (body.get("contact_doc_id") or "").strip(),
+            "days":           int(body.get("days") or 7),
+        }
+        job_id = _new_job("followup-email-sync", params)
+        _enqueue_task("followup-email-sync", job_id, params)
+        return _accepted(job_id, "followup-email-sync")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 # -- Worker endpoint ----------------------------------------------------------
 
 @app.route("/api/crm/worker/<name>/<job_id>", methods=["POST"])
@@ -1366,6 +1558,15 @@ def worker(name, job_id):
                 result = enrich_email_list(
                     emails, db=db, dry_run=dry_run, skip_ai=skip_ai,
                 )
+
+        elif name == "followup-email-sync":
+            from crm.followup_email_sync_lib import run_followup_email_sync
+            result = run_followup_email_sync(
+                db             = db,
+                campaign_id    = body.get("campaign_id")    or None,
+                contact_doc_id = body.get("contact_doc_id") or None,
+                days           = int(body.get("days") or 7),
+            )
 
         else:
             _update_job(job_id, status="error",

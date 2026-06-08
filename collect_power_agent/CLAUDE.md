@@ -596,3 +596,120 @@ it. This keeps all visual decisions in one place and makes global changes trivia
 The only exceptions:
 - Truly dynamic values set by JavaScript (e.g. `el.style.width = px + 'px'`)
 - Bootstrap utility classes that already cover the case (prefer those over custom CSS)
+
+---
+
+## Frontend / Firestore rules
+
+### RULE: No direct Firestore calls from the frontend — except authentication
+
+All reads and writes to Firestore **must** go through the CRM API (`crmApi` Cloud
+Function). The frontend is not allowed to call the Firestore REST API or SDK directly,
+with one exception: Firebase Authentication (sign-in, sign-out, token refresh) which
+must use the Firebase Auth SDK as today.
+
+**Never write in frontend JS:**
+```js
+fetch(`https://firestore.googleapis.com/v1/projects/.../documents/...`, ...)
+db.collection("...").document("...").set(...)
+```
+
+**Always route through the CRM API:**
+```js
+await fetchJSON(`${BASE}/api/crm/campaigns/${id}/contacts/${docId}`, {
+  method: 'PATCH',
+  body: JSON.stringify({ followup_status: 'contacted' }),
+})
+```
+
+This keeps all validation, history logging, and business logic server-side, prevents
+unauthorised direct writes, and makes the security rules auditable in one place.
+
+
+---
+
+## Job functions
+
+### RULE: Every job function must have a CLI companion and be documented
+
+Whenever a new job type is added to the CRM backend (`functions-crm/main.py` worker,
+`crm/` lib file), three things are required before the work is considered done:
+
+**1. A `app/<job_name>.py` CLI script** following the same conventions as the
+other scripts in `app/`:
+- `main(argv=None)` entry point with `argparse`
+- `if __name__ == "__main__": main()` at the bottom
+- Uses `get_firestore()` from `app.firestore_client` for Firestore access
+- Path-inserts `functions-crm` to import the shared lib (no code duplication)
+- Supports `--dry-run` to preview without writing
+- Prints a clear summary on completion
+
+**2. Both a `run_<job_name>.bat` (Windows) and `run_<job_name>.sh` (bash) launcher**
+in the project root, following the style of the other launcher pairs:
+- Activate `.venv` (`Scripts\activate.bat` / `bin/activate`)
+- Set sensible parameter defaults overridable via `%*` / `"$@"`
+- Exit with an error code on failure
+- Mark the `.sh` file executable (`chmod +x`)
+
+**3. Documentation** — add a section to `readme.md`
+- What the job does
+- All parameters with defaults
+- Example invocations
+- What is written to Firestore and how dedup works
+
+**Reference implementation:** `followup-email-sync`
+- Lib: `functions-crm/crm/followup_email_sync_lib.py`
+- API trigger: `POST /api/crm/followup-email-sync` in `functions-crm/main.py`
+- CLI: `app/followup_email_sync.py`
+- Launchers: `run_followup_email_sync.bat` and `run_followup_email_sync.sh`
+
+---
+
+## Frontend job polling
+
+### RULE: Every async job triggered from the frontend must show a visible status line
+
+Any page that triggers a background job (via a trigger endpoint that returns a `job_id`)
+must show a clear, persistent status line throughout the full lifecycle:
+
+1. **Queued** — show the `job_id` and "polling for result…" using `alert-info`
+2. **Done** — show a success summary using `alert-success`
+3. **Error** — show the error message using `alert-danger`
+
+Use a dedicated `<div id="sync-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>`
+placed just above the main content area. Never use a plain `<span>` or `console.log`
+as the only status indicator.
+
+The trigger button must be disabled while the job is running and re-enabled when done.
+
+**Standard pattern:**
+```js
+function setFeedback(msg, type) {
+  const fb = document.getElementById('sync-feedback');
+  if (!type) { fb.style.display = 'none'; return; }
+  fb.className = `alert alert-${type} py-2 px-3 small mb-3`;
+  fb.innerHTML = msg;
+  fb.style.display = '';
+}
+
+async function runJob() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  setFeedback(null);
+  try {
+    const res = await fetchJSON(`${BASE}/api/crm/my-job`, { method: 'POST', ... });
+    setFeedback(`<i class="ti ti-clock me-1"></i>Job queued <code>${res.job_id}</code> — polling…`, 'info');
+    await pollJob(res.job_id, {
+      onDone:  result => setFeedback(`<i class="ti ti-check me-1"></i>Done — ${result.count} items.`, 'success'),
+      onError: msg    => setFeedback(`<i class="ti ti-circle-x me-1"></i>Failed: ${escapeHtml(msg)}`, 'danger'),
+    });
+  } catch (e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Error: ${escapeHtml(e.message)}`, 'danger');
+  } finally {
+    btn.disabled = false;
+  }
+}
+```
+
+**Reference implementation:** `crm_follow.html` — `syncAllEmails()` and `syncContactEmails()`
+                                                                                      
