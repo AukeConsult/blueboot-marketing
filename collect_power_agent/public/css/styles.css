@@ -106,3 +106,24 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 
 .bb-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
 .bb-sortable:hover { color: var(--bb-accent); }
+
+/* ── CRM Follow-up page ──────────────────────────────────────────────────── */
+
+/* History count badge — shown on the expand chevron button */
+.hist-count {
+  font-size: .82rem;
+  font-weight: 700;
+  min-width: 22px;
+  text-align: center;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #e5e7eb;
+  color: #374151;
+}
+.hist-count.has-entries { background: #dbeafe; color: #1d4ed8; }
+
+/* Comment input in the follow-up row — larger, more readable */
+.follow-comment-row .follow-input {
+  font-size: .95rem;
+  color: #374151;
+}

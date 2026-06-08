@@ -159,7 +159,7 @@ const NAV_LINKS = [
       { href: 'filter-facets.html', icon: 'ti-filter',    label: 'Filter facets' },
     ]},
   { href: 'gdisk.html',         icon: 'ti-brand-google-drive',label: 'Drive Folder', roles: ['admin', 'campaign-user', 'user'] },
-  { href: 'mailbox.html',       icon: 'ti-inbox',             label: 'Mailbox',     roles: ['admin', 'campaign-user', 'user'] },
+  { href: 'mailbox.html',       icon: 'ti-inbox',             label: 'Message box', roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'docs',  match: ['doc-viewer.html'],           icon: 'ti-book',              label: 'Documentation',
     children: [
       { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user',           label: 'User guide' },
