@@ -232,9 +232,9 @@ def run_crm_sync(db, svc, campaign_id: str = "", tab: str = CONTACT_TAB) -> dict
 
     return {
         "contact_select_synced": synced,
-        "email_updated":         email_result["updated"],
-        "campaigns_upserted":    count,
-        "new_campaigns":         new_ids,
-        "campaign_ids":          list(campaign_stats.keys()),
-        "contacts_sync":         contacts_result,
+        "email_updated":        email_result,
+        "campaigns_upserted":   count,
+        "new_campaign_ids":     new_ids,
+        "campaign_ids":         list(campaign_stats.keys()),
+        "contacts_by_campaign": contacts_result,
     }
