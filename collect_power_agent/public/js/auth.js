@@ -59,11 +59,11 @@ function requireAuth() {
 }
 
 // ---------------------------------------------------------------------------
-// signOutUser()  -- signs out and returns to login.html
+// signOutUser()  -- signs out and returns to index.html
 // ---------------------------------------------------------------------------
 async function signOutUser() {
   await _auth.signOut();
-  location.href = 'login.html';
+  location.href = 'index.html';
 }
 
 // ---------------------------------------------------------------------------
