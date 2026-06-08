@@ -409,6 +409,34 @@ python app/build_filter_facets.py --cap 300 --no-write   # JSON preview only
 
 **Single source for mail** — all outbound email goes through `MailSender`. CSS inlining, header injection, sent-folder append, and display-name formatting are applied once, everywhere.
 
-**Dual discovery in the lead pipeline** — agencies are found through two independent channels: Bing search queries (controlled by `config/countries.json`) and paginated agency catalog scraping (controlled by `config/catalogs.json`). Both sources are deduplicated by domain before enrichment.
+**Dual discovery in the lead pipeline** — agencies are found t
 
-**Stateless API** — the CRM API (Flask on Cloud Functions) is stateless. All state lives in Firestore. Long operations are queued as Cloud Tasks jobs and polled by the frontend.
+---
+
+## Command-line operations
+
+These scripts are run by a developer from the project root. They are not available from the frontend UI.
+
+### Rebuild the filter facet catalog
+
+The filter facet catalog (the selectable values on the Filter Facets page) is built by scanning all contacts in the pipeline and collecting every value that appears. Run this after a large import to refresh the available filter options:
+
+```bash
+python app/build_filter_facets.py
+python app/build_filter_facets.py --pipeline leads     # leads pipeline only
+python app/build_filter_facets.py --no-write           # preview without saving
+```
+
+### Name enrichment (bulk)
+
+The Enrich names function on the campaign page handles individual campaigns. For bulk runs across all campaigns, or to enrich a specific list of email addresses, use the CLI directly:
+
+```bash
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --dry-run
+python app/campaign_name_enrich.py --all                  # all campaigns at once
+python app/campaign_name_enrich.py --emails a@b.com c@d.com
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --debug
+```
+
+The `--debug` flag prints exactly what context Bing and Brave found for each email and what the AI accepted or rejected — useful for diagnosing why a contact is not getting a name.

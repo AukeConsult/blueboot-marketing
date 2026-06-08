@@ -70,6 +70,7 @@ GET /api/crm/contact-sync?countries=NO,SE&max=500&min_pages=500
 | POST | `/api/crm/campaigns/<id>/contacts/remove` | `{emails:[…]}` | Remove contacts from a campaign by email address. |
 | POST | `/api/crm/campaigns/<id>/name-enrich` | `{dry_run?, skip_ai?}` | Enrich missing names — enqueues a `name-enrich` job (rules → Bing → Brave → AI). Returns `{job_id, poll}`. |
 | POST | `/api/crm/name-enrich` | `{campaign_id?}` or `{emails:[…], dry_run?, skip_ai?}` | Same enrichment by campaign ID or flat email list. Returns `{job_id, poll}`. |
+| GET | `/api/crm/leads/by-domain/<domain>` | — | Fetch lead data for a domain — checks `site_leads` first, then `leads`. Returns whichever doc is found with only non-empty fields: `company`, `website`, `location`, `location_country`, `ai_company_type`, `ai_sector`, `ai_platform`, `page_count`, `title`, `description`, `ai_summary`, `ai_confidence`, `ai_client_base`, `reseller_score`, `ai_specialisation`, `ai_reseller_potential`, `keywords`, `source_pipeline`. Returns `{"source_pipeline": null}` if domain not found in either collection. Used by the campaign contact lead-info popup. |
 
 ---
 

@@ -173,11 +173,7 @@ Triggers a background job that runs all aggregations and writes the results to F
 
 **URL:** `filter-facets.html`
 
-Displays and manages the filter facet catalog — the selectable values used by the lead filtering UI (platform, AI sector, country, page size, occupation, etc.). Built by running:
-
-```
-python app/build_filter_facets.py
-```
+Displays and manages the filter facet catalog — the selectable values used by the lead filtering UI (platform, AI sector, country, page size, occupation, etc.). The catalog is rebuilt periodically by a background process; a developer can also trigger it manually from the command line. See the [System Architecture](system-architecture.md) document for details.
 
 ### Toolbar
 
@@ -206,73 +202,4 @@ Browse, upload, and delete files in the connected Google Drive folder. Supports 
 
 Reads emails from all folders (INBOX, Sent, Drafts, Trash, etc.) of a configured mail account. Select an account from the dropdown and choose how many messages per folder to load.
 
-The message list shows: **Folder** badge, From, To, Subject (with a preview snippet), and Date. Click any row to open the full message body in a popup.
-
----
-
-## Settings
-
-**URL:** `settings.html`
-
-### Mail accounts
-
-Configure the outreach email accounts used by campaigns. Each account can be either IMAP or Gmail (OAuth2).
-
-**IMAP account fields:**
-- Email address, Display name
-- IMAP: Host, Port, Username, Password, SSL/TLS
-- SMTP (outgoing): Host, Port, SSL/TLS (used when sending)
-
-**Gmail account fields:**
-- Email address, Display name
-- Client ID, Client Secret, Refresh Token, Access Token (auto-refreshed)
-
-**Actions per account:**
-- **Send (paper plane)** — opens a test email popup to send from that account.
-- **Edit (pencil)** — opens the edit modal.
-- **Delete (trash)** — removes the account.
-
-The **Test** button in the edit modal pings the connection live before saving.
-
-Mail accounts are keyed by email address and stored in `settings/mail_accounts/accounts/{email}`. Campaigns reference them by the `outreach_email_account` field — changing that field on the campaign page automatically looks up the matching settings.
-
-### Google Drive folder
-
-Paste a Drive folder ID (the part after `/folders/` in the URL) and click **Save folder**. Use **Check access** to verify the backend service account has read/write permissions. If access is missing, share the folder with that service account as Editor.
-
----
-
-## Key concepts
-
-### Two pipelines
-
-| | Legacy leads | Site leads |
-|---|---|---|
-| Collection | `leads` | `site_leads` |
-| Contacts | `contacts` (subcollection) | `site_contacts` (subcollection) |
-| Excluded | `leads_excluded` | `sites_excluded` |
-| Discovery | Bing search + agency **catalog services** | Bing search only |
-| Enrichment | AI, social, email check | AI, location, Brave, email check |
-
-The lead pipeline's catalog services (Sortlist, DesignRush, Proff, DAN, TopDevelopers, and country-specific business directories) are configured in `config/catalogs.json` and give it broader agency coverage than Bing search alone.
-
-Both pipelines feed into `email_contacts` — the unified outreach contact list.
-
-### Campaigns and the master sheet
-
-Campaigns are discovered from the master CRM contact sheet (a Google Sheet with a `Campaign` column). Each unique campaign ID in the sheet becomes a campaign document in Firestore. Contacts are synced per campaign.
-
-The campaign's Google Drive spreadsheet is separate — it's the working sheet for follow-up tracking. Syncing between the Drive sheet and Firestore is bi-directional: **Export / Full override** goes DB→Sheet, **Sync** goes Sheet→DB (sheet wins, except `status` and `sent_at`).
-
-### Mail sending
-
-All outbound email goes through the `MailSender` class which:
-- Inlines CSS via `premailer` (required for HTML email — Gmail, Outlook, and MailChannels strip `<style>` blocks)
-- Adds `Message-ID` and `Date` headers
-- Formats the `From` header with display name
-- Appends sent mail to the IMAP Sent folder automatically (IMAP accounts only; Gmail saves Sent natively)
-- Supports both STARTTLS (port 587) and SSL (port 465)
-
-### Background jobs
-
-Long-running operations (syncs, exports, statistics collection) are queued as Cloud Tasks jobs. The Jobs page shows their status in real time. Job results and errors are stored in Firestore and visible by expanding the job card.
+The message list shows: **Folder** badge, From, To,

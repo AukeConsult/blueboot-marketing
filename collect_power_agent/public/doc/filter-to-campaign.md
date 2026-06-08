@@ -157,15 +157,7 @@ Only contacts without an existing name are processed. Names are written to both 
 
 **From the campaign page:** click **Enrich names** in the top toolbar. The job runs in the background (Bing + Brave + AI per contact). A progress bar updates while it runs and shows the final count — how many names were written, how many came from rules vs AI, and how many were skipped. Click **Reload contacts** in the result bar to refresh the table.
 
-**From the command line:**
-```bash
-python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID
-python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --dry-run
-python app/campaign_name_enrich.py --all                 # all campaigns at once
-python app/campaign_name_enrich.py --emails a@b.com c@d.com
-```
-
-Add `--debug` to see exactly what context each search pass found and what AI accepted or rejected.
+The enrichment can also be run from the command line by a developer for bulk processing across all campaigns or for a specific list of email addresses. See the [System Architecture](system-architecture.md) document for the technical CLI reference.
 
 ### What counts as verified evidence
 
@@ -179,4 +171,25 @@ The pipeline is deliberately strict — it is person-centric, not pattern-based:
 | Only a first name in email (`john@company.com`), no web context | ❌ Null — skipped |
 | Domain/company name used as surname | ❌ Never accepted |
 | Role address (`info@`, `kontakt@`, `support@`, etc.) | ❌ Always skipped |
+---
+
+## Lead info popup
+
+Each contact row in the campaign page shows the company website as a clickable link. Clicking the domain text opens a popup with the full lead record for that company. A small **↗** icon next to the domain still opens the website in a new tab.
+
+The popup fetches data lazily when opened — it checks `site_leads` first, then `leads`, using the domain to look up the record. Only fields that actually have a value are shown; empty fields are hidden entirely.
+
+**Fields shown when available:**
+
+- Company name, website, location
+- Company type, sector, platform (CMS)
+- Page count with size band (micro / small / medium / large / huge / ultra)
+- Page title and meta description (from the original crawl)
+- AI summary — one-sentence description generated during enrichment
+- Reseller potential, client base, reseller score, specialisation (leads pipeline only)
+- Keywords
+
+The pipeline source (site pipeline / leads pipeline) is shown as a badge in the popup header.
+
+The popup is read-only — it is for reference only and does not write anything back to Firestore.
 
