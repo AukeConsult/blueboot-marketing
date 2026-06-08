@@ -1294,6 +1294,83 @@ This script only needs to be run once on existing data. All new contacts written
 
 ---
 
+
+---
+
+## `followup_email_sync.py` — sync email history into follow-up contact logs
+
+Fetches inbox and sent messages for every configured outreach account, matches
+emails by address against campaign contacts, and appends `EMAIL_IN` / `EMAIL_OUT`
+entries to each matched contact's `comment_history` in Firestore. The operation is
+idempotent — each entry carries a unique `email_id` from the mail provider's
+`Message-ID` header, so re-running never creates duplicates.
+
+The same logic runs as a Cloud Function job when triggered from the
+CRM Follow-up web page (`crm_follow.html`).
+
+```bat
+:: Sync all contacts, last 7 days (default)
+run_followup_email_sync.bat
+
+:: Sync last 30 days for all contacts
+run_followup_email_sync.bat --days 30
+
+:: Sync one campaign only
+run_followup_email_sync.bat --campaign NO_jun
+
+:: Sync one specific contact
+run_followup_email_sync.bat --campaign NO_jun --contact john_doe_example_com
+
+:: Preview matches without writing to Firestore
+run_followup_email_sync.bat --dry-run
+
+:: List all campaign IDs
+run_followup_email_sync.bat --list-campaigns
+```
+
+```bash
+# macOS / Linux
+./run_followup_email_sync.sh --days 30
+./run_followup_email_sync.sh --dry-run
+python app/followup_email_sync.py --campaign NO_jun --dry-run
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--campaign` / `-c` | all campaigns | Only sync contacts in this campaign |
+| `--contact` / `-d` | all contacts | Only sync this contact doc ID (requires `--campaign`) |
+| `--days` / `-n` | `7` | Lookback window in days (`0` = all time) |
+| `--dry-run` | off | Fetch and match emails, print results, skip Firestore writes |
+| `--list-campaigns` | off | Print all campaign IDs and exit |
+
+### What gets written
+
+Each matched email appends one entry to `comment_history` on the contact document
+under `campaigns/{campaign_id}/campaign_contacts/{doc_id}`:
+
+| Field | Value |
+|---|---|
+| `type` | `EMAIL_IN` (received) or `EMAIL_OUT` (sent) |
+| `text` | Email subject line |
+| `date` | Sent / received timestamp from the mail server |
+| `user` | Outreach account address used for matching |
+| `from` / `to` | Raw From / To header values |
+| `email_id` | Unique `Message-ID` from the mail provider (dedup key) |
+
+### Dedup
+
+`email_id` is included in every entry. Firestore `ArrayUnion` silently skips any
+entry whose full value already exists in the array — so running the sync multiple
+times against the same mailbox never creates duplicates.
+
+### Mail account requirements
+
+Mail accounts must be configured in the CRM dashboard under **Settings → Mail accounts**.
+Both IMAP and Gmail OAuth accounts are supported. The sync connects to the inbox
+and the sent folder (auto-detected) for each account.
+
 ---
 
 ## `campaign_exporter.py` — export a campaign to Excel + JSON

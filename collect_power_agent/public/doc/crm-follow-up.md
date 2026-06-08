@@ -84,14 +84,6 @@ Click the **mail-bolt icon** next to any contact name. The same job mechanism ru
 
 The backend job (`followup-email-sync`) connects to each outreach account via IMAP, fetches headers for inbox and sent folders within the selected date window, matches emails by address to contacts in Firestore, and appends `EMAIL_IN` / `EMAIL_OUT` entries to `comment_history`. The operation is idempotent — each entry carries a unique `email_id` (from the mail provider's `Message-ID` header) so re-syncing never creates duplicates.
 
-You can also run the sync from the command line:
-
-```
-run_followup_email_sync.bat          # Windows
-./run_followup_email_sync.sh         # macOS / Linux
-python app/followup_email_sync.py --dry-run   # preview without writing
-```
-
 ---
 
 ## Batch: set follow-up date
