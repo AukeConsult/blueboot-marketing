@@ -131,6 +131,7 @@ const PAGE_ROLES = {
   'mailbox.html':       ['admin', 'campaign-user', 'user'],
   'crm-bp.html':        ['admin', 'user'],
   'crm-sync.html':      ['admin', 'user'],
+  'crm_follow.html':    ['admin', 'campaign-user', 'user'],
   'jobs.html':          ['admin', 'campaign-user', 'user'],
   'statistics.html':    ['admin', 'campaign-user', 'user'],
   'filter-facets.html': ['admin', 'campaign-user', 'user'],
@@ -144,7 +145,13 @@ const NAV_LINKS = [
   { href: 'campaigns.html',     icon: 'ti-speakerphone',      label: 'Campaigns',
     match: ['campaigns.html', 'campaign.html', 'campaign-edit.html'],
     roles: ['admin', 'campaign-user', 'user'] },
-  { href: 'crm-bp.html',        icon: 'ti-server-2',          label: 'CRM',        roles: ['admin', 'user'] },
+  { dropdown: 'crm', icon: 'ti-server-2', label: 'CRM', roles: ['admin', 'campaign-user', 'user'],
+    match: ['crm-bp.html', 'crm-sync.html', 'crm_follow.html'],
+    children: [
+      { href: 'crm-bp.html',     icon: 'ti-server-2',    label: 'CRM Batch Process' },
+      { href: 'crm-sync.html',   icon: 'ti-refresh',     label: 'CRM Sync' },
+      { href: 'crm_follow.html', icon: 'ti-phone-check', label: 'Follow-up' },
+    ]},
   { href: 'jobs.html',          icon: 'ti-list-check',        label: 'Jobs',        roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'data-sources',   icon: 'ti-database',          label: 'Data collect', roles: ['admin', 'campaign-user', 'user'],
     children: [
@@ -156,6 +163,7 @@ const NAV_LINKS = [
   { dropdown: 'docs',  match: ['doc-viewer.html'],           icon: 'ti-book',              label: 'Documentation',
     children: [
       { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user',           label: 'User guide' },
+      { href: 'doc-viewer.html?doc=crm-follow-up',       icon: 'ti-phone-check',    label: 'CRM Follow-up' },
       { href: 'doc-viewer.html?doc=filter-to-campaign',  icon: 'ti-filter',         label: 'Filter to campaign' },
       { href: 'doc-viewer.html?doc=backend-functions',   icon: 'ti-terminal',       label: 'Backend functions' },
       { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',     label: 'Pipeline config' },

@@ -13,13 +13,17 @@ The top navigation bar gives access to all sections:
 | Section | Purpose |
 |---|---|
 | **Campaigns** | Manage and run outreach campaigns |
-| **CRM** | Step-by-step workflow from import to outreach |
+| **CRM** → Batch process | Step-by-step workflow from import to outreach |
+| **CRM** → CRM Sync | Sync the master CRM sheet to Firestore |
+| **CRM** → Follow-up | Cross-campaign follow-up tracker with inline editable status and comments |
 | **Jobs** | Monitor background job progress |
 | **Data collect** → Statistics | Aggregated pipeline statistics |
 | **Data collect** → Filter facets | Lead filter configuration |
 | **Drive Folder** | Files in the connected Google Drive folder |
 | **Mailbox** | Read emails from configured outreach accounts |
 | **Settings** | Mail accounts and Drive folder configuration |
+
+The **CRM** entry in the navigation bar is a dropdown menu. Click it to expand the three sub-pages.
 
 ---
 
@@ -108,9 +112,9 @@ Lists all campaign contacts with status, name, email, title, website, and sent d
 
 ---
 
-## CRM workflow
+## CRM Batch Process
 
-**URL:** `crm-bp.html`
+**URL:** `crm-bp.html` — accessible via **CRM → Batch process**
 
 A step-by-step workflow panel:
 
@@ -127,9 +131,45 @@ A step-by-step workflow panel:
 
 ## CRM Sync
 
-**URL:** `crm-sync.html`
+**URL:** `crm-sync.html` — accessible via **CRM → CRM Sync**
 
 Standalone page for triggering a full CRM sync from the master contact sheet. Optionally filter to a single campaign ID. Shows recent sync jobs with result summaries.
+
+---
+
+## CRM Follow-up
+
+**URL:** `crm_follow.html` — accessible via **CRM → Follow-up**
+
+A cross-campaign follow-up tracker that loads every contact from every campaign in one view. Use it to manage ongoing outreach without switching between individual campaign pages.
+
+For full details see the dedicated [CRM Follow-up guide](doc-viewer.html?doc=crm-follow-up).
+
+### Filters
+
+Filter contacts by owner, outreach email account, follow-up status, and contact status (defaults to open — excludes already-sent contacts). A free-text search matches name, email, website, title, and owner.
+
+### Follow-up fields
+
+Three inline-editable fields are shown per contact and saved directly to Firestore on change — no Save button needed:
+
+| Field | Description |
+|---|---|
+| **Follow-up date** | The date you plan to or last followed up |
+| **Follow-up status** | Open / Contacted / Replied / Meeting booked / Closed / Not interested |
+| **Comment** | Free-text note about the contact |
+
+### Comment history
+
+Every time you update the comment field the previous value is appended to a `comment_history` array on the contact document in Firestore, recording the date, your user account, and the comment text. Click the **chevron button** to the right of the comment field to expand the history panel, which shows all past comments newest-first.
+
+### Batch selection
+
+Each row has a checkbox on the left. Selecting one or more rows shows a **batch bar** above the table with a count and a Clear button. Batch actions can be wired up to the selection in future.
+
+### Sorting
+
+All columns except Comment are sortable — click a column header to sort ascending, click again to sort descending.
 
 ---
 

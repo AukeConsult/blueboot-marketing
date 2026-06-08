@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — CRM Follow-up</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+
+.follow-input {
+  border: 1px solid transparent; background: transparent;
+  font-size: .8rem; width: 100%; padding: 2px 4px; border-radius: 4px;
+  transition: border-color .15s, background .15s;
+}
+.follow-input:hover { border-color: var(--bb-border); background: #fff; }
+.follow-input:focus { border-color: var(--bb-accent); background: #fff; outline: none;
+  box-shadow: 0 0 0 2px rgba(79,110,247,.15); }
+.follow-input::placeholder { color: var(--bb-muted); font-size: .78rem; }
+
+.follow-select {
+  border: 1px solid transparent; background: transparent;
+  font-size: .8rem; padding: 2px 4px; border-radius: 4px; cursor: pointer; width: 100%;
+  transition: border-color .15s, background .15s;
+}
+.follow-select:hover { border-color: var(--bb-border); background: #fff; }
+.follow-select:focus { border-color: var(--bb-accent); background: #fff; outline: none; }
+
+.save-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--bb-accent); margin-left: 4px; vertical-align: middle;
+  animation: dot-blink .6s ease-in-out infinite;
+}
+.save-dot.err { background: #dc2626; animation: none; }
+@keyframes dot-blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+/* Comment row — visually attached to the row above it */
+.follow-comment-row td { border-top: none; padding-top: 0; padding-bottom: 4px; }
+.follow-comment-row .follow-input { font-size: .88rem; color: var(--bb-muted); }
+.hist-toggle { flex-shrink: 0; background: none; border: none; cursor: pointer;
+  color: var(--bb-muted); padding: 0 3px; border-radius: 4px; line-height: 1;
+  display: flex; align-items: center; gap: 2px; font-size: .72rem; }
+.hist-toggle:hover { color: var(--bb-accent); background: #eef0ff; }
+.hist-count { font-size: .68rem; font-weight: 600; background: #e5e7eb;
+  color: #374151; border-radius: 10px; padding: 0 5px; }
+.hist-count.has-entries { background: #dbeafe; color: #1d4ed8; }
+
+/* History row */
+.follow-history-row td { border-top: none; padding-top: 0; padding-bottom: 8px; }
+.hist-list { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 0; }
+.hist-entry { display: grid; grid-template-columns: 120px 140px 1fr; gap: 6px;
+  align-items: baseline; font-size: .76rem; padding: 3px 6px; border-radius: 5px;
+  background: #f8f9fa; border: 1px solid var(--bb-border); }
+.hist-entry-date { color: var(--bb-muted); white-space: nowrap; }
+.hist-entry-user { color: var(--bb-muted); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.hist-entry-text { color: #111; }
+
+/* Batch bar */
+.batch-bar { display: flex; align-items: center; gap: .6rem;
+  background: #eef0ff; border: 1px solid #c7ceff; border-radius: 8px;
+  padding: .45rem .85rem; font-size: .82rem; }
+.batch-bar .batch-count { font-weight: 600; color: var(--bb-accent); }
+.batch-bar .batch-divider { width: 1px; height: 1rem; background: #c7ceff; margin: 0 .2rem; }
+
+</style>
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:1100px">
+
+  <div class="page-header mb-3">
+    <h5 class="page-title"><i class="ti ti-phone-check text-primary"></i>CRM Follow-up</h5>
+    <button class="btn btn-sm btn-outline-secondary" onclick="load()">
+      <i class="ti ti-refresh me-1"></i>Refresh
+    </button>
+  </div>
+
+  <!-- Filters -->
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <input id="search" class="form-control form-control-sm" style="max-width:210px"
+      placeholder="Search name, email, site…" oninput="applyFilter()">
+
+    <select id="owner-filter" class="form-select form-select-sm" style="max-width:160px" onchange="applyFilter()">
+      <option value="">All owners</option>
+    </select>
+
+    <select id="outreach-filter" class="form-select form-select-sm" style="max-width:220px" onchange="applyFilter()">
+      <option value="">All outreach emails</option>
+    </select>
+
+    <select id="followup-filter" class="form-select form-select-sm" style="max-width:170px" onchange="applyFilter()">
+      <option value="">All follow-up statuses</option>
+      <option value="__none__">No status set</option>
+      <option value="open">Open</option>
+      <option value="contacted">Contacted</option>
+      <option value="replied">Replied</option>
+      <option value="meeting">Meeting booked</option>
+      <option value="closed">Closed</option>
+      <option value="not_interested">Not interested</option>
+    </select>
+
+    <select id="contact-status-filter" class="form-select form-select-sm" style="max-width:155px" onchange="applyFilter()">
+      <option value="open">Open contacts</option>
+      <option value="">All contacts</option>
+      <option value="pending">Pending only</option>
+      <option value="sent">Sent only</option>
+      <option value="excluded">Excluded only</option>
+    </select>
+
+    <span id="count-badge" class="small ms-auto" style="color:var(--bb-muted)"></span>
+  </div>
+
+  <!-- Batch action bar (visible when rows are selected) -->
+  <div id="batch-bar" class="batch-bar mb-3" style="display:none">
+    <span class="batch-count" id="batch-count">0</span>
+    <span style="color:var(--bb-muted)">selected</span>
+    <div class="batch-divider"></div>
+    <button class="btn btn-sm btn-outline-secondary py-0" onclick="clearSelection()">
+      <i class="ti ti-x me-1"></i>Clear
+    </button>
+    <div class="batch-divider"></div>
+    <button class="btn btn-sm btn-outline-primary py-0" onclick="showBatchDatePanel()">
+      <i class="ti ti-calendar me-1"></i>Set follow-up date
+    </button>
+  </div>
+
+  <!-- Batch date panel -->
+  <div id="batch-date-panel" class="bb-card p-3 mb-3" style="display:none">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <label class="small fw-500 mb-0" style="color:var(--bb-muted)">Date</label>
+      <input type="date" id="batch-date-input" class="form-control form-control-sm" style="max-width:160px">
+      <label class="small fw-500 mb-0" style="color:var(--bb-muted)">Comment</label>
+      <input type="text" id="batch-date-comment" class="form-control form-control-sm" style="max-width:280px" placeholder="Optional note…">
+      <button class="btn btn-sm btn-primary" onclick="applyBatchDate()">
+        <i class="ti ti-check me-1"></i>Apply to <span id="batch-apply-count">0</span> selected
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="hideBatchDatePanel()">Cancel</button>
+      <span id="batch-date-status" class="small ms-1" style="color:var(--bb-muted)"></span>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="bb-card">
+    <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom bb-card-header">
+      <span class="fw-500 small"><i class="ti ti-list-check me-1 text-primary"></i>Contacts</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="bb-thead"><tr>
+          <th style="width:32px"><input type="checkbox" class="form-check-input" id="select-all" onclick="toggleSelectAll(this)"></th>
+          <th class="small bb-sortable" data-col="status"           onclick="sortBy('status')" style="min-width:85px">Status <span class="sort-icon"></span></th>
+          <th class="small bb-sortable" data-col="name"             onclick="sortBy('name')">Name <span class="sort-icon"></span></th>
+          <th class="small bb-sortable" data-col="email"            onclick="sortBy('email')">Email <span class="sort-icon"></span></th>
+          <th class="small bb-sortable" data-col="website"          onclick="sortBy('website')" style="min-width:150px">Website <span class="sort-icon"></span></th>
+          <th class="small bb-sortable" data-col="followup_date"    onclick="sortBy('followup_date')" style="min-width:135px">Follow-up date <span class="sort-icon"></span></th>
+          <th class="small bb-sortable" data-col="followup_status"  onclick="sortBy('followup_status')" style="min-width:150px">Follow-up status <span class="sort-icon"></span></th>
+        </tr></thead>
+        <tbody id="follow-tbody">
+          <tr><td colspan="7" class="text-center py-5" style="color:var(--bb-muted)">
+            <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="follow-empty" class="text-center py-3 small" style="color:var(--bb-muted);display:none">
+      No contacts match the current filters.
+    </div>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+<script>
+'use strict';
+
+const PROJECT = (window.FIREBASE_CONFIG || {}).projectId || 'blueboot-market';
+const FS_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents`;
+
+let allRows   = [];
+let _sortCol  = '';
+let _sortAsc  = true;
+const selected = new Set();   // doc_path strings
+
+// ── Firestore REST helpers ────────────────────────────────────────────────────
+
+function fsRead(f) {
+  if (!f) return '';
+  if ('stringValue'    in f) return f.stringValue;
+  if ('integerValue'   in f) return String(f.integerValue);
+  if ('doubleValue'    in f) return String(f.doubleValue);
+  if ('booleanValue'   in f) return f.booleanValue;
+  if ('timestampValue' in f) return f.timestampValue;
+  return '';
+}
+
+function fsReadHistory(f) {
+  if (!f || !f.arrayValue || !f.arrayValue.values) return [];
+  return f.arrayValue.values.map(v => {
+    const m = (v.mapValue && v.mapValue.fields) || {};
+    return { date: fsRead(m.date), user: fsRead(m.user), text: fsRead(m.text), type: fsRead(m.type) };
+  });
+}
+
+function fsVal(v) {
+  if (v === null || v === undefined || v === '') return { nullValue: null };
+  return { stringValue: String(v) };
+}
+
+async function fsPatch(docPath, fields) {
+  const token = await getAuthToken();
+  const keys  = Object.keys(fields);
+  const mask  = keys.map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
+  const body  = { name: `projects/${PROJECT}/databases/(default)/documents/${docPath}`, fields: {} };
+  keys.forEach(k => { body.fields[k] = fsVal(fields[k]); });
+  const r = await fetch(`${FS_BASE}/${docPath}?${mask}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error((e.error && e.error.message) || 'HTTP ' + r.status);
+  }
+}
+
+async function fsRunQuery(collectionId, limit) {
+  const token = await getAuthToken();
+  const r = await fetch(`${FS_BASE}:runQuery`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+    body: JSON.stringify({ structuredQuery: {
+      from: [{ collectionId, allDescendants: true }],
+      limit: limit || 2000
+    }})
+  });
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error((e.error && e.error.message) || 'HTTP ' + r.status);
+  }
+  return r.json();
+}
+
+// ── Load ──────────────────────────────────────────────────────────────────────
+
+async function load() {
+  setTbody('<tr><td colspan="7" class="text-center py-5" style="color:var(--bb-muted)">'
+    + '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>');
+  document.getElementById('follow-empty').style.display = 'none';
+  document.getElementById('count-badge').textContent = '';
+
+  try {
+    // 1. Campaigns → build owner/outreach map for filters
+    const cd    = await fetchJSON(BASE + '/api/crm/campaigns');
+    const camps = Array.isArray(cd) ? cd : (cd.campaigns || []);
+    const campMap = {};
+    const owners  = new Set();
+    const outreachEmails = new Set();
+    camps.forEach(c => {
+      campMap[c.campaign_id] = { owner: c.owner || '', outreach_email: c.outreach_email_account || '' };
+      if (c.owner)                  owners.add(c.owner);
+      if (c.outreach_email_account) outreachEmails.add(c.outreach_email_account);
+    });
+
+    // 2. CollectionGroup query: all campaign_contacts
+    const results = await fsRunQuery('campaign_contacts', 2000);
+
+    allRows = [];
+    (results || []).forEach(item => {
+      if (!item.document) return;
+      const f     = item.document.fields || {};
+      const parts = (item.document.name || '').split('/');
+      const ccIdx = parts.indexOf('campaign_contacts');
+      const campaign_id = ccIdx > 0 ? parts[ccIdx - 1] : '';
+      const doc_id      = parts[parts.length - 1];
+      const info  = campMap[campaign_id] || {};
+      if (info.owner)          owners.add(info.owner);
+      if (info.outreach_email) outreachEmails.add(info.outreach_email);
+
+      allRows.push({
+        name:             fsRead(f.name),
+        email:            fsRead(f.email),
+        title:            fsRead(f.title),
+        website:          fsRead(f.website),
+        status:           fsRead(f.status) || 'pending',
+        followup_date:    fsRead(f.followup_date),
+        followup_status:  fsRead(f.followup_status),
+        followup_comment:  fsRead(f.followup_comment),
+        comment_history:   fsReadHistory(f.comment_history),
+        campaign_id,
+        doc_id,
+        doc_path: `campaigns/${campaign_id}/campaign_contacts/${doc_id}`,
+        owner:          info.owner || '',
+        outreach_email: info.outreach_email || ''
+      });
+    });
+
+    populateSelect('owner-filter',   [...owners].sort(),         'All owners');
+    populateSelect('outreach-filter',[...outreachEmails].sort(), 'All outreach emails');
+    applyFilter();
+  } catch (e) {
+    setTbody(`<tr><td colspan="7" class="text-center py-5 text-danger small">
+      <i class="ti ti-alert-circle me-1"></i>${escapeHtml(e.message)}</td></tr>`);
+    console.error('[crm_follow] load error:', e);
+  }
+}
+
+function populateSelect(id, values, placeholder) {
+  const sel = document.getElementById(id);
+  const cur = sel.value;
+  sel.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>`
+    + values.map(v => `<option value="${escapeHtml(v)}"${v === cur ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('');
+}
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+
+function sortBy(col) {
+  if (_sortCol === col) {
+    _sortAsc = !_sortAsc;
+  } else {
+    _sortCol = col;
+    _sortAsc = true;
+  }
+  document.querySelectorAll('.bb-sortable').forEach(th => {
+    const ic = th.querySelector('.sort-icon');
+    if (th.dataset.col === col) {
+      ic.textContent = _sortAsc ? ' ▲' : ' ▼';
+      th.style.color = 'var(--bb-accent)';
+    } else {
+      ic.textContent = '';
+      th.style.color = '';
+    }
+  });
+  applyFilter();
+}
+
+function applySort(list) {
+  if (!_sortCol) return list;
+  return [...list].sort((a, b) => {
+    const va = String(a[_sortCol] || '').toLowerCase();
+    const vb = String(b[_sortCol] || '').toLowerCase();
+    return _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+  });
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+
+function applyFilter() {
+  const q   = document.getElementById('search').value.toLowerCase();
+  const own = document.getElementById('owner-filter').value;
+  const out = document.getElementById('outreach-filter').value;
+  const fu  = document.getElementById('followup-filter').value;
+  const cst = document.getElementById('contact-status-filter').value;
+
+  let list = allRows.filter(r => {
+    if (own && r.owner !== own) return false;
+    if (out && r.outreach_email !== out) return false;
+    if (fu === '__none__') { if (r.followup_status) return false; }
+    else if (fu && r.followup_status !== fu) return false;
+    if (cst === 'open' && r.status === 'sent') return false;
+    else if (cst && cst !== 'open' && r.status !== cst) return false;
+    if (q) {
+      const hay = [r.name, r.email, r.website, r.campaign_id, r.owner, r.title].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  list = applySort(list);
+
+  document.getElementById('count-badge').textContent =
+    `${list.length} contact${list.length === 1 ? '' : 's'}`;
+  render(list);
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+
+const FU_STATUSES = [
+  { value: '',               label: '— none —' },
+  { value: 'open',           label: 'Open' },
+  { value: 'contacted',      label: 'Contacted' },
+  { value: 'replied',        label: 'Replied' },
+  { value: 'meeting',        label: 'Meeting booked' },
+  { value: 'closed',         label: 'Closed' },
+  { value: 'not_interested', label: 'Not interested' }
+];
+
+function statusBadge(s) {
+  const map = { pending: 'bb-badge-pending', sent: 'bb-badge-sent',
+                excluded: 'bb-badge-excluded', dosend: 'bb-badge-dosend', error: 'bb-badge-error' };
+  return `<span class="bb-badge ${map[s] || 'bb-badge-muted'}">${escapeHtml(s || 'pending')}</span>`;
+}
+
+function render(list) {
+  const empty = document.getElementById('follow-empty');
+  if (!list.length) {
+    setTbody('');
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  // Restore check state after re-render
+  const restoreChecks = () => {
+    document.querySelectorAll('.row-chk').forEach(c => {
+      const row = allRows[parseInt(c.dataset.gidx, 10)];
+      if (row && selected.has(row.doc_path)) c.checked = true;
+    });
+    const sa = document.getElementById('select-all');
+    const all = document.querySelectorAll('.row-chk');
+    if (sa && all.length) sa.checked = all.length > 0 && [...all].every(c => c.checked);
+  };
+
+  setTbody(list.map(r => {
+    const gidx     = allRows.indexOf(r);
+    const siteShort = r.website
+      ? r.website.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 30) : '';
+    const fuOpts = FU_STATUSES.map(s =>
+      `<option value="${s.value}"${r.followup_status === s.value ? ' selected' : ''}>${escapeHtml(s.label)}</option>`
+    ).join('');
+
+    return `<tr data-doc="${escapeHtml(r.doc_path)}">
+      <td class="text-center"><input type="checkbox" class="form-check-input row-chk"
+        data-gidx="${gidx}" onchange="onRowCheck(this)"></td>
+      <td>${statusBadge(r.status)}</td>
+      <td>
+        <div class="small fw-500">${escapeHtml(r.name || '—')}</div>
+        ${r.title ? `<div style="font-size:.73rem;color:var(--bb-muted)">${escapeHtml(r.title)}</div>` : ''}
+      </td>
+      <td class="small"><a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email || '—')}</a></td>
+      <td class="small">${siteShort
+        ? `<a href="${escapeHtml(r.website)}" target="_blank"
+              style="color:var(--bb-muted);text-decoration:none" title="${escapeHtml(r.website)}">${escapeHtml(siteShort)}</a>`
+        : '—'}</td>
+      <td>
+        <input type="date" class="follow-input"
+          value="${escapeHtml(r.followup_date || '')}"
+          data-gidx="${gidx}" data-field="followup_date"
+          onchange="saveField(this)">
+      </td>
+      <td>
+        <select class="follow-select"
+          data-gidx="${gidx}" data-field="followup_status"
+          onchange="saveField(this)">
+          ${fuOpts}
+        </select>
+      </td>
+    </tr>
+    <tr class="follow-comment-row">
+      <td></td><td></td><td></td>
+      <td colspan="4">
+        <div class="d-flex align-items-center gap-1">
+          <input type="text" class="follow-input flex-grow-1"
+            value="${escapeHtml(r.followup_comment || '')}"
+            placeholder="Add comment…"
+            data-gidx="${gidx}" data-field="followup_comment"
+            onchange="saveField(this)">
+          <button class="hist-toggle" onclick="toggleHistory(this,${gidx})" title="Show comment history">
+            <i class="ti ti-chevron-down"></i>
+            <span class="hist-count${r.comment_history.length ? ' has-entries' : ''}">${r.comment_history.length}</span>
+          </button>
+        </div>
+      </td>
+    </tr>
+    <tr class="follow-history-row" id="hist-${gidx}" style="display:none">
+      <td></td><td></td><td></td>
+      <td colspan="4">${renderHistoryContent(r.comment_history)}</td>
+    </tr>`;
+  }).join(''));
+  restoreChecks();
+}
+
+// ── Save directly to Firestore ────────────────────────────────────────────────
+
+async function saveField(el) {
+  const gidx  = parseInt(el.dataset.gidx, 10);
+  const field = el.dataset.field;
+  const value = el.value;
+  const row   = allRows[gidx];
+  if (!row) return;
+
+  // Skip if nothing changed
+  if ((row[field] || '') === value) return;
+  row[field] = value;
+
+  const td = el.closest('td');
+  let dot  = td.querySelector('.save-dot');
+  if (!dot) { dot = document.createElement('span'); dot.className = 'save-dot'; td.appendChild(dot); }
+  dot.classList.remove('err');
+  dot.title = '';
+
+  try {
+    if (field === 'followup_comment') {
+      await fsCommitWithHistory(row, { followup_comment: value }, value, 'COMMENT');
+    } else if (field === 'followup_status') {
+      const label = (FU_STATUSES.find(s => s.value === value) || {}).label || value || '(none)';
+      await fsCommitWithHistory(row, { followup_status: value }, `Status → ${label}`, 'STATUS');
+    } else if (field === 'followup_date') {
+      const label = value ? `Follow-up date set to ${value}` : 'Follow-up date cleared';
+      await fsCommitWithHistory(row, { followup_date: value }, label, 'FOLLOWUP');
+    } else {
+      await fsPatch(row.doc_path, { [field]: value });
+    }
+    dot.remove();
+  } catch (e) {
+    console.error('[crm_follow] save failed:', e.message);
+    dot.classList.add('err');
+    dot.title = 'Save failed: ' + e.message;
+  }
+}
+
+// Atomically update one or more fields AND append a log entry to comment_history.
+// updateFields: { fieldName: value, … }   historyText: string shown in the log
+// type: 'COMMENT' | 'STATUS'  (stored on the entry, not displayed)
+async function fsCommitWithHistory(row, updateFields, historyText, type) {
+  const token   = await getAuthToken();
+  const user    = (window._authUser && (window._authUser.email || window._authUser.uid)) || 'unknown';
+  const docName = `projects/${PROJECT}/databases/(default)/documents/${row.doc_path}`;
+
+  const fsFields = {};
+  Object.keys(updateFields).forEach(k => { fsFields[k] = fsVal(updateFields[k]); });
+
+  const body = {
+    writes: [
+      {
+        update: { name: docName, fields: fsFields },
+        updateMask: { fieldPaths: Object.keys(updateFields) }
+      },
+      {
+        transform: {
+          document: docName,
+          fieldTransforms: [{
+            fieldPath: 'comment_history',
+            appendMissingElements: {
+              values: [{
+                mapValue: { fields: {
+                  date: { timestampValue: new Date().toISOString() },
+                  user: { stringValue: user },
+                  text: { stringValue: historyText },
+                  type: { stringValue: type || 'COMMENT' }
+                }}
+              }]
+            }
+          }]
+        }
+      }
+    ]
+  };
+
+  const r = await fetch(
+    `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents:commit`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+      body: JSON.stringify(body)
+    }
+  );
+  if (!r.ok) {
+    const e = await r.json().catch(() => ({}));
+    throw new Error((e.error && e.error.message) || 'HTTP ' + r.status);
+  }
+
+  // Update in-memory history and refresh panel if open
+  row.comment_history.push({ date: new Date().toISOString(), user, text: historyText, type: type || 'COMMENT' });
+  const gidx = allRows.indexOf(row);
+  if (gidx >= 0) refreshHistoryPanel(gidx);
+}
+
+// ── Selection ─────────────────────────────────────────────────────────────────
+
+function onRowCheck(chk) {
+  const row = allRows[parseInt(chk.dataset.gidx, 10)];
+  if (!row) return;
+  if (chk.checked) selected.add(row.doc_path);
+  else             selected.delete(row.doc_path);
+  updateSelectionUI();
+}
+
+function toggleSelectAll(chk) {
+  document.querySelectorAll('.row-chk').forEach(c => {
+    c.checked = chk.checked;
+    const row = allRows[parseInt(c.dataset.gidx, 10)];
+    if (!row) return;
+    if (chk.checked) selected.add(row.doc_path);
+    else             selected.delete(row.doc_path);
+  });
+  updateSelectionUI();
+}
+
+function clearSelection() {
+  selected.clear();
+  document.querySelectorAll('.row-chk').forEach(c => { c.checked = false; });
+  const sa = document.getElementById('select-all');
+  if (sa) sa.checked = false;
+  updateSelectionUI();
+}
+
+function updateSelectionUI() {
+  const n   = selected.size;
+  const bar = document.getElementById('batch-bar');
+  document.getElementById('batch-count').textContent = n;
+  bar.style.display = n > 0 ? '' : 'none';
+  // Keep the apply-button count in sync if panel is open
+  const applyCount = document.getElementById('batch-apply-count');
+  if (applyCount) applyCount.textContent = n;
+  // Hide panel when nothing is selected
+  if (n === 0) hideBatchDatePanel();
+}
+
+// ── Batch date update ─────────────────────────────────────────────────────────
+
+function showBatchDatePanel() {
+  document.getElementById('batch-apply-count').textContent = selected.size;
+  document.getElementById('batch-date-status').textContent = '';
+  document.getElementById('batch-date-panel').style.display = '';
+  document.getElementById('batch-date-input').focus();
+}
+
+function hideBatchDatePanel() {
+  document.getElementById('batch-date-panel').style.display = 'none';
+}
+
+async function applyBatchDate() {
+  const date    = document.getElementById('batch-date-input').value;
+  const comment = document.getElementById('batch-date-comment').value.trim();
+  const statusEl = document.getElementById('batch-date-status');
+
+  if (!date) {
+    statusEl.style.color = '#dc2626';
+    statusEl.textContent = 'Please pick a date first.';
+    return;
+  }
+
+  const rows = allRows.filter(r => selected.has(r.doc_path));
+  if (!rows.length) return;
+
+  statusEl.style.color = 'var(--bb-muted)';
+  statusEl.textContent = `Updating ${rows.length} contact${rows.length === 1 ? '' : 's'}…`;
+
+  const logText = comment
+    ? `Follow-up date set to ${date} — ${comment}`
+    : `Follow-up date set to ${date}`;
+
+  let done = 0, errors = 0;
+  await Promise.all(rows.map(async r => {
+    try {
+      await fsCommitWithHistory(r, { followup_date: date }, logText, 'FOLLOWUP');
+      r.followup_date = date;
+      done++;
+    } catch (e) {
+      errors++;
+      console.error('[batch-date] failed for', r.email, e.message);
+    }
+  }));
+
+  if (errors) {
+    statusEl.style.color = '#dc2626';
+    statusEl.textContent = `${done} updated, ${errors} failed.`;
+  } else {
+    statusEl.style.color = '#15803d';
+    statusEl.textContent = `${done} contact${done === 1 ? '' : 's'} updated.`;
+  }
+
+  applyFilter();   // re-render to show new dates
+}
+
+// ── Comment history UI ────────────────────────────────────────────────────────
+
+function toggleHistory(btn, gidx) {
+  const row = document.getElementById('hist-' + gidx);
+  if (!row) return;
+  const open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : '';
+  btn.querySelector('i').className = open ? 'ti ti-chevron-down' : 'ti ti-chevron-up';
+}
+
+function renderHistoryContent(history) {
+  if (!history.length) {
+    return '<span class="small" style="color:var(--bb-muted)">No history yet.</span>';
+  }
+  return '<div class="hist-list">'
+    + [...history].reverse().map(h => {
+        const d = h.date
+          ? new Date(h.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+          : '—';
+        return `<div class="hist-entry">
+          <span class="hist-entry-date">${escapeHtml(d)}</span>
+          <span class="hist-entry-user">${escapeHtml(h.user)}</span>
+          <span class="hist-entry-text">${escapeHtml(h.text)}</span>
+        </div>`;
+      }).join('')
+    + '</div>';
+}
+
+function refreshHistoryPanel(gidx) {
+  const row = document.getElementById('hist-' + gidx);
+  if (!row) return;
+  const td = row.querySelector('td:last-child');
+  if (td) td.innerHTML = renderHistoryContent(allRows[gidx].comment_history);
+  // Update count badge
+  const count = allRows[gidx].comment_history.length;
+  const btn = document.querySelector(`[onclick="toggleHistory(this,${gidx})"] .hist-count`);
+  if (btn) {
+    btn.textContent = count;
+    btn.classList.toggle('has-entries', count > 0);
+  }
+}
+
+function setTbody(html) {
+  document.getElementById('follow-tbody').innerHTML = html;
+}
+
+load();
+</script>
+</body>
+</html>
