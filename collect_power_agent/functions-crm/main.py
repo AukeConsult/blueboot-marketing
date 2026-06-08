@@ -971,6 +971,50 @@ def create_campaign_from_facet(name):
         return _err(str(exc), 500)
 
 
+
+
+@app.route("/api/crm/name-enrich", methods=["POST"])
+def name_enrich():
+    """Enrich a list of email addresses with names using rules + Bing + AI.
+
+    Body:
+      { "emails": ["a@b.com", "c@d.com"],
+        "dry_run": false,   // optional, default false
+        "skip_ai": false    // optional, default false
+      }
+
+    Returns:
+      { "results": { "a@b.com": { "name": "...", "title": "...", "source": "ai" }, ... },
+        "stats": { "total": N, "written": N, "skipped": N, ... }
+      }
+    """
+    try:
+        body    = request.get_json(silent=True) or {}
+        emails  = body.get("emails") or []
+        dry_run = bool(body.get("dry_run", False))
+        skip_ai = bool(body.get("skip_ai", False))
+
+        if not emails or not isinstance(emails, list):
+            return _err("'emails' must be a non-empty list", 400)
+        if len(emails) > 50:
+            return _err("Maximum 50 emails per request", 400)
+
+        db = _get_db()
+        import sys as _sys, os as _os
+        _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), "..", "app"))
+        from campaign_name_enrich import enrich_email_list
+
+        result = enrich_email_list(
+            emails, db=db,
+            dry_run=dry_run,
+            skip_ai=skip_ai,
+        )
+        return jsonify({
+            "results": result.get("resolved", {}),
+            "stats": {k: v for k, v in result.items() if k != "resolved"},
+        })
+    except Exception as exc:
+        return _err(str(exc), 500)
 @app.route("/api/crm/discover-campaigns", methods=["GET"])
 def discover_campaigns():
     """Scan the contact sheet for campaign IDs. Create + sync any new ones.
@@ -1121,9 +1165,16 @@ def worker(name, job_id):
                                        campaign_id=body.get("campaign_id", ""))
 
         elif name == "filter-count":
-            from crm.filter_count_lib import run_filter_count
-            counts = run_filter_count(db=db, name=body.get("name", ""))
-            result = {"name": body.get("name", ""), "counts": counts}
+            from crm.filter_count_lib import run_filter_count, run_leads_filter_count
+            fname = body.get("name", "")
+            # Auto-detect pipeline from facet doc
+            facet_snap = db.collection("filter_facets").document(fname).get()
+            pipeline = (facet_snap.to_dict() or {}).get("pipeline", "site_leads") if facet_snap.exists else "site_leads"
+            if pipeline == "leads":
+                counts = run_leads_filter_count(db=db, name=fname)
+            else:
+                counts = run_filter_count(db=db, name=fname)
+            result = {"name": fname, "counts": counts, "pipeline": pipeline}
 
         elif name == "campaign-delete":
             from crm.campaign_delete_lib import run_campaign_delete
@@ -1149,6 +1200,43 @@ def worker(name, job_id):
                     "sheet_url":  result["url"],
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 })
+
+        elif name == "name-enrich":
+            import sys as _sys, os as _os
+            _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), "..", "app"))
+            from campaign_name_enrich import enrich_email_list, _enrich, _doc_id_from_email
+            import asyncio as _asyncio
+            campaign_id = body.get("campaign_id", "").strip()
+            emails      = body.get("emails") or []
+            dry_run     = bool(body.get("dry_run", False))
+            skip_ai     = bool(body.get("skip_ai", False))
+            if campaign_id:
+                camp_ref = db.collection("campaigns").document(campaign_id)
+                contacts = []
+                for doc in camp_ref.collection("campaign_contacts").stream():
+                    data = doc.to_dict() or {}
+                    if data.get("name", "").strip():
+                        continue
+                    email = (data.get("email") or "").strip()
+                    if not email:
+                        continue
+                    contacts.append({
+                        "doc_id":       doc.id,
+                        "email":        email,
+                        "domain":       email.split("@")[1] if "@" in email else "",
+                        "campaign_ref": doc.reference,
+                        "ec_doc_id":    _doc_id_from_email(email),
+                    })
+                result = _asyncio.run(_enrich(
+                    db, contacts,
+                    dry_run=dry_run, skip_ai=skip_ai,
+                    model="gpt-4o-mini", batch_size=5,
+                    skip_ec_lookup=False, propagate_to_campaigns=False,
+                ))
+            else:
+                result = enrich_email_list(
+                    emails, db=db, dry_run=dry_run, skip_ai=skip_ai,
+                )
 
         else:
             _update_job(job_id, status="error",

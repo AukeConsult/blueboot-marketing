@@ -32,6 +32,8 @@ Field mapping (filter facet field → email_contacts field):
 """
 from __future__ import annotations
 
+from google.cloud.firestore_v1.base_query import FieldFilter
+
 import re
 from collections import Counter
 from datetime import datetime, timezone
@@ -41,7 +43,65 @@ CAMPAIGNS_COLLECTION = "campaigns"
 CAMPAIGN_CONTACTS_SUB = "campaign_contacts"
 EMAIL_CONTACTS_COLLECTION = "email_contacts"
 
+LEADS_COLLECTION = "leads"
 BATCH_SIZE = 400
+
+# ── Leads pipeline field spec (facet field → leads collection field) ──────────
+# Fields that exist on the 'leads' collection docs directly.
+_LEADS_FIELD_SPEC: list[tuple[str, str, str]] = [
+    ("ai_sector",            "ai_sector",            "scalar"),
+    ("ai_company_type",      "ai_company_type",      "scalar"),
+    ("ai_platform",          "ai_platform",          "scalar"),
+    ("country",              "country",              "scalar"),
+    ("ai_reseller_potential", "ai_reseller_potential", "scalar"),
+    ("ai_client_base",        "ai_client_base",         "scalar"),
+    ("ai_specialisation",     "ai_specialisation",      "array"),
+    # title / email_type are contact-level — tested on email_contacts, not leads
+    ("title",     "title",      "contact_scalar"),
+    ("email_type","email_type", "contact_scalar"),
+]
+
+
+class _LeadsFilter:
+    """Parses a leads-pipeline filter_facets doc and tests leads + email_contacts docs."""
+
+    def __init__(self, filters: dict) -> None:
+        self._lead: dict[str, set[str]] = {}
+        self._lead_array: dict[str, set[str]] = {}
+        self._contact: dict[str, set[str]] = {}
+        for fname, field, kind in _LEADS_FIELD_SPEC:
+            sel = _selected_values(filters.get(fname) or {})
+            if not sel:
+                continue
+            if kind == "scalar":
+                self._lead[field] = sel
+            elif kind == "array":
+                self._lead_array[field] = sel
+            elif kind == "contact_scalar":
+                self._contact[field] = sel
+
+    def matches_lead(self, data: dict) -> bool:
+        for field, sel in self._lead.items():
+            if not _starts_any(data.get(field), sel):
+                return False
+        for field, sel in self._lead_array.items():
+            have = _to_list(data.get(field))
+            if not any(h.startswith(k) for h in have for k in sel):
+                return False
+        return True
+
+    def matches_contact(self, data: dict) -> bool:
+        for field, sel in self._contact.items():
+            raw = str(data.get(field) or "").strip().lower()
+            val = _first_word(raw) if field == "title" else raw
+            if not any(val.startswith(k) for k in sel):
+                return False
+        return True
+
+    @property
+    def has_any(self) -> bool:
+        return bool(self._lead or self._lead_array or self._contact)
+
 
 # (facet field name, email_contacts field name, kind)
 # kind: "scalar" | "array" | "group" | "contact_scalar"
@@ -84,6 +144,15 @@ def _page_key(pc) -> str:
         if pc >= lo and (hi is None or pc <= hi):
             return key
     return "unknown"
+
+
+def _to_list(val) -> list:
+    """Coerce string-or-list field into a list (handles comma-separated strings)."""
+    if isinstance(val, list):
+        return [str(v).strip().lower() for v in val if str(v).strip()]
+    if isinstance(val, str) and val.strip():
+        return [v.strip().lower() for v in re.split(r"[,;|\n]", val) if v.strip()]
+    return []
 
 
 def _first_word(value) -> str:
@@ -206,36 +275,24 @@ def _collect_existing_campaign_emails(
         print("[facet-campaign] no existing campaign_contacts found "
               f"(excluding '{exclude_campaign_id}')", flush=True)
 
-    return taken
+    return taken, dict(per_campaign)
 
 
-def run_facet_campaign(
+def _run_facet_campaign_site_leads(
     db,
     facet_name: str,
     campaign_id: str,
     dry_run: bool = False,
+    _snap=None,
 ) -> dict:
-    """Build a campaign from a saved filter-facets preset.
-
-    Args:
-        db:          Firestore client.
-        facet_name:  Name of the filter_facets document to use as the source
-                     filter (e.g. "site_leads" or a saved preset name).
-        campaign_id: Target campaign document ID. Created if not found;
-                     contact_count / sites_count are updated if it exists.
-        dry_run:     If True, compute everything but write nothing.
-
-    Returns a summary dict with keys: campaign_id, facet_name,
-    contacts_matched, contacts_skipped_dedup, contacts_written,
-    sites_count, countries, dry_run.
-    """
+    """Build a campaign from a site_leads filter_facets preset (internal)."""
     if not facet_name:
         raise ValueError("facet_name is required")
     if not campaign_id:
         raise ValueError("campaign_id is required")
 
     # ── 1. Load filter preset ────────────────────────────────────────────────
-    snap = db.collection(FILTER_FACETS_COLLECTION).document(facet_name).get()
+    snap = _snap or db.collection(FILTER_FACETS_COLLECTION).document(facet_name).get()
     if not snap.exists:
         raise ValueError(f"filter_facets/'{facet_name}' not found")
     filters: dict = (snap.to_dict() or {}).get("filters") or {}
@@ -249,7 +306,7 @@ def run_facet_campaign(
 
     # ── 2. Collect emails already in other campaigns (dedup set) ─────────────
     print("[facet-campaign] loading existing campaign contacts for dedup…", flush=True)
-    taken_emails = _collect_existing_campaign_emails(db, campaign_id)
+    taken_emails, dedup_by_campaign = _collect_existing_campaign_emails(db, campaign_id)
     print(f"[facet-campaign] {len(taken_emails)} emails already in other campaigns",
           flush=True)
 
@@ -463,3 +520,223 @@ def run_facet_campaign(
         "countries":                 countries_list,
         "dry_run":                   False,
     }
+
+
+def run_facet_campaign_leads(
+    db,
+    facet_name: str,
+    campaign_id: str,
+    dry_run: bool = False,
+) -> dict:
+    """Build a campaign from a leads-pipeline filter_facets preset.
+
+    Algorithm:
+    1. Load filter_facets/{facet_name}; must have pipeline=='leads'.
+    2. Filter 'leads' collection → candidate_lead_ids.
+    3. Stream email_contacts where mark_leads==True; keep those whose
+       lead_id_leads is in candidate_leads and that pass contact filters.
+    4. Dedup against other campaigns (same as site_leads path).
+    5. Write campaign_contacts with source_pipeline='leads'.
+    """
+    if not facet_name or not campaign_id:
+        raise ValueError("facet_name and campaign_id are required")
+
+    snap = db.collection(FILTER_FACETS_COLLECTION).document(facet_name).get()
+    if not snap.exists:
+        raise ValueError(f"filter_facets/'{facet_name}' not found")
+    facet_doc = snap.to_dict() or {}
+    if facet_doc.get("pipeline") != "leads":
+        raise ValueError(
+            f"filter_facets/'{facet_name}' has pipeline='{facet_doc.get('pipeline')}' — "
+            "expected 'leads'"
+        )
+    filters = facet_doc.get("filters") or {}
+    flt = _LeadsFilter(filters)
+
+    print(f"[facet-campaign-leads] facet='{facet_name}'  campaign='{campaign_id}'  "
+          f"dry_run={dry_run}", flush=True)
+
+    # ── 1. Dedup set ──────────────────────────────────────────────────────────
+    taken_emails, dedup_by_campaign = _collect_existing_campaign_emails(db, campaign_id)
+    print(f"[facet-campaign-leads] {len(taken_emails)} emails in other campaigns", flush=True)
+
+    # ── 2. Filter leads → candidate_lead_ids ─────────────────────────────────
+    print("[facet-campaign-leads] filtering leads collection…", flush=True)
+    candidate_leads: set[str] = set()
+    for doc in db.collection(LEADS_COLLECTION).stream():
+        data = doc.to_dict() or {}
+        if not flt.has_any or flt.matches_lead(data):
+            lid = data.get("lead_id") or doc.id
+            candidate_leads.add(lid)
+    print(f"[facet-campaign-leads] {len(candidate_leads)} candidate leads", flush=True)
+
+    # ── 3. Filter email_contacts (mark_leads==True, lead_id_leads in candidates) ─
+    print("[facet-campaign-leads] filtering email_contacts (leads)…", flush=True)
+    matched: list[dict] = []
+    skipped_dedup = skipped_filter = 0
+    for doc in db.collection(EMAIL_CONTACTS_COLLECTION).where(
+            "mark_leads", "==", True).stream():
+        ec = doc.to_dict() or {}
+        if ec.get("lead_id_leads") not in candidate_leads:
+            skipped_filter += 1
+            continue
+        if flt._contact and not flt.matches_contact(ec):
+            skipped_filter += 1
+            continue
+        email = str(ec.get("email") or "").strip().lower()
+        if not email:
+            skipped_filter += 1
+            continue
+        if email in taken_emails:
+            skipped_dedup += 1
+            continue
+        ec.setdefault("doc_id", doc.id)
+        matched.append(ec)
+
+    print(f"[facet-campaign-leads] matched={len(matched)}  "
+          f"skipped_filter={skipped_filter}  skipped_dedup={skipped_dedup}", flush=True)
+
+    if not matched:
+        raise ValueError(
+            f"No leads email_contacts match the filter for facet '{facet_name}' "
+            "— campaign not created."
+        )
+
+    # ── 4. Campaign-level stats ───────────────────────────────────────────────
+    sites: set[str] = set()
+    country_counter: Counter = Counter()
+    for ec in matched:
+        lid = ec.get("lead_id_leads") or ""
+        if lid:
+            sites.add(lid)
+        c = str(ec.get("country") or "").strip()
+        if c:
+            country_counter[c] += 1
+    countries_list = [c for c, _ in country_counter.most_common()]
+
+    if dry_run:
+        return {
+            "campaign_id":               campaign_id,
+            "facet_name":                facet_name,
+            "pipeline":                  "leads",
+            "emails_in_other_campaigns": len(taken_emails),
+            "contacts_matched":          len(matched),
+            "contacts_skipped_dedup":    skipped_dedup,
+            "contacts_added":            None,
+            "contacts_refreshed":        None,
+            "contacts_removed":          None,
+            "contacts_protected":        None,
+            "dedup_by_campaign":         dedup_by_campaign,
+            "sites_count":               len(sites),
+            "countries":                 countries_list,
+            "dry_run":                   True,
+        }
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    facet_filters_snapshot: dict = {f: sorted(v) for f, v in flt._lead.items()}
+    facet_filters_snapshot.update({f: sorted(v) for f, v in flt._contact.items()})
+    facet_ref_fields = {
+        "source_facet":          facet_name,
+        "source_facet_path":     f"{FILTER_FACETS_COLLECTION}/{facet_name}",
+        "source_facet_filters":  facet_filters_snapshot,
+        "source_facet_built_at": now,
+        "source_pipeline":       "leads",
+    }
+
+    camp_ref = db.collection(CAMPAIGNS_COLLECTION).document(campaign_id)
+    if camp_ref.get().exists:
+        camp_ref.update({
+            "contact_count": len(matched), "sites_count": len(sites),
+            "countries": countries_list, **facet_ref_fields, "updated_at": now,
+        })
+    else:
+        camp_ref.set({
+            "campaign_id": campaign_id, "status": "draft", "sent_at": None,
+            "outreach_email_account": "",
+            "mail": {"subject": "", "body": "", "type": "plain"},
+            "contact_count": len(matched), "sites_count": len(sites),
+            "countries": countries_list, **facet_ref_fields,
+            "status_breakdown": {}, "select_breakdown": {},
+            "tier_breakdown": {}, "outreach_breakdown": {}, "updated_at": now,
+        })
+
+    contacts_col = camp_ref.collection(CAMPAIGN_CONTACTS_SUB)
+    existing: dict[str, dict] = {
+        doc.id: doc.to_dict() or {}
+        for doc in contacts_col.select(
+            ["status", "sent_at", "last_action", "last_action_status"]).stream()
+    }
+    LIFECYCLE = ("status", "sent_at", "last_action", "last_action_status")
+    matched_ids: set[str] = set()
+    added = refreshed = 0
+    for i in range(0, len(matched), BATCH_SIZE):
+        chunk = matched[i:i + BATCH_SIZE]
+        batch = db.batch()
+        for ec in chunk:
+            doc_id = ec.get("doc_id") or re.sub(
+                r"[^a-zA-Z0-9_-]", "_",
+                str(ec.get("email") or "").strip().lower()
+            )
+            matched_ids.add(doc_id)
+            contact_doc = {
+                "doc_id": doc_id, "email": ec.get("email", ""),
+                "name": ec.get("name", ""), "title": ec.get("title", ""),
+                "website": ec.get("website", ""),
+                "lead_id": ec.get("lead_id_leads", ""),
+                "source_facet": facet_name, "source_pipeline": "leads",
+                "added_at": now,
+            }
+            if doc_id in existing:
+                prev = existing[doc_id]
+                for field in LIFECYCLE:
+                    contact_doc[field] = prev.get(field, "" if field != "sent_at" else None)
+                batch.set(contacts_col.document(doc_id), contact_doc, merge=True)
+                refreshed += 1
+            else:
+                contact_doc.update({
+                    "status": "pending", "sent_at": None,
+                    "last_action": "", "last_action_status": "",
+                })
+                batch.set(contacts_col.document(doc_id), contact_doc, merge=False)
+                added += 1
+        batch.commit()
+
+    stale_ids = [
+        did for did, data in existing.items()
+        if did not in matched_ids and (data.get("status") or "pending") == "pending"
+    ]
+    removed = 0
+    for i in range(0, len(stale_ids), BATCH_SIZE):
+        batch = db.batch()
+        for did in stale_ids[i:i + BATCH_SIZE]:
+            batch.delete(contacts_col.document(did))
+        batch.commit()
+        removed += len(stale_ids[i:i + BATCH_SIZE])
+
+    protected = len(existing) - len(matched_ids & set(existing)) - len(stale_ids)
+    written = added + refreshed
+    print(f"[facet-campaign-leads] done. +{added} new, ~{refreshed} refreshed, -{removed} removed",
+          flush=True)
+    return {
+        "campaign_id": campaign_id, "facet_name": facet_name,
+        "pipeline": "leads",
+        "emails_in_other_campaigns": len(taken_emails),
+        "contacts_matched": len(matched),
+        "contacts_skipped_dedup": skipped_dedup,
+        "contacts_added": added, "contacts_refreshed": refreshed,
+        "contacts_removed": removed, "contacts_protected": protected,
+        "dedup_by_campaign": dedup_by_campaign,
+        "sites_count": len(sites), "countries": countries_list, "dry_run": False,
+    }
+
+
+def run_facet_campaign(db, facet_name: str, campaign_id: str, dry_run: bool = False) -> dict:
+    """Dispatch to the correct pipeline based on the facet doc's 'pipeline' field."""
+    snap = db.collection(FILTER_FACETS_COLLECTION).document(facet_name).get()
+    if not snap.exists:
+        raise ValueError(f"filter_facets/'{facet_name}' not found")
+    pipeline = (snap.to_dict() or {}).get("pipeline", "site_leads")
+    if pipeline == "leads":
+        return run_facet_campaign_leads(db, facet_name, campaign_id, dry_run)
+    return _run_facet_campaign_site_leads(db, facet_name, campaign_id, dry_run, snap)

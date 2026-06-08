@@ -314,8 +314,8 @@ def enrich_contacts(
     collection:    str | None    = None,
     countries:     list[str] | None = None,
     limit:         int | None    = None,
-    workers:       int           = 50,
-    delay:         float         = 1.0,
+    workers:       int           = 3,
+    delay:         float         = 2.0,
     skip_enriched: bool          = False,
     platforms:     list[str] | None = None,
     dry_run:       bool          = False,
@@ -484,8 +484,8 @@ def _parse_args(argv=None):
                    help="Space or comma-separated country codes e.g. --countries NO SE UK")
     p.add_argument("--limit",         metavar="N", type=int, default=None,
                    help="Maximum number of contacts to process")
-    p.add_argument("--workers",       metavar="N", type=int, default=50,
-                   help="Number of parallel async workers (default: 50)")
+    p.add_argument("--workers",       metavar="N", type=int, default=3,
+                   help="Number of parallel async workers (default: 3)")
     p.add_argument("--delay",         metavar="SECS", type=float, default=1.0,
                    help="Seconds to wait between Bing searches per worker (default: 1.0)")
     p.add_argument("--skip-enriched", action="store_true",

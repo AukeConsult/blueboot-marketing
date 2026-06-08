@@ -368,7 +368,11 @@ function renderContacts(list) {
   tbody.innerHTML = list.map(c => {
     const isExcluded = c.status === 'excluded';
     return `<tr data-email="${c.email}">
-    <td>${statusBadge(c.status)}${c.status !== 'pending' && c.sent_at ? `<br><span style="font-size:.72rem;color:var(--bb-muted)">${fmt(c.sent_at)}</span>` : ''}</td>
+    <td>
+      ${statusBadge(c.status)}
+      ${c.source_pipeline === 'leads' ? '<span class="ms-1 badge" style="background:#dcfce7;color:#15803d;font-size:.65rem;font-weight:600">leads</span>' : c.source_pipeline === 'site_leads' ? '<span class="ms-1 badge" style="background:#dbeafe;color:#1d4ed8;font-size:.65rem;font-weight:600">site</span>' : ''}
+      ${c.status !== 'pending' && c.sent_at ? `<br><span style="font-size:.72rem;color:var(--bb-muted)">${fmt(c.sent_at)}</span>` : ''}
+    </td>
     <td class="small"><span class="editable-cell" data-field="name" data-doc="${c.doc_id||(c.email||"").replace(/[^a-zA-Z0-9_-]/g,"_").toLowerCase()}" data-email="${c.email}">${escapeHtml(c.name||'')}<span class="edit-placeholder" style="color:var(--bb-muted)">${c.name?'':'—'}</span></span></td>
     <td class="small"><a href="mailto:${c.email}">${c.email||'—'}</a></td>
     <td class="small"><span class="editable-cell" data-field="title" data-doc="${c.doc_id||(c.email||"").replace(/[^a-zA-Z0-9_-]/g,"_").toLowerCase()}" data-email="${c.email}">${escapeHtml(c.title||'')}<span class="edit-placeholder" style="color:var(--bb-muted)">${c.title?'':'—'}</span></span></td>
@@ -535,11 +539,16 @@ async function loadCampaign() {
     // Facet reference
     const facetRow = document.getElementById('c-facet-row');
     if (c.source_facet) {
+      const pipelineBadge = c.source_pipeline === 'leads'
+        ? '<span class="ms-2 badge" style="background:#dcfce7;color:#15803d;font-size:.65rem">leads pipeline</span>'
+        : c.source_pipeline === 'site_leads'
+          ? '<span class="ms-2 badge" style="background:#dbeafe;color:#1d4ed8;font-size:.65rem">site pipeline</span>'
+          : '';
       document.getElementById('c-facet-name').textContent = c.source_facet;
       document.getElementById('c-facet-name').href =
         `filter-facets.html?facet=${encodeURIComponent(c.source_facet)}`;
-      document.getElementById('c-facet-built-at').textContent =
-        c.source_facet_built_at ? `built ${fmt(c.source_facet_built_at)}` : '';
+      document.getElementById('c-facet-built-at').innerHTML =
+        (c.source_facet_built_at ? `built ${fmt(c.source_facet_built_at)}` : '') + pipelineBadge;
       const filtersEl = document.getElementById('c-facet-filters');
       const filters = c.source_facet_filters || {};
       filtersEl.innerHTML = Object.entries(filters).map(([field, vals]) => {

@@ -251,7 +251,12 @@ function render(){
   if(facets.lead_count != null) meta.push(facets.lead_count + ' leads');
   if(facets.contact_count != null) meta.push(facets.contact_count + ' contacts');
   if(facets.generated_at) meta.push('generated ' + facets.generated_at.replace('T',' ').slice(0,16));
-  document.getElementById('meta').textContent = meta.join('  ·  ');
+  // Pipeline badge
+  const pipeline = facets.pipeline || 'site_leads';
+  const pipelineHtml = pipeline === 'leads'
+    ? '<span class="ms-2 badge" style="background:#dcfce7;color:#15803d;font-size:.68rem">leads pipeline</span>'
+    : '<span class="ms-2 badge" style="background:#dbeafe;color:#1d4ed8;font-size:.68rem">site pipeline</span>';
+  document.getElementById('meta').innerHTML = meta.join('  ·  ') + pipelineHtml;
 
   const selOnly = (document.getElementById('view-mode')||{}).value === 'selected';
   const order = Object.keys(facets.filters || {});
@@ -374,7 +379,8 @@ async function pollCount(jobId, name){
         // reload so the refreshed keyword list + stored counts are shown
         await loadFacets(name);
         const c = (facets && facets.counts) || (j.result && j.result.counts) || {};
-        setStatus(`'${name}' saved \u2014 ${c.leads ?? '?'} sites, ${c.contacts ?? '?'} contacts match.`, 'ok');
+        const lbl = (facets && facets.pipeline) === 'leads' ? 'leads' : 'sites';
+        setStatus(`'${name}' saved \u2014 ${c.leads ?? '?'} ${lbl}, ${c.contacts ?? '?'} contacts match.`, 'ok');
         return;
       }
       if(j.status === 'error'){
@@ -405,20 +411,36 @@ function renderCounts(c){
   if(ccBtn){
     // contacts_in_email_contacts is the count that actually matters for
     // campaign creation (facet_campaign_lib filters email_contacts directly).
-    const hasContacts = (c.contacts_in_email_contacts ?? 0) > 0;
+    const isLeads = (facets && facets.pipeline) === 'leads';
+    const hasContacts = isLeads
+      ? (c.contacts ?? 0) > 0
+      : (c.contacts_in_email_contacts ?? 0) > 0;
     ccBtn.disabled = !hasContacts;
     ccBtn.title = hasContacts ? '' : 'No contacts in email_contacts match this filter — adjust selections first';
   }
   const when = (facets && facets.counts_generated_at)
     ? ` <span style="color:var(--bb-muted)" class="ms-auto">counted ${facets.counts_generated_at.replace('T',' ').slice(0,16)}</span>`
     : '';
+  const pipeline = (facets && facets.pipeline) || 'site_leads';
+  let countsHtml;
+  if (pipeline === 'leads') {
+    // Leads pipeline: leads → email_contacts → campaigns
+    countsHtml =
+      `<span><i class="ti ti-database me-1"></i><strong>${c.leads ?? 0}</strong> leads match</span>`
+      + `<span><i class="ti ti-users me-1"></i><strong>${c.contacts ?? 0}</strong> contacts in email_contacts</span>`
+      + `<span class="text-success"><i class="ti ti-speakerphone me-1"></i>${c.contacts_not_in_campaigns ?? 0} available for campaign</span>`
+      + `<span style="color:var(--bb-muted)"><i class="ti ti-lock me-1"></i>${c.contacts_in_campaigns ?? 0} already in a campaign</span>`;
+  } else {
+    // Site pipeline: site_leads → site_contacts → email_contacts
+    countsHtml =
+      `<span><i class="ti ti-building-store me-1"></i><strong>${c.leads ?? 0}</strong> sites</span>`
+      + `<span><i class="ti ti-users me-1"></i><strong>${c.contacts ?? 0}</strong> contacts</span>`
+      + `<span class="text-success"><i class="ti ti-mail-check me-1"></i>${c.contacts_in_email_contacts ?? 0} in email_contacts</span>`
+      + `<span style="color:var(--bb-muted)"><i class="ti ti-mail-off me-1"></i>${c.contacts_not_in_email_contacts ?? 0} not yet</span>`;
+  }
   el.innerHTML =
     `<div class="alert alert-info py-2 px-3 mb-0 d-flex flex-wrap gap-3 align-items-center">`
-    + `<span><i class="ti ti-building-store me-1"></i><strong>${c.leads ?? 0}</strong> sites</span>`
-    + `<span><i class="ti ti-users me-1"></i><strong>${c.contacts ?? 0}</strong> contacts</span>`
-    + `<span class="text-success"><i class="ti ti-mail-check me-1"></i>${c.contacts_in_email_contacts ?? 0} in email_contacts</span>`
-    + `<span style="color:var(--bb-muted)"><i class="ti ti-mail-off me-1"></i>${c.contacts_not_in_email_contacts ?? 0} not yet</span>`
-    + when
+    + countsHtml + when
     + `</div>`;
 }
 

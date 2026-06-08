@@ -13,6 +13,8 @@ transform is applied to each contact's title before comparing.
 """
 from __future__ import annotations
 
+from google.cloud.firestore_v1.base_query import FieldFilter
+
 import os
 import re
 from collections import Counter
@@ -37,6 +39,16 @@ _PAGE_BANDS = [
     ("micro", 1, 50), ("small", 51, 500), ("medium", 501, 3000),
     ("large", 3001, 10000), ("huge", 10001, 100000), ("ultra", 100001, None),
 ]
+
+
+def _to_list(val) -> list:
+    """Coerce string-or-list field into a list (handles comma-separated strings)."""
+    import re as _re
+    if isinstance(val, list):
+        return [str(v).strip().lower() for v in val if str(v).strip()]
+    if isinstance(val, str) and val.strip():
+        return [v.strip().lower() for v in _re.split(r"[,;|\n]", val) if v.strip()]
+    return []
 
 
 def _page_key(pc) -> str:
@@ -136,7 +148,7 @@ def run_filter_count(db, name: str) -> dict:
             if not _starts_any(d.get(f), sel):
                 return False
         for f, sel in lead_array.items():
-            have = [str(x).strip().lower() for x in (d.get(f) or [])]
+            have = [v.lower() for v in _to_list(d.get(f))]
             if not any(h.startswith(k) for h in have for k in sel):
                 return False
         if page_keys and _page_key(d.get("page_count")) not in page_keys:
@@ -228,5 +240,123 @@ def run_filter_count(db, name: str) -> dict:
         "filters":              filters,
         "counts":               counts,
         "counts_generated_at":  datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    })
+    return counts
+
+
+LEADS_COLLECTION_NAME = "leads"
+
+# Leads pipeline scalar fields (facet name == leads field name)
+LEADS_SCALAR_FIELDS = (
+    "ai_sector", "ai_company_type", "ai_platform",
+    "country", "ai_reseller_potential", "ai_client_base",
+)
+LEADS_ARRAY_FIELDS = ("ai_specialisation",)
+# Contact fields from email_contacts (same names in both pipelines)
+LEADS_CONTACT_FIELDS = ("title", "email_type")
+
+
+def run_leads_filter_count(db, name: str) -> dict:
+    """Count leads-pipeline contacts for filter_facets/<name> (pipeline=='leads')."""
+    if not name:
+        raise ValueError("filter-count job requires a 'name'")
+    doc_ref = db.collection(FILTER_FACETS_COLLECTION).document(name)
+    snap = doc_ref.get()
+    if not snap.exists:
+        raise ValueError(f"filter_facets/'{name}' not found")
+    facet = snap.to_dict() or {}
+    filters = facet.get("filters", {}) or {}
+
+    lead_scalar = {f: _selected_values(filters[f])
+                   for f in LEADS_SCALAR_FIELDS
+                   if f in filters and _selected_values(filters[f])}
+    contact_sel = {f: _selected_values(filters[f])
+                   for f in LEADS_CONTACT_FIELDS
+                   if f in filters and _selected_values(filters[f])}
+
+    lead_array = {f: _selected_values(filters[f])
+                  for f in LEADS_ARRAY_FIELDS
+                  if f in filters and _selected_values(filters[f])}
+
+    def lead_match(d: dict) -> bool:
+        for f, sel in lead_scalar.items():
+            if not _starts_any(d.get(f), sel):
+                return False
+        for f, sel in lead_array.items():
+            have = [str(x).strip().lower() for x in (d.get(f) or [])]
+            if not any(h.startswith(k) for h in have for k in sel):
+                return False
+        return True
+
+    def contact_match(d: dict) -> bool:
+        for f, sel in contact_sel.items():
+            if not _starts_any(d.get(f), sel):
+                return False
+        return True
+
+    # 1. Filter leads collection
+    lead_fields = list(LEADS_SCALAR_FIELDS) + list(LEADS_ARRAY_FIELDS) + ["lead_id"]
+    candidate_leads: set = set()
+    lead_val_counts: dict = {f: Counter() for f in list(LEADS_SCALAR_FIELDS) + list(LEADS_ARRAY_FIELDS)}
+    for d in db.collection(LEADS_COLLECTION_NAME).select(lead_fields).stream():
+        data = d.to_dict() or {}
+        if lead_match(data):
+            candidate_leads.add(data.get("lead_id") or d.id)
+            for f in LEADS_SCALAR_FIELDS:
+                v = str(data.get(f) or "").strip().lower()
+                if v:
+                    lead_val_counts[f][v] += 1
+            for f in LEADS_ARRAY_FIELDS:
+                for item in _to_list(data.get(f)):
+                    w = item.lower()
+                    if w:
+                        lead_val_counts[f][w] += 1
+
+    # 2. Count email_contacts (mark_leads==True) that match candidates + contact filter
+    n_contacts = 0
+    n_in_campaigns = 0
+    contact_val_counts: dict = {f: Counter() for f in LEADS_CONTACT_FIELDS}
+    email_ids_in_campaigns: set = set()
+    for d in db.collection_group("campaign_contacts").select(["email"]).stream():
+        email_ids_in_campaigns.add(str((d.to_dict() or {}).get("email") or "").strip().lower())
+
+    for d in db.collection(EMAIL_CONTACTS_COLLECTION).where(filter=FieldFilter("mark_leads", "==", True)).select(list(LEADS_CONTACT_FIELDS) + ["lead_id_leads", "email"]).stream():
+        data = d.to_dict() or {}
+        if data.get("lead_id_leads") not in candidate_leads:
+            continue
+        if contact_sel and not contact_match(data):
+            continue
+        n_contacts += 1
+        email = str(data.get("email") or "").strip().lower()
+        if email in email_ids_in_campaigns:
+            n_in_campaigns += 1
+        for f in LEADS_CONTACT_FIELDS:
+            raw = str(data.get(f) or "").strip().lower()
+            v = _first_word(raw) if f == "title" else raw
+            if v:
+                contact_val_counts[f][v] += 1
+
+    counts = {
+        "leads":                      len(candidate_leads),
+        "contacts":                   n_contacts,
+        "contacts_in_email_contacts": n_contacts,   # all are already in email_contacts
+        "contacts_in_campaigns":      n_in_campaigns,
+        "contacts_not_in_campaigns":  n_contacts - n_in_campaigns,
+    }
+
+    # Write selected_count onto facet values
+    for f in list(LEADS_SCALAR_FIELDS) + list(LEADS_ARRAY_FIELDS):
+        for val in (filters.get(f) or {}).get("values", []):
+            v = str(val.get("value") or "").strip().lower()
+            val["selected_count"] = lead_val_counts[f].get(v, 0)
+    for f in LEADS_CONTACT_FIELDS:
+        for val in (filters.get(f) or {}).get("values", []):
+            v = str(val.get("value") or "").strip().lower()
+            val["selected_count"] = contact_val_counts[f].get(v, 0)
+
+    doc_ref.update({
+        "filters":             filters,
+        "counts":              counts,
+        "counts_generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     })
     return counts
