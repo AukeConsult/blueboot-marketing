@@ -205,6 +205,55 @@ python app/filter_site_leads.py --filter country=NO --min-pages 500
 
 ---
 
+
+### `campaign_name_enrich.py` — Fill missing contact names 🌐 Frontend triggered
+
+Enriches campaign contacts that are missing a name using a three-pass search pipeline:
+
+1. **Rules** — extracts names from email patterns (`john.doe@` → "John Doe")
+2. **Bing search** — searches for the exact email address; if not found, searches `"firstname" site:domain` to find the person on the company's own site
+3. **Brave Search** — same two queries via the Brave API for pages Bing misses
+4. **AI validation** — GPT-4o-mini validates every candidate and returns both `name` and `title` from the verified context. AI returns null if evidence is insufficient — a wrong name is never written.
+
+Writes back to both `campaigns/{id}/campaign_contacts` and `email_contacts` to keep collections in sync.
+
+```bash
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --dry-run
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --skip-ai
+python app/campaign_name_enrich.py --all                   # all campaigns
+python app/campaign_name_enrich.py --emails a@b.com c@d.com
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --debug
+```
+
+**Key flags:**
+
+| Flag | Description |
+|---|---|
+| `--campaign ID` | Enrich all contacts without a name in this campaign |
+| `--all` | Enrich across all campaigns in the `campaigns` collection |
+| `--emails a@b.com …` | Enrich a flat list of addresses (no campaign context needed) |
+| `--dry-run` | Preview without writing to Firestore |
+| `--skip-ai` | Rule-based only — no Bing, Brave, or OpenAI calls |
+| `--debug` | Print exactly what Bing/Brave sends to AI and what AI returns; always prepends `leif@auke.no` as a calibration contact (expected: "Leif Auke") |
+| `--limit N` | Cap the number of contacts processed (useful with `--all`) |
+
+**Requires:** `OPENAI_API_KEY` and `BRAVE_API_KEY` in `.env`
+
+**Frontend trigger:** Campaign page → **Enrich names** button
+→ API: `POST /api/crm/campaigns/<id>/name-enrich`
+→ Cloud Tasks job: `name-enrich`
+
+The API also accepts a generic call with an email list:
+```
+POST /api/crm/name-enrich
+{ "campaign_id": "MY_CAMPAIGN" }          — enrich all contacts in campaign
+{ "emails": ["a@b.com", "c@d.com"] }      — enrich a specific list
+```
+Returns immediately with `job_id` — poll `GET /api/crm/status/<job_id>`.
+
+---
+
 ## CRM Workflow (also triggered from frontend)
 
 ### `crm/contact_sync.py` — Import contacts to contact sheet 🌐 Frontend triggered
@@ -375,25 +424,4 @@ python app/maint_fix_contact_country.py
 Re-crawls leads where phone/email data is mismatched or corrupted.
 
 ```bash
-python app/maint_fix_rescrape_contacts.py --dry-run
-python app/maint_fix_rescrape_contacts.py
-python app/maint_fix_rescrape_contacts.py --country FI
-```
-
----
-
-## Deployment
-
-```bash
-# Deploy frontend (HTML/CSS/JS)
-firebase deploy --only hosting
-
-# Deploy backend API
-firebase deploy --only functions:crm
-
-# Deploy Firestore indexes + rules
-firebase deploy --only firestore
-
-# Deploy everything
-firebase deploy
-```
+python app/maint_fix_rescrape_contact

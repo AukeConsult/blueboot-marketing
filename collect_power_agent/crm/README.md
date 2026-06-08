@@ -368,40 +368,47 @@ Create or refresh a campaign directly from a saved filter-facets preset. Filters
 
 ```bash
 python app\facet_campaign.py --facet leif_test_b2b_personal --campaign NO_b2b_jul01
-python app\facet_campaign.py --facet NO_ecom --campaign NO_ecom_jul01 --dry-run
+python app\facet_campaign.py --facet NO_ecom --campaign NO_ecom_jul01 --dry-ru
+
+
+## Name enrichment (`campaign_name_enrich.py`) 🌐 Frontend triggered
+
+Fills missing contact names using a three-pass search pipeline: email pattern rules → Bing search → Brave Search → AI validation (GPT-4o-mini). Only writes a name when there is verifiable evidence linking the name to the specific email address.
+
+```bash
+python app\campaign_name_enrich.py --campaign MY_CAMPAIGN_ID
+python app\campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --dry-run
+python app\campaign_name_enrich.py --all
+python app\campaign_name_enrich.py --emails a@b.com c@d.com
+python app\campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --debug
 ```
 
 | Flag | Description |
 |---|---|
-| `--facet` | Name of the `filter_facets` Firestore document to use (e.g. a saved preset name) |
-| `--campaign` | Target campaign ID — created if absent, contacts refreshed if it already exists |
-| `--dry-run` | Count and print results without writing anything to Firestore |
+| `--campaign ID` | Enrich contacts without a name in this campaign |
+| `--all` | Enrich across all campaigns |
+| `--emails` | Enrich a flat list of addresses (no campaign needed) |
+| `--dry-run` | Preview without writing |
+| `--skip-ai` | Rule-based extraction only |
+| `--debug` | Print Bing/Brave→AI payload and AI response per contact; prepends `leif@auke.no` as calibration |
 
-**Rerun behaviour:** existing contacts keep their outreach history (`status`, `sent_at`, `last_action`, `last_action_status`). Stale `pending` contacts that no longer match the filter are removed. Contacts with any other status are preserved untouched.
+**Search passes:**
+1. `"exact@email.com"` — email in snippet = strong evidence
+2. `"firstname" site:domain` + `"firstname" "domain"` — company's own site (moderate, flagged to AI)
+3. Same two queries via Brave API
 
-The campaign document stores `source_facet`, `source_facet_path`, `source_facet_filters` (selection snapshot), and `source_facet_built_at` so you can always audit which filter produced it.
+AI returns `{name, title}` or `null`. A null from AI is final — rule-based suggestions are not written without AI confirmation.
 
-This function also runs as a background job (`facet-campaign`) via the Filter Facets page → **Create campaign** button, or via `POST /api/crm/filter-facets/<name>/create-campaign`.
+**Writes to:** `campaigns/{id}/campaign_contacts` + `email_contacts` (kept in sync)
 
----
+**Frontend:** Campaign page → **Enrich names** button
+`POST /api/crm/campaigns/<id>/name-enrich` → Cloud Tasks job: `name-enrich`
 
-## CRM Template Columns
+Generic API (email list or campaign):
+```
+POST /api/crm/name-enrich
+{ "campaign_id": "MY_CAMPAIGN" }
+{ "emails": ["a@b.com", "c@d.com"] }
+```
+Returns `{ job_id, poll }` — poll `GET /api/crm/status/<job_id>`.
 
-| # | Column | Source | Notes |
-|---|---|---|---|
-| 1 | Dato lagt i | today | → `crm_date` in site_leads |
-| 2 | Bedrift | `company` / `domain` | |
-| 3 | Nettside | `website` | |
-| 4 | Bransje | `ai_sector \| ai_platform \| ai_company_type` | |
-| 5 | Størrelse | size label + location | page_count based |
-| 6 | Oppsummert | `ai_summary` | |
-| 7 | Land | `country` | |
-| 8 | Site-sider | `page_count` | |
-| 9 | Beslutningstaker | first contact name | |
-| 10 | Rolle | first contact title | |
-| 11 | E-post | first contact email | |
-| 12 | Telefon | first contact phone | text format |
-| 13 | Contacts | `\|name,email,phone,title\|...` | all selected contacts |
-| 14 | Score | — | manual |
-| 15 | Status | — | manual → `crm_status` |
-| 16 | Selger | — | manual → `crm_sales_pe

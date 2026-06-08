@@ -137,3 +137,46 @@ The result summary always shows two numbers: how many emails are blocked across 
 ## Deleting a draft campaign
 
 If you created a campaign by mistake or want to start over, open the campaign page. If the campaign is still in **draft** status, a red **Delete** button appears in the top bar. Clicking it asks for confirmation, shows you the contact count, and then permanently deletes the entire campaign and all its contacts in the background. This cannot be undone, and is only available for drafts — campaigns that have been activated or sent cannot be deleted.
+
+---
+
+## Name enrichment — filling in missing contact names
+
+Many contacts in the pool have an email address but no name. The **Enrich names** function attempts to find and verify the real person behind each email using a three-pass search pipeline.
+
+### How it works
+
+1. **Email pattern rules** — `john.doe@company.com` → "John Doe" (high confidence, both first and last name present in the local part)
+2. **Bing search** — searches first for the exact email address in quotes. If the email appears on a web page alongside a name, that context is captured. If not, a second query searches `"john" site:company.com` — since the email was originally scraped from that site, a team or contact page there will often list the person by full name.
+3. **Brave Search** — same two queries via the Brave API, which indexes pages Bing sometimes misses.
+4. **AI validation** — all candidates are sent to GPT-4o-mini with the full web context. AI returns a verified `name` and `title`, or `null` if the evidence is insufficient. A wrong name is never written — the AI is instructed that returning null is always better than guessing.
+
+Only contacts without an existing name are processed. Names are written to both the campaign contact and the master `email_contacts` collection so they stay in sync.
+
+### Running name enrichment
+
+**From the campaign page:** click **Enrich names** in the top toolbar. The job runs in the background (Bing + Brave + AI per contact). A progress bar updates while it runs and shows the final count — how many names were written, how many came from rules vs AI, and how many were skipped. Click **Reload contacts** in the result bar to refresh the table.
+
+**From the command line:**
+```bash
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --dry-run
+python app/campaign_name_enrich.py --all                 # all campaigns at once
+python app/campaign_name_enrich.py --emails a@b.com c@d.com
+```
+
+Add `--debug` to see exactly what context each search pass found and what AI accepted or rejected.
+
+### What counts as verified evidence
+
+The pipeline is deliberately strict — it is person-centric, not pattern-based:
+
+| Evidence | Accepted? |
+|---|---|
+| Email address appears in web snippet next to a name | ✅ Strong — written directly |
+| Full name (`first.last@`) in email local part | ✅ High confidence rule |
+| Company team page lists "John Smith" and email starts with "john" | ⚠️ Moderate — sent to AI for confirmation |
+| Only a first name in email (`john@company.com`), no web context | ❌ Null — skipped |
+| Domain/company name used as surname | ❌ Never accepted |
+| Role address (`info@`, `kontakt@`, `support@`, etc.) | ❌ Always skipped |
+
