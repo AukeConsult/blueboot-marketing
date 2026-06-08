@@ -713,3 +713,34 @@ async function runJob() {
 
 **Reference implementation:** `crm_follow.html` — `syncAllEmails()` and `syncContactEmails()`
                                                                                       
+---
+
+## Documentation rules
+
+### RULE: User guides contain no technical implementation details
+
+User-facing documentation (`doc/user-guide.md`, `doc/crm-follow-up.md`, and any
+other doc accessible from the Documentation menu) must describe **what** features
+do and **how to use them** — never **how they are built**.
+
+The following belong in `README.md`, `doc/system-architecture.md`,
+`doc/installation.md`, or `doc/backend-functions.md` — not in user guides:
+
+- API endpoint URLs and HTTP methods
+- Firestore collection paths or document field names
+- Database write strategies (ArrayUnion, field masks, transactions, etc.)
+- Cloud Function names, job types, or queue names
+- Internal class names, module paths, or library choices
+- Any sentence that starts with "The backend…", "The API call…", or "Firestore…"
+
+**Wrong (user guide):**
+> All reads and writes go through the CRM API. Saving calls
+> `PATCH /api/crm/campaigns/{id}/contacts/{doc_id}`.
+
+**Right (user guide):**
+> Changes are saved automatically as soon as you leave the field — no Save
+> button needed.
+
+**Right (system architecture / README):**
+> Follow-up field writes go through `PATCH /api/crm/campaigns/{id}/contacts/{doc_id}`.
+> The backend appends a `comment_history` entry using Firestore `ArrayUnion`.
