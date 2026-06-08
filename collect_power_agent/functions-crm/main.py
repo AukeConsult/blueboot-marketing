@@ -1015,6 +1015,30 @@ def name_enrich():
         })
     except Exception as exc:
         return _err(str(exc), 500)
+@app.route("/api/crm/campaigns/<campaign_id>/name-enrich", methods=["POST"])
+def name_enrich_campaign(campaign_id):
+    """Convenience shortcut: enrich all contacts in a specific campaign.
+
+    Body (optional): { "dry_run": false, "skip_ai": false }
+    Returns immediately with job_id — poll GET /api/crm/status/<job_id>.
+    """
+    try:
+        body       = request.get_json(silent=True) or {}
+        dry_run    = bool(body.get("dry_run", False))
+        skip_ai    = bool(body.get("skip_ai", False))
+        job_params = {"campaign_id": campaign_id, "emails": [],
+                      "dry_run": dry_run, "skip_ai": skip_ai}
+        job_id     = _new_job("name-enrich", job_params)
+        _enqueue_task("name-enrich", job_id, job_params)
+        return _ok(
+            f"Queued name-enrich for campaign '{campaign_id}'",
+            job_id=job_id,
+            poll=f"/api/crm/status/{job_id}",
+        )
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @app.route("/api/crm/discover-campaigns", methods=["GET"])
 def discover_campaigns():
     """Scan the contact sheet for campaign IDs. Create + sync any new ones.
