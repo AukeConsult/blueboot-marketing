@@ -47,6 +47,8 @@ GET /api/crm/contact-sync?countries=NO,SE&max=500&min_pages=500
 
 ## Jobs
 
+> **Deployment note:** after adding new routes to `main.py`, run `firebase deploy --only functions:crm` before testing from the frontend. A missing deploy is the most common cause of "Failed to fetch" errors on new buttons.
+
 | Method | Path | Query params | Description |
 |---|---|---|---|
 | GET | `/api/crm/status/<job_id>` | — | Get one job: `status` (`queued`/`running`/`done`/`error`), `result`, `error`, timings. |
@@ -64,6 +66,10 @@ GET /api/crm/contact-sync?countries=NO,SE&max=500&min_pages=500
 | POST | `/api/crm/campaigns/<id>/create` | `{outreach_email_account?}` | Create a campaign (409 if it exists). |
 | POST·PATCH | `/api/crm/campaigns/<id>` | campaign fields (status, mail, …) | Update a campaign. |
 | DELETE | `/api/crm/campaigns/<id>` | — | Delete a **draft** campaign. Atomically flips status to `deleting` in a Firestore transaction, then enqueues a `campaign-delete` job that batch-deletes all `campaign_contacts` and the campaign doc. Returns `{job_id, poll}`. Returns 409 if status is not `draft`. |
+| PATCH | `/api/crm/campaigns/<id>/contacts/<doc_id>` | `{name?, title?, status?}` | Update editable fields on a single campaign contact. |
+| POST | `/api/crm/campaigns/<id>/contacts/remove` | `{emails:[…]}` | Remove contacts from a campaign by email address. |
+| POST | `/api/crm/campaigns/<id>/name-enrich` | `{dry_run?, skip_ai?}` | Enrich missing names — enqueues a `name-enrich` job (rules → Bing → Brave → AI). Returns `{job_id, poll}`. |
+| POST | `/api/crm/name-enrich` | `{campaign_id?}` or `{emails:[…], dry_run?, skip_ai?}` | Same enrichment by campaign ID or flat email list. Returns `{job_id, poll}`. |
 
 ---
 
@@ -90,21 +96,4 @@ File operations on the configured Drive folder. All Drive access is server-side 
 | Method | Path | Body / params | Description |
 |---|---|---|---|
 | GET | `/api/crm/gdisk/settings` | — | `{folder_id, configured}`. |
-| POST·PATCH | `/api/crm/gdisk/settings` | `{folder_id}` | Set the Drive folder id (stored in `settings/gdisk`). |
-| GET | `/api/crm/gdisk/files` | — | List files: `{folder_id, files:[{id,name,size,mimeType,modifiedTime}]}`. |
-| POST | `/api/crm/gdisk/files` | multipart form field `file` | Upload (create-or-overwrite by name). |
-| GET | `/api/crm/gdisk/files/<name>` | — | Download the file as an attachment (raw bytes). |
-| DELETE | `/api/crm/gdisk/files/<name>` | — | Delete the file. |
-
-Returns `400` if no folder is configured. Names are matched exactly, case-sensitive.
-
----
-
-## Notes
-
-- **Deploy:** `firebase deploy --only functions:crm` (deploys both `crmApi` and `crmWorker`).
-- **Auth:** the functions run as the project service account
-  (`<YOUR_PROJECT_ID>@appspot.gserviceaccount.com`); Sheets/Drive resources must be shared
-  with it, and the relevant Google APIs enabled.
-- **Trigger endpoints are GET** for easy use from links/the dashboard; they only enqueue
-  work, the actual run happens in `crmWorker`.
+| 
