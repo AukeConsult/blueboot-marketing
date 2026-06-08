@@ -750,15 +750,19 @@ python lead_enrich_contacts.py [options]
 | `--collection NAME` | `leads` | Firestore leads collection |
 | `--countries CC [CC ...]` | all | Space or comma-separated country codes, e.g. `--countries NO SE UK` |
 | `--limit N` | _(none)_ | Maximum number of contacts to process |
-| `--workers N` | `50` | Parallel async workers (Bing searches run concurrently) |
-| `--delay SECS` | `1.0` | Seconds to wait between Bing searches per worker |
+| `--workers N` | `3` | Parallel async workers (Bing searches run concurrently) |
+| `--delay SECS` | `2.0` | Seconds to wait between Bing searches per worker |
 | `--skip-enriched` | off | Skip contacts that already have `social_enriched_at` set |
 | `--platforms LIST` | all | Comma-separated subset: `linkedin,twitter,facebook,instagram,telegram,whatsapp` |
 | `--dry-run` | off | Print what would be written without touching Firestore |
 
 ### How parallelism works
 
-Contacts are first filtered synchronously from Firestore. All filtered contacts are then enriched concurrently using `asyncio.gather` capped by a semaphore of `--workers`. Results are batch-written to Firestore after all workers finish. With 20 workers and 5 platforms per contact, throughput is roughly 20× faster than a sequential run.
+Contacts are first filtered synchronously from Firestore. All filtered contacts are then enriched concurrently using `asyncio.gather` capped by a semaphore of `--workers`. Results are batch-written to Firestore after all workers finish.
+
+**Rate limiting:** Bing rate-limits aggressively — typically after ~400 queries in one session, subsequent requests hang until the 90 s per-contact timeout fires. Keep `--workers` low (default 3) and `--delay` at 2.0 s or higher to stay below the threshold (~1.5 queries/second). Increase only if you have a dedicated Bing API key with a higher quota.
+
+**Optional step:** `lead_enrich_contacts.py` only adds social profile links (LinkedIn, Twitter etc.) — it does **not** affect which contacts reach `email_contacts`. You can skip this step entirely and run `leads_email_check.py` + `leads_smart_export.py --write-contacts` directly. Contacts will be exported without social profiles but are otherwise complete.
 
 ### Example runs
 
@@ -1777,43 +1781,4 @@ Drives `site_agent.py` — defines per-country search instructions for finding c
 |---|---|
 | `name` | Full country name |
 | `language` | Browser `Accept-Language` language code used in Bing search headers |
-| `accept_language` | Full `Accept-Language` header value sent with requests |
-| `description` | Human description of what kinds of sites to target in this country |
-| `min_pages` | Minimum page count for a site to be stored — lower = more inclusive |
-| `target_types` | List of site types the queries aim to find (used for scoring and keywords) |
-| `query_categories` | Map of `category → [query strings]` — the actual Bing search queries |
-
-### Per-country summary
-
-| Country | `min_pages` | Language | Categories | Queries |
-|---|---|---|---|---|
-| NO — Norway | 50 | no | 16 | 208 |
-| SE — Sweden | 50 | sv | 16 | 205 |
-| DK — Denmark | 50 | da | 16 | 200 |
-| FI — Finland | 50 | fi | 16 | 200 |
-| UK — United Kingdom | 100 | en | 16 | 204 |
-| DE — Germany | 50 | de | 16 | 203 |
-| FR — France | 20 | fr | 19 | 224 |
-| NL — Netherlands | 20 | nl | 19 | 222 |
-| BE — Belgium | 15 | fr,nl | 5 | 32 |
-| IN — India | 10 | en | 12 | 106 |
-| EU — European Union | 4 | en | 16 | 192 |
-
-`min_pages` reflects how content-heavy sites tend to be per market — UK/Nordic public sector sites are large, India and Belgium thresholds are lower to capture more results.
-
-### Query categories (37 total)
-
-| Category | Description |
-|---|---|
-| `municipality` | Local government, kommune, council websites |
-| `public` / `public_sector` | Government agencies, public bodies, national institutions |
-| `healthcare` | Hospitals, health trusts, clinic networks, patient information sites |
-| `education` | Universities, schools, educational institutions |
-| `media` | News sites, broadcasters, online publications |
-| `company` | General businesses, manufacturers, B2B companies |
-| `ecommerce` / `shop` | Online shops, retailers |
-| `technology` / `tech` | SaaS, IT companies, tech platforms |
-| `finance` | Banks, insurance, financial services |
-| `real_estate` | Property portals, housing associations |
-| `legal` | Law firms, legal information sites |
-| `logistics` | Shipping, transport
+| `accept_language` | Full `Accep

@@ -32,6 +32,9 @@
       <button class="btn btn-sm btn-outline-secondary" onclick="confirmFullOverride()">
         <i class="ti ti-table-export me-1"></i>Full override
       </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="enrichNames()" id="enrich-btn">
+        <i class="ti ti-user-search me-1"></i>Enrich names
+      </button>
       <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none">
         <i class="ti ti-rocket me-1"></i>Activate campaign
       </button>
@@ -642,6 +645,81 @@ async function pollExport(jobId, id) {
     } catch(_) { /* keep polling */ }
   }
   btn.disabled = false; btn.innerHTML = '<i class="ti ti-table-export me-1"></i>Export to Drive';
+}
+
+async function enrichNames() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const fb  = document.getElementById('sync-feedback');
+  const btn = document.getElementById('enrich-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Enriching…';
+  fb.style.display = 'none';
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/name-enrich`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({}),
+    });
+    const d = await r.json();
+    if (d.status === 'error') throw new Error(d.message || 'enrich failed');
+    fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
+    fb.innerHTML = `Name enrichment job queued (${d.job_id || ''}) — working…`;
+    fb.style.display = '';
+    if (d.job_id) pollEnrich(d.job_id);
+    else btnReset();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = 'Enrich failed: ' + (e.message || e);
+    fb.style.display = '';
+    btnReset();
+  }
+  function btnReset() {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-user-search me-1"></i>Enrich names';
+  }
+}
+
+async function pollEnrich(jobId) {
+  const fb  = document.getElementById('sync-feedback');
+  const btn = document.getElementById('enrich-btn');
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const r = await fetch(`${BASE}/api/crm/status/${jobId}`);
+      const j = await r.json();
+      if (j.status === 'done') {
+        const res = j.result || {};
+        const written  = res.written  ?? 0;
+        const skipped  = res.skipped  ?? 0;
+        const ai       = res.ai_resolved  ?? 0;
+        const rule     = res.rule_resolved ?? 0;
+        fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
+        fb.innerHTML = `Enrichment done — ${written} names written `
+          + `(rule: ${rule}, ai: ${ai}, skipped: ${skipped}). `
+          + `<a href="" onclick="location.reload();return false">Reload contacts</a>`;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-user-search me-1"></i>Enrich names';
+        return;
+      }
+      if (j.status === 'error') {
+        fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+        fb.textContent = 'Enrichment failed: ' + (j.error || 'unknown');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-user-search me-1"></i>Enrich names';
+        return;
+      }
+      // Still running — show progress if available
+      if (j.result) {
+        fb.innerHTML = `Enriching… (${j.result.written ?? 0} written so far)`;
+      }
+    } catch(_) { /* keep polling */ }
+  }
+  // Timeout after 6 minutes — let user know but don't error
+  fb.className = 'alert alert-warning py-1 px-2 small mt-2 mb-0';
+  fb.textContent = 'Job still running in background — check back in a moment.';
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-user-search me-1"></i>Enrich names';
 }
 
 async function syncCampaign() {
