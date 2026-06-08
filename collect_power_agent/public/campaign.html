@@ -204,6 +204,14 @@
       <div class="modal-body pt-1" id="lead-modal-body">
         <div class="text-center py-4 small" style="color:var(--bb-muted)"><i class="ti ti-loader" style="font-size:20px"></i></div>
       </div>
+      <div class="modal-footer border-0 pt-0 d-flex justify-content-between align-items-center">
+        <div id="lead-modal-feedback" class="small" style="display:none"></div>
+        <div class="d-flex gap-2 ms-auto">
+          <button class="btn btn-sm btn-outline-danger" id="lead-remove-campaign-btn" onclick="removeLeadFromCampaign()" style="display:none">
+            <i class="ti ti-user-minus me-1"></i>Remove from campaign
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -784,11 +792,19 @@ async function openLeadPopup(evt, website, pipeline) {
     icon.style.background = '#dbeafe'; icon.querySelector('i').style.color = '#1d4ed8';
   }
   body.innerHTML = '<div class="text-center py-4 small" style="color:var(--bb-muted)"><i class="ti ti-loader" style="font-size:20px"></i></div>';
+  document.getElementById('lead-modal-feedback').style.display = 'none';
+  document.getElementById('lead-remove-campaign-btn').style.display = 'none';
+  // Store current domain + pipeline for action buttons
+  window._leadPopupDomain   = domain;
+  window._leadPopupPipeline = pipeline;
+  window._leadPopupWebsite  = website;
   new bootstrap.Modal(document.getElementById('leadInfoModal')).show();
   try {
     const r = await fetch(`${BASE}/api/crm/leads/by-domain/${encodeURIComponent(domain)}`);
     const d = await r.json();
     renderLeadModal(d, website);
+    // Show action buttons once data is loaded
+    document.getElementById('lead-remove-campaign-btn').style.display = '';
   } catch(e) {
     body.innerHTML = `<p class="small text-danger">Failed to load: ${e.message}</p>`;
   }
@@ -860,6 +876,53 @@ function renderLeadModal(d, website) {
         <i class="ti ti-external-link me-1"></i>Open site
       </a>
     </div>`;
+}
+
+async function removeLeadFromCampaign() {
+  const domain  = window._leadPopupDomain;
+  const website = window._leadPopupWebsite;
+  if (!domain) return;
+  const campaignId = document.getElementById('campaign-select').value;
+  if (!campaignId) return;
+  const fb  = document.getElementById('lead-modal-feedback');
+  const btn = document.getElementById('lead-remove-campaign-btn');
+
+  // Find all contacts in this campaign that belong to this domain
+  const emails = allContacts
+    .filter(c => {
+      const d = (c.website || '').replace(/^https?:\/\//, '').replace(/\/$/, '').split('/')[0];
+      return d === domain || d === 'www.' + domain || 'www.' + d === domain;
+    })
+    .map(c => c.email)
+    .filter(Boolean);
+
+  if (!emails.length) {
+    fb.className = 'small text-warning'; fb.textContent = 'No contacts found for this domain.';
+    fb.style.display = ''; return;
+  }
+  if (!confirm(`Remove ${emails.length} contact(s) from "${domain}" from this campaign?`)) return;
+
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Removing…';
+  fb.style.display = 'none';
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/remove`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({emails}),
+    });
+    const d = await r.json();
+    if (d.status === 'error') throw new Error(d.message);
+    // Remove from local state + re-render
+    allContacts = allContacts.filter(c => !emails.includes(c.email));
+    filterContacts();
+    fb.className = 'small text-success';
+    fb.textContent = `${emails.length} contact(s) removed.`;
+    fb.style.display = '';
+    btn.style.display = 'none';
+  } catch(e) {
+    fb.className = 'small text-danger'; fb.textContent = 'Remove failed: ' + (e.message||e);
+    fb.style.display = '';
+  }
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-user-minus me-1"></i>Remove from campaign';
 }
 
 async function syncCampaign() {

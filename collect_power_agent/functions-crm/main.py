@@ -1084,6 +1084,68 @@ def lead_by_domain(domain):
         return jsonify({"source_pipeline": None})
     except Exception as exc:
         return _err(str(exc), 500)
+
+
+@app.route("/api/crm/leads/by-domain/<path:domain>/exclude", methods=["POST"])
+def exclude_lead_by_domain(domain):
+    """Add a domain to sites_excluded or leads_excluded so it is skipped in future pipeline runs.
+
+    Body:
+      { "pipeline": "site_leads" | "leads",   -- which collection to exclude from
+        "reason":   "manual"                   -- optional, default "manual"
+      }
+
+    Also accepts pipeline auto-detected from the lead doc if body is empty.
+    """
+    try:
+        import re as _re
+        db = _get_db()
+        body = request.get_json(silent=True) or {}
+        reason = (body.get("reason") or "manual").strip()
+
+        def _lead_id(d: str) -> str:
+            slug = _re.sub(r"[.\-]+", "_", d.rstrip(".").lower())
+            return _re.sub(r"_+", "_", slug).strip("_")
+
+        lead_id = _lead_id(domain)
+        pipeline = (body.get("pipeline") or "").strip()
+
+        # Auto-detect pipeline if not supplied
+        if not pipeline:
+            if db.collection("site_leads").document(lead_id).get().exists:
+                pipeline = "site_leads"
+            elif db.collection("leads").document(lead_id).get().exists:
+                pipeline = "leads"
+            else:
+                pipeline = "site_leads"   # default
+
+        now = datetime.now(timezone.utc).isoformat()
+
+        if pipeline == "leads":
+            db.collection("leads_excluded").document(lead_id).set({
+                "lead_id":     lead_id,
+                "domain":      domain,
+                "reason":      reason,
+                "excluded_at": now,
+            }, merge=True)
+        else:
+            # Fetch existing site_lead doc for metadata
+            snap = db.collection("site_leads").document(lead_id).get()
+            data = snap.to_dict() or {} if snap.exists else {}
+            db.collection("sites_excluded").document(lead_id).set({
+                "lead_id":     lead_id,
+                "domain":      domain,
+                "website":     data.get("website", ""),
+                "country":     data.get("country", ""),
+                "page_count":  data.get("page_count", 0),
+                "reason":      reason,
+                "excluded_at": now,
+            }, merge=True)
+
+        return _ok(f"Domain '{domain}' added to {pipeline} excluded list",
+                   pipeline=pipeline, lead_id=lead_id)
+    except Exception as exc:
+        return _err(str(exc), 500)
 @app.route("/api/crm/discover-campaigns", methods=["GET"])
 def discover_campaigns():
     """Scan the contact sheet for campaign IDs. Create + sync any new ones.
