@@ -1226,9 +1226,7 @@ def worker(name, job_id):
                 })
 
         elif name == "name-enrich":
-            import sys as _sys, os as _os
-            _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), "..", "app"))
-            from campaign_name_enrich import enrich_email_list, _enrich, _doc_id_from_email
+            from crm.name_enrich_lib import enrich_email_list, _enrich, _doc_id_from_email
             import asyncio as _asyncio
             campaign_id = body.get("campaign_id", "").strip()
             emails      = body.get("emails") or []

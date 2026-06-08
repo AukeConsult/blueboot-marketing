@@ -32,10 +32,7 @@
       <button class="btn btn-sm btn-outline-secondary" onclick="confirmFullOverride()">
         <i class="ti ti-table-export me-1"></i>Full override
       </button>
-      <button class="btn btn-sm btn-outline-secondary" onclick="enrichNames()" id="enrich-btn">
-        <i class="ti ti-user-search me-1"></i>Enrich names
-      </button>
-      <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none">
+<button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none">
         <i class="ti ti-rocket me-1"></i>Activate campaign
       </button>
       <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete()" id="delete-btn" style="display:none">
@@ -52,16 +49,17 @@
   <div id="campaign-detail" style="display:none">
 
     <!-- Status line -->
-    <div class="mb-3 small" style="color:var(--bb-muted)">
+    <div class="mb-3 small d-flex align-items-center flex-wrap gap-2" style="color:var(--bb-muted)">
       <span><strong id="c-contacts" style="color:#111">—</strong> contacts</span>
-      <span class="mx-2">·</span>
+      <span>·</span>
       <span><strong id="c-sites" style="color:#111">—</strong> sites</span>
-      <span class="mx-2">·</span>
+      <span>·</span>
       <span><strong id="c-countries" style="color:#111">—</strong> countries</span>
-      <span class="mx-2">·</span>
+      <span>·</span>
       <span><strong id="c-sent" style="color:#111">—</strong> sent</span>
-      <span class="mx-2">·</span>
+      <span>·</span>
       <span>updated <strong id="c-updated" style="color:#111">—</strong></span>
+      <span id="c-pipeline-badge" style="display:none"></span>
     </div>
 
     <div id="sync-feedback" class="alert py-1 px-2 small mb-3" style="display:none"></div>
@@ -151,6 +149,9 @@
           </select>
           <button id="delete-excluded-btn" class="btn btn-sm btn-outline-danger" style="display:none" onclick="deleteExcluded()">
             <i class="ti ti-trash me-1"></i>Delete excluded
+          </button>
+          <button id="enrich-btn" class="btn btn-sm btn-outline-secondary" onclick="enrichNames()" title="Fill missing names using Bing + AI">
+            <i class="ti ti-user-search"></i>
           </button>
           <input id="contact-search" class="form-control form-control-sm" style="max-width:180px" placeholder="Search…" oninput="filterContacts()">
         </div>
@@ -373,7 +374,7 @@ function renderContacts(list) {
     return `<tr data-email="${c.email}">
     <td>
       ${statusBadge(c.status)}
-      ${c.source_pipeline === 'leads' ? '<span class="ms-1 badge" style="background:#dcfce7;color:#15803d;font-size:.65rem;font-weight:600">leads</span>' : c.source_pipeline === 'site_leads' ? '<span class="ms-1 badge" style="background:#dbeafe;color:#1d4ed8;font-size:.65rem;font-weight:600">site</span>' : ''}
+
       ${c.status !== 'pending' && c.sent_at ? `<br><span style="font-size:.72rem;color:var(--bb-muted)">${fmt(c.sent_at)}</span>` : ''}
     </td>
     <td class="small"><span class="editable-cell" data-field="name" data-doc="${c.doc_id||(c.email||"").replace(/[^a-zA-Z0-9_-]/g,"_").toLowerCase()}" data-email="${c.email}">${escapeHtml(c.name||'')}<span class="edit-placeholder" style="color:var(--bb-muted)">${c.name?'':'—'}</span></span></td>
@@ -542,11 +543,18 @@ async function loadCampaign() {
     // Facet reference
     const facetRow = document.getElementById('c-facet-row');
     if (c.source_facet) {
-      const pipelineBadge = c.source_pipeline === 'leads'
-        ? '<span class="ms-2 badge" style="background:#dcfce7;color:#15803d;font-size:.65rem">leads pipeline</span>'
-        : c.source_pipeline === 'site_leads'
-          ? '<span class="ms-2 badge" style="background:#dbeafe;color:#1d4ed8;font-size:.65rem">site pipeline</span>'
-          : '';
+      // Pipeline badge in status line (overall info, not per-contact)
+    const plBadge = document.getElementById('c-pipeline-badge');
+    if (c.source_pipeline === 'leads') {
+      plBadge.innerHTML = '<span class="badge" style="background:#dcfce7;color:#15803d;font-size:.72rem;font-weight:500"><i class="ti ti-briefcase me-1"></i>leads pipeline</span>';
+      plBadge.style.display = '';
+    } else if (c.source_pipeline === 'site_leads') {
+      plBadge.innerHTML = '<span class="badge" style="background:#dbeafe;color:#1d4ed8;font-size:.72rem;font-weight:500"><i class="ti ti-world me-1"></i>site pipeline</span>';
+      plBadge.style.display = '';
+    } else {
+      plBadge.style.display = 'none';
+    }
+    const pipelineBadge = '';  // kept for facet-built-at line (now empty)
       document.getElementById('c-facet-name').textContent = c.source_facet;
       document.getElementById('c-facet-name').href =
         `filter-facets.html?facet=${encodeURIComponent(c.source_facet)}`;
