@@ -1039,6 +1039,51 @@ def name_enrich_campaign(campaign_id):
         return _err(str(exc), 500)
 
 
+
+
+@app.route("/api/crm/leads/by-domain/<path:domain>", methods=["GET"])
+def lead_by_domain(domain):
+    """Fetch lead data for a domain — checks site_leads first, then leads.
+
+    Returns whichever doc is found with the fields needed for the lead popup:
+      company, website, location, location_country, ai_company_type, page_count,
+      title, description, ai_summary, ai_platform, source_pipeline,
+      ai_client_base, reseller_score, ai_specialisation, ai_reseller_potential.
+    """
+    try:
+        db = _get_db()
+
+        def _lead_id(domain_str: str) -> str:
+            import re as _re
+            slug = _re.sub(r"[.\-]+", "_", domain_str.rstrip(".").lower())
+            return _re.sub(r"_+", "_", slug).strip("_")
+
+        FIELDS = [
+            "company", "website", "location", "location_country",
+            "ai_company_type", "ai_sector", "ai_platform", "page_count",
+            "title", "description", "ai_summary", "ai_confidence",
+            "ai_client_base", "reseller_score", "ai_specialisation",
+            "ai_reseller_potential", "keywords",
+        ]
+        lead_id = _lead_id(domain)
+
+        # Try site_leads first
+        snap = db.collection("site_leads").document(lead_id).get()
+        if snap.exists:
+            data = {k: v for k, v in (snap.to_dict() or {}).items() if k in FIELDS and v not in (None, "", [], {})}
+            data["source_pipeline"] = "site_leads"
+            return jsonify(data)
+
+        # Try leads collection
+        snap = db.collection("leads").document(lead_id).get()
+        if snap.exists:
+            data = {k: v for k, v in (snap.to_dict() or {}).items() if k in FIELDS and v not in (None, "", [], {})}
+            data["source_pipeline"] = "leads"
+            return jsonify(data)
+
+        return jsonify({"source_pipeline": None})
+    except Exception as exc:
+        return _err(str(exc), 500)
 @app.route("/api/crm/discover-campaigns", methods=["GET"])
 def discover_campaigns():
     """Scan the contact sheet for campaign IDs. Create + sync any new ones.
