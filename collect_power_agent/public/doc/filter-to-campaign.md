@@ -20,7 +20,7 @@ The **Filter Facets page** lets you tick the values you want, save that selectio
 
 ---
 
-## The workflow — four steps
+## The workflow — six steps
 
 ### Step 1 — Load a preset
 
@@ -66,6 +66,58 @@ When the job finishes, a success message shows the result: how many contacts wer
 
 ---
 
+### Step 5 — Allocate owner and outreach email
+
+Once the campaign exists, open it from the Campaigns list. Expand the **Campaign details** section and fill in two fields before doing anything else.
+
+**Owner** — select the team member responsible for this campaign. This is the person who will manage replies and follow-up. Choosing an owner also auto-fills the outreach email if that person has a default mailbox configured in their user profile.
+
+**Email account** — select which configured mail account sends and receives for this campaign. Every outreach email goes out from this address, and incoming replies are synced back to the campaign. The contact's status in the contact list updates as mail is tracked — so you can see at a glance who has replied, who has not been contacted yet, and who has bounced. The email account must be set up in **Settings → Mail accounts** before it appears in the dropdown.
+
+Changing the email account at any point saves immediately. You can verify it is working by clicking the eye icon next to the dropdown to inspect the account settings, or use **Send test** on the mail template to confirm delivery.
+
+---
+
+### Step 6 — Review contacts and prepare the mail template
+
+Before activating the campaign, take two more steps: review the contact list and prepare the outreach email.
+
+#### Reviewing contacts
+
+The contact list shows every person who will receive an email. Three tools help you clean it up:
+
+**Filter by status** — use the status dropdown (All / Pending / Emailed / Excluded / …) to focus on a specific group. For example, selecting Pending lets you quickly scan contacts that have not been reached yet.
+
+**Search** — filter by name, email, title, or website to find a specific person or company.
+
+**Bulk selection** — tick the checkbox on any row to select it. The master checkbox in the header selects or deselects all visible rows (respecting the current filter and search). When one or more rows are checked, a bulk action bar appears with two options:
+- **Mark excluded** — flags the selected contacts as excluded without deleting them. Useful if you want to review the list further before committing.
+- **Delete selected** — permanently removes the selected contacts from the campaign after a confirmation.
+
+**Remove excluded** — if you prefer the two-step approach (mark first, delete later), set contacts to Exclude one by one using the per-row dropdown, then click **Remove excluded** to purge them all at once.
+
+This is the right time to clean the list — once the campaign is activated, contacts cannot be removed.
+
+#### Writing and editing the mail template
+
+Each campaign has its own subject line and email body. Click **Edit** in the Mail template section to open the campaign editor, where you can write the subject and body in either plain text or HTML. You can use personalisation placeholders — for example the contact's first name — so each email feels individual rather than mass-sent.
+
+Once you have written the template, use **Send test** to send a preview to your own address and confirm it looks right. The preview renders the full email exactly as recipients will see it, including CSS styling for HTML templates.
+
+#### Activating the campaign
+
+When the owner, email account, contact list, and mail template are all ready, click **Activate campaign**. This sets the campaign to **dosend** status and queues it for outreach delivery. Once activated, the campaign is locked: contacts cannot be added or removed, and the mail template cannot be changed.
+
+---
+
+## Campaign and spreadsheet sync
+
+The campaign's Google Drive spreadsheet is always kept in sync with the database automatically:
+
+- **Deleting contacts** (via Exclude + Delete excluded) triggers an immediate sheet regeneration — deleted contacts disappear from the sheet in the background without any manual action.
+- **Syncing from the sheet** updates editable fields (name, title, last action notes) in the DB. The sheet can never *add* new contacts — only update existing ones. If the sheet has orphaned rows (contacts already removed from the DB), they are cleaned up on the next sync.
+- **Any new column** you add to the sheet is automatically written to the DB as a new field on the contact doc, so you can extend the schema without touching any code.
+
 ## Rerunning on the same campaign
 
 You can run the same preset → campaign flow again at any time. This is safe and expected — it keeps the campaign in sync as new contacts appear in the pool.
@@ -85,47 +137,3 @@ The result summary always shows two numbers: how many emails are blocked across 
 ## Deleting a draft campaign
 
 If you created a campaign by mistake or want to start over, open the campaign page. If the campaign is still in **draft** status, a red **Delete** button appears in the top bar. Clicking it asks for confirmation, shows you the contact count, and then permanently deletes the entire campaign and all its contacts in the background. This cannot be undone, and is only available for drafts — campaigns that have been activated or sent cannot be deleted.
-
----
-
-## Step 5 — Allocate owner and outreach email
-
-Once the campaign exists, open it from the Campaigns list. Expand the **Campaign details** section and fill in two fields before doing anything else.
-
-**Owner** — select the team member responsible for this campaign. This is the person who will manage replies and follow-up. Choosing an owner also auto-fills the outreach email if that person has a default mailbox configured in their user profile.
-
-**Email account** — select which configured mail account sends and receives for this campaign. Every outreach email goes out from this address, and incoming replies are synced back to the campaign. The contact's status in the contact list updates as mail is tracked — so you can see at a glance who has replied, who has not been contacted yet, and who has bounced. The email account must be set up in **Settings → Mail accounts** before it appears in the dropdown.
-
-Changing the email account at any point saves immediately. You can verify it is working by clicking the eye icon next to the dropdown to inspect the account settings, or use **Send test** on the mail template to confirm delivery.
-
----
-
-## Step 6 — Review contacts and prepare the mail template
-
-Before activating the campaign, take two more steps: review the contact list and prepare the outreach email.
-
-### Reviewing contacts
-
-The contact list shows every person who will receive an email. Scroll through it and use the search box to find specific names, emails, titles, or websites. For any contact you do not want to include, use the **Exclude** dropdown on that row. This marks them locally without deleting anything yet.
-
-When you have finished reviewing, the **Remove excluded** button appears at the top of the table. Clicking it permanently removes those contacts from the campaign in one go. This is the right time to clean the list — once the campaign is activated, contacts cannot be removed.
-
-### Writing and editing the mail template
-
-Each campaign has its own subject line and email body. Click **Edit** in the Mail template section to open the campaign editor, where you can write the subject and body in either plain text or HTML. You can use personalisation placeholders — for example the contact's first name — so each email feels individual rather than mass-sent.
-
-Once you have written the template, use **Send test** to send a preview to your own address and confirm it looks right. The preview renders the full email exactly as recipients will see it, including CSS styling for HTML templates.
-
-### Activating the campaign
-
-When the owner, email account, contact list, and mail template are all ready, change the campaign status to **dosend** using the status editor on the campaign page. The green **Activate campaign** button will then appear. Clicking it — after confirming — marks the campaign as sent and queues it for outreach delivery. Once activated, the campaign is locked: contacts cannot be added or removed, and the mail template cannot be changed.
-
----
-
-## Tips
-
-- Use descriptive preset names that include country and month: `NO_b2b_personal_jul01` is much easier to find later than `test2`.
-- Always count before creating. The "in email contacts" number is the one that matters — not the total contacts count.
-- If the count is lower than expected, check whether you have selected values across multiple cards. Each card you use narrows the results.
-- A large dedup overlap (many contacts blocked by other campaigns) means your filter overlaps with an existing campaign. Consider narrowing by an additional field, or check whether the other campaign is still active.
-- The campaign page always shows which filter preset produced it and when, so you can trace back any campaign to the exact selections that created it.

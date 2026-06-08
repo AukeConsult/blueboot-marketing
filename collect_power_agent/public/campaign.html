@@ -138,15 +138,30 @@
       <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom bb-card-header">
         <span class="fw-500 small"><i class="ti ti-users me-1 text-primary"></i>Contacts <span class="ms-1" style="color:var(--bb-muted)" id="c-contact-count"></span></span>
         <div class="d-flex align-items-center gap-2">
-          <button id="remove-excluded-btn" class="btn btn-sm btn-outline-danger" style="display:none" onclick="confirmRemoveExcluded()">
-            <i class="ti ti-trash me-1"></i>Remove excluded
+          <select id="status-filter" class="form-select form-select-sm" style="max-width:130px;font-size:.78rem" onchange="filterContacts()">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="emailed">Emailed</option>
+            <option value="replied">Replied</option>
+            <option value="excluded">Excluded</option>
+            <option value="bounced">Bounced</option>
+          </select>
+          <button id="delete-excluded-btn" class="btn btn-sm btn-outline-danger" style="display:none" onclick="deleteExcluded()">
+            <i class="ti ti-trash me-1"></i>Delete excluded
           </button>
-          <input id="contact-search" class="form-control form-control-sm" style="max-width:200px" placeholder="Search…" oninput="filterContacts()">
+          <input id="contact-search" class="form-control form-control-sm" style="max-width:180px" placeholder="Search…" oninput="filterContacts()">
         </div>
       </div>
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
-          <thead class="bb-thead"><tr><th class="small">Status</th><th class="small">Name</th><th class="small">Email</th><th class="small">Title</th><th class="small">Website</th><th class="small">Sent at</th><th></th></tr></thead>
+          <thead class="bb-thead"><tr>
+            <th class="small bb-sortable" data-col="status" onclick="sortBy('status')">Status <span class="sort-icon"></span></th>
+            <th class="small bb-sortable" data-col="name" onclick="sortBy('name')">Name <span class="sort-icon"></span></th>
+            <th class="small bb-sortable" data-col="email" onclick="sortBy('email')">Email <span class="sort-icon"></span></th>
+            <th class="small bb-sortable" data-col="title" onclick="sortBy('title')">Title <span class="sort-icon"></span></th>
+            <th class="small bb-sortable" data-col="website" onclick="sortBy('website')">Website <span class="sort-icon"></span></th>
+            <th class="small text-center" style="width:40px">Excl.</th>
+          </tr></thead>
           <tbody id="contacts-body"></tbody>
         </table>
       </div>
@@ -273,14 +288,14 @@
         <h6 class="modal-title"><i class="ti ti-trash text-danger me-2"></i>Remove excluded contacts</h6>
       </div>
       <div class="modal-body">
-        <p class="mb-2">Remove <strong><span id="remove-excluded-count">0</span> excluded</strong> contact(s) from this view?</p>
+        <p class="mb-2">Permanently remove <strong><span id="remove-excluded-count">0</span></strong> contact(s) from this campaign?</p>
         <div class="alert alert-warning py-2 small mb-0">
           <i class="ti ti-alert-triangle me-1"></i>This only removes them from the current view. No data will be deleted.
         </div>
       </div>
       <div class="modal-footer border-0 pt-0">
         <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn btn-danger btn-sm" onclick="doRemoveExcluded()"><i class="ti ti-trash me-1"></i>Remove</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteExcluded()"><i class="ti ti-trash me-1"></i>Delete excluded</button>
       </div>
     </div>
   </div>
@@ -352,93 +367,123 @@ function renderContacts(list) {
   const campaignId = document.getElementById('campaign-select').value;
   tbody.innerHTML = list.map(c => {
     const isExcluded = c.status === 'excluded';
-    return `<tr>
-    <td>${statusBadge(c.status)}</td>
-    <td class="small">${c.name||'—'}</td>
+    return `<tr data-email="${c.email}">
+    <td>${statusBadge(c.status)}${c.status !== 'pending' && c.sent_at ? `<br><span style="font-size:.72rem;color:var(--bb-muted)">${fmt(c.sent_at)}</span>` : ''}</td>
+    <td class="small"><span class="editable-cell" data-field="name" data-doc="${c.doc_id||(c.email||"").replace(/[^a-zA-Z0-9_-]/g,"_").toLowerCase()}" data-email="${c.email}">${escapeHtml(c.name||'')}<span class="edit-placeholder" style="color:var(--bb-muted)">${c.name?'':'—'}</span></span></td>
     <td class="small"><a href="mailto:${c.email}">${c.email||'—'}</a></td>
-    <td class="small text-muted">${c.title||'—'}</td>
+    <td class="small"><span class="editable-cell" data-field="title" data-doc="${c.doc_id||(c.email||"").replace(/[^a-zA-Z0-9_-]/g,"_").toLowerCase()}" data-email="${c.email}">${escapeHtml(c.title||'')}<span class="edit-placeholder" style="color:var(--bb-muted)">${c.title?'':'—'}</span></span></td>
     <td class="small"><a href="${c.website||'#'}" target="_blank">${(c.website||'').replace(/^https?:\/\//,'').slice(0,28)||'—'}</a></td>
-    <td class="small text-muted">${fmt(c.sent_at)}</td>
-    <td>
-      <select class="form-select form-select-sm bb-contact-select"
-        data-email="${c.email}"
-        onchange="handleExcludeSelect(this,'${c.contact_id||c.email}','${campaignId}')">
-        <option value="" ${!isExcluded?'selected':''}>— keep —</option>
-        <option value="excluded" ${isExcluded?'selected':''}>Exclude</option>
-      </select>
-    </td>
+    <td class="text-center">${c.status === 'pending' ? `<input type="checkbox" class="form-check-input excl-chk" data-email="${c.email}" ${isExcluded?'checked':''} title="Exclude" onchange="handleExcludeChk(this)">` : ''}</td>
   </tr>`;
   }).join('');
   updateRemoveExcludedBtn();
 }
 
-function handleExcludeSelect(sel, contactId, campaignId) {
-  const exclude = sel.value === 'excluded';
-  const row = sel.closest('tr');
-  if (row) row.cells[0].innerHTML = statusBadge(exclude ? 'excluded' : 'pending');
+function handleExcludeChk(chk) {
+  const newStatus = chk.checked ? 'excluded' : 'pending';
+  const row = chk.closest('tr');
+  if (row) row.cells[0].innerHTML = statusBadge(newStatus);
+  // Update allContacts in memory
+  const c = allContacts.find(x => x.email === chk.dataset.email);
+  if (c) c.status = newStatus;
   updateRemoveExcludedBtn();
+  // Write directly to Firestore via API (fire-and-forget)
+  const campaignId = document.getElementById('campaign-select').value;
+  const doc = chk.dataset.doc || (chk.dataset.email||'').replace(/[^a-zA-Z0-9_-]/g,'_').toLowerCase();
+  if (campaignId && doc) {
+    fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/${encodeURIComponent(doc)}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status: newStatus})
+    }).catch(e => console.warn('[excl] save failed:', e.message));
+  }
 }
 
 function updateRemoveExcludedBtn() {
-  const hasExcluded = Array.from(document.querySelectorAll('#contacts-body select')).some(s => s.value === 'excluded');
-  document.getElementById('remove-excluded-btn').style.display = hasExcluded ? '' : 'none';
+  // Show "Delete excluded" button when any contact is excluded
+  const btn = document.getElementById('delete-excluded-btn');
+  if (!btn) return;
+  const hasExcluded = allContacts.some(c => c.status === 'excluded');
+  btn.style.display = hasExcluded ? '' : 'none';
 }
 
-function confirmRemoveExcluded() {
-  const n = Array.from(document.querySelectorAll('#contacts-body select')).filter(s => s.value === 'excluded').length;
-  document.getElementById('remove-excluded-count').textContent = n;
-  new bootstrap.Modal(document.getElementById('removeExcludedModal')).show();
-}
-
-async function doRemoveExcluded() {
-  const modal = bootstrap.Modal.getInstance(document.getElementById('removeExcludedModal'));
-  if (modal) modal.hide();
-
+async function deleteExcluded() {
+  const excluded = allContacts.filter(c => c.status === 'excluded').map(c => c.email);
+  if (!excluded.length) return;
+  if (!window.confirm(`Permanently delete ${excluded.length} excluded contact(s) from this campaign?`)) return;
   const campaignId = document.getElementById('campaign-select').value;
-  const excludedEmails = [];
-  const excludedRows = [];
-  Array.from(document.querySelectorAll('#contacts-body tr')).forEach(row => {
-    const sel = row.querySelector('select');
-    if (sel && sel.value === 'excluded') {
-      excludedEmails.push(sel.dataset.email);
-      excludedRows.push(row);
-    }
-  });
-  if (!excludedEmails.length) return;
-
   const fb = document.getElementById('sync-feedback');
   fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
-  fb.textContent = 'Removing contacts…';
+  fb.textContent = `Deleting ${excluded.length} excluded contact(s)…`;
   fb.style.display = '';
-
   try {
     const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/remove`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ emails: excludedEmails })
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ emails: excluded })
     });
     const d = await r.json();
     if (d.status !== 'ok') throw new Error(d.message || 'remove failed');
-
-    excludedRows.forEach(row => row.remove());
-    allContacts = allContacts.filter(c => !excludedEmails.includes(c.email));
-    document.getElementById('remove-excluded-btn').style.display = 'none';
-    document.getElementById('c-contact-count').textContent = `(${d.contact_count ?? allContacts.length})`;
     fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
-    fb.textContent = `Removed ${d.deleted} contact(s).`;
+    fb.textContent = `Deleted ${d.deleted} contact(s). Refreshing…`;
+    await loadCampaign();
+    fb.textContent = `Deleted ${d.deleted} contact(s).`;
   } catch(e) {
     fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
     fb.textContent = 'Error: ' + e.message;
   }
 }
 
-function filterContacts() {
-  const q = document.getElementById('contact-search').value.toLowerCase();
-  renderContacts(q ? allContacts.filter(c =>
-    [(c.name||''),(c.email||''),(c.website||''),(c.title||'')].some(v => v.toLowerCase().includes(q))
-  ) : allContacts);
+// ── Column sort ──────────────────────────────────────────────────────────
+let _sortCol = '';
+let _sortAsc  = true;
+
+function sortBy(col) {
+  if (_sortCol === col) {
+    _sortAsc = !_sortAsc;
+  } else {
+    _sortCol = col;
+    _sortAsc = true;
+  }
+  // Update header icons
+  document.querySelectorAll('.bb-sortable').forEach(th => {
+    const ic = th.querySelector('.sort-icon');
+    if (th.dataset.col === col) {
+      ic.textContent = _sortAsc ? ' ▲' : ' ▼';
+      th.style.color = 'var(--bb-accent)';
+    } else {
+      ic.textContent = '';
+      th.style.color = '';
+    }
+  });
+  filterContacts();   // re-renders with current filter + new sort
 }
 
+function _applySort(list) {
+  if (!_sortCol) return list;
+  return [...list].sort((a, b) => {
+    const va = String(a[_sortCol] || '').toLowerCase();
+    const vb = String(b[_sortCol] || '').toLowerCase();
+    return _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+  });
+}
+
+// Event delegation for editable cells — works on dynamically rendered rows
+document.addEventListener('click', function(e) {
+  const span = e.target.closest('.editable-cell');
+  if (span) startEdit(span);
+});
+
+function filterContacts() {
+  const q  = document.getElementById('contact-search').value.toLowerCase();
+  const st = document.getElementById('status-filter').value;
+  let list = allContacts;
+  if (st)  list = list.filter(c => (c.status || 'pending') === st);
+  if (q)   list = list.filter(c =>
+    [(c.name||''),(c.email||''),(c.website||''),(c.title||'')].some(v => v.toLowerCase().includes(q)));
+  renderContacts(_applySort(list));
+}
+
+// ── Bulk selection helpers ────────────────────────────────────────────────
 async function loadCampaign() {
   const id = document.getElementById('campaign-select').value;
   document.getElementById('sync-feedback').style.display = 'none';
@@ -885,6 +930,55 @@ async function pollDelete(jobId, id) {
   fb.textContent = 'Delete is taking longer than expected — check CRM Jobs.';
 }
 
+// ── Inline cell editing ──────────────────────────────────────────────────
+function startEdit(span) {
+  if (span.querySelector('input')) return;   // already editing
+  const field = span.dataset.field;
+  const doc   = span.dataset.doc;
+  const email = span.dataset.email;
+  const cur   = span.textContent.trim();
+  span.innerHTML = '';
+  const inp = document.createElement('input');
+  inp.className = 'form-control form-control-sm py-0';
+  inp.style.cssText = 'font-size:.82rem;min-width:80px;max-width:180px;display:inline-block';
+  inp.value = cur === '—' ? '' : cur;
+  span.appendChild(inp);
+  inp.focus();
+  inp.select();
+
+  async function save() {
+    const val = inp.value.trim();
+    if (val === (cur === '—' ? '' : cur)) { renderSpan(val); return; }
+    const campaignId = document.getElementById('campaign-select').value;
+    if (!doc || !campaignId) { renderSpan(val); return; }
+    try {
+      const r = await fetch(
+        `${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/${encodeURIComponent(doc)}`,
+        { method: 'PATCH', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({[field]: val}) });
+      const d = await r.json();
+      if (d.status !== 'ok') throw new Error(d.message);
+      // update allContacts in memory
+      const c = allContacts.find(c => c.email === email);
+      if (c) c[field] = val;
+    } catch(e) {
+      console.warn('[edit] save failed:', e.message);
+    }
+    renderSpan(val);
+  }
+
+  function renderSpan(val) {
+    span.innerHTML = escapeHtml(val) +
+      `<span class="edit-placeholder" style="color:var(--bb-muted)">${val ? '' : '—'}</span>`;
+  }
+
+  inp.addEventListener('blur', save);
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+    if (e.key === 'Escape') { renderSpan(cur === '—' ? '' : cur); }
+  });
+}
+
 (async () => {
   const cid = new URLSearchParams(window.location.search).get('campaign_id')
            || localStorage.getItem('selectedCampaign');
@@ -892,6 +986,4 @@ async function pollDelete(jobId, id) {
   if (cid) await loadCampaign();
 })();
 </script>
-<script src="vendor/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+<script src="vendor/boo

@@ -567,6 +567,30 @@ def send_test_mail(campaign_id):
     except Exception as exc:
         return _err(str(exc), 500)
 
+@app.route("/api/crm/campaigns/<campaign_id>/contacts/<doc_id>", methods=["PATCH", "POST"])
+def update_campaign_contact(campaign_id, doc_id):
+    """Update editable fields on a single campaign_contact doc.
+
+    Allowed fields: name, title.
+    Body: { "name": "...", "title": "..." }
+    """
+    try:
+        db   = _get_db()
+        body = request.get_json(silent=True) or {}
+        allowed = {"name", "title", "status"}
+        update  = {k: str(v).strip() for k, v in body.items() if k in allowed}
+        if not update:
+            return _err("No editable fields provided. Allowed: name, title, status.", 400)
+        ref = (db.collection("campaigns").document(campaign_id)
+                 .collection("campaign_contacts").document(doc_id))
+        if not ref.get().exists:
+            return _err(f"Contact '{doc_id}' not found in campaign '{campaign_id}'", 404)
+        ref.update(update)
+        return _ok(f"Contact '{doc_id}' updated", updated=update)
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @app.route("/api/crm/campaigns/<campaign_id>/contacts/remove", methods=["POST"])
 def remove_campaign_contacts(campaign_id):
     """Remove contacts from a campaign by email list.
@@ -603,7 +627,14 @@ def remove_campaign_contacts(campaign_id):
             "updated_at": datetime.now(timezone.utc).isoformat(),
         })
 
-        return jsonify({"status": "ok", "deleted": deleted, "contact_count": remaining})
+        # Enqueue a sheet export so the Drive sheet stays in sync with DB
+        export_params = {"campaign_id": campaign_id}
+        export_job_id = _new_job("campaign-export", export_params)
+        _enqueue_task("campaign-export", export_job_id, export_params)
+
+        return jsonify({"status": "ok", "deleted": deleted,
+                        "contact_count": remaining,
+                        "export_job_id": export_job_id})
 
     except Exception as exc:
         return _err(str(exc), 500)
