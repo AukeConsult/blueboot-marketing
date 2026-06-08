@@ -72,9 +72,19 @@ Shows the From address, Subject, and a rendered preview of the email body. Suppo
 - **Edit** — opens the campaign editor.
 - **Send test** — opens a popup pre-filled with the campaign subject and body. Sends a test email via the configured mail account. HTML emails are CSS-inlined before sending to ensure compatibility with spam filters.
 
+### Campaign ↔ Sheet synchronisation
+
+The campaign contact list and the Google Drive spreadsheet are kept in sync automatically. The rules are:
+
+**DB is the source of truth for the contact list.** Contacts are only added to a campaign through the app (via Create campaign from facet, or manual API). The sheet never adds new contacts to the DB — it only updates existing ones.
+
+**Sheet wins for editable fields.** When you sync from the sheet, the values in the sheet overwrite the DB for user-editable fields (name, title, last action, last action status, etc.). The DB always controls `status` and `sent_at`. Any new column you add to the sheet is automatically written to the DB as a new field on the contact doc.
+
+**Deletes are propagated both ways.** When contacts are removed from the campaign (via the Exclude + Delete excluded flow, or bulk delete), a `campaign-export` job is automatically enqueued, which regenerates the sheet from the current DB state — deleted contacts disappear from the sheet. Conversely, when you sync from the sheet and a sheet row's Doc ID is no longer in the DB, the sync detects the discrepancy and re-exports the sheet to remove the orphaned row.
+
 ### Sync button
 
-Reads the campaign's Google Drive spreadsheet → updates Firestore. **Sheet wins for all fields** except `status` and `sent_at` which are always DB-controlled. New DB contacts not yet in the sheet are appended automatically. If no sheet exists yet, behaves like Full override (creates the sheet).
+Reads the campaign's Google Drive spreadsheet → updates Firestore for existing contacts only. **Sheet wins for all non-system fields.** `status` and `sent_at` are always DB-controlled. New columns in the sheet are written to the DB. Sheet rows whose Doc ID no longer exists in the DB are cleaned up by triggering a full sheet regeneration. If no sheet exists yet, behaves like Full override (creates the sheet).
 
 ### Full override button
 

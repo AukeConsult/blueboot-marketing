@@ -92,3 +92,17 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 /* Card section header bar */
 .bb-card-header { background: #f9fafb; border-radius: 10px 10px 0 0; }
 .bb-contact-select { min-width: 110px; font-size: .75rem; }
+
+.editable-cell {
+  cursor: text;
+  display: inline-block;
+  min-width: 40px;
+  border-bottom: 1px dashed transparent;
+  border-radius: 2px;
+  padding: 0 2px;
+  transition: border-color .15s;
+}
+.editable-cell:hover { border-bottom-color: var(--bb-muted); }
+
+.bb-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.bb-sortable:hover { color: var(--bb-accent); }
