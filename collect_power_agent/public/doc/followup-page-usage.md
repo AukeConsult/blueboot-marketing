@@ -112,15 +112,17 @@ The selection persists while you scroll, filter, and sort — allowing you to bu
 
 ---
 
-## 6. Mass actions on selected contacts
+## 6. Action bar
 
-When one or more contacts are selected a **batch action bar** appears above the table showing the count selected.
+When one or more contacts are selected, the **Action bar** appears above the table. It shows the number of selected contacts and gives you three actions:
 
 **Clear** — deselects all contacts and hides the bar.
 
-**Set follow-up date** — opens a date panel. Pick a date and optionally add a short comment (for example: *"batch scheduled after campaign review"*). Click **Apply to N selected** to write that follow-up date to every selected contact at once, with a history entry for each. The panel closes automatically when done.
+**Set follow-up date** — expands a panel directly inside the bar. Pick a date and optionally add a short comment (for example: *"batch scheduled after campaign review"*). Click **Apply to N selected** to write that follow-up date to every selected contact at once, with a history entry on each. The panel closes automatically when done.
 
-The batch bar disappears when the selection is cleared.
+**Move to campaign** — expands a panel inside the bar where you choose a destination campaign. You can either pick an existing campaign from the dropdown, or type a name to create a new one. Click **Move** to transfer all selected contacts. The contacts disappear from the current view and appear in the target campaign. If the target is a new campaign, you are set as its owner automatically.
+
+Only one panel is open at a time — opening one closes the other. The action bar disappears when the selection is cleared.
 
 ---
 

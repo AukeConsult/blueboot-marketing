@@ -210,12 +210,15 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 .view-toggle { display: flex; gap: 2px; }
 .view-toggle .btn { padding: 2px 8px; }
 
-/* Batch bar */
-.batch-bar { display: flex; align-items: center; gap: .6rem;
-  background: #eef0ff; border: 1px solid #c7ceff; border-radius: 8px;
-  padding: .45rem .85rem; font-size: .82rem; }
-.batch-bar .batch-count { font-weight: 600; color: var(--bb-accent); }
-.batch-bar .batch-divider { width: 1px; height: 1rem; background: #c7ceff; margin: 0 .2rem; }
+/* Action bar */
+.action-bar { background: #eef0ff; border: 1px solid #c7ceff; border-radius: 8px;
+  font-size: .82rem; overflow: hidden; }
+.action-bar-top { display: flex; align-items: center; gap: .6rem;
+  padding: .45rem .85rem; flex-wrap: wrap; }
+.action-bar-top .batch-count { font-weight: 600; color: var(--bb-accent); }
+.action-bar-divider { width: 1px; height: 1rem; background: #c7ceff; margin: 0 .2rem; flex-shrink: 0; }
+.action-bar-panel { border-top: 1px solid #c7ceff; padding: .6rem .85rem;
+  background: #f5f6ff; display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 
 </style>
 </head>
@@ -302,27 +305,28 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
     <span id="count-badge" class="small ms-auto" style="color:var(--bb-muted)"></span>
   </div>
 
-  <!-- Batch action bar (visible when rows are selected) -->
-  <div id="batch-bar" class="batch-bar mb-3" style="display:none">
-    <span class="batch-count" id="batch-count">0</span>
-    <span style="color:var(--bb-muted)">selected</span>
-    <div class="batch-divider"></div>
-    <button class="btn btn-sm btn-outline-secondary py-0" onclick="clearSelection()">
-      <i class="ti ti-x me-1"></i>Clear
-    </button>
-    <div class="batch-divider"></div>
-    <button class="btn btn-sm btn-outline-primary py-0" onclick="showBatchDatePanel()">
-      <i class="ti ti-calendar me-1"></i>Set follow-up date
-    </button>
-    <div class="batch-divider"></div>
-    <button class="btn btn-sm btn-outline-secondary py-0" onclick="showMovePanel()">
-      <i class="ti ti-folders me-1"></i>Move to campaign
-    </button>
-  </div>
+  <!-- Action bar (visible when rows are selected) -->
+  <div id="action-bar" class="action-bar mb-3" style="display:none">
+    <!-- Top row: count + action buttons -->
+    <div class="action-bar-top">
+      <span class="batch-count" id="batch-count">0</span>
+      <span style="color:var(--bb-muted)">selected</span>
+      <div class="action-bar-divider"></div>
+      <button class="btn btn-sm btn-outline-secondary py-0" onclick="clearSelection()">
+        <i class="ti ti-x me-1"></i>Clear
+      </button>
+      <div class="action-bar-divider"></div>
+      <button class="btn btn-sm btn-outline-primary py-0" id="ab-date-btn" onclick="showBatchDatePanel()">
+        <i class="ti ti-calendar me-1"></i>Set follow-up date
+      </button>
+      <div class="action-bar-divider"></div>
+      <button class="btn btn-sm btn-outline-secondary py-0" id="ab-move-btn" onclick="showMovePanel()">
+        <i class="ti ti-folders me-1"></i>Move to campaign
+      </button>
+    </div>
 
-  <!-- Batch date panel -->
-  <div id="batch-date-panel" class="bb-card p-3 mb-3" style="display:none">
-    <div class="d-flex align-items-center gap-2 flex-wrap">
+    <!-- Inline date panel -->
+    <div id="batch-date-panel" class="action-bar-panel" style="display:none">
       <label class="small fw-500 mb-0" style="color:var(--bb-muted)">Date</label>
       <input type="date" id="batch-date-input" class="form-control form-control-sm" style="max-width:160px">
       <label class="small fw-500 mb-0" style="color:var(--bb-muted)">Comment</label>
@@ -333,27 +337,25 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
       <button class="btn btn-sm btn-outline-secondary" onclick="hideBatchDatePanel()">Cancel</button>
       <span id="batch-date-status" class="small ms-1" style="color:var(--bb-muted)"></span>
     </div>
-  </div>
 
-  <!-- Move-to-campaign panel -->
-  <div id="move-panel" class="bb-card p-3 mb-3" style="display:none">
-    <div class="d-flex align-items-center gap-2 flex-wrap">
+    <!-- Inline move panel -->
+    <div id="move-panel" class="action-bar-panel" style="display:none">
       <span class="small fw-500" style="color:var(--bb-muted)">Move <span id="move-count">0</span> selected to:</span>
       <div class="d-flex align-items-center gap-2">
         <div class="form-check form-check-inline mb-0">
           <input class="form-check-input" type="radio" name="move-target" id="move-opt-existing" value="existing" checked onchange="onMoveOptionChange()">
-          <label class="form-check-label small" for="move-opt-existing">Existing campaign</label>
+          <label class="form-check-label small" for="move-opt-existing">Existing</label>
         </div>
         <div class="form-check form-check-inline mb-0">
           <input class="form-check-input" type="radio" name="move-target" id="move-opt-new" value="new" onchange="onMoveOptionChange()">
-          <label class="form-check-label small" for="move-opt-new">New campaign</label>
+          <label class="form-check-label small" for="move-opt-new">New</label>
         </div>
       </div>
       <div id="move-existing-wrap">
-        <select id="move-campaign-select" class="form-select form-select-sm" style="max-width:260px"></select>
+        <select id="move-campaign-select" class="form-select form-select-sm" style="max-width:240px"></select>
       </div>
       <div id="move-new-wrap" style="display:none">
-        <input type="text" id="move-new-name" class="form-control form-control-sm" style="max-width:260px" placeholder="New campaign name…">
+        <input type="text" id="move-new-name" class="form-control form-control-sm" style="max-width:240px" placeholder="New campaign name…">
       </div>
       <button class="btn btn-sm btn-primary" id="move-apply-btn" onclick="applyMove()">
         <i class="ti ti-check me-1"></i>Move
@@ -1461,14 +1463,14 @@ function getSyncCutoff() {
 }
 
 function showBatchDatePanel() {
+  _showActionPanel('batch-date-panel');
   document.getElementById('batch-apply-count').textContent = selected.size;
   document.getElementById('batch-date-status').textContent = '';
-  document.getElementById('batch-date-panel').style.display = '';
   document.getElementById('batch-date-input').focus();
 }
 
 function hideBatchDatePanel() {
-  document.getElementById('batch-date-panel').style.display = 'none';
+  _hideActionPanel('batch-date-panel');
 }
 
 async function applyBatchDate() {
@@ -1506,9 +1508,36 @@ async function applyBatchDate() {
   if (!errors) { hideBatchDatePanel(); clearSelection(); }
 }
 
+// ── Action bar panel helpers ─────────────────────────────────────────────────
+
+const _ACTION_PANELS = ['batch-date-panel', 'move-panel'];
+
+function _showActionPanel(id) {
+  _ACTION_PANELS.forEach(p => {
+    document.getElementById(p).style.display = p === id ? '' : 'none';
+  });
+  // Highlight active button
+  document.getElementById('ab-date-btn').classList.toggle('btn-primary', id === 'batch-date-panel');
+  document.getElementById('ab-date-btn').classList.toggle('btn-outline-primary', id !== 'batch-date-panel');
+  document.getElementById('ab-move-btn').classList.toggle('btn-secondary', id === 'move-panel');
+  document.getElementById('ab-move-btn').classList.toggle('btn-outline-secondary', id !== 'move-panel');
+}
+
+function _hideActionPanel(id) {
+  document.getElementById(id).style.display = 'none';
+  if (id === 'batch-date-panel') {
+    document.getElementById('ab-date-btn').classList.replace('btn-primary', 'btn-outline-primary');
+  }
+  if (id === 'move-panel') {
+    document.getElementById('ab-move-btn').classList.replace('btn-secondary', 'btn-outline-secondary');
+  }
+}
+
 // ── Move contacts ────────────────────────────────────────────────────────────
 
 function showMovePanel() {
+  if (!selected.size) return;
+  _showActionPanel('move-panel');
   document.getElementById('move-count').textContent = selected.size;
   document.getElementById('move-status').textContent = '';
   // Populate existing-campaign dropdown (exclude current campaign if single-campaign view)
@@ -1522,12 +1551,10 @@ function showMovePanel() {
   document.getElementById('move-opt-existing').checked = true;
   onMoveOptionChange();
   document.getElementById('move-new-name').value = '';
-  document.getElementById('batch-date-panel').style.display = 'none';
-  document.getElementById('move-panel').style.display = '';
 }
 
 function hideMovePanel() {
-  document.getElementById('move-panel').style.display = 'none';
+  _hideActionPanel('move-panel');
 }
 
 function onMoveOptionChange() {
@@ -1568,17 +1595,17 @@ async function applyMove() {
   statusEl.style.color = 'var(--bb-muted)';
   statusEl.textContent = `Moving ${rowsToMove.length} contact${rowsToMove.length === 1 ? '' : 's'}…`;
 
-  let totalMoved = 0, totalErrors = 0, targetName = body.target_campaign_id || body.new_campaign_name;
+  const targetName = body.target_campaign_id || body.new_campaign_name;
 
+  // Fire one job per source campaign (multi-campaign view support)
+  const jobIds = [];
   try {
     for (const [srcCampId, docIds] of Object.entries(byCampaign)) {
       const res = await fetchJSON(
         `${BASE}/api/crm/campaigns/${encodeURIComponent(srcCampId)}/contacts/move`,
-        { method: 'POST', body: JSON.stringify({ ...body, doc_ids: docIds }) }
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, doc_ids: docIds }) }
       );
-      totalMoved  += res.moved  || 0;
-      totalErrors += (res.errors || []).length;
-      if (res.target_campaign_id) targetName = res.target_campaign_id;
+      if (res.job_id) jobIds.push(res.job_id);
     }
   } catch (e) {
     statusEl.style.color = '#dc2626';
@@ -1587,18 +1614,48 @@ async function applyMove() {
     return;
   }
 
-  // Remove moved rows from allRows
+  hideMovePanel();
   const movedPaths = new Set(rowsToMove.map(r => r.doc_path));
-  for (let i = allRows.length - 1; i >= 0; i--) {
-    if (movedPaths.has(allRows[i].doc_path)) allRows.splice(i, 1);
+
+  // Poll all jobs; when all done remove rows and show feedback
+  setFeedback(`<i class="ti ti-clock me-1"></i>Moving ${rowsToMove.length} contact${rowsToMove.length===1?'':'s'} to <strong>${escapeHtml(targetName)}</strong> — please wait…`, 'info');
+  let totalMoved = 0, anyError = false;
+  for (const jid of jobIds) {
+    await new Promise(resolve => {
+      pollJob(jid, {
+        onDone: result => {
+          totalMoved += (result.moved || 0);
+          if (result.errors && result.errors.length) {
+            anyError = true;
+            console.warn('[move] job errors', jid, result.errors);
+          }
+          resolve();
+        },
+        onError: msg => {
+          anyError = true;
+          console.warn('[move] job failed', jid, msg);
+          resolve();
+        },
+      });
+    });
+  }
+
+  // Remove moved rows from allRows only if they were actually moved
+  if (totalMoved > 0) {
+    for (let i = allRows.length - 1; i >= 0; i--) {
+      if (movedPaths.has(allRows[i].doc_path)) allRows.splice(i, 1);
+    }
   }
   clearSelection();
   applyFilter();
-  hideMovePanel();
-  setFeedback(
-    `<i class="ti ti-check me-1"></i>${totalMoved} contact${totalMoved === 1 ? '' : 's'} moved to <strong>${escapeHtml(targetName)}</strong>${totalErrors ? ` (${totalErrors} failed)` : ''}.`,
-    totalErrors ? 'warning' : 'success'
-  );
+  if (totalMoved === 0 && anyError) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Move failed — check Cloud Function logs for details.`, 'danger');
+  } else {
+    setFeedback(
+      `<i class="ti ti-check me-1"></i>${totalMoved} contact${totalMoved===1?'':'s'} moved to <strong>${escapeHtml(targetName)}</strong>${anyError ? ' (some may have failed — check logs)' : ''}.`,
+      anyError ? 'warning' : 'success'
+    );
+  }
   btn.disabled = false;
 }
 
@@ -1654,6 +1711,7 @@ function _syncGroupCheckboxes() {
 
 function clearSelection() {
   selected.clear();
+  _ACTION_PANELS.forEach(p => { document.getElementById(p).style.display = 'none'; });
   document.querySelectorAll('.row-chk').forEach(c => { c.checked = false; });
   document.querySelectorAll('.group-chk').forEach(c => { c.checked = false; });
   const sa = document.getElementById('select-all');
@@ -1664,7 +1722,7 @@ function clearSelection() {
 function updateSelectionUI() {
   const n = selected.size;
   document.getElementById('batch-count').textContent = n;
-  document.getElementById('batch-bar').style.display = n > 0 ? '' : 'none';
+  document.getElementById('action-bar').style.display = n > 0 ? '' : 'none';
   const ac = document.getElementById('batch-apply-count');
   if (ac) ac.textContent = n;
   if (n === 0) hideBatchDatePanel();

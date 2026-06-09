@@ -258,6 +258,17 @@ def worker(name, job_id):
                 days             = int(body.get("days") or 7),
             )
 
+        elif name == "campaign-move":
+            from crm.campaign_move_lib import run_campaign_move
+            result = run_campaign_move(
+                db                 = db,
+                src_campaign_id    = body.get("src_campaign_id", ""),
+                doc_ids            = body.get("doc_ids", []),
+                target_campaign_id = body.get("target_campaign_id", ""),
+                new_campaign_name  = body.get("new_campaign_name", ""),
+                user               = body.get("user", "api"),
+            )
+
         else:
             _update_job(job_id, status="error",
                         error=f"Unknown job: {name}",

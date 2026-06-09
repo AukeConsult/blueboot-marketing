@@ -1,6 +1,6 @@
 # CRM Follow-up — Concepts and Logic
 
-This document explains how the follow-up system works, what the statuses mean, and how contacts move through the outreach lifecycle. For instructions on how to use the page itself — filters, the side card, row selection, batch actions — see the [Follow-up page usage guide](doc-viewer.html?doc=followup-page-usage).
+This document explains how the follow-up system works, what the statuses mean, and how contacts move through the outreach lifecycle. For instructions on how to use the page itself — filters, the side card, row selection, the action bar — see the [Follow-up page usage guide](doc-viewer.html?doc=followup-page-usage).
 
 ---
 

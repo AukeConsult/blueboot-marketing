@@ -85,6 +85,8 @@ _JOB_ENDPOINTS = frozenset({
     "followup_email.followup_email_sync",
     # statistics collection (statistics blueprint)
     "statistics.collect_statistics",
+    # move contacts job trigger (contacts blueprint)
+    "contacts.move_campaign_contacts",
 })
 
 # Minimum role required for mutating requests (POST / PATCH / PUT / DELETE).
@@ -276,4 +278,4 @@ def crmWorker(req: https_fn.Request) -> https_fn.Response:
         try:
             return app.full_dispatch_request()
         except Exception as exc:
-            return _err(str(exc), 500)
+            return https_fn.Response(f"Worker error: {exc}", status=500)
