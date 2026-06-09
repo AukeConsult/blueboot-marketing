@@ -20,6 +20,12 @@
       "source": "functions-auth",
       "runtime": "nodejs22",
       "ignore": ["node_modules"]
+    },
+    {
+      "codebase": "smartmail",
+      "source": "functions-smartmail",
+      "runtime": "python313",
+      "ignore": ["venv", ".venv", "**/__pycache__/**"]
     }
   ]
 }
