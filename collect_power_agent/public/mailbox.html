@@ -262,14 +262,13 @@ function populateStatusSelects() {
 async function loadAccounts() {
   const sel = document.getElementById('account-select');
   try {
-    const r = await fetch(BASE + '/api/crm/settings/mail-accounts');
-    const d = await r.json();
+    const d = await fetchJSON(BASE + '/api/crm/settings/mail-accounts');
     const list = d.accounts || [];
     sel.innerHTML = '<option value="">— select account —</option>' +
       list.map(a => `<option value="${a.email}">${a.email} (${a.account_type})</option>`).join('');
     if (list.length === 1) { sel.value = list[0].email; loadMailbox(); }
   } catch(e) {
-    sel.innerHTML = '<option value="">Error loading accounts</option>';
+    sel.innerHTML = `<option value="">${e.message || 'Error loading accounts'}</option>`;
   }
 }
 

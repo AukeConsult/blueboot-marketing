@@ -186,7 +186,6 @@ const NAV_LINKS = [
       { href: 'crm-sync.html',   icon: 'ti-refresh',     label: 'CRM Sync' },
       { href: 'crm_follow.html', icon: 'ti-phone-check', label: 'Follow-up' },
     ]},
-  { href: 'jobs.html',          icon: 'ti-list-check',        label: 'Jobs',        roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'data-sources',   icon: 'ti-database',          label: 'Data collect', roles: ['admin', 'campaign-user', 'user'],
     children: [
       { href: 'statistics.html',    icon: 'ti-chart-bar', label: 'Statistics' },
@@ -194,6 +193,7 @@ const NAV_LINKS = [
     ]},
   { href: 'gdisk.html',         icon: 'ti-brand-google-drive',label: 'Drive Folder', roles: ['admin', 'campaign-user', 'user'] },
   { href: 'mailbox.html',       icon: 'ti-inbox',             label: 'Message box', roles: ['admin', 'campaign-user', 'user'] },
+  { href: 'jobs.html',          icon: 'ti-list-check',        label: 'Jobs',        roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'docs',  match: ['doc-viewer.html'],           icon: 'ti-book',              label: 'Documentation',
     children: [
       { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user',           label: 'User guide' },

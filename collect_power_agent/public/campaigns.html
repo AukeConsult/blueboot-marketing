@@ -133,13 +133,17 @@ function populateOwnerFilter() {
 async function load() {
   document.getElementById('list-container').innerHTML = '<div class="text-center py-5" style="color:var(--bb-muted)"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>';
   try {
-    const r = await fetch(BASE + '/api/crm/campaigns');
-    const d = await r.json();
+    const d = await fetchJSON(BASE + '/api/crm/campaigns');
     allCampaigns = d.campaigns || [];
     populateOwnerFilter();
     filter();
   } catch(e) {
-    document.getElementById('list-container').innerHTML = `<div class="text-center text-danger py-4 small">Could not load campaigns: ${e.message}</div>`;
+    const msg = e.message || 'Unknown error';
+    const isAccess = msg.includes('Access denied') || msg.includes('role required');
+    document.getElementById('list-container').innerHTML =
+      `<div class="text-center py-4 small ${isAccess ? 'text-warning' : 'text-danger'}">
+        <i class="ti ti-${isAccess ? 'lock' : 'alert-circle'} me-1"></i>${escapeHtml(msg)}
+      </div>`;
   }
 }
 

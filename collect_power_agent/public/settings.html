@@ -246,8 +246,7 @@ const esc = escapeHtml;
 
 async function loadSetting(){
   try{
-    const r = await fetch(BASE + '/api/crm/gdisk/settings');
-    const d = await r.json();
+    const d = await fetchJSON(BASE + '/api/crm/gdisk/settings');
     document.getElementById('folder-id').value = d.folder_id || '';
     if(!d.configured) setStatus('setting-status', 'No folder configured yet — paste a Drive folder ID and save.', 'muted');
   }catch(e){ setStatus('setting-status', 'Could not read settings: ' + prettyError(e.message), 'err', true); }
@@ -303,8 +302,7 @@ let _mailAccounts = {};
 async function loadMailAccounts() {
   const el = document.getElementById('mail-accounts-list');
   try {
-    const r = await fetch(BASE + '/api/crm/settings/mail-accounts');
-    const d = await r.json();
+    const d = await fetchJSON(BASE + '/api/crm/settings/mail-accounts');
     const list = d.accounts || [];
     _mailAccounts = {};
     list.forEach(a => _mailAccounts[a.email] = a);
