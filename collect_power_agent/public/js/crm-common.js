@@ -65,6 +65,7 @@ async function fetchWithTimeout(url, options = {}, ms = 8000){
 // fetch + parse JSON; throws Error on HTTP error or {status:'error'}.
 // The auth interceptor (below) handles token attachment for all fetch() calls.
 // On 503 (transient auth cert failure) retries once automatically.
+// On 401 redirects to login — the session has expired or the token is invalid.
 async function fetchJSON(url, options = {}, _retry = true){
   const r = await fetch(url, options);
   let d = {};
@@ -72,6 +73,12 @@ async function fetchJSON(url, options = {}, _retry = true){
   if(r.status === 503 && _retry) {
     await new Promise(res => setTimeout(res, 800));
     return fetchJSON(url, options, false);
+  }
+  if(r.status === 401) {
+    // Token invalid or expired — redirect to login preserving the current page
+    const next = encodeURIComponent(location.pathname.split('/').pop() + location.search);
+    location.replace('login.html?next=' + next);
+    throw new Error(d.message || 'Sign in required');
   }
   if(!r.ok || d.status === 'error') throw new Error(d.message || ('HTTP ' + r.status));
   return d;

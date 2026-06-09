@@ -148,7 +148,7 @@ def check_auth():
     auth_header = req.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         _log.warning(f"[auth] {req.method} {req.path} — no Bearer token")
-        return _err("Authentication required — please sign in", 401)
+        return _err("Sign in required", 401)
 
     try:
         decoded    = _fb_auth.verify_id_token(auth_header[7:])
@@ -159,13 +159,13 @@ def check_auth():
         return _err("Session expired — please sign in again", 401)
     except _fb_auth.InvalidIdTokenError as exc:
         _log.warning(f"[auth] token INVALID  {req.method} {req.path}  {exc}")
-        return _err("Invalid token — please sign in again", 401)
+        return _err("Sign in required — token invalid", 401)
     except _fb_auth.CertificateFetchError as exc:
         _log.error(f"[auth] cert fetch FAILED  {exc}")
         return _err("Auth service temporarily unavailable — please retry", 503)
     except Exception as exc:
         _log.error(f"[auth] verify_id_token ERROR  {type(exc).__name__}: {exc}")
-        return _err("Authentication failed — please retry", 503)
+        return _err("Auth service temporarily unavailable — please retry", 503)
 
     # ── Fetch role from Firestore user doc ────────────────────────────────────
     role = _get_user_role(db, user_email)
@@ -187,7 +187,7 @@ def check_auth():
                 f"[auth] BLOCKED read  user={user_email}  role={role}  "
                 f"required={min_read}  {req.path}"
             )
-            return _err(f"Access denied — requires \'{min_read}\' role to access this data.", 403)
+            return _err(f"Access denied (403) — '{min_read}' role required", 403)
         return  # allowed
 
     # From here: non-GET request OR a job-related endpoint (any method).
@@ -195,8 +195,7 @@ def check_auth():
     if role == "guest":
         _log.warning(f"[auth] BLOCKED guest  {req.method} {req.path}  user={user_email}")
         return _err(
-            "Access denied — your account has not been assigned a role yet. "
-            "Contact an administrator.", 403
+            "Access denied (403) — no role assigned. Contact an administrator.", 403
         )
 
     # Enforce Blueprint minimum role
@@ -208,7 +207,7 @@ def check_auth():
             f"role={role}  required={min_role}  {req.method} {req.path}"
         )
         return _err(
-            f"Access denied — this action requires '{min_role}' role or higher.", 403
+            f"Access denied (403) — '{min_role}' role required", 403
         )
 
     # Settings collection — admin only, regardless of blueprint minimum
@@ -216,7 +215,7 @@ def check_auth():
         _log.warning(
             f"[auth] BLOCKED settings write  user={user_email}  role={role}  {req.method} {req.path}"
         )
-        return _err("Access denied — only admins can update system settings.", 403)
+        return _err("Access denied (403) — admin role required for settings", 403)
 
     _log.info(f"[auth] ALLOWED  user={user_email}  role={role}  {req.method} {req.path}")
 
