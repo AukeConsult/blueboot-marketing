@@ -31,9 +31,9 @@ Only activate when both the list and the email are fully prepared.
 
 ### Stage 3 — Follow-up takes over
 
-After a campaign is activated, outreach emails go out. From that point on the **CRM Follow-up** page (`CRM → Follow-up`) becomes the main working tool. It shows every open contact across all campaigns in a single list, without requiring you to switch between campaign pages.
+After a campaign is activated, outreach emails go out. From that point on the **Follow-up** page becomes the main working tool. It shows every open contact across all campaigns in a single list, without requiring you to switch between campaign pages.
 
-Access it from the navigation bar: **CRM → Follow-up**
+Access it from the navigation bar: click **Follow-up** in the top bar.
 
 ---
 

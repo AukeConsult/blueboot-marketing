@@ -2,7 +2,7 @@
 
 This guide explains how to go from a raw pool of discovered contacts to a focused outreach campaign using the Filter Facets page. No technical knowledge is required.
 
-> **Note:** this is one of two ways to create a campaign. The other is the **master sheet route** — manually curating contacts in the CRM contact sheet and then using Discover new on the Campaigns page. The filter route is faster and fully automated; the master sheet route gives you individual control over every contact. Both are described in the [User guide](../doc-viewer.html?doc=user-guide).
+> **Note:** this is one of two ways to create a campaign. The other is the **master sheet route** — manually curating contacts in the CRM contact sheet and then using Discover campaigns on the Campaigns page. The filter route is faster and fully automated; the master sheet route gives you individual control over every contact. Both are described in the [User guide](../doc-viewer.html?doc=user-guide).
 
 ---
 
@@ -186,12 +186,4 @@ The popup fetches data lazily when opened — it checks `site_leads` first, then
 - Company name, website, location
 - Company type, sector, platform (CMS)
 - Page count with size band (micro / small / medium / large / huge / ultra)
-- Page title and meta description (from the original crawl)
-- AI summary — one-sentence description generated during enrichment
-- Reseller potential, client base, reseller score, specialisation (leads pipeline only)
-- Keywords
-
-The pipeline source (site pipeline / leads pipeline) is shown as a badge in the popup header.
-
-The popup is read-only — it is for reference only and does not write anything back to Firestore.
-
+- Page title and meta de

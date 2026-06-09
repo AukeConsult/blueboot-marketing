@@ -49,7 +49,7 @@
       <i class="ti ti-table me-1"></i>Master sheet
     </a>
     <button class="btn btn-sm btn-outline-primary" onclick="discover()" id="discover-btn">
-      <i class="ti ti-search me-1"></i>Discover new
+      <i class="ti ti-search me-1"></i>Discover campaigns
     </button>
   </div>
 
@@ -153,7 +153,6 @@ async function discover() {
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Scanning…';
   bar.style.display = 'none';
   try {
-    // Step 1: discover new campaigns
     const r = await fetch(BASE + '/api/crm/discover-campaigns');
     const d = await r.json();
     const newCampaigns = d.created || [];
@@ -174,29 +173,33 @@ async function discover() {
     if (jobId) {
       for (let i = 0; i < 60; i++) {
         await new Promise(r => setTimeout(r, 3000));
-        const jr = await fetch(`${BASE}/api/crm/status/${jobId}`);
-        const jd = await jr.json();
-        if (jd.status === 'done') {
-          const res = jd.result || {};
-          bar.className = 'alert alert-success py-2 px-3 small mb-3';
-          bar.innerHTML = `<i class="ti ti-check me-1"></i>Done — `
-            + `${res.campaigns_upserted ?? 0} campaigns, ${res.contact_select_synced ?? 0} contacts synced`
-            + (newCampaigns.length ? ` · <strong>${newCampaigns.length} new campaign(s) created</strong>` : '');
-          break;
-        }
-        if (jd.status === 'error') {
-          bar.className = 'alert alert-warning py-2 px-3 small mb-3';
-          bar.innerHTML = `<i class="ti ti-alert-triangle me-1"></i>Sync error: ${jd.error || 'unknown'}`;
-          break;
-        }
+        try {
+          const jr = await fetch(`${BASE}/api/crm/status/${jobId}`);
+          const jd = await jr.json();
+          if (jd.status === 'done') {
+            const res = jd.result || {};
+            bar.className = 'alert alert-success py-2 px-3 small mb-3';
+            bar.innerHTML = `<i class="ti ti-check me-1"></i>Done — `
+              + `${res.campaigns_upserted ?? 0} campaigns, ${res.contact_select_synced ?? 0} contacts synced`
+              + (newCampaigns.length ? ` · <strong>${newCampaigns.length} new campaign(s) created</strong>` : '');
+            break;
+          }
+          if (jd.status === 'error') {
+            bar.className = 'alert alert-danger py-2 px-3 small mb-3';
+            bar.innerHTML = `<i class="ti ti-circle-x me-1"></i>Sync error: ${escapeHtml(jd.error || 'unknown')}`;
+            break;
+          }
+        } catch(_) { /* keep polling */ }
       }
     }
     await load();
   } catch(e) {
     bar.className = 'alert alert-danger py-2 px-3 small mb-3';
-    bar.textContent = 'Error: ' + e.message; bar.style.display = '';
+    bar.innerHTML = `<i class="ti ti-circle-x me-1"></i>${escapeHtml(e.message)}`;
+    bar.style.display = '';
   }
-  btn.disabled = false; btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover new';
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover campaigns';
 }
 
 load();

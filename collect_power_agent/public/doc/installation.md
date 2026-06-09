@@ -180,7 +180,7 @@ The CRM workflow requires two Google Sheets:
 - Copy the sheet ID from the URL (the long alphanumeric string after `/spreadsheets/d/`)
 - Set in `functions-crm/crm/sheets_config.py` or via env var: `CONTACT_SHEET_ID=your_sheet_id`
 
-### 4.2 CRM template sheet
+### 4.2 CRM work sheet
 - Create a second Google Sheet
 - Name the first tab **Outreach**
 - Required columns will be written by `crm/push_and_sync.py` on first run

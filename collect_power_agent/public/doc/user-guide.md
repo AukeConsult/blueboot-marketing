@@ -13,9 +13,8 @@ The top navigation bar gives access to all sections:
 | Section | Purpose |
 |---|---|
 | **Campaigns** | Manage and run outreach campaigns |
-| **CRM** → Batch process | Step-by-step workflow from import to outreach |
-| **CRM** → CRM Sync | Sync the master CRM sheet to Firestore |
-| **CRM** → Follow-up | Cross-campaign follow-up tracker with inline editable status and comments |
+| **Follow-up** | Cross-campaign follow-up tracker with inline editable status and comments |
+| **CRM discover** | Manual discovery workflow — export contacts, review, push to CRM work sheet |
 | **Jobs** | Monitor background job progress |
 | **Data collect** → Statistics | Aggregated pipeline statistics |
 | **Data collect** → Filter facets | Lead filter configuration |
@@ -23,7 +22,7 @@ The top navigation bar gives access to all sections:
 | **Mailbox** | Read emails from configured outreach accounts |
 | **Settings** | Mail accounts and Drive folder configuration |
 
-The **CRM** entry in the navigation bar is a dropdown menu. Click it to expand the three sub-pages.
+**CRM discover** is a direct link in the top navigation bar. **Follow-up** is a standalone link immediately to the left of it.
 
 ---
 
@@ -39,9 +38,9 @@ This is the faster route and works well when your target audience can be describ
 
 ### Route 2 — Master CRM sheet (manual curation)
 
-The master CRM contact sheet is a shared Google Spreadsheet that sits outside the system. It is populated through the **CRM Batch Process** (CRM → Batch process), which imports a selection of contacts from the internal pool into the sheet so a person can review them, mark the ones worth pursuing in the **Select** column, and assign a campaign name in the **Campaign** column.
+The master CRM contact sheet is a shared Google Spreadsheet that sits outside the system. It is populated through **CRM discover**, which imports a selection of contacts from the internal pool into the sheet so a person can review them, mark the ones worth pursuing in the **Select** column, and assign a campaign name in the **Campaign** column.
 
-Once the sheet is filled and reviewed, clicking **Discover new** on the Campaigns page reads the Campaign column, finds any campaign names that do not yet exist in the system, and creates those campaigns automatically — pulling in all contacts assigned to that name in the sheet.
+Once the sheet is filled and reviewed, clicking **Discover campaigns** on the Campaigns page reads the Campaign column, finds any campaign names that do not yet exist in the system, and creates those campaigns automatically — pulling in all contacts assigned to that name in the sheet.
 
 This route gives you full human control over exactly which contacts enter a campaign. It is slower but more precise, and is suited to smaller, high-priority lists where individual review matters.
 
@@ -57,15 +56,15 @@ Lists all outreach campaigns. Each campaign card shows status, contact count, si
 
 ### Actions
 
-- **Discover new** — scans the master CRM contact sheet for any campaign IDs that do not yet exist in the system, creates them, and immediately kicks off a contact sync for each one. A **Master sheet** link sits to the left of the button for direct access.
+- **Discover campaigns** — scans the master CRM contact sheet for any campaign IDs that do not yet exist in the system, creates them, and immediately kicks off a contact sync for each one. A **Master sheet** link sits to the left of the button for direct access.
 - **Refresh** — reloads the list.
 - **Filters** — search by name, filter by status (Draft / Do send / Sent / Cancelled) and owner.
 
-### How Discover new works
+### How Discover campaigns works
 
 The master CRM contact sheet is the central spreadsheet that holds all contacts across all campaigns. Each row in the sheet has a **Campaign** column that contains a campaign identifier (for example `NO_jun` or `SE_aug`).
 
-When you click **Discover new**, the system:
+When you click **Discover campaigns**, the system:
 
 1. Reads every unique value in the Campaign column of the master sheet.
 2. Compares that list against the campaigns that already exist in the system.
@@ -74,13 +73,13 @@ When you click **Discover new**, the system:
 
 A confirmation bar appears at the top of the page showing which campaign IDs were created and confirming that the sync jobs have been queued. You can monitor progress on the **Jobs** page.
 
-**When to use it:** after the master CRM sheet has been updated with contacts assigned to a new campaign ID that has not been set up in the system yet. You do not need to create the campaign manually first — Discover new handles that in one click.
+**When to use it:** after the master CRM sheet has been updated with contacts assigned to a new campaign ID that has not been set up in the system yet. You do not need to create the campaign manually first — Discover campaigns handles that in one click.
 
 **Nothing is overwritten.** Campaigns that already exist are never touched. Only genuinely new campaign IDs (ones the system has never seen before) result in new campaign documents being created.
 
 ### Automatic campaign naming
 
-When a campaign is created — whether from a filter preset, via Discover new, or directly — the system checks whether the requested name already exists. If it does, a number is appended automatically: `NO_jun` becomes `NO_jun_2`, then `NO_jun_3`, and so on. You are never asked to choose a different name yourself; the system resolves the conflict silently and shows you what name was actually used in the confirmation message.
+When a campaign is created — whether from a filter preset, via Discover campaigns, or directly — the system checks whether the requested name already exists. If it does, a number is appended automatically: `NO_jun` becomes `NO_jun_2`, then `NO_jun_3`, and so on. You are never asked to choose a different name yourself; the system resolves the conflict silently and shows you what name was actually used in the confirmation message.
 
 ### Campaign statuses
 
@@ -157,134 +156,11 @@ Lists all campaign contacts with status, name, email, title, website, and sent d
 
 ## CRM Batch Process
 
-**URL:** `crm-bp.html` — accessible via **CRM → Batch process**
+**URL:** `crm-bp.html` — accessible via **CRM discover** in the top navigation bar
 
 This is the manual curation workflow that fills the **master CRM contact sheet** — the Google Spreadsheet used as the starting point for the master-sheet campaign route (see above).
 
 | Step | Action |
 |---|---|
-| 1 | **Import contacts** — pull a selection from the internal contact pool into the master sheet. Choose country and minimum site size to narrow the import. |
-| 2 | **Review & select** — open the master sheet, review each row, and mark the contacts you want to pursue by filling the **Select** column. Fill in the **Campaign** column with the campaign name you want these contacts to belong to. |
-| 3 | **Push selected to CRM** — takes all rows you marked in step 2, groups them by company site, and writes them to the CRM template sheet for deeper review. |
-| 4 | **Work the CRM** — fill Status and Selger in the CRM template as you progress through the list. |
-| 5 | **Sync CRM to Leads Database** — pushes status and sales person data back to the internal database. |
-| 6 | **Campaign sync** — reads the master sheet and syncs contacts into their respective campaigns in the system. If a Campaign column value does not yet exist as a campaign, it is created automatically (equivalent to clicking **Discover new** on the Campaigns page). |
-
-After completing step 6, go to the **Campaigns** page and click **Discover new** if the campaigns have not yet appeared — or they will be created automatically as part of the sync.
-
----
-
-## CRM Sync
-
-**URL:** `crm-sync.html` — accessible via **CRM → CRM Sync**
-
-Standalone page for triggering a full CRM sync from the master contact sheet. Optionally filter to a single campaign ID. Shows recent sync jobs with result summaries.
-
----
-
-## CRM Follow-up
-
-**URL:** `crm_follow.html` — accessible via **CRM → Follow-up**
-
-A cross-campaign follow-up tracker that loads every contact from every campaign in one view. Use it to manage ongoing outreach without switching between individual campaign pages.
-
-For full details see the dedicated [CRM Follow-up guide](doc-viewer.html?doc=crm-follow-up).
-
-### Filters
-
-Filter contacts by owner, outreach email account, follow-up status, and contact status (defaults to open — excludes already-sent contacts). A free-text search matches name, email, website, title, and owner.
-
-### Follow-up fields
-
-Three inline-editable fields are shown per contact and saved directly to Firestore on change — no Save button needed:
-
-| Field | Description |
-|---|---|
-| **Follow-up date** | The date you plan to or last followed up |
-| **Follow-up status** | Open / Contacted / Replied / Meeting booked / Closed / Not interested |
-| **Comment** | Free-text note about the contact |
-
-### Comment history
-
-Every time you update the comment field the previous value is appended to a `comment_history` array on the contact document in Firestore, recording the date, your user account, and the comment text. Click the **chevron button** to the right of the comment field to expand the history panel, which shows all past comments newest-first.
-
-### Batch selection
-
-Each row has a checkbox on the left. Selecting one or more rows shows a **batch bar** above the table with a count and a Clear button. Batch actions can be wired up to the selection in future.
-
-### Sorting
-
-All columns except Comment are sortable — click a column header to sort ascending, click again to sort descending.
-
----
-
-## Jobs
-
-**URL:** `jobs.html`
-
-Monitors all background jobs (imports, syncs, exports). Jobs auto-refresh every 5 seconds without collapsing expanded rows. Click any job card header to expand/collapse its result or error detail.
-
-Job statuses: `queued` → `running` → `done` or `error`.
-
----
-
-## Statistics
-
-**URL:** `statistics.html`
-
-Aggregated statistics across both pipelines, displayed in three tabs:
-
-### Leads tab
-- **Lead pipeline** — doc counts for `leads` and `leads_excluded`, top countries, exclusion rate.
-- **Lead enrichment** — how many leads/contacts have been AI-classified, social-enriched, and email-checked.
-
-### Site leads tab
-- **Site lead pipeline** — doc counts for `site_leads` and `sites_excluded`, top countries by AI country and sector, page-size distribution, exclusion rate.
-- **Site enrichment** — AI classification, location enrichment, Brave enrichment, and email-check completion rates.
-- **Data quality** — leads with no sitemap, zero page count, or not classified; contacts missing name or with name/email mismatches.
-
-### Common tab
-- **Priority × country** — lead counts by priority for each country.
-- **email_contacts funnel** — outreach contact list broken down by status, pipeline membership (site/leads/both), and email type.
-- **Pipeline cross-coverage** — how many contacts appear in both pipelines vs only one.
-
-### Collect statistics button
-
-Triggers a background job that runs all aggregations and writes the results to Firestore. The page auto-refreshes when the job completes.
-
----
-
-## Filter facets
-
-**URL:** `filter-facets.html`
-
-Displays and manages the filter facet catalog — the selectable values used by the lead filtering UI (platform, AI sector, country, page size, occupation, etc.). The catalog is rebuilt periodically by a background process; a developer can also trigger it manually from the command line. See the [System Architecture](system-architecture.md) document for details.
-
-### Toolbar
-
-- **Load facets** — dropdown of saved presets. Switching presets clears the Save as field.
-- **Load** — reloads the selected preset.
-- **Save as / Save & count** — saves the current selections under a new preset name and enqueues a `filter-count` job. The job refreshes the keyword list, counts matching sites and contacts, and writes `selected_count` back onto every facet value.
-- **Create campaign** — only enabled after a count job has confirmed `contacts_in_email_contacts > 0`. Opens a modal to enter a campaign ID and optional dry-run flag; enqueues a `facet-campaign` job. Rerun on an existing campaign refreshes matching contacts (preserves outreach history on non-pending contacts) and removes stale pending contacts.
-
-### selected_count
-
-After a count job completes, each facet value shows two numbers: **N / M** where N (blue) is `selected_count` — how many matched sites/contacts have that value — and M is the total across all sites. This lets you see the distribution of your filter results without leaving the page.
-
----
-
-## Drive Folder
-
-**URL:** `gdisk.html`
-
-Browse, upload, and delete files in the connected Google Drive folder. Supports drag-and-drop upload. The folder is configured in Settings.
-
----
-
-## Mailbox
-
-**URL:** `mailbox.html`
-
-Reads emails from all folders (INBOX, Sent, Drafts, Trash, etc.) of a configured mail account. Select an account from the dropdown and choose how many messages per folder to load.
-
-The message list shows: **Folder** badge, From, To,
+| 1 | **Export contacts** — pull a selection from the internal contact pool into the master sheet. Choose country and minimum site size to narrow the import. |
+| 2 | **Review & select** — open the master sheet, review each row, and mark the contac

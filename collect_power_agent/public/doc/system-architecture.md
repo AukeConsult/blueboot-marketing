@@ -238,7 +238,7 @@ Campaigns group `email_contacts` by a shared tag and track the outreach process 
 
 **From the master CRM sheet (automated):**
 1. The master Google Sheet has a `Campaign` column
-2. `Discover new` button (or `crm-sync` API) scans the sheet for unique campaign IDs not yet in Firestore
+2. `Discover campaigns` button (or `crm-sync` API) scans the sheet for unique campaign IDs not yet in Firestore
 3. New campaign documents are created with `status: draft` and `source: master-sheet`
 4. A `crm-sync` job runs immediately to populate `campaign_contacts`
 
@@ -324,12 +324,12 @@ Long-running operations run as Cloud Tasks jobs:
 
 | Job name | Triggered by | What it does |
 |---|---|---|
-| `contact-sync` | CRM step 1 | Import contacts from Leads DB to contact sheet |
-| `push-and-sync` | CRM step 3 | Push selected contacts to CRM template |
-| `template-sync` | CRM step 5 | Sync CRM template back to Leads DB |
+| `contact-sync` | CRM discover step 1 | Export contacts from Leads DB to contact sheet |
+| `push-and-sync` | CRM discover step 3 | Push selected contacts to CRM work sheet |
+| `template-sync` | CRM discover step 5 | Sync CRM work sheet back to Leads DB |
 | `campaign-sync` | Campaign Sync button | Drive sheet → Firestore sync |
 | `campaign-export` | Full override button | Firestore → Drive sheet |
-| `crm-sync` | Discover new / CRM step 6 | Master sheet → Firestore |
+| `crm-sync` | Discover campaigns | Master sheet → Firestore |
 | `statistics` | Collect statistics button | Run all `StatisticsBuilder` aggregations |
 | `filter-count` | Filter facets page | Count leads matching a filter selection |
 

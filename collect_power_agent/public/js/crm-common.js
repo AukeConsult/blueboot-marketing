@@ -179,13 +179,11 @@ const NAV_LINKS = [
   { href: 'campaigns.html',     icon: 'ti-speakerphone',      label: 'Campaigns',
     match: ['campaigns.html', 'campaign.html', 'campaign-edit.html'],
     roles: ['admin', 'campaign-user', 'user'] },
-  { dropdown: 'crm', icon: 'ti-server-2', label: 'CRM', roles: ['admin', 'campaign-user', 'user'],
-    match: ['crm-bp.html', 'crm-sync.html', 'crm_follow.html'],
-    children: [
-      { href: 'crm-bp.html',     icon: 'ti-server-2',    label: 'CRM Batch Process' },
-      { href: 'crm-sync.html',   icon: 'ti-refresh',     label: 'CRM Sync' },
-      { href: 'crm_follow.html', icon: 'ti-phone-check', label: 'Follow-up' },
-    ]},
+  { href: 'crm_follow.html',   icon: 'ti-phone-check',       label: 'Follow-up',
+    roles: ['admin', 'campaign-user', 'user'] },
+  { href: 'crm-bp.html', icon: 'ti-server-2', label: 'CRM discover',
+    match: ['crm-bp.html', 'crm-sync.html'],
+    roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'data-sources',   icon: 'ti-database',          label: 'Data collect', roles: ['admin', 'campaign-user', 'user'],
     children: [
       { href: 'statistics.html',    icon: 'ti-chart-bar', label: 'Statistics' },

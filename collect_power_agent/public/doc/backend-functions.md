@@ -285,7 +285,7 @@ python app/followup_email_sync.py --list-campaigns       # list available campai
 
 ## CRM Workflow (also triggered from frontend)
 
-### `crm/contact_sync.py` — Import contacts to contact sheet 🌐 Frontend triggered
+### `crm/contact_sync.py` — Export contacts to contact sheet 🌐 Frontend triggered
 
 Exports selected `email_contacts` to the master CRM contact sheet.
 
@@ -295,9 +295,9 @@ Exports selected `email_contacts` to the master CRM contact sheet.
 
 ---
 
-### `crm/push_and_sync.py` — Push selected to CRM template 🌐 Frontend triggered
+### `crm/push_and_sync.py` — Push selected to CRM work sheet 🌐 Frontend triggered
 
-Takes contacts marked in the contact sheet and pushes them to the CRM template spreadsheet, grouped by site.
+Takes contacts marked in the contact sheet and pushes them to the CRM work sheet, grouped by site.
 
 **Frontend trigger:** CRM page → Step 3 "Push to CRM"
 → API: `GET /api/crm/push-and-sync`
@@ -305,9 +305,9 @@ Takes contacts marked in the contact sheet and pushes them to the CRM template s
 
 ---
 
-### `crm/template_sync.py` — Sync CRM template back to Leads DB 🌐 Frontend triggered
+### `crm/template_sync.py` — Sync CRM work sheet back to Leads DB 🌐 Frontend triggered
 
-Reads `crm_status`, `crm_sales_person`, and `crm_date` from the CRM template and writes them back to Firestore.
+Reads `crm_status`, `crm_sales_person`, and `crm_date` from the CRM work sheet and writes them back to Firestore.
 
 **Frontend trigger:** CRM page → Step 5 "Sync now"
 → API: `GET /api/crm/template-sync`
@@ -319,7 +319,7 @@ Reads `crm_status`, `crm_sales_person`, and `crm_date` from the CRM template and
 
 Reads the master CRM contact sheet and syncs contacts into the correct campaign in Firestore.
 
-**Frontend trigger:** CRM page → Step 6 "Sync campaigns" / Discover new button
+**Frontend trigger:** CRM page → Step 6 "Sync campaigns" / Discover campaigns button
 → API: `GET /api/crm/crm-sync`
 → Cloud Tasks job: `crm-sync`
 
@@ -333,7 +333,7 @@ These operations have no standalone CLI — they run as Cloud Tasks jobs trigger
 |---|---|---|---|
 | Campaign sync (Drive sheet → DB) | Campaign page → Sync | `GET /api/crm/campaign-sync` | `campaign-sync` |
 | Full override (DB → Drive sheet) | Campaign page → Full override | `GET /api/crm/campaign-export` | `campaign-export` |
-| Discover new campaigns | Campaigns list → Discover new | `GET /api/crm/discover-campaigns` | — (sync jobs spawned) |
+| Discover campaigns campaigns | Campaigns list → Discover campaigns | `GET /api/crm/discover-campaigns` | — (sync jobs spawned) |
 | Collect statistics | Statistics page → Collect statistics | `POST /api/crm/statistics/collect` | `statistics` |
 | Load all follow-up contacts | CRM Follow-up page load | `GET /api/crm/followup-contacts` | — (direct read) |
 | Update follow-up field | CRM Follow-up inline edit | `PATCH /api/crm/campaigns/<id>/contacts/<doc>` | — (direct write) |
@@ -373,88 +373,4 @@ Scans `site_leads` + `site_contacts` and builds the filter facet catalog stored 
 ```bash
 python app/build_filter_facets.py
 python app/build_filter_facets.py --cap 300
-python app/build_filter_facets.py --no-write          # JSON preview only
-```
-
-**Frontend trigger:** Filter facets page → Rebuild button (if present)
-→ API: `GET /api/crm/filter-count` (for counting selected filters)
-
----
-
-### `maint_site_leads_export.py` — Raw export of site_leads to Excel
-
-Exports `site_leads` + `site_contacts` to a flat Excel file without scoring.
-
-```bash
-python app/maint_site_leads_export.py
-python app/maint_site_leads_export.py --countries NO,SE
-python app/maint_site_leads_export.py --countries NO --output exports/no_leads.xlsx
-```
-
----
-
-### `maint_site_excluded_recheck.py` — Re-check excluded sites
-
-Re-crawls sites in `sites_excluded` to see if they now meet minimum criteria.
-
-```bash
-python app/maint_site_excluded_recheck.py
-python app/maint_site_excluded_recheck.py --countries NO,SE
-python app/maint_site_excluded_recheck.py --reason min_pages
-```
-
----
-
-### `maint_site_sitemap_backfill.py` — Backfill sitemap data
-
-Re-fetches sitemap data for `site_leads` that are missing `sitemap_url`, `sitemap_type`, or `page_count`.
-
-```bash
-python app/maint_site_sitemap_backfill.py
-python app/maint_site_sitemap_backfill.py --countries NO,SE
-python app/maint_site_sitemap_backfill.py --limit 200 --dry-run
-```
-
----
-
-### `maint_firestore_snapshot.py` — Search Firestore by keyword
-
-Quick diagnostic to search any Firestore collection by keyword across all fields.
-
-```bash
-python app/maint_firestore_snapshot.py wordpress
-python app/maint_firestore_snapshot.py wordpress --field source_query
-python app/maint_firestore_snapshot.py wordpress --limit 20
-```
-
----
-
-### `maint_firestore_index_sync.py` — Merge Firestore indexes
-
-Merges newly generated indexes into `firestore.indexes.json` without losing existing ones.
-
-```bash
-python app/maint_firestore_index_sync.py
-python app/maint_firestore_index_sync.py --dry-run
-python app/maint_firestore_index_sync.py --discover-only
-```
-
----
-
-### `maint_fix_contact_country.py` — Fix contact country fields
-
-One-off migration to standardise country field values on contact documents.
-
-```bash
-python app/maint_fix_contact_country.py --dry-run
-python app/maint_fix_contact_country.py
-```
-
----
-
-### `maint_fix_rescrape_contacts.py` — Re-scrape contacts with bad data
-
-Re-crawls leads where phone/email data is mismatched or corrupted.
-
-```bash
-python app/maint_fix_rescrape_contact
+python app/build_fi
