@@ -6,6 +6,28 @@
 // Base URL of the CRM API (crmApi Cloud Function).
 const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
 
+// ── Auth interceptor ──────────────────────────────────────────────────────────
+// Wraps window.fetch so that every call to the CRM API (any URL starting with
+// BASE) automatically carries the Firebase ID token — regardless of whether the
+// call site uses fetchJSON or a raw fetch().  Zero per-page changes required.
+(function _installAuthInterceptor() {
+  const _orig = window.fetch.bind(window);
+  window.fetch = async function(url, options) {
+    if (typeof url === 'string' && url.startsWith(BASE)) {
+      options = Object.assign({}, options);
+      options.headers = Object.assign({}, options.headers);
+      // Only add if not already present (avoids duplicating the header)
+      if (!options.headers['Authorization'] && !options.headers['authorization']) {
+        if (typeof getAuthToken === 'function') {
+          const token = await getAuthToken();
+          if (token) options.headers['Authorization'] = 'Bearer ' + token;
+        }
+      }
+    }
+    return _orig(url, options);
+  };
+})();
+
 // HTML-escape a string for safe interpolation into innerHTML.
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c =>
@@ -41,10 +63,16 @@ async function fetchWithTimeout(url, options = {}, ms = 8000){
 }
 
 // fetch + parse JSON; throws Error on HTTP error or {status:'error'}.
-async function fetchJSON(url, options = {}){
+// The auth interceptor (below) handles token attachment for all fetch() calls.
+// On 503 (transient auth cert failure) retries once automatically.
+async function fetchJSON(url, options = {}, _retry = true){
   const r = await fetch(url, options);
   let d = {};
   try { d = await r.json(); } catch(_){ /* non-JSON */ }
+  if(r.status === 503 && _retry) {
+    await new Promise(res => setTimeout(res, 800));
+    return fetchJSON(url, options, false);
+  }
   if(!r.ok || d.status === 'error') throw new Error(d.message || ('HTTP ' + r.status));
   return d;
 }
@@ -54,8 +82,7 @@ async function pollJob(jobId, { onDone, onError, intervalMs = 2000, tries = 60 }
   for(let i = 0; i < tries; i++){
     await new Promise(res => setTimeout(res, intervalMs));
     try{
-      const r = await fetch(BASE + '/api/crm/status/' + jobId);
-      const j = await r.json();
+      const j = await fetchJSON(BASE + '/api/crm/status/' + jobId);
       if(j.status === 'done'){ onDone && onDone(j.result || {}, j); return; }
       if(j.status === 'error'){ onError && onError(j.error || 'unknown', j); return; }
     }catch(_){ /* keep polling */ }
@@ -165,11 +192,11 @@ const NAV_LINKS = [
       { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user',           label: 'User guide' },
       { href: 'doc-viewer.html?doc=crm-follow-up',       icon: 'ti-phone-check',    label: 'CRM Follow-up' },
       { href: 'doc-viewer.html?doc=filter-to-campaign',  icon: 'ti-filter',         label: 'Filter to campaign' },
-      { href: 'doc-viewer.html?doc=backend-functions',   icon: 'ti-terminal',       label: 'Backend functions' },
       { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',     label: 'Pipeline config' },
       { href: 'doc-viewer.html?doc=ai-assistance',       icon: 'ti-brain',          label: 'AI assistance' },
       { divider: true },
       { href: 'doc-viewer.html?doc=system-architecture', icon: 'ti-topology-star-3', label: 'System architecture' },
+      { href: 'doc-viewer.html?doc=backend-functions',   icon: 'ti-terminal',       label: 'Backend functions' },
       { href: 'doc-viewer.html?doc=installation',        icon: 'ti-download',       label: 'Installation' },
     ]},
   { dropdown: 'settings', icon: 'ti-settings', label: 'Settings', roles: ['admin'],
@@ -235,7 +262,7 @@ function renderNav(targetId){
 
 // auto-render on any page that has a #nav placeholder, and require auth.
 // Public pages (no sign-in required): login.html, index.html, doc-viewer.html
-const PUBLIC_PAGES = new Set(['login.html', 'index.html', 'doc-viewer.html', '']);
+const PUBLIC_PAGES = new Set(['login.html', 'register.html', 'index.html', 'doc-viewer.html', '']);
 (function(){
   function go(){
     if(!document.getElementById('nav')) return;

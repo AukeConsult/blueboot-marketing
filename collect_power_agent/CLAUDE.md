@@ -744,3 +744,176 @@ The following belong in `README.md`, `doc/system-architecture.md`,
 **Right (system architecture / README):**
 > Follow-up field writes go through `PATCH /api/crm/campaigns/{id}/contacts/{doc_id}`.
 > The backend appends a `comment_history` entry using Firestore `ArrayUnion`.
+
+---
+
+## Frontend access control
+
+### RULE: You must be at least `user` level to access any internal page
+
+All pages except `index.html`, `login.html`, and `doc-viewer.html` (public pages)
+require the signed-in user to have a role of `user`, `campaign-user`, or `admin`.
+
+A signed-in user with **no role assigned** gets the role `guest`. Guests are
+redirected to `index.html` automatically by `requireRole()` in `crm-common.js`
+because `guest` is not included in any page's `PAGE_ROLES` entry.
+
+`index.html` shows a visible warning banner to guests explaining that their account
+is pending role assignment.
+
+**Implementation:**
+- `auth.js` — `_fetchRole()` falls back to `'guest'` (not `'user'`) when the
+  Firestore user doc is missing or the role field is empty.
+- `crm-common.js` — `PAGE_ROLES` lists allowed roles per page; none include `guest`.
+  `requireRole()` redirects to `index.html` for any unlisted role.
+- `index.html` — shows `#guest-notice` alert when the signed-in user has `guest` role.
+
+**When adding a new page:** add it to `PAGE_ROLES` in `crm-common.js` with the
+minimum required role. Never omit a page from `PAGE_ROLES` unless it is explicitly
+a public page added to `PUBLIC_PAGES`.
+
+---
+
+## Access control documentation
+
+### RULE: All access control rules must be documented in readme-access.md
+
+`readme-access.md` (project root) is the single source of truth for all access
+control documentation — roles, enforcement rules, Firestore paths, Blueprint
+minimums, and how to add new protected endpoints.
+
+When adding or changing any access rule (frontend or backend):
+
+1. **Update `readme-access.md`** — keep the role table, Blueprint minimum table,
+   and `PAGE_ROLES` listing current.
+2. **Update `public/doc/installation.md`** — section 11 covers the first-admin
+   setup and role assignment flow. Keep it aligned with any role or flow changes.
+3. **No access rules live only in code** — if a role check, redirect, or Blueprint
+   minimum is added, it must appear in `readme-access.md` within the same commit.
+
+The two documents serve different audiences:
+- `readme-access.md` — technical reference for developers (roles, API enforcement, code pointers)
+- `installation.md` section 11 — operational guide for administrators (how to set up the first admin, assign roles to new users)
+
+---
+
+## Access control — guest read protection
+
+### RULE: Any blueprint whose GET responses contain internal data must be in `_BLUEPRINTS_BLOCKED_FOR_GUESTS`
+
+By default, authenticated GET requests are allowed for all roles including `guest`.
+This is acceptable for purely public or non-sensitive read endpoints. However, any
+blueprint whose GET responses include contact details, campaign data, file listings,
+or other internal business data **must** be added to `_BLUEPRINTS_BLOCKED_FOR_GUESTS`
+in `functions-crm/main.py`.
+
+Currently blocked:
+
+| Blueprint | Reason |
+|---|---|
+| `campaigns` | Campaign docs embed the full `campaign_contacts` subcollection |
+| `contacts` | Direct reads of `campaign_contacts` via collection-group query |
+| `gdisk` | Google Drive folder contents are internal |
+
+**When adding a new blueprint or route, ask:** can a guest (signed in but no role)
+see this response without any risk? If not, add the blueprint to the set.
+
+**Checklist when adding a new blueprint:**
+1. Add to `_BLUEPRINTS_BLOCKED_FOR_GUESTS` in `main.py` if GET returns sensitive data
+2. Add to `_BLUEPRINT_MIN_ROLES` in `main.py` with the correct minimum role for writes
+3. Add the endpoint to `_JOB_ENDPOINTS` in `main.py` if it triggers a background job
+4. Update `readme-access.md` — all three sets must be kept current
+5. Update `public/doc/installation.md` section 11 if the change affects user onboarding
+
+---
+
+## Role model — user role is read-only
+
+### RULE: `user` role has read access only — all writes require `campaign-user`
+
+The role model is:
+
+| Role | GET reads | Writes (POST / PATCH / PUT / DELETE) |
+|---|---|---|
+| `guest` | blocked for sensitive blueprints | blocked everywhere |
+| `user` | all internal data | **none** |
+| `campaign-user` | everything | everything except admin endpoints |
+| `admin` | everything | everything |
+
+`user` must **never** appear as a minimum role in `_BLUEPRINT_MIN_ROLES` in
+`functions-crm/main.py`. All mutating endpoints require at least `campaign-user`.
+
+This means a `user`-level account can browse campaigns, contacts, the mailbox,
+statistics, and the Drive folder — but cannot change any data, trigger any job,
+or sync anything. They are a read-only observer.
+
+When adding a new write endpoint, the minimum role is always `campaign-user`
+or `admin` — never `user`.
+
+---
+
+## Access control — settings collection is admin-only
+
+### RULE: Any endpoint that writes to the Firestore `settings` collection requires `admin`
+
+The `settings` collection holds system-level configuration — mail accounts, Drive
+folder, user roles, mail tag statuses. Only admins may modify any document under
+this path, regardless of which Blueprint the endpoint belongs to.
+
+Enforced via `_ADMIN_ENDPOINTS` in `functions-crm/main.py`, which is checked
+**after** the Blueprint minimum role. An endpoint in `_ADMIN_ENDPOINTS` returns
+403 for any role below `admin`, even if the Blueprint minimum would allow it.
+
+Currently enforced:
+
+| Endpoint | Writes to |
+|---|---|
+| `PUT /api/crm/settings/mail-tag-statuses` | `settings/mail_tag_statuses` |
+| `POST/PATCH /api/crm/gdisk/settings` | `settings/gdisk` |
+
+`mail_accounts` and `auth` blueprints already enforce `admin` at the Blueprint level
+and do not need to appear in `_ADMIN_ENDPOINTS`.
+
+**When adding a new endpoint that writes to `settings/`:**
+1. Add the Flask endpoint name to `_ADMIN_ENDPOINTS` in `main.py`
+2. Add a row to the Settings table in `readme-access.md`
+3. Do NOT rely on the Blueprint minimum alone — `_ADMIN_ENDPOINTS` is the explicit
+   guard for all settings writes
+
+---
+
+## Access control — guest read protection
+
+### RULE: Any blueprint whose GET responses contain internal data must be in `_BLUEPRINT_MIN_READ_ROLES`
+
+By default, authenticated GET requests are allowed for all roles including `guest`.
+This is acceptable for purely public or non-sensitive read endpoints. However, any
+blueprint whose GET responses include contact details, campaign data, file listings,
+or other internal business data **must** be added to `_BLUEPRINT_MIN_READ_ROLES`
+in `functions-crm/main.py`.
+
+Neither `guest` nor `user` roles can read from any blueprint in this map —
+the minimum is always `campaign-user`.
+
+Currently blocked:
+
+| Blueprint | Min read role | Why |
+|---|---|---|
+| `campaigns` | `campaign-user` | Campaign docs embed the full `campaign_contacts` subcollection |
+| `contacts` | `campaign-user` | Direct reads of `campaign_contacts` via collection-group query |
+| `gdisk` | `campaign-user` | Google Drive folder contents are internal |
+| `mail_accounts` | `campaign-user` | Mail account credentials live under `settings/` |
+| `auth` | `campaign-user` | User role docs live under `settings/users` |
+| `mail_tags` | `campaign-user` | `settings/mail_tag_statuses` is system configuration |
+| `mailbox` | `campaign-user` | IMAP mailbox contents are internal — no read for user/guest |
+
+**When adding a new blueprint or route, ask:** can a guest or basic user see this
+response without any risk? If not, add the blueprint to `_BLUEPRINT_MIN_READ_ROLES`.
+
+**Checklist when adding a new blueprint:**
+1. Add to `_BLUEPRINT_MIN_READ_ROLES` in `main.py` if GET returns sensitive data
+2. Add to `_BLUEPRINT_MIN_ROLES` in `main.py` with the correct minimum role for writes
+3. Add the endpoint to `_JOB_ENDPOINTS` in `main.py` if it triggers a background job
+4. Add to `_ADMIN_ENDPOINTS` in `main.py` if it writes to the `settings` collection
+5. Update `readme-access.md` — all four sets must be kept current
+6. Update `public/doc/installation.md` section 11 if the change affects user onboarding

@@ -381,3 +381,49 @@ collect_power_agent/
 **Cloud Function returns 403** — the service account needs `roles/run.invoker` and `roles/cloudtasks.enqueuer` (run `setup_gcp.sh`).
 
 **Sheets not found (404)** — verify the sheet IDs in `sheets_config.py` and that the service account has Editor access 
+---
+
+## 11. Access control — first admin setup
+
+The system requires every user to be assigned a role before they can access any internal page or make any write API call. A signed-in user with no role is a **guest** — they can only see the landing page.
+
+For full details see [`readme-access.md`](../../readme-access.md).
+
+### Role hierarchy
+
+| Role | What they can do |
+|---|---|
+| `guest` | View the landing page only. Cannot access any internal page or API write. |
+| `user` | Full read access + follow-up field updates and email sync. |
+| `campaign-user` | Everything `user` can do + create / manage campaigns and jobs. |
+| `admin` | Full access including mail account settings and user management. |
+
+### Assigning the first admin
+
+There is no UI for the very first user — assign the role directly in Firestore:
+
+1. Sign in to the CRM dashboard with the account that should be the first admin.
+2. In [Firebase Console → Firestore](https://console.firebase.google.com) open:
+   ```
+   settings → users → users → {your-email-address}
+   ```
+3. Add a field:
+   ```
+   role: "admin"   (string)
+   ```
+4. Reload the dashboard — the account now has full access.
+
+All subsequent users can be assigned roles via the **Settings → Users** page.
+
+### Assigning roles to new users
+
+1. A new user signs in — Firebase Authentication creates their account.
+2. They land on the dashboard and see *"Your account is pending access — contact an administrator."*
+3. An admin opens **Settings → Users**, finds the new user, and assigns a role.
+4. The user refreshes — they now have access.
+
+### How it is enforced
+
+**Frontend:** `crm-common.js` checks `PAGE_ROLES` on every page load. Guests and unauthenticated users are redirected to the landing page automatically.
+
+**Backend:** every API request (GET and non-GET) must carry a valid Firebase ID token in the `Authorization` header. The `before_request` hook in `functions-crm/main.py` verifies the token, fetches the role from Firestore, and returns `401` (no/bad token) or `403` (insufficient role) if the check fails.

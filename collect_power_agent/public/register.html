@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Register — Blueboot CRM</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+body { background: #f4f5f7; }
+.login-card {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.1);
+  padding: 2.5rem 2rem;
+  max-width: 400px;
+  width: 100%;
+}
+.brand-logo {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; border-radius: 13px;
+  background: #eef0ff; margin-bottom: 1rem;
+}
+#status { min-height: 1.4rem; }
+</style>
+</head>
+<body class="d-flex align-items-center justify-content-center" style="min-height:100vh">
+
+<div class="login-card text-center">
+
+  <div class="brand-logo mx-auto">
+    <i class="ti ti-bolt" style="font-size:1.5rem;color:var(--bb-accent)"></i>
+  </div>
+  <h1 style="font-size:1.35rem;font-weight:700;margin-bottom:.25rem;color:#111">Blueboot CRM</h1>
+  <p class="text-muted small mb-4" style="line-height:1.5">Create your account</p>
+
+  <div id="success-panel" style="display:none">
+    <div class="alert alert-success py-3 px-3 small text-start mb-3">
+      <i class="ti ti-check me-1"></i>
+      <strong>Account created.</strong><br>
+      Your account is pending access. Contact an administrator to be assigned a role before you can use the system.
+    </div>
+    <a href="login.html" class="btn btn-primary btn-sm w-100">
+      <i class="ti ti-login me-1"></i>Go to sign in
+    </a>
+  </div>
+
+  <form id="register-form" onsubmit="register(event)" novalidate>
+    <div class="mb-3 text-start">
+      <label class="form-label small text-muted mb-1" for="inp-email">Email</label>
+      <input id="inp-email" type="email" class="form-control form-control-sm"
+        placeholder="you@example.com" autocomplete="email" required>
+    </div>
+    <div class="mb-3 text-start">
+      <label class="form-label small text-muted mb-1" for="inp-password">Password</label>
+      <input id="inp-password" type="password" class="form-control form-control-sm"
+        placeholder="At least 8 characters" autocomplete="new-password" required>
+    </div>
+    <div class="mb-4 text-start">
+      <label class="form-label small text-muted mb-1" for="inp-confirm">Confirm password</label>
+      <input id="inp-confirm" type="password" class="form-control form-control-sm"
+        placeholder="Repeat password" autocomplete="new-password" required>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm w-100" id="btn-register">
+      <i class="ti ti-user-plus me-1"></i>Create account
+    </button>
+  </form>
+
+  <div id="status" class="small mt-3 text-danger"></div>
+
+  <p class="small text-muted mt-4 mb-0">
+    Already have an account? <a href="login.html">Sign in</a>
+  </p>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+if (!firebase.apps.length) {
+  firebase.initializeApp(window.FIREBASE_CONFIG || {});
+}
+
+// If already signed in, go straight to the app
+firebase.auth().onAuthStateChanged(user => {
+  if (user) location.replace('index.html');
+});
+
+async function register(e) {
+  e.preventDefault();
+  setStatus('');
+
+  const email   = document.getElementById('inp-email').value.trim();
+  const pass    = document.getElementById('inp-password').value;
+  const confirm = document.getElementById('inp-confirm').value;
+
+  if (!email || !pass || !confirm) {
+    setStatus('Please fill in all fields.'); return;
+  }
+  if (pass.length < 8) {
+    setStatus('Password must be at least 8 characters.'); return;
+  }
+  if (pass !== confirm) {
+    setStatus('Passwords do not match.'); return;
+  }
+
+  setBusy(true);
+  try {
+    await firebase.auth().createUserWithEmailAndPassword(email, pass);
+    // Sign out immediately — user must wait for a role to be assigned
+    await firebase.auth().signOut();
+    document.getElementById('register-form').style.display = 'none';
+    document.getElementById('success-panel').style.display = '';
+  } catch (err) {
+    setStatus(friendlyError(err));
+    setBusy(false);
+  }
+}
+
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+function setBusy(busy) {
+  document.getElementById('btn-register').disabled = busy;
+}
+
+function friendlyError(err) {
+  const code = err.code || '';
+  if (code === 'auth/email-already-in-use')  return 'An account with this email already exists.';
+  if (code === 'auth/invalid-email')          return 'That doesn\'t look like a valid email address.';
+  if (code === 'auth/weak-password')          return 'Password is too weak — choose something stronger.';
+  if (code === 'auth/network-request-failed') return 'Network error — check your connection.';
+  if (code === 'auth/too-many-requests')      return 'Too many attempts — try again later.';
+  return err.message || 'Registration failed.';
+}
+</script>
+</body>
+</html>

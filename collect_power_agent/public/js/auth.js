@@ -73,9 +73,19 @@ async function signOutUser() {
 //     fetch(url, { headers: { Authorization: 'Bearer ' + token } });
 // ---------------------------------------------------------------------------
 async function getAuthToken() {
+  // Fast path — auth already resolved
   const user = _auth.currentUser || window._authUser;
-  if (!user) return null;
-  return user.getIdToken();
+  if (user) return user.getIdToken();
+
+  // Auth not yet resolved — wait for Firebase to confirm state (max 5 s)
+  return new Promise(resolve => {
+    const timer = setTimeout(() => resolve(null), 5000);
+    const unsub = _auth.onAuthStateChanged(u => {
+      clearTimeout(timer);
+      unsub();
+      resolve(u ? u.getIdToken() : null);
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -85,11 +95,11 @@ async function getAuthToken() {
 // ---------------------------------------------------------------------------
 
 // Fetch the user's role from the Firestore user doc via the REST API.
-// Returns 'user' if the doc is missing or the role field is empty.
+// Returns 'guest' if the doc is missing or the role field is empty/unrecognised.
 async function _fetchRole(user) {
   const projectId = (window.FIREBASE_CONFIG || {}).projectId || 'blueboot-market';
   const email     = (user.email || '').toLowerCase().trim();
-  if (!email) { console.warn('[auth] _fetchRole: no email on user'); return 'user'; }
+  if (!email) { console.warn('[auth] _fetchRole: no email on user'); return 'guest'; }
 
   const url = `https://firestore.googleapis.com/v1/projects/${projectId}`
             + `/databases/(default)/documents/settings/users/users/${encodeURIComponent(email)}`;
@@ -98,7 +108,7 @@ async function _fetchRole(user) {
     // Rules are "allow read: if true" so no auth header needed for reads
     const r = await fetch(url, { cache: 'no-store' });
     console.log('[auth] role fetch status:', r.status);
-    if (!r.ok) { console.warn('[auth] role doc not found or error'); return 'user'; }
+    if (!r.ok) { console.warn('[auth] role doc not found or error'); return 'guest'; }
     const doc = await r.json();
     console.log('[auth] role doc fields:', JSON.stringify(doc.fields));
     const role = (doc.fields && doc.fields.role && doc.fields.role.stringValue) || 'user';
@@ -106,7 +116,7 @@ async function _fetchRole(user) {
     return role;
   } catch(err) {
     console.error('[auth] _fetchRole error:', err);
-    return 'user';
+    return 'guest';
   }
 }
 

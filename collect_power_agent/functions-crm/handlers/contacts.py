@@ -98,8 +98,10 @@ def update_campaign_contact(campaign_id, doc_id):
 
         changed_fu = [f for f in _FOLLOWUP_FIELDS if f in update]
         if changed_fu:
-            user    = (body.get("_user") or "api").strip()
-            now     = datetime.now(timezone.utc).isoformat()
+            from flask import g as _g
+            # Use server-verified identity; fall back to body '_user' for backward compat.
+            user = getattr(_g, 'user_email', None) or (body.get("_user") or "api").strip()
+            now  = datetime.now(timezone.utc).isoformat()
             entries = [
                 {
                     "date":  now,

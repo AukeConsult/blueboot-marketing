@@ -100,8 +100,7 @@ function toggle(id){
 async function loadJobs(){
   try{
     const limit = Math.min(Math.max(parseInt(document.getElementById('job-limit').value) || 50, 1), 500);
-    const r = await fetch(BASE+'/api/crm/jobs?limit='+limit);
-    const d = await r.json();
+    const d = await fetchJSON(BASE+'/api/crm/jobs?limit='+limit);
     renderJobs(d.jobs||[]);
     // Restore previously open rows
     _openRows.forEach(id => {

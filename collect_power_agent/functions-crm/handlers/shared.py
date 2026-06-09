@@ -135,6 +135,45 @@ def _gdisk():
     return GdiskInterface.from_settings(_get_db())
 
 
+# ── Role-based access control ─────────────────────────────────────────────────
+
+# guest         = authenticated but no role assigned yet (read-only)
+# user          = standard CRM user
+# campaign-user = can create / manage campaigns
+# admin         = full access
+ROLE_LEVELS: dict[str, int] = {
+    "guest":         0,
+    "user":          1,
+    "campaign-user": 2,
+    "admin":         3,
+}
+
+_VALID_ROLES = set(ROLE_LEVELS)
+
+
+def _get_user_role(db, email: str) -> str:
+    """Return the user role from Firestore.
+    Falls back to 'guest' when the user doc is missing or the role is unrecognised.
+    """
+    if not email:
+        return "guest"
+    try:
+        doc = (
+            db.collection("settings")
+              .document("users")
+              .collection("users")
+              .document(email.strip().lower())
+              .get()
+        )
+        if doc.exists:
+            role = (doc.to_dict() or {}).get("role", "").strip()
+            if role in _VALID_ROLES:
+                return role
+    except Exception:
+        pass
+    return "guest"
+
+
 # ── Flask response helpers ────────────────────────────────────────────────────
 
 def _ok(message: str, **kwargs):
