@@ -14,3 +14,5 @@ functions-crm/.env
 /.firebase/
 **/venv
 .venv
+/firebase-debug.log
+/nul

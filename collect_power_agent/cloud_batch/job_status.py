@@ -66,6 +66,13 @@ def list_definitions() -> list[dict]:
     return [d.to_dict() for d in get_db().collection(BATCH_COLLECTION).stream() if d.exists]
 
 
+
+
+def get_definition(job_name: str) -> dict | None:
+    """Return the live job definition from Firestore, or None if not found."""
+    doc = _job_doc(job_name).get()
+    return doc.to_dict() if doc.exists else None
+
 # ── Run lifecycle ─────────────────────────────────────────────────────────────
 
 def create_run(job_name: str, run_id: str, params: dict, triggered_by: str, steps: list[dict]) -> None:
@@ -156,3 +163,64 @@ def list_runs(job_name: str, limit: int = 20) -> list[dict]:
 def get_run(job_name: str, run_id: str) -> dict | None:
     doc = _run_doc(job_name, run_id).get()
     return doc.to_dict() if doc.exists else None
+
+# ── Task CRUD ─────────────────────────────────────────────────────────────────
+
+import uuid as _uuid
+
+
+def _task_col(job_name: str):
+    return _job_doc(job_name).collection("tasks")
+
+
+def _task_ref(job_name: str, task_id: str):
+    return _task_col(job_name).document(task_id)
+
+
+def list_tasks(job_name: str) -> list[dict]:
+    """Return all tasks for a job, sorted by created_at."""
+    docs = _task_col(job_name).order_by("created_at").stream()
+    return [d.to_dict() for d in docs if d.exists]
+
+
+def get_task(job_name: str, task_id: str) -> dict | None:
+    doc = _task_ref(job_name, task_id).get()
+    return doc.to_dict() if doc.exists else None
+
+
+def create_task(job_name: str, data: dict) -> dict:
+    """Create a new task doc in tasks/ subcollection. Returns the created doc."""
+    task_id = str(_uuid.uuid4())[:8]
+    task = {
+        "task_id":    task_id,
+        "job":        job_name,
+        "name":       data.get("name", "unnamed"),
+        "schedule":   data.get("schedule", ""),
+        "params":     data.get("params", {}),
+        "active":     data.get("active", True),
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    _task_ref(job_name, task_id).set(task)
+    return task
+
+
+def update_task(job_name: str, task_id: str, data: dict) -> dict | None:
+    """Update allowed task fields. Returns updated doc or None if not found."""
+    ref = _task_ref(job_name, task_id)
+    if not ref.get().exists:
+        return None
+    allowed = {"name", "schedule", "params", "active"}
+    update  = {k: v for k, v in data.items() if k in allowed}
+    update["updated_at"] = now_iso()
+    ref.update(update)
+    return ref.get().to_dict()
+
+
+def delete_task(job_name: str, task_id: str) -> bool:
+    """Delete a task doc. Returns True if deleted, False if not found."""
+    ref = _task_ref(job_name, task_id)
+    if not ref.get().exists:
+        return False
+    ref.delete()
+    return True

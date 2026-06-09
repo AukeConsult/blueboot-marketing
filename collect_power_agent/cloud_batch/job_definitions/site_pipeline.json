@@ -3,25 +3,63 @@
   "description": "Full site discovery + enrichment pipeline (end-user companies)",
   "schedule": "0 2 * * 1",
   "params": {
-    "countries":  { "type": "str",  "required": true,  "help": "Comma-separated country codes, e.g. NO,DK" },
-    "campaign":   { "type": "str",  "required": true,  "help": "Campaign name, e.g. NO_jun02" },
-    "workers":    { "type": "int",  "default": 8,      "help": "Concurrent async workers for site_agent" },
-    "max_results":{ "type": "int",  "default": 500,    "help": "Max Bing results per query" },
-    "dry_run":    { "type": "bool", "default": false,  "help": "Preview only — no Firestore writes" },
-    "force":      { "type": "bool", "default": false,  "help": "Re-process already enriched items" }
+    "countries": {
+      "type": "str",
+      "required": true,
+      "help": "Comma-separated country codes, e.g. NO,DK"
+    },
+    "campaign": {
+      "type": "str",
+      "help": "Campaign name, e.g. NO_jun02"
+    },
+    "workers": {
+      "type": "int",
+      "default": 8,
+      "help": "Concurrent async workers for site_agent"
+    },
+    "max_results": {
+      "type": "int",
+      "default": 500,
+      "help": "Max Bing results per query"
+    },
+    "dry_run": {
+      "type": "bool",
+      "default": false,
+      "help": "Preview only — no Firestore writes"
+    },
+    "force": {
+      "type": "bool",
+      "default": false,
+      "help": "Re-process already enriched items"
+    },
+    "gdisk": {
+      "type": "bool",
+      "default": true,
+      "help": "Upload Excel exports to Google Drive (requires GDISK_FOLDER_ID)"
+    }
   },
   "steps": [
     {
       "name": "discover",
       "module": "site_agent",
-      "args": ["--countries", "{countries}", "--workers", "{workers}", "--max-results", "{max_results}"],
+      "args": [
+        "--countries",
+        "{countries}",
+        "--workers",
+        "{workers}",
+        "--max-results",
+        "{max_results}"
+      ],
       "dry_run_flag": "--dry-run",
       "on_error": "abort"
     },
     {
       "name": "enrich_ai",
       "module": "site_enrich_agent",
-      "args": ["--countries", "{countries}"],
+      "args": [
+        "--countries",
+        "{countries}"
+      ],
       "dry_run_flag": "--dry-run",
       "force_flag": "--force",
       "on_error": "abort"
@@ -29,7 +67,10 @@
     {
       "name": "enrich_contacts",
       "module": "site_contact_enrich",
-      "args": ["--countries", "{countries}"],
+      "args": [
+        "--countries",
+        "{countries}"
+      ],
       "dry_run_flag": "--dry-run",
       "force_flag": "--force",
       "on_error": "continue"
@@ -37,7 +78,10 @@
     {
       "name": "enrich_location",
       "module": "site_location_enrich",
-      "args": ["--countries", "{countries}"],
+      "args": [
+        "--countries",
+        "{countries}"
+      ],
       "dry_run_flag": "--dry-run",
       "force_flag": "--force",
       "on_error": "continue"
@@ -45,7 +89,10 @@
     {
       "name": "email_check",
       "module": "site_email_check",
-      "args": ["--countries", "{countries}"],
+      "args": [
+        "--countries",
+        "{countries}"
+      ],
       "dry_run_flag": "--dry-run",
       "force_flag": "--force",
       "on_error": "continue"
@@ -53,15 +100,30 @@
     {
       "name": "export",
       "module": "site_smart_export",
-      "args": ["--countries", "{countries}", "--write-contacts", "--campaign", "{campaign}"],
+      "args": [
+        "--countries",
+        "{countries}",
+        "--write-contacts",
+        "--campaign",
+        "{campaign}"
+      ],
       "dry_run_flag": "--dry-run-contacts",
-      "on_error": "abort"
+      "on_error": "abort",
+      "gdisk_flag": "--gdisk"
     },
     {
       "name": "export_contacts",
       "module": "email_contacts_export",
-      "args": ["--countries", "{countries}", "--campaign", "{campaign}", "--status", "pending"],
-      "on_error": "continue"
+      "args": [
+        "--countries",
+        "{countries}",
+        "--campaign",
+        "{campaign}",
+        "--status",
+        "pending"
+      ],
+      "on_error": "continue",
+      "gdisk_flag": "--gdisk"
     }
   ]
 }

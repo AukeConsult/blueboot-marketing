@@ -135,6 +135,9 @@ class JobRunner:
             resolved.append(step["dry_run_flag"])
         if self.params.get("force") and step.get("force_flag"):
             resolved.append(step["force_flag"])
+        # gdisk: default True — add flag unless explicitly set to False
+        if self.params.get("gdisk", True) and step.get("gdisk_flag"):
+            resolved.append(step["gdisk_flag"])
 
         module = f"app.{step['module']}"
         return [sys.executable, "-m", module] + resolved
