@@ -7,9 +7,20 @@ PROJECT="${GCP_PROJECT:-blueboot-market}"
 LOCATION="${GCP_LOCATION:-us-central1}"
 SA_EMAIL="${BATCH_SA:-batch-runner@${PROJECT}.iam.gserviceaccount.com}"
 
+# Fall back to .env, then try fetching from gcloud
 if [ -z "${BATCH_RUNNER_URL:-}" ]; then
-  echo "ERROR: BATCH_RUNNER_URL is not set."
-  echo "  Run 04_deploy_cloudrun.sh first and export the printed URL."
+  ENV_FILE="$(cd "$(dirname "$0")/../.." && pwd)/.env"
+  BATCH_RUNNER_URL=$(grep -E "^BATCH_RUNNER_URL=" "$ENV_FILE" 2>/dev/null | head -1 | sed "s/^BATCH_RUNNER_URL=//;s/^['\"]//;s/['\"]$//")
+fi
+if [ -z "${BATCH_RUNNER_URL:-}" ]; then
+  echo "  BATCH_RUNNER_URL not in .env — fetching from gcloud..."
+  BATCH_RUNNER_URL=$(gcloud run services describe batch-runner \
+    --platform managed --region "$LOCATION" --project "$PROJECT" \
+    --format "value(status.url)" 2>/dev/null || true)
+fi
+if [ -z "${BATCH_RUNNER_URL:-}" ]; then
+  echo "ERROR: Could not determine BATCH_RUNNER_URL."
+  echo "  Add it to .env or run: export BATCH_RUNNER_URL=https://..."
   exit 1
 fi
 

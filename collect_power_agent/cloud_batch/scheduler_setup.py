@@ -19,7 +19,11 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
+
+# On Windows, gcloud is a .cmd file — subprocess needs shell=True to find it.
+_SHELL = sys.platform == "win32"
 
 DEFS_DIR = Path(__file__).resolve().parent / "job_definitions"
 
@@ -62,27 +66,25 @@ def main(argv=None):
 
     for defn in scheduled:
         sched_name    = _scheduler_job_name(defn["name"])
+        # Include secret in body so we avoid --headers quoting issues on Windows
         body          = json.dumps({
             "job":          defn["name"],
             "params":       _build_default_params(defn),
             "triggered_by": "scheduler",
+            **({"secret": args.secret} if args.secret else {}),
         })
-        headers       = {"Content-Type": "application/json"}
-        if args.secret:
-            headers["X-Batch-Secret"] = args.secret
 
         # Try update first, then create
         base_cmd = [
             "gcloud", "scheduler", "jobs",
             "--project", args.project,
-            "--location", args.location,
         ]
         target_flags = [
+            "--location",        args.location,
             "--schedule",        defn["schedule"],
             "--uri",             f"{args.runner_url.rstrip('/')}/run",
             "--http-method",     "POST",
             "--message-body",    body,
-            "--headers",         ",".join(f"{k}={v}" for k, v in headers.items()),
             "--time-zone",       "UTC",
             "--attempt-deadline","30m",
         ]
@@ -100,10 +102,10 @@ def main(argv=None):
             continue
 
         # Try update; if it fails (job doesn't exist), create
-        result = subprocess.run(update_cmd, capture_output=True, text=True)
+        result = subprocess.run(update_cmd, capture_output=True, text=True, shell=_SHELL)
         if result.returncode != 0:
             print(f"    update failed ({result.stderr.strip()[:80]}), creating...")
-            result = subprocess.run(create_cmd, capture_output=True, text=True)
+            result = subprocess.run(create_cmd, capture_output=True, text=True, shell=_SHELL)
             if result.returncode != 0:
                 print(f"    ERROR: {result.stderr.strip()}")
             else:

@@ -72,12 +72,17 @@ def health():
 
 @app.route("/run", methods=["POST"])
 def run_job():
-    # Optional shared-secret auth (Cloud Scheduler adds it as a header)
+    body = request.get_json(silent=True) or {}
+
+    # Optional shared-secret auth — accepted from header or request body.
+    # Cloud Scheduler sends it in the body (avoids --headers quoting issues).
+    # The CRM API sends it as X-Batch-Secret header.
     if BATCH_SECRET:
-        if request.headers.get("X-Batch-Secret") != BATCH_SECRET:
+        provided = (request.headers.get("X-Batch-Secret")
+                    or body.get("secret", ""))
+        if provided != BATCH_SECRET:
             return _err("Unauthorized", 401)
 
-    body = request.get_json(silent=True) or {}
     job_name     = body.get("job", "").strip()
     params       = body.get("params", {})
     triggered_by = body.get("triggered_by", "manual")

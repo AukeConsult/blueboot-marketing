@@ -38,6 +38,11 @@ RUN pip install --no-cache-dir -r cloud_batch_requirements.txt
 COPY app/                   ./app/
 COPY config/                ./config/
 
+# _pathsetup.py is imported by all pipeline scripts as a top-level module
+# (e.g. `import _pathsetup`). Copy it to /workspace so Python finds it
+# when PYTHONPATH=/workspace and scripts run as `python -m app.<module>`.
+RUN cp app/_pathsetup.py _pathsetup.py
+
 # ── Copy cloud_batch framework ────────────────────────────────────────────────
 COPY cloud_batch/           ./cloud_batch/
 

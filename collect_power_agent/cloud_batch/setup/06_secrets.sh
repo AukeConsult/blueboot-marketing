@@ -32,7 +32,16 @@ _push_secret() {
   local NAME="$1"
   local VALUE="$2"
   if [ -z "$VALUE" ]; then
-    echo "  SKIP $NAME (empty value)"
+    # No value in .env — create a placeholder so Cloud Run deploy doesn't fail.
+    # The placeholder is only written if the secret doesn't already exist.
+    if gcloud secrets describe "$NAME" --project "$PROJECT" &>/dev/null; then
+      echo "  SKIP $NAME (empty in .env, secret already exists)"
+    else
+      echo "  PLACEHOLDER $NAME (not in .env — creating empty placeholder)"
+      echo -n "placeholder" | gcloud secrets create "$NAME" \
+        --data-file=- --replication-policy automatic \
+        --project "$PROJECT" --quiet
+    fi
     return
   fi
   if gcloud secrets describe "$NAME" --project "$PROJECT" &>/dev/null; then
@@ -56,12 +65,13 @@ _push_secret "bing-key"          "$(_read_env BING_API_KEY)"
 _push_secret "github-token"      "$(_read_env GITHUB_TOKEN)"
 _push_secret "smtp-password"     "$(_read_env SMTP_PASSWORD)"
 
-# BATCH_SECRET — generate one if not already in .env
+# BATCH_SECRET — generate one if not already in .env and save it automatically
 BATCH_SECRET="$(_read_env BATCH_SECRET)"
 if [ -z "$BATCH_SECRET" ]; then
   BATCH_SECRET=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
-  echo "  Generated BATCH_SECRET: $BATCH_SECRET"
-  echo "  (add to .env: BATCH_SECRET=$BATCH_SECRET)"
+  echo "  Generated BATCH_SECRET — saving to .env"
+  echo "BATCH_SECRET=${BATCH_SECRET}" >> "$ENV_FILE"
+  echo "  (deploy_crm.sh will pick it up automatically on next CRM deploy)"
   export BATCH_SECRET
 fi
 _push_secret "batch-secret" "$BATCH_SECRET"

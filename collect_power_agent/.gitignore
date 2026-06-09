@@ -1,6 +1,7 @@
 *secrets.py
 /public/firebase-config.js
 .env
+functions-crm/.env
 !/env.example
 /exports/
 /output/
@@ -11,3 +12,5 @@
 **/node_modules/
 /.firebase/*
 /.firebase/
+**/venv
+.venv

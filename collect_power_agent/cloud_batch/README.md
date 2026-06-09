@@ -199,82 +199,154 @@ gcloud-job.md                      Architecture reference doc
 
 ### Prerequisites
 
-- `gcloud` CLI installed and authenticated (`gcloud auth login`)
-- Docker installed and running
-- Firebase service account key at `config/serviceAccountKey.json`
-- Environment variables set:
+- `gcloud` CLI installed and authenticated:
+  ```bash
+  gcloud auth login
+  gcloud config set project blueboot-market
+  ```
+- **No local Docker required** — the image is built on GCP via Cloud Build
+- All API keys filled in at the project root `.env` file
+
+> Keys missing from `.env` get a `placeholder` secret automatically so the
+> deploy never fails. Replace placeholders later with real values and rerun
+> `06_secrets.sh` + `deploy_batch.sh`.
+
+---
+
+### Setup checklist
+
+Work through these steps in order. Each script is idempotent — safe to re-run.
+
+---
+
+#### ✅ Step 1 — Enable GCP APIs
 
 ```bash
-export GCP_PROJECT=blueboot-market
-export GCP_LOCATION=us-central1
-```
-
-### How the scripts get into Cloud Run
-
-The `Dockerfile` uses `COPY . .` to copy the entire project root into `/workspace`
-inside the container. This includes all `app/*.py` pipeline scripts and the
-`config/` query/country JSON files. The `job_runner.py` then calls them as:
-
-```
-python -m app.site_agent --countries NO --workers 8
-```
-
-**Secrets are NOT baked into the image.** A `.dockerignore` at the project root
-excludes `config/serviceAccountKey.json` and `.env`. Instead, secrets are stored
-in Secret Manager (`06_secrets.sh`) and Cloud Run injects them as env vars at
-runtime. The pipeline scripts read them via `app/functions/config.py` which loads
-from env vars:
-
-| Env var | Secret Manager key | Used by |
-|---|---|---|
-| `FIREBASE_KEY_JSON` | `firebase-key-json` | All scripts (Firebase auth) |
-| `OPENAI_API_KEY` | `openai-key` | Enrich agents (GPT calls) |
-| `BING_API_KEY` | `bing-key` | site_agent, lead_agent |
-| `BRAVE_API_KEY` | `brave-key` | site_contact_enrich, lead_enrich_contacts |
-| `BATCH_SECRET` | `batch-secret` | entrypoint.py (auth on /run) |
-
-### Run all steps
-
-```bash
-bash cloud_batch/setup/setup_all.sh
-```
-
-This runs steps 1–6 in sequence. Each step is idempotent — safe to re-run.
-
-### Or run steps individually
-
-```bash
-# Step 1 — Enable GCP APIs
 bash cloud_batch/setup/01_enable_apis.sh
+```
 
-# Step 2 — Create service account + IAM roles
+Enables: Cloud Run, Cloud Build, Artifact Registry, Secret Manager, Cloud Scheduler, IAM.
+
+---
+
+#### ✅ Step 2 — Create service account + IAM roles
+
+```bash
 bash cloud_batch/setup/02_service_account.sh
-export BATCH_SA=batch-runner@blueboot-market.iam.gserviceaccount.com
+```
 
-# Step 3 — Store API keys in Secret Manager
+Creates the `batch-runner` service account and grants it the required roles.
+Also grants the **Cloud Build** service account `roles/artifactregistry.writer`
+so it can push the Docker image.
+
+---
+
+#### ✅ Step 3 — Push secrets to Secret Manager
+
+```bash
 bash cloud_batch/setup/06_secrets.sh
-# (prompts for OPENAI_API_KEY, BING_API_KEY; generates BATCH_SECRET)
+```
 
-# Step 4 — Build and push Docker image
+Reads values from `.env` and pushes them to Secret Manager. Keys not in `.env`
+get a `placeholder` value so the deploy doesn't fail.
+
+`BATCH_SECRET` is auto-generated and appended to `.env` if not already present.
+
+**After this step, confirm secrets exist:**
+```bash
+gcloud secrets list --project blueboot-market
+```
+You should see: `firebase-key-json`, `openai-key`, `brave-key`, `bing-key`,
+`github-token`, `smtp-password`, `batch-secret`.
+
+---
+
+#### ✅ Step 4 — Build and push Docker image
+
+```bash
 bash cloud_batch/setup/03_artifact_registry.sh
-export BATCH_IMAGE=us-central1-docker.pkg.dev/blueboot-market/batch-runner/batch-runner:latest
+```
 
-# Step 5 — Deploy Cloud Run service
+Creates the Artifact Registry repository and builds the image via **Cloud Build**
+(no local Docker needed). Upload is limited to `app/`, `config/`, `cloud_batch/`
+by `.gcloudignore`. Takes ~3–5 minutes.
+
+---
+
+#### ✅ Step 5 — Deploy Cloud Run service
+
+```bash
 bash cloud_batch/setup/04_deploy_cloudrun.sh
-export BATCH_RUNNER_URL=https://batch-runner-xxx-uc.a.run.app
+```
 
-# Step 6 — Create Cloud Scheduler cron jobs
+Deploys the `batch-runner` Cloud Run service with all secrets injected from
+Secret Manager. Must run **after** step 3 — Cloud Run will fail if any secret
+is missing.
+
+**After deploy, get the service URL and add it to `.env`:**
+```bash
+gcloud run services describe batch-runner \
+  --platform managed --region us-central1 --project blueboot-market \
+  --format "value(status.url)"
+```
+
+Add to `.env`:
+```ini
+BATCH_RUNNER_URL=https://batch-runner-xxxx-uc.a.run.app
+```
+
+---
+
+#### ✅ Step 6 — Create Cloud Scheduler cron jobs
+
+```bash
 bash cloud_batch/setup/05_setup_scheduler.sh
 ```
 
-### After deploy — wire up the CRM API
+Reads job definitions and creates one Cloud Scheduler cron job per pipeline
+that has a `schedule` field. Automatically fetches `BATCH_RUNNER_URL` from
+`.env` or from `gcloud` — no manual export needed.
 
-The CRM Cloud Function needs to know the batch-runner URL so it can trigger on-demand jobs:
+---
+
+#### ✅ Step 7 — Wire up the CRM API
 
 ```bash
-gcloud functions deploy crmApi \
-  --update-env-vars BATCH_RUNNER_URL=https://batch-runner-xxx-uc.a.run.app,BATCH_SECRET=<your-secret>
+bash deploy_crm.sh
 ```
+
+`deploy_crm.sh` reads `BATCH_RUNNER_URL` and `BATCH_SECRET` from the root `.env`
+and writes them to `functions-crm/.env` automatically before deploying.
+You never need to edit `functions-crm/.env` manually.
+
+---
+
+#### ✅ Step 8 — Verify
+
+Open the dashboard → **Google Jobs**. If the page shows *"No job definitions found"*,
+the Cloud Run service hasn't booted yet (it writes definitions to Firestore on startup).
+Seed them manually:
+
+```bash
+python app/seed_batch_jobs.py
+```
+
+Then trigger the **Test Job** — it runs two fast steps (~6 seconds each) and confirms
+the full pipeline is working end to end.
+
+---
+
+### Secrets → env var mapping
+
+| `.env` key | Secret Manager name | Env var in Cloud Run |
+|---|---|---|
+| `FIREBASE_KEY_JSON` | `firebase-key-json` | `FIREBASE_KEY_JSON` |
+| `OPENAI_API_KEY` | `openai-key` | `OPENAI_API_KEY` |
+| `BRAVE_API_KEY` | `brave-key` | `BRAVE_API_KEY` |
+| `BING_API_KEY` | `bing-key` | `BING_API_KEY` |
+| `GITHUB_TOKEN` | `github-token` | `GITHUB_TOKEN` |
+| `SMTP_PASSWORD` | `smtp-password` | `SMTP_PASSWORD` |
+| `BATCH_SECRET` | `batch-secret` | `BATCH_SECRET` |
 
 ---
 
