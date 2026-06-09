@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from collections import Counter
+from google.cloud import firestore as _gfs
 
 CAMPAIGNS_COLLECTION = "campaigns"
 CONTACTS_SUBCOLLECTION = "campaign_contacts"
@@ -35,12 +36,10 @@ _HEADER_TO_FIELD: dict[str, str] = {
     "Title":                "title",
     "Website":              "website",
     "Sent at":              "sent_at",
-    "Last action":          "last_action",
-    "Last action status":   "last_action_status",
     "Follow-up date":       "followup_date",
     "Follow-up status":     "followup_status",
     "Follow-up importance": "followup_importance",
-    "Follow-up comment":    "followup_comment",
+    "Comment":               "followup_comment",
     "Lead ID":              "lead_id",
     "Doc ID":               "doc_id",
 }
@@ -170,12 +169,25 @@ def run_campaign_sync(db, svc, gd, campaign_id: str, **_kwargs) -> dict:
             if field == "doc_id" or field in DB_CONTROLLED:
                 continue
             update[field] = raw_val
+
+        # If the comment changed, append a history entry via ArrayUnion.
+        new_comment = update.get("followup_comment", "")
+        old_comment = str(db_contacts[doc_id].get("followup_comment") or "")
+        if new_comment != old_comment:
+            update["comment_history"] = _gfs.ArrayUnion([{
+                "date":  now,
+                "user":  "sheet-sync",
+                "text":  new_comment or "(comment cleared)",
+                "type":  "COMMENT",
+            }])
+
         pairs.append((doc_id, update))
 
     for i in range(0, len(pairs), BATCH_SIZE):
         batch = db.batch()
         for doc_id, data in pairs[i:i + BATCH_SIZE]:
-            batch.set(contacts_col.document(doc_id), data, merge=True)
+            # Use update() so ArrayUnion in comment_history is applied correctly.
+            batch.update(contacts_col.document(doc_id), data)
         batch.commit()
         updated += len(pairs[i:i + BATCH_SIZE])
         print(f"[campaign-sync]   written {updated}/{len(pairs)} contacts to DB", flush=True)

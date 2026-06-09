@@ -26,9 +26,6 @@
 
   <div class="page-header">
     <h5 class="page-title"><i class="ti ti-speakerphone text-primary"></i><span id="page-title-campaign">Campaign</span>
-      <a id="sheet-link" href="#" target="_blank" class="ms-2 small text-decoration-none" style="display:none;font-weight:400;color:var(--bb-muted)">
-        <i class="ti ti-table me-1"></i>Spreadsheet
-      </a>
     </h5>
     <div class="d-flex align-items-center gap-2" id="campaign-actions" style="display:none!important">
       <span class="bb-badge" id="c-status-badge"></span>
@@ -36,10 +33,13 @@
             style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;font-size:.68rem">
         <i class="ti ti-table me-1"></i>master-sheet
       </span>
+      <a id="sheet-link" href="#" target="_blank" class="btn btn-sm btn-outline-secondary text-decoration-none" style="display:none">
+        <i class="ti ti-table me-1"></i>View sheet
+      </a>
       <button class="btn btn-sm btn-outline-secondary" onclick="syncCampaign()">
         <i class="ti ti-refresh me-1"></i>Sync
       </button>
-      <button class="btn btn-sm btn-outline-secondary" onclick="confirmFullOverride()">
+      <button id="override-btn" class="btn btn-sm btn-outline-secondary" onclick="confirmFullOverride()">
         <i class="ti ti-table-export me-1"></i>Full override
       </button>
 <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none">
@@ -652,7 +652,7 @@ async function exportToDrive() {
   const id = document.getElementById('campaign-select').value;
   if (!id) return;
   const fb = document.getElementById('sync-feedback');
-  const btn = document.querySelector('[onclick="exportToDrive()"]');
+  const btn = document.getElementById('override-btn');
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Exporting…';
   fb.style.display = 'none';
   try {
@@ -669,12 +669,12 @@ async function exportToDrive() {
     fb.textContent = 'Export failed: ' + (e.message||e);
     fb.style.display = ''; btnReset();
   }
-  function btnReset(){ btn.disabled = false; btn.innerHTML = '<i class="ti ti-table-export me-1"></i>Export to Drive'; }
+  function btnReset(){ btn.disabled = false; btn.innerHTML = '<i class="ti ti-table-export me-1"></i>Full override'; }
 }
 
 async function pollExport(jobId, id) {
   const fb = document.getElementById('sync-feedback');
-  const btn = document.querySelector('[onclick="exportToDrive()"]');
+  const btn = document.getElementById('override-btn');
   for (let i = 0; i < 60; i++) {
     await new Promise(r => setTimeout(r, 2000));
     try {
@@ -698,7 +698,7 @@ async function pollExport(jobId, id) {
       }
     } catch(_) { /* keep polling */ }
   }
-  btn.disabled = false; btn.innerHTML = '<i class="ti ti-table-export me-1"></i>Export to Drive';
+  btn.disabled = false; btn.innerHTML = '<i class="ti ti-table-export me-1"></i>Full override';
 }
 
 async function enrichNames() {
