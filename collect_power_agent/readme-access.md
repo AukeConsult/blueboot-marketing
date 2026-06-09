@@ -143,6 +143,25 @@ Request arrives
 | `filter_facets` | `campaign-user` | Facet save, create-campaign |
 | `mail_accounts` | `admin` | Account CRUD, ping, test-send |
 | `auth` | `admin` | User doc management |
+| `user_prefs` | `campaign-user` | Save per-page frontend state |
+
+### Frontend state persistence (`frontend-status` collection)
+
+`GET /api/crm/user-prefs?page=<name>` and `PUT /api/crm/user-prefs?page=<name>` read
+and write the caller's own frontend state. Firestore path:
+
+```
+frontend-status/{user_email}/pages/{page_name}
+```
+
+Each page gets its own document. Currently registered pages:
+
+| Page name | HTML page | What is stored |
+|---|---|---|
+| `followup` | `crm_follow.html` | Owner/campaign/outreach filters, view mode, group fields, search, filter bar, sort |
+
+Reads are not listed in `_BLUEPRINT_MIN_READ_ROLES` — any authenticated user can read
+their own prefs. Writes require `campaign-user` (CLAUDE.md write rule).
 
 ### Settings collection — admin only (all write operations)
 

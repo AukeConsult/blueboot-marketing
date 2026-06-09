@@ -18,6 +18,7 @@
 .follow-input:focus { border-color: var(--bb-accent); background: #fff; outline: none;
   box-shadow: 0 0 0 2px rgba(79,110,247,.15); }
 .follow-input::placeholder { color: var(--bb-muted); font-size: .78rem; }
+.contact-title { font-size: .73rem; color: var(--bb-muted); }
 
 .follow-select {
   border: 1px solid transparent; background: transparent;
@@ -118,6 +119,15 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
   padding: 5px 10px;
   border-top: 2px solid #c7ceff;
   border-bottom: 1px solid #c7ceff;
+}
+.group-chk {
+  vertical-align: middle;
+  margin-right: 6px;
+  margin-top: -1px;
+  flex-shrink: 0;
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
 }
 .group-header-row td .group-count {
   font-weight: 400;
@@ -310,7 +320,7 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
     <div class="table-responsive">
       <table class="table table-sm table-hover mb-0">
         <thead class="bb-thead"><tr>
-          <th style="width:32px"></th>
+          <th style="width:32px"><input type="checkbox" class="form-check-input" id="select-all" onclick="toggleSelectAll(this)"></th>
           <th class="small bb-sortable" data-col="status"           onclick="sortBy('status')" style="min-width:85px">Status <span class="sort-icon"></span></th>
           <th class="small bb-sortable" data-col="name"             onclick="sortBy('name')">Name <span class="sort-icon"></span></th>
           <th class="small bb-sortable" data-col="email"            onclick="sortBy('email')">Email <span class="sort-icon"></span></th>
@@ -350,6 +360,10 @@ const _collapsedGroups = new Set();
 let _currentGroupKeys = [];
 let _allCampaigns = [];   // loaded from /followup-meta
 const selected = new Set();   // doc_path strings
+let _groupDocPaths = {};              // groupKey -> [doc_path, ...] built by renderGrouped
+let _prefsReady       = false;  // true only after first load() completes with prefs applied
+let _pendingOutreach  = '';     // outreach pref applied after load() populates dropdown
+let _loadedPrefs      = null;   // prefs fetched by loadUserPrefs(); applied inside load()
 
 // ── Load contacts via API (no direct Firestore reads) ─────────────────────────
 
@@ -395,6 +409,7 @@ async function onOwnerChange() {
     }
   }
   await load();
+  saveUserPrefs();
 }
 
 async function load() {
@@ -403,6 +418,21 @@ async function load() {
   const ownerVal = document.getElementById('owner-header')?.value || '';
   if (document.getElementById('campaign-filter').options.length <= 1 && _allCampaigns.length) {
     populateCampaignDropdown(ownerVal);
+  }
+
+  // Apply saved owner + campaign now that both dropdowns are fully populated
+  if (_loadedPrefs && !_prefsReady) {
+    const ownerSel = document.getElementById('owner-header');
+    if (ownerSel && _loadedPrefs.owner !== undefined) {
+      ownerSel.value = _loadedPrefs.owner;
+      // Repopulate campaign dropdown for the restored owner, preserving saved campaign
+      populateCampaignDropdown(_loadedPrefs.owner);
+    }
+    const campSel = document.getElementById('campaign-filter');
+    if (campSel && _loadedPrefs.campaign !== undefined) {
+      if ([...campSel.options].some(o => o.value === _loadedPrefs.campaign))
+        campSel.value = _loadedPrefs.campaign;
+    }
   }
 
   setTbody('<tr><td colspan="9" class="text-center py-5" style="color:var(--bb-muted)">'
@@ -446,6 +476,41 @@ async function load() {
     if (outreachEmails.length === 1) {
       document.getElementById('outreach-filter').value = outreachEmails[0];
     }
+    // Apply deferred outreach pref (populated after dropdown is built)
+    if (_pendingOutreach) {
+      const el = document.getElementById('outreach-filter');
+      if ([...el.options].some(o => o.value === _pendingOutreach)) el.value = _pendingOutreach;
+      _pendingOutreach = '';
+    }
+    // Apply all remaining prefs (static controls: filters, view, sort) after first load
+    if (_loadedPrefs && !_prefsReady) {
+      const sv = (id, v) => { if (v !== undefined) { const el = document.getElementById(id); if (el) el.value = v; } };
+      if (_loadedPrefs.sync_period) { const sp = document.getElementById('sync-period'); if (sp) sp.value = _loadedPrefs.sync_period; }
+      if (_loadedPrefs.view && _loadedPrefs.view !== _currentView) {
+        _currentView = _loadedPrefs.view;
+        document.getElementById('view-list-btn').className = 'btn btn-sm ' + (_currentView === 'list' ? 'btn-primary' : 'btn-outline-secondary');
+        document.getElementById('view-group-btn').className = 'btn btn-sm ' + (_currentView === 'group' ? 'btn-primary' : 'btn-outline-secondary');
+        const _gs = document.getElementById('group-selectors');
+        if (_gs) _gs.style.display = _currentView === 'group' ? 'flex' : 'none';
+      }
+      const gp = document.getElementById('group-primary');   if (gp && _loadedPrefs.group_primary) gp.value = _loadedPrefs.group_primary;
+      const gs2 = document.getElementById('group-secondary'); if (gs2 && _loadedPrefs.group_secondary !== undefined) gs2.value = _loadedPrefs.group_secondary;
+      sv('search',                _loadedPrefs.search);
+      sv('followup-filter',       _loadedPrefs.filter_followup_status);
+      sv('importance-filter',     _loadedPrefs.filter_importance);
+      sv('contact-status-filter', _loadedPrefs.filter_contact_status);
+      sv('due-filter',            _loadedPrefs.filter_due);
+      if (_loadedPrefs.sort_col !== undefined) _sortCol = _loadedPrefs.sort_col;
+      if (_loadedPrefs.sort_asc !== undefined) _sortAsc  = _loadedPrefs.sort_asc;
+      if (_sortCol) {
+        document.querySelectorAll('.bb-sortable').forEach(th => {
+          const ic = th.querySelector('.sort-icon'); if (!ic) return;
+          if (th.dataset.col === _sortCol) { ic.textContent = _sortAsc ? ' ▲' : ' ▼'; th.style.color = 'var(--bb-accent)'; }
+          else { ic.textContent = ''; th.style.color = ''; }
+        });
+      }
+    }
+    _prefsReady = true;
     applyFilter();
   } catch (e) {
     setTbody(`<tr><td colspan="9" class="text-center py-5 text-danger small">
@@ -501,6 +566,7 @@ function sortBy(col) {
     else { ic.textContent = ''; th.style.color = ''; }
   });
   applyFilter();
+  saveUserPrefs();
 }
 
 function applySort(list) {
@@ -525,6 +591,7 @@ function toggleView(v) {
   if (gs) gs.style.display = v === 'group' ? 'flex' : 'none';
   _collapsedGroups.clear();
   applyFilter();
+  saveUserPrefs();
 }
 
 
@@ -547,6 +614,7 @@ function toggleAllGroups() {
 // ── Filter ────────────────────────────────────────────────────────────────────
 
 function applyFilter() {
+  if (_prefsReady) _savePrefsDebounced();
   const q   = document.getElementById('search').value.toLowerCase();
 
   const out = document.getElementById('outreach-filter').value;
@@ -648,6 +716,9 @@ function render(list) {
       const row = allRows[parseInt(c.dataset.gidx, 10)];
       if (row && selected.has(row.doc_path)) c.checked = true;
     });
+    const sa = document.getElementById('select-all');
+    const all = document.querySelectorAll('.row-chk');
+    if (sa && all.length) sa.checked = all.length > 0 && [...all].every(c => c.checked);
   };
 
   setTbody(list.map(r => {
@@ -668,17 +739,29 @@ function render(list) {
       <td>${statusBadge(r.status)}</td>
       <td>
         <div class="d-flex align-items-center gap-1">
-          <span class="small fw-500">${escapeHtml(r.name || '—')}</span>
-          <button class="sync-btn" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
+          <input type="text" class="follow-input small fw-500"
+            value="${escapeHtml(r.name || '')}" placeholder="Name"
+            data-gidx="${gidx}" data-field="name"
+            onchange="saveField(this)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+          <button class="sync-btn flex-shrink-0" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
             <i class="ti ti-mail-bolt"></i>
           </button>
         </div>
-        ${r.title ? `<div style="font-size:.73rem;color:var(--bb-muted)">${escapeHtml(r.title)}</div>` : ''}
+        <input type="text" class="follow-input contact-title"
+          value="${escapeHtml(r.title || '')}" placeholder="Title…"
+          data-gidx="${gidx}" data-field="title"
+          onchange="saveField(this)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
       </td>
       <td class="small"><a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email || '—')}</a></td>
-      <td class="small">${r.phone
-        ? `<a href="tel:${escapeHtml(r.phone)}" style="color:var(--bb-muted);white-space:nowrap">${escapeHtml(r.phone)}</a>`
-        : '—'}</td>
+      <td class="small">
+        <input type="tel" class="follow-input"
+          value="${escapeHtml(r.phone || '')}" placeholder="Phone"
+          data-gidx="${gidx}" data-field="phone"
+          onchange="saveField(this)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+      </td>
       <td class="small">${siteShort
         ? `<a href="${escapeHtml(r.website)}" target="_blank"
               style="color:var(--bb-muted);text-decoration:none" title="${escapeHtml(r.website)}">${escapeHtml(siteShort)}</a>`
@@ -761,17 +844,29 @@ function _contactRowsHtml(r) {
       <td>${statusBadge(r.status)}</td>
       <td>
         <div class="d-flex align-items-center gap-1">
-          <span class="small fw-500">${escapeHtml(r.name || '—')}</span>
-          <button class="sync-btn" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
+          <input type="text" class="follow-input small fw-500"
+            value="${escapeHtml(r.name || '')}" placeholder="Name"
+            data-gidx="${gidx}" data-field="name"
+            onchange="saveField(this)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+          <button class="sync-btn flex-shrink-0" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
             <i class="ti ti-mail-bolt"></i>
           </button>
         </div>
-        ${r.title ? `<div style="font-size:.73rem;color:var(--bb-muted)">${escapeHtml(r.title)}</div>` : ''}
+        <input type="text" class="follow-input contact-title"
+          value="${escapeHtml(r.title || '')}" placeholder="Title…"
+          data-gidx="${gidx}" data-field="title"
+          onchange="saveField(this)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
       </td>
       <td class="small"><a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email || '—')}</a></td>
-      <td class="small">${r.phone
-        ? `<a href="tel:${escapeHtml(r.phone)}" style="color:var(--bb-muted);white-space:nowrap">${escapeHtml(r.phone)}</a>`
-        : '—'}</td>
+      <td class="small">
+        <input type="tel" class="follow-input"
+          value="${escapeHtml(r.phone || '')}" placeholder="Phone"
+          data-gidx="${gidx}" data-field="phone"
+          onchange="saveField(this)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+      </td>
       <td class="small">${siteShort
         ? `<a href="${escapeHtml(r.website)}" target="_blank"
               style="color:var(--bb-muted);text-decoration:none" title="${escapeHtml(r.website)}">${escapeHtml(siteShort)}</a>`
@@ -845,14 +940,18 @@ function renderGrouped(list) {
 
   let html = '';
 
+  _groupDocPaths = {};
+
   pKeys.forEach(pVal => {
     const pRows      = list.filter(r => (r[primaryField] || '') === pVal);
     const pLabel     = pDef.labelFn(pVal);
     const pKey       = 'p:' + primaryField + ':' + pVal;
     const pCollapsed = _collapsedGroups.has(pKey);
 
+    _groupDocPaths[pKey] = pRows.map(r => r.doc_path);
+
     html += `<tr class="group-header-row" data-group-hdr="${escapeHtml(pKey)}" onclick="toggleGroup('${escapeHtml(pKey)}')">
-      <td colspan="9"><i class="ti ti-tag me-1"></i>${escapeHtml(pLabel)}<span class="group-count">${pRows.length} contact${pRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${pCollapsed ? ' collapsed' : ''}"></i></td>
+      <td colspan="9"><input type="checkbox" class="form-check-input group-chk" data-gkey="${escapeHtml(pKey)}" onclick="toggleGroupSelect(event,'${escapeHtml(pKey)}')" tabindex="-1"><i class="ti ti-tag me-1"></i>${escapeHtml(pLabel)}<span class="group-count">${pRows.length} contact${pRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${pCollapsed ? ' collapsed' : ''}"></i></td>
     </tr>`;
 
     if (pCollapsed) return;
@@ -865,8 +964,10 @@ function renderGrouped(list) {
         const sKey       = 's:' + primaryField + ':' + pVal + ':' + secondaryField + ':' + sVal;
         const sCollapsed = _collapsedGroups.has(sKey);
 
+        _groupDocPaths[sKey] = sRows.map(r => r.doc_path);
+
         html += `<tr class="group-subheader-row" data-group-hdr="${escapeHtml(sKey)}" onclick="toggleGroup('${escapeHtml(sKey)}')">
-          <td colspan="9"><i class="ti ti-corner-down-right me-1"></i>${escapeHtml(sLabel)}<span class="group-count">${sRows.length} contact${sRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${sCollapsed ? ' collapsed' : ''}"></i></td>
+          <td colspan="9"><input type="checkbox" class="form-check-input group-chk" data-gkey="${escapeHtml(sKey)}" onclick="toggleGroupSelect(event,'${escapeHtml(sKey)}')" tabindex="-1"><i class="ti ti-corner-down-right me-1"></i>${escapeHtml(sLabel)}<span class="group-count">${sRows.length} contact${sRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${sCollapsed ? ' collapsed' : ''}"></i></td>
         </tr>`;
 
         if (!sCollapsed) html += sRows.map(r => _contactRowsHtml(r)).join('');
@@ -881,6 +982,10 @@ function renderGrouped(list) {
     const row = allRows[parseInt(c.dataset.gidx, 10)];
     if (row && selected.has(row.doc_path)) c.checked = true;
   });
+  const sa = document.getElementById('select-all');
+  const all = document.querySelectorAll('.row-chk');
+  if (sa && all.length) sa.checked = all.length > 0 && [...all].every(c => c.checked);
+  _syncGroupCheckboxes();
 }
 
 // ── Save follow-up field via API ──────────────────────────────────────────────
@@ -996,12 +1101,56 @@ function onRowCheck(chk) {
   const row = allRows[parseInt(chk.dataset.gidx, 10)];
   if (!row) return;
   if (chk.checked) selected.add(row.doc_path); else selected.delete(row.doc_path);
+  _syncGroupCheckboxes();
   updateSelectionUI();
+}
+
+function toggleSelectAll(chk) {
+  document.querySelectorAll('.row-chk').forEach(c => {
+    c.checked = chk.checked;
+    const row = allRows[parseInt(c.dataset.gidx, 10)];
+    if (row) {
+      if (chk.checked) selected.add(row.doc_path);
+      else selected.delete(row.doc_path);
+    }
+  });
+  updateSelectionUI();
+}
+
+function toggleGroupSelect(event, groupKey) {
+  event.stopPropagation();
+  const chk = event.currentTarget;
+  const paths = _groupDocPaths[groupKey] || [];
+  paths.forEach(path => {
+    if (chk.checked) selected.add(path);
+    else selected.delete(path);
+  });
+  // Sync individual row checkboxes
+  document.querySelectorAll('.row-chk').forEach(c => {
+    const row = allRows[parseInt(c.dataset.gidx, 10)];
+    if (row && paths.includes(row.doc_path)) c.checked = chk.checked;
+  });
+  // Sync the global select-all checkbox
+  const sa = document.getElementById('select-all');
+  const allChk = document.querySelectorAll('.row-chk');
+  if (sa && allChk.length) sa.checked = [...allChk].every(c => c.checked);
+  _syncGroupCheckboxes();
+  updateSelectionUI();
+}
+
+function _syncGroupCheckboxes() {
+  document.querySelectorAll('.group-chk').forEach(gc => {
+    const paths = _groupDocPaths[gc.dataset.gkey] || [];
+    gc.checked = paths.length > 0 && paths.every(p => selected.has(p));
+  });
 }
 
 function clearSelection() {
   selected.clear();
   document.querySelectorAll('.row-chk').forEach(c => { c.checked = false; });
+  document.querySelectorAll('.group-chk').forEach(c => { c.checked = false; });
+  const sa = document.getElementById('select-all');
+  if (sa) sa.checked = false;
   updateSelectionUI();
 }
 
@@ -1175,9 +1324,59 @@ function dueDateClass(date) {
   return '';
 }
 
+// ── User preference persistence (frontend-status/{email}/pages/followup) ─────
 
+let _savePrefsTimer = null;
 
-load();
+function _savePrefsDebounced() {
+  clearTimeout(_savePrefsTimer);
+  _savePrefsTimer = setTimeout(saveUserPrefs, 800);
+}
+
+async function saveUserPrefs() {
+  if (!_prefsReady) return;
+  const prefs = {
+    owner:                  document.getElementById('owner-header')?.value          || '',
+    campaign:               document.getElementById('campaign-filter')?.value       || '',
+    outreach:               document.getElementById('outreach-filter')?.value       || '',
+    sync_period:            document.getElementById('sync-period')?.value           || '7',
+    view:                   _currentView,
+    group_primary:          document.getElementById('group-primary')?.value         || 'followup_status',
+    group_secondary:        document.getElementById('group-secondary')?.value       || '',
+    search:                 document.getElementById('search')?.value                || '',
+    filter_followup_status: document.getElementById('followup-filter')?.value       || '',
+    filter_importance:      document.getElementById('importance-filter')?.value     || '',
+    filter_contact_status:  document.getElementById('contact-status-filter')?.value || '',
+    filter_due:             document.getElementById('due-filter')?.value            || '',
+    sort_col:               _sortCol,
+    sort_asc:               _sortAsc,
+  };
+  try {
+    await fetchJSON(BASE + '/api/crm/user-prefs?page=followup', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(prefs),
+    });
+  } catch (e) {
+    console.warn('[prefs] save failed:', e.message);
+  }
+}
+
+async function loadUserPrefs() {
+  // Fetch prefs and store. All application happens inside load() once dropdowns are ready.
+  try {
+    const prefs = await fetchJSON(BASE + '/api/crm/user-prefs?page=followup');
+    if (prefs && Object.keys(prefs).length) {
+      _loadedPrefs = prefs;
+      if (prefs.outreach) _pendingOutreach = prefs.outreach;
+    }
+  } catch (e) {
+    console.warn('[prefs] load failed:', e.message);
+  }
+  // _prefsReady is set inside load() after all prefs are applied
+}
+
+(async () => { await loadUserPrefs(); load(); })();
 </script>
 </body>
 </html>

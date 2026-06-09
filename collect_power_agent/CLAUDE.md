@@ -917,3 +917,60 @@ response without any risk? If not, add the blueprint to `_BLUEPRINT_MIN_READ_ROL
 4. Add to `_ADMIN_ENDPOINTS` in `main.py` if it writes to the `settings` collection
 5. Update `readme-access.md` — all four sets must be kept current
 6. Update `public/doc/installation.md` section 11 if the change affects user onboarding
+
+## Flask API handler structure
+
+### RULE: Every handler file must import shared infrastructure from `handlers/shared.py`
+
+All Blueprint handler files in `functions-crm/handlers/` must import their shared
+infrastructure from `handlers/shared.py` — never reimplement it locally.
+
+**Always import from shared:**
+```python
+from handlers.shared import _get_db, _err, _ok, _accepted  # pick what you need
+```
+
+**Never write local versions of:**
+- `_get_db()` — Firestore singleton
+- `_err(msg, code)` — error JSON response
+- `_ok(msg, **kwargs)` — success JSON response
+- `_accepted(job_id, name)` — 202 queued response
+- `_new_job()`, `_enqueue_task()` — job/task helpers
+
+**Standard handler file structure:**
+```python
+"""handlers/<name>.py — <short description>."""
+from __future__ import annotations
+
+from flask import Blueprint, g, jsonify, request
+
+from handlers.shared import _get_db, _err, _ok
+
+bp = Blueprint("<name>", __name__)
+
+# ── Private helpers (module-specific only) ────────────────────────────────────
+
+def _my_helper(...):
+    ...
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@bp.route("/api/crm/<route>", methods=["GET"])
+def my_endpoint():
+    """One-line docstring."""
+    try:
+        ...
+        return jsonify(...)
+    except Exception as exc:
+        return _err(str(exc), 500)
+```
+
+**Response shapes — use the shared helpers consistently:**
+- Success with data: `return jsonify({"status": "ok", ...data...})`
+- Success with message: `return _ok("Done.", count=n)`
+- Client error: `return _err("Reason.", 400)`
+- Server error: `return _err(str(exc), 500)`
+- Job queued: `return _accepted(job_id, "job-name")`
+
+**Reference implementations:** `handlers/statistics.py` (simple GET + job trigger),
+`handlers/user_prefs.py` (GET + PUT with per-user Firestore scoping via `g.user_email`).

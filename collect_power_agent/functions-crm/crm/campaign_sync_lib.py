@@ -21,7 +21,6 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from collections import Counter
-from google.cloud import firestore as _gfs
 
 CAMPAIGNS_COLLECTION = "campaigns"
 CONTACTS_SUBCOLLECTION = "campaign_contacts"
@@ -169,17 +168,6 @@ def run_campaign_sync(db, svc, gd, campaign_id: str, **_kwargs) -> dict:
             if field == "doc_id" or field in DB_CONTROLLED:
                 continue
             update[field] = raw_val
-
-        # If the comment changed, append a history entry via ArrayUnion.
-        new_comment = update.get("followup_comment", "")
-        old_comment = str(db_contacts[doc_id].get("followup_comment") or "")
-        if new_comment != old_comment:
-            update["comment_history"] = _gfs.ArrayUnion([{
-                "date":  now,
-                "user":  "sheet-sync",
-                "text":  new_comment or "(comment cleared)",
-                "type":  "COMMENT",
-            }])
 
         pairs.append((doc_id, update))
 

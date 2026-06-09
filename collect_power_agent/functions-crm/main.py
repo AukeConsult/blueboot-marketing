@@ -38,11 +38,13 @@ from handlers.filter_facets import bp as filter_facets_bp
 from handlers.leads         import bp as leads_bp
 from handlers.statistics    import bp as statistics_bp
 from handlers.auth          import bp as auth_bp
+from handlers.user_prefs    import bp as user_prefs_bp
 
 for bp in (
     campaigns_bp, contacts_bp, jobs_bp, mailbox_bp,
     mail_tags_bp, mail_accounts_bp, followup_email_bp,
     gdisk_bp, filter_facets_bp, leads_bp, statistics_bp, auth_bp,
+    user_prefs_bp,
 ):
     app.register_blueprint(bp)
 
@@ -115,6 +117,7 @@ _BLUEPRINT_MIN_ROLES: dict[str, str] = {
     "filter_facets":  "campaign-user",
     "mail_accounts":  "admin",
     "auth":           "admin",
+    "user_prefs":     "campaign-user",
 }
 
 

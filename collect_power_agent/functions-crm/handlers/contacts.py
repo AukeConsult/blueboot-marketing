@@ -86,7 +86,7 @@ def update_campaign_contact(campaign_id, doc_id):
         db   = _get_db()
         body = request.get_json(silent=True) or {}
 
-        allowed = {"name", "title", "status"} | _FOLLOWUP_FIELDS
+        allowed = {"name", "title", "status", "phone"} | _FOLLOWUP_FIELDS
         update  = {k: str(v).strip() for k, v in body.items() if k in allowed}
         if not update:
             return _err("No editable fields provided.", 400)
