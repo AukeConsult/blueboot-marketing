@@ -331,7 +331,28 @@ cd cloud_batch/setup
 bash setup_all.sh          # runs scripts 01–06 in sequence
 ```
 
-Scripts enable APIs, create a service account, push the Docker image to Artifact Registry, deploy Cloud Run, create Cloud Scheduler jobs, and push all secrets from `.env` to Secret Manager.
+This enables APIs, creates the service account, pushes secrets from `.env` to Secret Manager, builds the Docker image via **Cloud Build** (no local Docker required), deploys the Cloud Run service, and creates the Cloud Scheduler cron jobs.
+
+> **Note:** The build step uses Google Cloud Build, not local Docker. Docker Desktop does not need to be installed or running.
+>
+> **Upload size:** A `.gcloudignore` file is included that limits the upload to only the files needed (`app/`, `config/`, `cloud_batch/`). Virtual environments, `public/`, `functions-crm/`, and local outputs are excluded, keeping the upload small and fast.
+
+### Deploying code changes
+
+After the initial setup, any change to `cloud_batch/` or `app/` scripts needs a rebuild and redeploy. One command handles both:
+
+```bash
+bash deploy_batch.sh
+```
+
+This rebuilds the image via Cloud Build (~3 min) and redeploys the Cloud Run service. The CRM frontend and Firebase Cloud Function are unaffected — use `deploy_crm.sh` for those.
+
+| What changed | Command |
+|---|---|
+| `cloud_batch/` or `app/` scripts | `bash deploy_batch.sh` |
+| `functions-crm/` or `public/` | `bash deploy_crm.sh` |
+| Secrets in `.env` | `bash cloud_batch/setup/06_secrets.sh` then `bash deploy_batch.sh` |
+| First-time setup | `bash cloud_batch/setup/setup_all.sh` |
 
 ### Managing jobs
 

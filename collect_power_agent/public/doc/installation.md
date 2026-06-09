@@ -259,7 +259,72 @@ firebase deploy --only hosting
 
 ---
 
-## 6. Firestore indexes
+## 6. Google Cloud Batch Jobs (optional)
+
+The `cloud_batch/` framework runs the pipeline scripts unattended on Google Cloud. Set this up if you want scheduled weekly runs or want to trigger pipelines from the Google Jobs page in the dashboard.
+
+### 6.1 Prerequisites
+
+You need the `gcloud` CLI installed and logged in:
+
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+```
+
+No local Docker installation is required — the image is built on GCP using Cloud Build.
+
+A `.gcloudignore` file in the project root limits what gets uploaded to Cloud Build — only `app/`, `config/`, and `cloud_batch/` are sent. Virtual environments, `public/`, `functions-crm/`, and local exports are excluded, so uploads are fast even in large projects.
+
+### 6.2 First-time setup
+
+Run once from the project root:
+
+```bash
+bash cloud_batch/setup/setup_all.sh
+```
+
+This will:
+1. Enable required GCP APIs (Cloud Run, Cloud Build, Artifact Registry, Secret Manager, Cloud Scheduler)
+2. Create a `batch-runner` service account with the required roles
+3. Push all secrets from your `.env` file to Secret Manager
+4. Build the Docker image on GCP via Cloud Build (no local Docker needed)
+5. Deploy the `batch-runner` Cloud Run service (always-warm, 1 instance)
+6. Create Cloud Scheduler cron jobs for each pipeline
+
+Setup takes around 5–10 minutes on first run.
+
+### 6.3 Deploying code changes
+
+After any change to pipeline scripts (`app/`) or the batch framework (`cloud_batch/`):
+
+```bash
+bash deploy_batch.sh
+```
+
+This rebuilds the image (~3 minutes) and redeploys Cloud Run. It does not affect the CRM frontend or Firebase Cloud Function.
+
+| What changed | Command |
+|---|---|
+| `app/` or `cloud_batch/` scripts | `bash deploy_batch.sh` |
+| `functions-crm/` or `public/` | `bash deploy_crm.sh` |
+| Secrets in `.env` | `bash cloud_batch/setup/06_secrets.sh` then `bash deploy_batch.sh` |
+
+### 6.4 Verify deployment
+
+After setup, the batch runner URL is printed at the end of `setup_all.sh`. You can also retrieve it with:
+
+```bash
+gcloud run services describe batch-runner \
+  --platform managed --region us-central1 --project YOUR_PROJECT_ID \
+  --format "value(status.url)"
+```
+
+Open the dashboard → **Google Jobs** to confirm jobs are listed and try a manual run.
+
+---
+
+## 7. Firestore indexes
 
 Deploy the Firestore indexes (required for collection group queries):
 
@@ -271,7 +336,7 @@ This deploys both `firestore.indexes.json` and `firestore.rules`.
 
 ---
 
-## 7. Google Drive folder (optional)
+## 8. Google Drive folder (optional)
 
 The campaign export feature uploads spreadsheets to a Google Drive folder.
 
@@ -282,7 +347,7 @@ The campaign export feature uploads spreadsheets to a Google Drive folder.
 
 ---
 
-## 8. Mail accounts
+## 9. Mail accounts
 
 Configure outreach email accounts in the CRM dashboard:
 
@@ -300,7 +365,7 @@ Gmail OAuth2 setup:
 
 ---
 
-## 9. First run checklist
+## 10. First run checklist
 
 Once everything is set up, verify the pipeline works end to end:
 
@@ -337,7 +402,7 @@ python app/build_filter_facets.py --no-write
 
 ---
 
-## 10. Project structure
+## 11. Project structure
 
 ```
 collect_power_agent/
@@ -383,47 +448,6 @@ collect_power_agent/
 **Sheets not found (404)** — verify the sheet IDs in `sheets_config.py` and that the service account has Editor access 
 ---
 
-## 11. Access control — first admin setup
+## 12. Access control — first admin setup
 
-The system requires every user to be assigned a role before they can access any internal page or make any write API call. A signed-in user with no role is a **guest** — they can only see the landing page.
-
-For full details see [`readme-access.md`](../../readme-access.md).
-
-### Role hierarchy
-
-| Role | What they can do |
-|---|---|
-| `guest` | View the landing page only. Cannot access any internal page or API write. |
-| `user` | Full read access + follow-up field updates and email sync. |
-| `campaign-user` | Everything `user` can do + create / manage campaigns and jobs. |
-| `admin` | Full access including mail account settings and user management. |
-
-### Assigning the first admin
-
-There is no UI for the very first user — assign the role directly in Firestore:
-
-1. Sign in to the CRM dashboard with the account that should be the first admin.
-2. In [Firebase Console → Firestore](https://console.firebase.google.com) open:
-   ```
-   settings → users → users → {your-email-address}
-   ```
-3. Add a field:
-   ```
-   role: "admin"   (string)
-   ```
-4. Reload the dashboard — the account now has full access.
-
-All subsequent users can be assigned roles via the **Settings → Users** page.
-
-### Assigning roles to new users
-
-1. A new user signs in — Firebase Authentication creates their account.
-2. They land on the dashboard and see *"Your account is pending access — contact an administrator."*
-3. An admin opens **Settings → Users**, finds the new user, and assigns a role.
-4. The user refreshes — they now have access.
-
-### How it is enforced
-
-**Frontend:** `crm-common.js` checks `PAGE_ROLES` on every page load. Guests and unauthenticated users are redirected to the landing page automatically.
-
-**Backend:** every API request (GET and non-GET) must carry a valid Firebase ID token in the `Authorization` header. The `before_request` hook in `functions-crm/main.py` verifies the token, fetches the role from Firestore, and returns `401` (no/bad token) or `403` (insufficient role) if the check fails.
+The system requires every user t

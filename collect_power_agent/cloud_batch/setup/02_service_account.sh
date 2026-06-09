@@ -28,7 +28,16 @@ do
   echo "  granted $ROLE"
 done
 
-echo "[3/3] Service account ready: $SA_EMAIL"
+echo "[3/3] Granting Cloud Build service account Artifact Registry write access..."
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')
+gcloud projects add-iam-policy-binding "$PROJECT" \
+  --member="serviceAccount:${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com" \
+  --role="roles/artifactregistry.writer" \
+  --condition=None \
+  --quiet
+echo "  granted roles/artifactregistry.writer to Cloud Build SA"
+
+echo "[4/4] Service account ready: $SA_EMAIL"
 echo ""
 echo "  Set in environment or pass to 04_deploy_cloudrun.sh:"
 echo "  export BATCH_SA=${SA_EMAIL}"

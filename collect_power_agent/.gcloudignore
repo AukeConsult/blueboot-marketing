@@ -1,0 +1,50 @@
+# .gcloudignore — controls what gcloud builds submit uploads to Cloud Build.
+# Anything listed here is excluded from the upload entirely.
+# Use **/ prefix to match at any depth.
+
+.gcloudignore
+.git/
+.gitignore
+
+# Python virtual environments (at any depth)
+.venv/
+**/.venv/
+venv/
+**/venv/
+**/__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+**/*.egg-info/
+
+# Secrets
+.env
+config/google_oauth_client.json
+config/google_token.json
+
+# Node / Firebase tools
+node_modules/
+**/node_modules/
+.firebase/
+firebase-debug.log
+
+# Frontend (not needed in Docker image)
+public/
+
+# CRM function (deployed separately via deploy_crm.sh)
+functions-crm/
+
+# CRM sheet-sync scripts (local only)
+crm/
+
+# Local outputs
+exports/
+checkpoints/
+*.xlsx
+*.csv
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
