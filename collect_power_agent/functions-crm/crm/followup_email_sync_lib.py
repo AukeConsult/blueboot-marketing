@@ -309,7 +309,12 @@ def run_followup_email_sync(
         for match_e, entries in contact_entries.items():
             ref = contact_index[match_e]
             try:
-                ref.update({"comment_history": firestore.ArrayUnion(entries)})
+                update_doc: dict = {"comment_history": firestore.ArrayUnion(entries)}
+                # Set new_mail flag if any incoming email was added
+                has_incoming = any(e.get("type") == "EMAIL_IN" for e in entries)
+                if has_incoming:
+                    update_doc["new_mail"] = True
+                ref.update(update_doc)
                 total_entries  += len(entries)
                 total_contacts += 1
                 print(f"  {match_e}: +{len(entries)} entries", flush=True)

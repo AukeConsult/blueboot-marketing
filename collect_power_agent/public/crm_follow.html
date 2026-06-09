@@ -11,14 +11,19 @@
 
 .follow-input {
   border: 1px solid transparent; background: transparent;
-  font-size: .8rem; width: 100%; padding: 2px 4px; border-radius: 4px;
-  transition: border-color .15s, background .15s;
+  font-size: .8rem; width: 100%; min-width: 0; padding: 2px 4px; border-radius: 4px;
+  transition: border-color .15s, background .15s; overflow: hidden; text-overflow: ellipsis;
 }
 .follow-input:hover { border-color: var(--bb-border); background: #fff; }
 .follow-input:focus { border-color: var(--bb-accent); background: #fff; outline: none;
   box-shadow: 0 0 0 2px rgba(79,110,247,.15); }
 .follow-input::placeholder { color: var(--bb-muted); font-size: .78rem; }
 .contact-title { font-size: .73rem; color: var(--bb-muted); }
+/* Side-panel comment textarea */
+.sp-comment-input {
+  resize: vertical; overflow-y: auto; line-height: 1.4;
+  min-height: 1.4em; white-space: pre-wrap; word-break: break-word;
+}
 
 .follow-select {
   border: 1px solid transparent; background: transparent;
@@ -37,9 +42,7 @@
 .save-dot.ok  { background: #16a34a; animation: none; }
 @keyframes dot-blink { 0%,100%{opacity:1} 50%{opacity:.2} }
 
-/* Comment row — visually attached to the row above it */
-.follow-comment-row td { border-top: none; padding-top: 0; padding-bottom: 4px; }
-/* .follow-comment-row .follow-input font — defined in css/styles.css */
+/* Comment row styling — in css/styles.css (.comment-row-inner, .comment-row-input) */
 .hist-toggle { flex-shrink: 0; background: none; border: none; cursor: pointer;
   color: var(--bb-muted); padding: 0 3px; border-radius: 4px; line-height: 1;
   display: flex; align-items: center; gap: 2px; font-size: .72rem; }
@@ -47,15 +50,23 @@
 /* .hist-count sizing and comment input font — defined in css/styles.css */
 
 /* History row */
-.follow-history-row td { border-top: none; padding-top: 0; padding-bottom: 8px; }
-.hist-list { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 0; }
-.hist-entry { display: grid; grid-template-columns: 120px 140px 1fr; gap: 6px;
-  align-items: baseline; font-size: .76rem; padding: 3px 6px; border-radius: 5px;
-  background: #f8f9fa; border: 1px solid var(--bb-border); }
-.hist-entry-date { color: var(--bb-muted); white-space: nowrap; }
-.hist-entry-user { color: var(--bb-muted); white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; }
-.hist-entry-text { color: #111; }
+.follow-history-row td { border-top: none; }
+.hist-row-td { padding: 0 8px 8px; }
+.hist-list { display: flex; flex-direction: column; gap: 3px; padding: 4px 0 0; }
+.hist-entry { font-size: .76rem; border-radius: 5px; border: 1px solid var(--bb-border);
+  background: #f8f9fa; overflow: hidden; user-select: none; }
+.hist-entry-summary { display: flex; align-items: center; gap: 6px;
+  padding: 3px 6px; min-height: 24px; }
+.hist-entry-date { color: var(--bb-muted); white-space: nowrap; flex-shrink: 0; }
+.hist-entry-preview { color: #374151; flex: 1; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.hist-entry-chevron { color: var(--bb-muted); font-size: .7rem; flex-shrink: 0;
+  margin-left: auto; transition: transform .15s; }
+.hist-entry-detail { display: none; padding: 4px 8px 6px; border-top: 1px solid var(--bb-border);
+  font-size: .75rem; color: #374151; background: #fff; }
+.hist-entry.hist-entry-open .hist-entry-detail { display: block; }
+.hist-detail-lbl { color: var(--bb-muted); font-weight: 600; margin-right: 4px; }
+.hist-entry-text { color: #111; white-space: pre-wrap; word-break: break-word; }
 
 /* Importance select */
 .imp-select { border: 1px solid transparent; background: transparent;
@@ -73,6 +84,9 @@
 .sync-btn:hover { color: var(--bb-accent); background: #eef0ff; }
 .sync-btn.spinning i { display: inline-block; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.newmail-btn { background: none; border: none; cursor: pointer; color: #d97706;
+  padding: 1px 3px; border-radius: 4px; font-size: .9rem; line-height: 1; flex-shrink: 0; }
+.newmail-btn:hover { opacity: .7; }
 
 /* Email history entries */
 .hist-entry-email-in  { background: #f0fdf4; border-color: #bbf7d0; }
@@ -81,6 +95,7 @@
   border-radius: 4px; white-space: nowrap; flex-shrink: 0; }
 .hist-type-in  { background: #dcfce7; color: #15803d; }
 .hist-type-out { background: #dbeafe; color: #1d4ed8; }
+/* hist-expand-btn removed — accordion per entry */
 
 /* Overdue / due-soon date highlighting */
 .date-overdue  { color: #b91c1c !important; font-weight: 600; }
@@ -129,6 +144,39 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
   position: relative;
   z-index: 1;
 }
+
+/* Side-panel layout */
+#follow-layout { display: flex; align-items: flex-start; gap: 0; }
+#follow-layout .bb-card { flex: 1; min-width: 0; }
+.follow-side-panel {
+  width: 0; overflow: hidden;
+  transition: width .2s ease, opacity .2s ease;
+  opacity: 0;
+  flex-shrink: 0;
+}
+.follow-side-panel.sp-open {
+  width: 25vw;
+  opacity: 1;
+  margin-left: 12px;
+}
+.follow-side-panel .bb-card { width: 25vw; min-width: 25vw; }
+tr.row-sp-active > td { background: #f0f2ff !important; }
+.sp-avatar {
+  width: 42px; height: 42px; border-radius: 50%;
+  background: #e6f1fb; display: flex; align-items: center;
+  justify-content: center; font-size: 14px; font-weight: 500;
+  color: #185fa5; flex-shrink: 0;
+}
+.sp-section { padding: 10px 14px; border-bottom: 1px solid var(--bb-border); }
+.sp-section-label {
+  font-size: .68rem; color: var(--bb-muted); text-transform: uppercase;
+  letter-spacing: .05em; margin-bottom: 8px; font-weight: 600;
+}
+.sp-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 5px; font-size: .8rem; }
+.sp-row i { font-size: 14px; color: var(--bb-muted); flex-shrink: 0; margin-top: 1px; }
+.sp-muted { color: var(--bb-muted); }
+.sp-btn-panel { display: flex; gap: .5rem; padding: 10px 14px; }
+.sp-ch-btn { color: var(--bb-accent) !important; background: #eef0ff; border-color: #c7ceff; }
 .group-header-row td .group-count {
   font-weight: 400;
   color: var(--bb-muted);
@@ -202,6 +250,9 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
       <button class="header-action-btn" onclick="load()" title="Refresh contacts">
         <i class="ti ti-refresh"></i>
       </button>
+      <a href="doc-viewer.html?doc=followup-page-usage" target="_blank" class="header-action-btn" title="Follow-up page help">
+        <i class="ti ti-help"></i>
+      </a>
     </div>
   </div>
 
@@ -283,7 +334,8 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
   <!-- Job status feedback -->
   <div id="sync-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
 
-  <!-- Table -->
+  <!-- Table + side panel -->
+  <div id="follow-layout">
   <div class="bb-card">
     <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom bb-card-header">
       <span class="fw-500 small"><i class="ti ti-list-check me-1 text-primary"></i>Contacts</span>
@@ -314,21 +366,24 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
           <button id="view-list-btn" class="btn btn-sm btn-primary" onclick="toggleView('list')" title="List view">
             <i class="ti ti-list"></i>
           </button>
+          <button id="side-panel-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleSidePanel()" title="Toggle contact detail panel">
+            <i class="ti ti-layout-sidebar-right"></i>
+          </button>
         </div>
       </div>
     </div>
     <div class="table-responsive">
-      <table class="table table-sm table-hover mb-0">
+      <table class="table table-sm table-hover mb-0" style="table-layout:fixed;width:100%">
         <thead class="bb-thead"><tr>
           <th style="width:32px"><input type="checkbox" class="form-check-input" id="select-all" onclick="toggleSelectAll(this)"></th>
-          <th class="small bb-sortable" data-col="status"           onclick="sortBy('status')" style="min-width:85px">Status <span class="sort-icon"></span></th>
-          <th class="small bb-sortable" data-col="name"             onclick="sortBy('name')">Name <span class="sort-icon"></span></th>
-          <th class="small bb-sortable" data-col="email"            onclick="sortBy('email')">Email <span class="sort-icon"></span></th>
-          <th class="small" style="min-width:110px">Phone</th>
-          <th class="small bb-sortable" data-col="website"          onclick="sortBy('website')" style="min-width:150px">Website <span class="sort-icon"></span></th>
-          <th class="small bb-sortable" data-col="followup_date"    onclick="sortBy('followup_date')" style="min-width:135px">Follow-up date <span class="sort-icon"></span></th>
-          <th class="small bb-sortable" data-col="followup_status"     onclick="sortBy('followup_status')" style="min-width:150px">Follow-up status <span class="sort-icon"></span></th>
-          <th class="small bb-sortable" data-col="followup_importance" onclick="sortBy('followup_importance')" style="min-width:100px">Importance <span class="sort-icon"></span></th>
+          <th class="small bb-sortable d-none d-lg-table-cell" data-col="status"           onclick="sortBy('status')" style="width:95px">Status <span class="sort-icon"></span></th>
+          <th class="small bb-sortable d-none d-xl-table-cell" data-col="name"             onclick="sortBy('name')" style="width:auto">Name <span class="sort-icon"></span></th>
+          <th class="small bb-sortable"                         data-col="email"            onclick="sortBy('email')" style="width:200px">Email <span class="sort-icon"></span></th>
+          <th class="small d-none d-xxl-table-cell" style="width:130px">Phone</th>
+          <th class="small bb-sortable d-none d-xxl-table-cell" data-col="website"          onclick="sortBy('website')" style="width:155px">Website <span class="sort-icon"></span></th>
+          <th class="small bb-sortable d-none d-lg-table-cell" data-col="followup_date"    onclick="sortBy('followup_date')" style="width:135px">Follow-up date <span class="sort-icon"></span></th>
+          <th class="small bb-sortable"                         data-col="followup_status"  onclick="sortBy('followup_status')" style="width:155px">Follow-up status <span class="sort-icon"></span></th>
+          <th class="small bb-sortable d-none d-xl-table-cell" data-col="followup_importance" onclick="sortBy('followup_importance')" style="width:105px">Importance <span class="sort-icon"></span></th>
         </tr></thead>
         <tbody id="follow-tbody">
           <tr><td colspan="9" class="text-center py-5" style="color:var(--bb-muted)">
@@ -340,7 +395,23 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
     <div id="follow-empty" class="text-center py-3 small" style="color:var(--bb-muted);display:none">
       No contacts match the current filters.
     </div>
+  </div><!-- /.bb-card -->
+
+  <!-- Contact side panel -->
+  <div id="contact-side-panel" class="follow-side-panel">
+    <div class="bb-card">
+      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom bb-card-header">
+        <span class="fw-500 small"><i class="ti ti-user me-1 text-primary"></i>Contact</span>
+        <button class="collapse-all-btn" onclick="closeSidePanel()" title="Close panel"><i class="ti ti-x"></i></button>
+      </div>
+      <div id="sp-body" style="overflow-y:auto;max-height:calc(100vh - 160px)">
+        <div class="sp-section text-center py-4 small" style="color:var(--bb-muted)">
+          Click a row to view contact details.
+        </div>
+      </div>
+    </div>
   </div>
+  </div><!-- /#follow-layout -->
 
 </div>
 
@@ -361,6 +432,20 @@ let _currentGroupKeys = [];
 let _allCampaigns = [];   // loaded from /followup-meta
 const selected = new Set();   // doc_path strings
 let _groupDocPaths = {};              // groupKey -> [doc_path, ...] built by renderGrouped
+const _CHANNEL_HREF = {
+  linkedin:   v => v.startsWith('http') ? v : 'https://linkedin.com/in/' + v,
+  twitter:    v => v.startsWith('http') ? v : 'https://x.com/' + v.replace(/^@/,''),
+  facebook:   v => v.startsWith('http') ? v : 'https://facebook.com/' + v,
+  instagram:  v => v.startsWith('http') ? v : 'https://instagram.com/' + v.replace(/^@/,''),
+  whatsapp:   v => 'https://wa.me/' + v.replace(/[^0-9]/g,''),
+  teams:      v => v.includes('@') ? 'https://teams.microsoft.com/l/chat/0/0?users=' + encodeURIComponent(v) : (v.startsWith('http') ? v : '#'),
+  telegram:   v => v.startsWith('http') ? v : 'https://t.me/' + v.replace(/^@/,''),
+  googlechat: v => v.startsWith('http') ? v : 'https://mail.google.com/chat/u/0/#dm/' + encodeURIComponent(v),
+  messenger:  v => v.startsWith('http') ? v : 'https://m.me/' + v,
+};
+let _sideOpen      = false;           // side panel visible
+let _sidePanelGidx = -1;
+let _spChannelsOpen = false;          // channels section collapsed by default             // which contact is shown in side panel
 let _prefsReady       = false;  // true only after first load() completes with prefs applied
 let _pendingOutreach  = '';     // outreach pref applied after load() populates dropdown
 let _loadedPrefs      = null;   // prefs fetched by loadUserPrefs(); applied inside load()
@@ -457,6 +542,15 @@ async function load() {
       title:              c.title              || '',
       website:            c.website            || '',
       phone:              c.phone              || '',
+      linkedin:           c.linkedin           || '',
+      twitter:            c.twitter            || '',
+      facebook:           c.facebook           || '',
+      instagram:          c.instagram          || '',
+      whatsapp:           c.whatsapp           || '',
+      teams:              c.teams              || '',
+      telegram:           c.telegram           || '',
+      googlechat:         c.googlechat         || '',
+      messenger:          c.messenger          || '',
       status:             c.status             || 'pending',
       followup_date:      c.followup_date      || '',
       followup_status:    c.followup_status    || '',
@@ -468,6 +562,7 @@ async function load() {
       doc_path:           c.doc_path,
       owner:              c.owner              || '',
       outreach_email:     c.outreach_email     || '',
+      new_mail:           !!c.new_mail,
     }));
 
     const outreachEmails = [...new Set(allRows.map(r => r.outreach_email).filter(Boolean))].sort();
@@ -502,6 +597,7 @@ async function load() {
       sv('due-filter',            _loadedPrefs.filter_due);
       if (_loadedPrefs.sort_col !== undefined) _sortCol = _loadedPrefs.sort_col;
       if (_loadedPrefs.sort_asc !== undefined) _sortAsc  = _loadedPrefs.sort_asc;
+      if (_loadedPrefs.side_open) { _sideOpen = true; _updateSidePanelBtn(); _updateSidePanelVisibility(); }
       if (_sortCol) {
         document.querySelectorAll('.bb-sortable').forEach(th => {
           const ic = th.querySelector('.sort-icon'); if (!ic) return;
@@ -733,11 +829,11 @@ function render(list) {
     const rowCls  = dueCls === 'overdue' ? 'row-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'row-due-soon' : '';
     const dateCls = dueCls === 'overdue' ? 'date-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'date-due-soon' : '';
 
-    return `<tr data-doc="${escapeHtml(r.doc_path)}" class="${rowCls}">
+    return `<tr data-doc="${escapeHtml(r.doc_path)}" class="${rowCls}" onclick="onRowClick(event,${gidx})" style="cursor:pointer">
       <td class="text-center"><input type="checkbox" class="form-check-input row-chk"
         data-gidx="${gidx}" onchange="onRowCheck(this)"></td>
-      <td>${statusBadge(r.status)}</td>
-      <td>
+      <td class="d-none d-lg-table-cell">${statusBadge(r.status)}</td>
+      <td class="d-none d-xl-table-cell">
         <div class="d-flex align-items-center gap-1">
           <input type="text" class="follow-input small fw-500"
             value="${escapeHtml(r.name || '')}" placeholder="Name"
@@ -754,32 +850,37 @@ function render(list) {
           onchange="saveField(this)"
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
       </td>
-      <td class="small"><a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email || '—')}</a></td>
       <td class="small">
+        <div class="d-flex align-items-center gap-1 min-w-0">
+          <a href="mailto:${escapeHtml(r.email)}" class="text-truncate">${escapeHtml(r.email || '—')}</a>
+          ${r.new_mail ? `<button class="newmail-btn" title="New mail — click to acknowledge" onclick="ackNewMail(${gidx},event)"><i class="ti ti-mail-opened"></i></button>` : ''}
+        </div>
+      </td>
+      <td class="small d-none d-xxl-table-cell">
         <input type="tel" class="follow-input"
           value="${escapeHtml(r.phone || '')}" placeholder="Phone"
           data-gidx="${gidx}" data-field="phone"
           onchange="saveField(this)"
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
       </td>
-      <td class="small">${siteShort
+      <td class="small d-none d-xxl-table-cell">${siteShort
         ? `<a href="${escapeHtml(r.website)}" target="_blank"
               style="color:var(--bb-muted);text-decoration:none" title="${escapeHtml(r.website)}">${escapeHtml(siteShort)}</a>`
         : '—'}</td>
-      <td>
+      <td class="d-none d-lg-table-cell">
         <input type="date" class="follow-input ${dateCls}"
           value="${escapeHtml(r.followup_date || '')}"
           data-gidx="${gidx}" data-field="followup_date"
           onchange="saveField(this)">
       </td>
-      <td>
+      <td class="">
         <select class="follow-select"
           data-gidx="${gidx}" data-field="followup_status"
           onchange="saveField(this)">
           ${fuOpts}
         </select>
       </td>
-      <td>
+      <td class="d-none d-xl-table-cell">
         <select class="imp-select ${impCls}"
           data-gidx="${gidx}" data-field="followup_importance"
           onchange="saveField(this);this.className='imp-select '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
@@ -788,15 +889,16 @@ function render(list) {
       </td>
     </tr>
     <tr class="follow-comment-row">
-      <td></td><td></td><td></td>
-      <td colspan="6">
-        <div class="d-flex align-items-center gap-1">
-          <input type="text" class="follow-input flex-grow-1"
-            value="${escapeHtml(r.followup_comment || '')}"
-            placeholder="Add comment…"
+      <td colspan="9">
+        <div class="d-flex align-items-center gap-2 comment-row-inner">
+          <i class="ti ti-message-circle comment-row-icon"></i>
+          <textarea class="follow-input comment-row-input flex-grow-1"
+            placeholder="Add a comment…"
             data-gidx="${gidx}" data-field="followup_comment"
             onchange="saveField(this)"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+            onfocus="onRowExpand(${gidx})"
+            oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+            rows="1">${escapeHtml(r.followup_comment || '')}</textarea>
           <button class="hist-toggle" onclick="toggleHistory(this,${gidx})" title="Show comment history">
             <i class="ti ti-chevron-down"></i>
             <span class="hist-count${r.comment_history.length ? ' has-entries' : ''}">${r.comment_history.length}</span>
@@ -805,8 +907,7 @@ function render(list) {
       </td>
     </tr>
     <tr class="follow-history-row" id="hist-${gidx}" style="display:none">
-      <td></td><td></td><td></td>
-      <td colspan="6">${renderHistoryContent(r.comment_history)}</td>
+      <td colspan="9" class="hist-row-td">${renderHistoryContent(r.comment_history)}</td>
     </tr>`;
   }).join(''));
   restoreChecks();
@@ -838,11 +939,11 @@ function _contactRowsHtml(r) {
   const dueCls  = dueDateClass(r.followup_date);
   const rowCls  = dueCls === 'overdue' ? 'row-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'row-due-soon' : '';
   const dateCls = dueCls === 'overdue' ? 'date-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'date-due-soon' : '';
-  return `<tr data-doc="${escapeHtml(r.doc_path)}" class="${rowCls}">
+  return `<tr data-doc="${escapeHtml(r.doc_path)}" class="${rowCls}" onclick="onRowClick(event,${gidx})" style="cursor:pointer">
       <td class="text-center"><input type="checkbox" class="form-check-input row-chk"
         data-gidx="${gidx}" onchange="onRowCheck(this)"></td>
-      <td>${statusBadge(r.status)}</td>
-      <td>
+      <td class="d-none d-lg-table-cell">${statusBadge(r.status)}</td>
+      <td class="d-none d-xl-table-cell">
         <div class="d-flex align-items-center gap-1">
           <input type="text" class="follow-input small fw-500"
             value="${escapeHtml(r.name || '')}" placeholder="Name"
@@ -859,32 +960,37 @@ function _contactRowsHtml(r) {
           onchange="saveField(this)"
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
       </td>
-      <td class="small"><a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email || '—')}</a></td>
       <td class="small">
+        <div class="d-flex align-items-center gap-1 min-w-0">
+          <a href="mailto:${escapeHtml(r.email)}" class="text-truncate">${escapeHtml(r.email || '—')}</a>
+          ${r.new_mail ? `<button class="newmail-btn" title="New mail — click to acknowledge" onclick="ackNewMail(${gidx},event)"><i class="ti ti-mail-opened"></i></button>` : ''}
+        </div>
+      </td>
+      <td class="small d-none d-xxl-table-cell">
         <input type="tel" class="follow-input"
           value="${escapeHtml(r.phone || '')}" placeholder="Phone"
           data-gidx="${gidx}" data-field="phone"
           onchange="saveField(this)"
           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
       </td>
-      <td class="small">${siteShort
+      <td class="small d-none d-xxl-table-cell">${siteShort
         ? `<a href="${escapeHtml(r.website)}" target="_blank"
               style="color:var(--bb-muted);text-decoration:none" title="${escapeHtml(r.website)}">${escapeHtml(siteShort)}</a>`
         : '—'}</td>
-      <td>
+      <td class="d-none d-lg-table-cell">
         <input type="date" class="follow-input ${dateCls}"
           value="${escapeHtml(r.followup_date || '')}"
           data-gidx="${gidx}" data-field="followup_date"
           onchange="saveField(this)">
       </td>
-      <td>
+      <td class="">
         <select class="follow-select"
           data-gidx="${gidx}" data-field="followup_status"
           onchange="saveField(this)">
           ${fuOpts}
         </select>
       </td>
-      <td>
+      <td class="d-none d-xl-table-cell">
         <select class="imp-select ${impCls}"
           data-gidx="${gidx}" data-field="followup_importance"
           onchange="saveField(this);this.className='imp-select '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
@@ -893,15 +999,16 @@ function _contactRowsHtml(r) {
       </td>
     </tr>
     <tr class="follow-comment-row">
-      <td></td><td></td><td></td>
-      <td colspan="6">
-        <div class="d-flex align-items-center gap-1">
-          <input type="text" class="follow-input flex-grow-1"
-            value="${escapeHtml(r.followup_comment || '')}"
-            placeholder="Add comment…"
+      <td colspan="9">
+        <div class="d-flex align-items-center gap-2 comment-row-inner">
+          <i class="ti ti-message-circle comment-row-icon"></i>
+          <textarea class="follow-input comment-row-input flex-grow-1"
+            placeholder="Add a comment…"
             data-gidx="${gidx}" data-field="followup_comment"
             onchange="saveField(this)"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+            onfocus="onRowExpand(${gidx})"
+            oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+            rows="1">${escapeHtml(r.followup_comment || '')}</textarea>
           <button class="hist-toggle" onclick="toggleHistory(this,${gidx})" title="Show comment history">
             <i class="ti ti-chevron-down"></i>
             <span class="hist-count${r.comment_history.length ? ' has-entries' : ''}">${r.comment_history.length}</span>
@@ -910,8 +1017,7 @@ function _contactRowsHtml(r) {
       </td>
     </tr>
     <tr class="follow-history-row" id="hist-${gidx}" style="display:none">
-      <td></td><td></td><td></td>
-      <td colspan="6">${renderHistoryContent(r.comment_history)}</td>
+      <td colspan="9" class="hist-row-td">${renderHistoryContent(r.comment_history)}</td>
     </tr>`;
 }
 
@@ -990,6 +1096,270 @@ function renderGrouped(list) {
 
 // ── Save follow-up field via API ──────────────────────────────────────────────
 
+// ── Side panel ────────────────────────────────────────────────────────────────
+
+function onRowClick(event, gidx) {
+  if (event.target.closest('button,a,label,select')) return;
+  onRowExpand(gidx);            // expand comment/history for this row
+  if (!_sideOpen) return;
+  if (_sidePanelGidx === gidx) return;
+  openSidePanel(gidx);
+}
+
+function toggleSidePanel() {
+  _sideOpen = !_sideOpen;
+  _updateSidePanelBtn();
+  _updateSidePanelVisibility();
+  saveUserPrefs();
+}
+
+function closeSidePanel() {
+  _sideOpen = false;
+  _sidePanelGidx = -1;
+  _updateSidePanelBtn();
+  _updateSidePanelVisibility();
+  document.querySelectorAll('tr.row-sp-active').forEach(tr => tr.classList.remove('row-sp-active'));
+  saveUserPrefs();
+}
+
+function toggleSpChannels() {
+  _spChannelsOpen = !_spChannelsOpen;
+  const body = document.querySelector('.sp-channels-body');
+  const icon = document.querySelector('.sp-channels-section .sp-collapsible .ti');
+  if (body) body.style.display = _spChannelsOpen ? 'block' : 'none';
+  if (icon) { icon.classList.toggle('ti-chevron-up', _spChannelsOpen); icon.classList.toggle('ti-chevron-down', !_spChannelsOpen); }
+}
+
+async function logChatOpened(gidx, url) {
+  window.open(url, '_blank', 'noopener');
+  const row = allRows[gidx];
+  if (!row) return;
+  const today = new Date().toISOString().slice(0, 10);
+  const alreadyToday = (row.comment_history || []).some(
+    h => h.type === 'CHAT' && (h.date || '').slice(0, 10) === today
+  );
+  if (alreadyToday) return;
+  const now  = new Date();
+  const hhmm = now.toTimeString().slice(0, 5);
+  const entry = { text: `Google Chat opened ${hhmm}`, type: 'CHAT', date: now.toISOString() };
+  try {
+    await apiPatchContact(row, { _history_entry: entry });
+    row.comment_history = row.comment_history || [];
+    row.comment_history.push({ ...entry, user: (window._authUser && window._authUser.email) || '' });
+    if (_sidePanelGidx === gidx) _refreshSidePanelHistory();
+  } catch(e) { console.warn('[chat-log]', e.message); }
+}
+
+async function ackNewMail(gidx, event) {
+  if (event) event.stopPropagation();
+  const row = allRows[gidx];
+  if (!row || !row.new_mail) return;
+  const now = new Date();
+  const hhmm = now.toTimeString().slice(0, 5);
+  const entry = { text: `New mail acknowledged ${hhmm}`, type: 'NEWMAIL_ACK', date: now.toISOString() };
+  try {
+    await apiPatchContact(row, { new_mail: false, _history_entry: entry });
+    row.new_mail = false;
+    row.comment_history = row.comment_history || [];
+    row.comment_history.push({ ...entry, user: (window._authUser && window._authUser.email) || '' });
+    // Re-render: update badge in row
+    const tr = document.querySelector(`tr[data-doc="${CSS.escape(row.doc_path)}"]`);
+    if (tr) {
+      const btn = tr.querySelector('.newmail-btn');
+      if (btn) btn.remove();
+    }
+    // Refresh side panel if open on this contact
+    if (_sidePanelGidx === gidx) _refreshSidePanelHistory();
+    if (_sidePanelGidx === gidx) openSidePanel(gidx);
+  } catch(e) { console.warn('[ack-newmail]', e.message); }
+}
+
+function _updateSidePanelBtn() {
+  const btn = document.getElementById('side-panel-btn');
+  if (!btn) return;
+  btn.className = 'btn btn-sm ' + (_sideOpen ? 'btn-primary' : 'btn-outline-secondary');
+}
+
+function _updateSidePanelVisibility() {
+  const panel = document.getElementById('contact-side-panel');
+  if (!panel) return;
+  if (_sideOpen) panel.classList.add('sp-open');
+  else panel.classList.remove('sp-open');
+}
+
+function openSidePanel(gidx) {
+  _sidePanelGidx = gidx;
+  const row = allRows[gidx];
+  if (!row) return;
+  document.querySelectorAll('tr.row-sp-active').forEach(tr => tr.classList.remove('row-sp-active'));
+  const tr = document.querySelector(`tr[data-doc="${CSS.escape(row.doc_path)}"]`);
+  if (tr) tr.classList.add('row-sp-active');
+  try {
+    document.getElementById('sp-body').innerHTML = _renderSidePanel(row);
+  } catch(e) {
+    console.error('[side-panel] render error:', e);
+    document.getElementById('sp-body').innerHTML =
+      `<div class="sp-section small text-danger p-3">⚠ Render error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function _renderSidePanel(r) {
+  const gidx    = allRows.indexOf(r);
+  const initials = (r.name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+  const siteShort = r.website ? r.website.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 35) : '';
+  const dueCls    = dueDateClass(r.followup_date);
+  const dateCls   = dueCls === 'overdue' ? 'date-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'date-due-soon' : '';
+  const impCls    = (IMPORTANCE_LEVELS.find(i => i.value === r.followup_importance) || IMPORTANCE_LEVELS[0]).cls;
+  const fuOpts    = FU_STATUSES.map(st =>
+    `<option value="${st.value}"${r.followup_status === st.value ? ' selected' : ''}>${escapeHtml(st.label)}</option>`).join('');
+  const impOpts   = IMPORTANCE_LEVELS.map(i =>
+    `<option value="${i.value}"${r.followup_importance === i.value ? ' selected' : ''}>${escapeHtml(i.label)}</option>`).join('');
+  const newMailBanner = r.new_mail
+    ? `<div class="sp-section" style="padding:6px 12px">
+         <div class="d-flex align-items-center gap-2" style="background:#fef3c7;border-radius:6px;padding:6px 10px">
+           <i class="ti ti-mail-opened" style="color:#d97706;font-size:1rem"></i>
+           <span class="small" style="color:#92400e;flex:1">New incoming mail</span>
+           <button class="btn btn-sm py-0 px-2" style="font-size:.75rem;background:#d97706;color:#fff;border:none"
+             onclick="ackNewMail(${gidx},event)">Mark read</button>
+         </div>
+       </div>`
+    : '';
+  return `
+    ${newMailBanner}
+    <div class="sp-section d-flex align-items-start gap-2 py-3">
+      <div class="sp-avatar">${escapeHtml(initials)}</div>
+      <div class="flex-grow-1">
+        <input type="text" class="follow-input small w-100 fw-500" value="${escapeHtml(r.name || '')}"
+          placeholder="Name" data-gidx="${gidx}" data-field="name"
+          onchange="saveField(this)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+        <input type="text" class="follow-input small w-100 contact-title" value="${escapeHtml(r.title || '')}"
+          placeholder="Title" data-gidx="${gidx}" data-field="title"
+          onchange="saveField(this)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+        <div class="mt-1">${statusBadge(r.status)}</div>
+      </div>
+      <div class="d-flex gap-1">
+        ${r.email    ? `<a href="mailto:${escapeHtml(r.email)}" class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.email)}"><i class="ti ti-mail"></i></a>` : ''}
+        ${r.phone    ? `<a href="tel:${escapeHtml(r.phone)}" class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.phone)}"><i class="ti ti-phone"></i></a>` : ''}
+        ${r.linkedin ? `<a href="${escapeHtml(_CHANNEL_HREF.linkedin(r.linkedin))}" target="_blank" class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.linkedin)}"><i class="ti ti-brand-linkedin"></i></a>` : ''}
+        ${r.twitter  ? `<a href="${escapeHtml(_CHANNEL_HREF.twitter(r.twitter))}" target="_blank" class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.twitter)}"><i class="ti ti-brand-twitter"></i></a>` : ''}
+        ${r.facebook ? `<a href="${escapeHtml(_CHANNEL_HREF.facebook(r.facebook))}" target="_blank" class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.facebook)}"><i class="ti ti-brand-facebook"></i></a>` : ''}
+        ${r.instagram? `<a href="${escapeHtml(_CHANNEL_HREF.instagram(r.instagram))}" target="_blank" class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.instagram)}"><i class="ti ti-brand-instagram"></i></a>` : ''}
+        ${r.whatsapp   ? `<a href="${escapeHtml(_CHANNEL_HREF.whatsapp(r.whatsapp))}" target="_blank" class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.whatsapp)}"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
+        ${r.teams      ? `<a href="${escapeHtml(_CHANNEL_HREF.teams(r.teams))}" target="_blank" class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.teams)}"><i class="ti ti-brand-teams"></i></a>` : ''}
+        ${r.telegram   ? `<a href="${escapeHtml(_CHANNEL_HREF.telegram(r.telegram))}" target="_blank" class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.telegram)}"><i class="ti ti-brand-telegram"></i></a>` : ''}
+        ${r.googlechat ? `<button class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.googlechat)}" onclick="logChatOpened(${gidx},${JSON.stringify(_CHANNEL_HREF.googlechat(r.googlechat))})"><i class="ti ti-brand-google"></i></button>` : ''}
+        ${r.messenger  ? `<a href="${escapeHtml(_CHANNEL_HREF.messenger(r.messenger))}" target="_blank" class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.messenger)}"><i class="ti ti-brand-messenger"></i></a>` : ''}
+      </div>
+    </div>
+    <div class="sp-section">
+      <textarea class="follow-input small w-100 sp-comment-input"
+        placeholder="Add comment…" data-gidx="${gidx}" data-field="followup_comment"
+        onchange="saveField(this)"
+        onfocus="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+        oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+        rows="1">${escapeHtml(r.followup_comment || '')}</textarea>
+    </div>
+    <div class="sp-section sp-channels-section">
+      <div class="sp-section-label sp-collapsible" onclick="toggleSpChannels()" style="cursor:pointer;user-select:none">
+        Channels
+        <i class="ti ${_spChannelsOpen ? 'ti-chevron-up' : 'ti-chevron-down'} ms-1" style="font-size:12px;vertical-align:middle"></i>
+      </div>
+      <div class="sp-channels-body" style="display:${_spChannelsOpen ? 'block' : 'none'}">
+      ${[
+        {field:'linkedin',   icon:'ti-brand-linkedin',   ph:'LinkedIn URL or username'},
+        {field:'twitter',    icon:'ti-brand-twitter',    ph:'Twitter / X handle or URL'},
+        {field:'facebook',   icon:'ti-brand-facebook',   ph:'Facebook profile URL'},
+        {field:'instagram',  icon:'ti-brand-instagram',  ph:'Instagram handle or URL'},
+        {field:'whatsapp',   icon:'ti-brand-whatsapp',   ph:'WhatsApp number (with country code)'},
+        {field:'teams',      icon:'ti-brand-teams',      ph:'Teams email or meeting URL'},
+        {field:'telegram',   icon:'ti-brand-telegram',   ph:'Telegram handle or URL'},
+        {field:'googlechat', icon:'ti-brand-google',     ph:'Google Chat email or URL', btnIcon:'ti-messages', btnTitle:'Open Chat', logChat:true},
+        {field:'messenger',  icon:'ti-brand-messenger',  ph:'Messenger username or URL'},
+      ].sort((a, b) => (r[b.field] ? 1 : 0) - (r[a.field] ? 1 : 0)).map(ch => `
+        <div class="sp-row align-items-center">
+          <i class="ti ${ch.icon}" style="font-size:16px;flex-shrink:0"></i>
+          <input type="text" class="follow-input small flex-grow-1"
+            value="${escapeHtml(r[ch.field] || '')}" placeholder="${ch.ph}"
+            data-gidx="${gidx}" data-field="${ch.field}"
+            onchange="saveField(this)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+          ${r[ch.field]
+            ? (ch.logChat
+                ? `<button class="collapse-all-btn sp-ch-btn" style="flex-shrink:0"
+                    title="${ch.btnTitle || 'Open Chat'}"
+                    onclick="logChatOpened(${gidx},${JSON.stringify(_CHANNEL_HREF.googlechat(r.googlechat))})">
+                    <i class="ti ${ch.btnIcon || 'ti-messages'}"></i></button>`
+                : `<a href="${escapeHtml(_CHANNEL_HREF[ch.field](r[ch.field]))}" target="_blank"
+                    class="collapse-all-btn${ch.btnIcon ? ' sp-ch-btn' : ''}" style="flex-shrink:0"
+                    title="${ch.btnTitle || 'Open'}">
+                    <i class="ti ${ch.btnIcon || 'ti-external-link'}"></i></a>`)
+            : ''}
+        </div>`).join('')}
+      </div>
+    </div>
+    <div class="sp-section">
+      <div class="sp-section-label">Contact</div>
+      ${r.email ? `<div class="sp-row"><i class="ti ti-mail"></i><a href="mailto:${escapeHtml(r.email)}" class="small">${escapeHtml(r.email)}</a></div>` : ''}
+      <div class="sp-row">
+        <i class="ti ti-phone" style="margin-top:5px"></i>
+        <input type="tel" class="follow-input small flex-grow-1"
+          value="${escapeHtml(r.phone || '')}" placeholder="Phone"
+          data-gidx="${gidx}" data-field="phone"
+          onchange="saveField(this)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+      </div>
+      ${siteShort ? `<div class="sp-row"><i class="ti ti-world"></i><a href="${escapeHtml(r.website)}" target="_blank" class="small sp-muted">${escapeHtml(siteShort)}</a></div>` : ''}
+      ${!r.email && !r.phone && !siteShort ? '<div class="small sp-muted">No contact info.</div>' : ''}
+    </div>
+    <div class="sp-section">
+      <div class="sp-section-label">Follow-up</div>
+      <div class="sp-row">
+        <i class="ti ti-calendar" style="margin-top:5px"></i>
+        <input type="date" class="follow-input small ${dateCls}" value="${escapeHtml(r.followup_date || '')}"
+          data-gidx="${gidx}" data-field="followup_date" onchange="saveField(this)">
+      </div>
+      <div class="sp-row">
+        <i class="ti ti-flag" style="margin-top:5px"></i>
+        <select class="follow-select small" data-gidx="${gidx}" data-field="followup_status" onchange="saveField(this)">
+          ${fuOpts}
+        </select>
+      </div>
+      <div class="sp-row">
+        <i class="ti ti-star" style="margin-top:5px"></i>
+        <select class="imp-select ${impCls} small" data-gidx="${gidx}" data-field="followup_importance"
+          onchange="saveField(this);this.className='imp-select small '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
+          ${impOpts}
+        </select>
+      </div>
+    </div>
+    <div class="sp-section" id="sp-history-section">
+      ${_spHistoryHtml(r)}
+    </div>
+`;
+}
+
+function _spHistoryHtml(r) {
+  if (!r.comment_history || !r.comment_history.length) return '<div class="small sp-muted">No history yet.</div>';
+  return `<div class="sp-section-label">History (${r.comment_history.length})</div>` +
+    r.comment_history.slice(-5).reverse().map(h => `
+      <div class="sp-row">
+        <i class="ti ti-clock-hour-4"></i>
+        <div class="small">
+          <span class="sp-muted">${escapeHtml((h.date||'').slice(0,10))} · ${escapeHtml(h.user||'')}</span><br>
+          ${escapeHtml(h.text||'')}
+        </div>
+      </div>`).join('');
+}
+
+function _refreshSidePanelHistory() {
+  const row = allRows[_sidePanelGidx];
+  const el  = document.getElementById('sp-history-section');
+  if (!row || !el) return;
+  el.innerHTML = _spHistoryHtml(row);
+}
+
 async function saveField(el) {
   const gidx  = parseInt(el.dataset.gidx, 10);
   const field = el.dataset.field;
@@ -1001,26 +1371,35 @@ async function saveField(el) {
   const oldValue = row[field] || '';
   row[field] = value;
 
-  const td = el.closest('td');
-  let dot  = td.querySelector('.save-dot');
-  if (!dot) { dot = document.createElement('span'); dot.className = 'save-dot'; td.appendChild(dot); }
-  dot.classList.remove('err', 'ok');
-  dot.title = '';
+  const container = el.closest('td') || el.closest('.sp-row');
+  let dot = container ? container.querySelector('.save-dot') : null;
+  if (container) {
+    if (!dot) { dot = document.createElement('span'); dot.className = 'save-dot'; container.appendChild(dot); }
+    dot.classList.remove('err', 'ok');
+    dot.title = '';
+  }
 
   try {
     await apiPatchContact(row, { [field]: value });
 
     const user = (window._authUser && (window._authUser.email || window._authUser.uid)) || 'unknown';
     const entry = buildLocalHistoryEntry(field, value, user);
-    if (entry) { row.comment_history.push(entry); refreshHistoryPanel(gidx); }
+    if (entry) {
+      row.comment_history.push(entry);
+      refreshHistoryPanel(gidx);
+      if (_sidePanelGidx === gidx) _refreshSidePanelHistory();
+    }
 
-    dot.classList.add('ok');
-    setTimeout(() => dot.remove(), 900);
+    // Sync other DOM inputs for the same field (table ↔ side panel)
+    document.querySelectorAll(`[data-gidx="${gidx}"][data-field="${field}"]`).forEach(other => {
+      if (other !== el) other.value = value;
+    });
+
+    if (dot) { dot.classList.add('ok'); setTimeout(() => dot.remove(), 900); }
   } catch (e) {
     console.error('[crm_follow] save failed:', e.message);
     row[field] = oldValue;
-    dot.classList.add('err');
-    dot.title = 'Save failed: ' + e.message;
+    if (dot) { dot.classList.add('err'); dot.title = 'Save failed: ' + e.message; }
   }
 }
 
@@ -1265,6 +1644,40 @@ async function syncAllEmails() {
 
 // ── Comment history UI ────────────────────────────────────────────────────────
 
+// ── Row expand / collapse state ──────────────────────────────────────────────
+let _expandedGidx = -1;
+
+function onRowExpand(gidx) {
+  if (_expandedGidx === gidx) return;
+  if (_expandedGidx >= 0) _collapseRow(_expandedGidx);
+  _expandedGidx = gidx;
+  // Expand the textarea to fit its content
+  const ta = document.querySelector(`.comment-row-input[data-gidx="${gidx}"]`);
+  if (ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+}
+
+function _collapseRow(gidx) {
+  // Collapse textarea to 1 line
+  const ta = document.querySelector(`.comment-row-input[data-gidx="${gidx}"]`);
+  if (ta) ta.style.height = '';
+  // Hide history row and reset toggle chevron
+  const histRow = document.getElementById('hist-' + gidx);
+  if (histRow && histRow.style.display !== 'none') {
+    histRow.style.display = 'none';
+    const btn = document.querySelector(`[onclick="toggleHistory(this,${gidx})"]`);
+    if (btn) btn.querySelector('i').className = 'ti ti-chevron-down';
+  }
+}
+
+// Collapse expanded row when clicking outside the contacts table
+document.addEventListener('click', e => {
+  if (_expandedGidx < 0) return;
+  if (!e.target.closest('#follow-tbody')) {
+    _collapseRow(_expandedGidx);
+    _expandedGidx = -1;
+  }
+}, false);
+
 function toggleHistory(btn, gidx) {
   const row = document.getElementById('hist-' + gidx);
   if (!row) return;
@@ -1273,11 +1686,23 @@ function toggleHistory(btn, gidx) {
   btn.querySelector('i').className = open ? 'ti ti-chevron-down' : 'ti ti-chevron-up';
 }
 
+let _histExpanded = new Set();
+
+function toggleHistEntry(key, el) {
+  if (_histExpanded.has(key)) _histExpanded.delete(key);
+  else _histExpanded.add(key);
+  const entry = el.closest('.hist-entry');
+  if (!entry) return;
+  entry.classList.toggle('hist-entry-open', _histExpanded.has(key));
+  const chevron = entry.querySelector('.hist-entry-chevron');
+  if (chevron) { chevron.classList.toggle('ti-chevron-down', !_histExpanded.has(key)); chevron.classList.toggle('ti-chevron-up', _histExpanded.has(key)); }
+}
+
 function renderHistoryContent(history) {
   if (!history.length) return '<span class="small" style="color:var(--bb-muted)">No history yet.</span>';
   return '<div class="hist-list">'
-    + [...history].reverse().map(h => {
-        const d = h.date ? new Date(h.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—';
+    + [...history].reverse().map((h, i) => {
+        const d        = h.date ? new Date(h.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—';
         const isEmailIn  = h.type === 'EMAIL_IN';
         const isEmailOut = h.type === 'EMAIL_OUT';
         const isEmail    = isEmailIn || isEmailOut;
@@ -1285,11 +1710,27 @@ function renderHistoryContent(history) {
         const typeBadge  = isEmailIn
           ? `<span class="hist-type-badge hist-type-in">IN</span>`
           : isEmailOut ? `<span class="hist-type-badge hist-type-out">OUT</span>` : '';
-        return `<div class="hist-entry ${extraCls}" style="grid-template-columns:${isEmail ? '60px 120px 130px 1fr' : '120px 140px 1fr'}">
-          ${typeBadge}
-          <span class="hist-entry-date">${escapeHtml(d)}</span>
-          <span class="hist-entry-user">${escapeHtml(isEmail ? (h.from || h.user) : h.user)}</span>
-          <span class="hist-entry-text">${escapeHtml(h.text)}</span>
+        const text    = h.text || '';
+        const key     = `${i}_${(h.date||'').slice(0,10)}`;
+        const preview = text.length > 60 ? text.slice(0, 60) + '…' : text;
+        const detail  = isEmail
+          ? `<div class="hist-entry-detail">
+               ${h.from ? `<div><span class="hist-detail-lbl">From</span> ${escapeHtml(h.from)}</div>` : ''}
+               ${h.to   ? `<div><span class="hist-detail-lbl">To</span> ${escapeHtml(h.to)}</div>` : ''}
+               ${text   ? `<div class="hist-entry-text mt-1">${escapeHtml(text)}</div>` : ''}
+             </div>`
+          : `<div class="hist-entry-detail">
+               <div><span class="hist-detail-lbl">By</span> ${escapeHtml(h.user || '')}</div>
+               ${text ? `<div class="hist-entry-text mt-1">${escapeHtml(text)}</div>` : ''}
+             </div>`;
+        return `<div class="hist-entry ${extraCls}" onclick="toggleHistEntry('${key}',this)" style="cursor:pointer">
+          <div class="hist-entry-summary">
+            ${typeBadge}
+            <span class="hist-entry-date">${escapeHtml(d)}</span>
+            <span class="hist-entry-preview">${escapeHtml(preview)}</span>
+            <i class="ti ti-chevron-down hist-entry-chevron"></i>
+          </div>
+          ${detail}
         </div>`;
       }).join('') + '</div>';
 }
@@ -1308,6 +1749,8 @@ function refreshHistoryPanel(gidx) {
 
 function setTbody(html) {
   document.getElementById('follow-tbody').innerHTML = html;
+  // Reset expanded row tracking — DOM was rebuilt
+  _expandedGidx = -1;
 }
 
 // ── Due-date helpers ──────────────────────────────────────────────────────────
@@ -1350,6 +1793,7 @@ async function saveUserPrefs() {
     filter_due:             document.getElementById('due-filter')?.value            || '',
     sort_col:               _sortCol,
     sort_asc:               _sortAsc,
+    side_open:              _sideOpen,
   };
   try {
     await fetchJSON(BASE + '/api/crm/user-prefs?page=followup', {

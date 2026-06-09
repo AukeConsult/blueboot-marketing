@@ -68,6 +68,7 @@ def get_campaign_contact(campaign_id, doc_id):
             "followup_comment":    d.get("followup_comment", "") or "",
             "followup_importance": d.get("followup_importance", "") or "",
             "comment_history":     _safe_history(d.get("comment_history", [])),
+            "new_mail":            bool(d.get("new_mail", False)),
         })
     except Exception as exc:
         return _err(str(exc), 500)
@@ -86,9 +87,13 @@ def update_campaign_contact(campaign_id, doc_id):
         db   = _get_db()
         body = request.get_json(silent=True) or {}
 
-        allowed = {"name", "title", "status", "phone"} | _FOLLOWUP_FIELDS
+        allowed = {"name", "title", "status", "phone", "linkedin", "twitter", "facebook", "instagram", "whatsapp", "teams", "telegram", "googlechat", "messenger"} | _FOLLOWUP_FIELDS
         update  = {k: str(v).strip() for k, v in body.items() if k in allowed}
-        if not update:
+        # Boolean fields — handled separately (must not be coerced to str)
+        if "new_mail" in body:
+            update["new_mail"] = bool(body["new_mail"])
+        has_entry = bool((request.get_json(silent=True) or {}).get("_history_entry"))
+        if not update and not has_entry:
             return _err("No editable fields provided.", 400)
 
         ref = (db.collection("campaigns").document(campaign_id)
@@ -97,12 +102,12 @@ def update_campaign_contact(campaign_id, doc_id):
             return _err(f"Contact '{doc_id}' not found in campaign '{campaign_id}'", 404)
 
         changed_fu = [f for f in _FOLLOWUP_FIELDS if f in update]
+        from flask import g as _g
+        user = getattr(_g, 'user_email', None) or (body.get("_user") or "api").strip()
+        now  = datetime.now(timezone.utc).isoformat()
+        entries = []
         if changed_fu:
-            from flask import g as _g
-            # Use server-verified identity; fall back to body '_user' for backward compat.
-            user = getattr(_g, 'user_email', None) or (body.get("_user") or "api").strip()
-            now  = datetime.now(timezone.utc).isoformat()
-            entries = [
+            entries += [
                 {
                     "date":  now,
                     "user":  user,
@@ -111,6 +116,16 @@ def update_campaign_contact(campaign_id, doc_id):
                 }
                 for f in changed_fu
             ]
+        # Direct history entry (e.g. channel interaction log)
+        raw_entry = body.get("_history_entry")
+        if isinstance(raw_entry, dict) and raw_entry.get("text"):
+            entries.append({
+                "date":  raw_entry.get("date", now),
+                "user":  user,
+                "text":  str(raw_entry["text"])[:200],
+                "type":  str(raw_entry.get("type", "NOTE"))[:20],
+            })
+        if entries:
             update["comment_history"] = _gfs.ArrayUnion(entries)
 
         ref.update(update)
@@ -214,6 +229,16 @@ def followup_contacts():
                 "followup_importance": d.get("followup_importance", "") or "",
                 "comment_history":     _safe_history(d.get("comment_history", [])),
                 "phone":               d.get("phone", "") or "",
+                "linkedin":            d.get("linkedin", "") or "",
+                "twitter":             d.get("twitter", "") or "",
+                "facebook":            d.get("facebook", "") or "",
+                "instagram":           d.get("instagram", "") or "",
+                "whatsapp":            d.get("whatsapp", "") or "",
+                "teams":               d.get("teams", "") or "",
+                "telegram":            d.get("telegram", "") or "",
+                "googlechat":          d.get("googlechat", "") or "",
+                "messenger":           d.get("messenger", "") or "",
+                "new_mail":            bool(d.get("new_mail", False)),
                 "owner":               info.get("owner", ""),
                 "outreach_email":      info.get("outreach_email", ""),
             })

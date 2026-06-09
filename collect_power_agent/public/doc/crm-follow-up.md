@@ -1,194 +1,131 @@
-# CRM Follow-up
+# CRM Follow-up — Concepts and Logic
 
-## The outreach workflow — from discovery to follow-up
-
-Blueboot CRM connects two separate stages: building campaigns and working them. Understanding the flow makes the Follow-up page much easier to use.
+This document explains how the follow-up system works, what the statuses mean, and how contacts move through the outreach lifecycle. For instructions on how to use the page itself — filters, the side card, row selection, batch actions — see the [Follow-up page usage guide](doc-viewer.html?doc=followup-page-usage).
 
 ---
+
+## The outreach lifecycle
+
+Blueboot CRM connects two separate stages: building campaigns and working them.
 
 ### Stage 1 — Contacts arrive from the pipelines
 
-Contacts do not get entered manually. They come from the discovery pipelines — the automated processes that scan the web for companies and extract contact emails. When a pipeline run completes, the contacts are held in a central pool.
+Contacts are not entered manually. They come from the discovery pipelines — automated processes that scan the web for companies and extract contact emails. When a pipeline run completes, the contacts are held in a central pool.
 
-From the **Filter facets** page you define exactly which companies and contacts you want to target (by country, sector, importance, page size, etc.). Once you are satisfied with the filter and a count is confirmed, you create a campaign directly from that selection. All matching contacts are then pulled into the new campaign automatically.
+From the **Filter facets** page you define exactly which companies and contacts you want to target (by country, sector, importance, page size, etc.). Once you are satisfied with the filter, you create a campaign from that selection. All matching contacts are pulled into the new campaign automatically.
 
----
+### Stage 2 — Review and prepare on the Campaign page
 
-### Stage 2 — Reviewing and cleaning on the Campaign page
+After a campaign is created it lands on the **Campaign page**. Before activating you should:
 
-After a campaign is created it lands on the **Campaign page** (`Campaigns → [campaign name]`). At this point you should review the incoming contacts before activating:
+- Remove contacts you do not want to pursue.
+- Exclude contacts temporarily — excluded contacts are skipped when outreach runs but remain in the campaign.
+- Correct names and titles inline.
+- Sync from the Google Drive sheet — contacts can be reviewed and edited in the sheet, then synced back to the database.
+- Write and test the outreach email — the campaign page contains the template that goes to every contact. Use the Send test button to send yourself a copy before going live.
 
-- **Remove contacts** you do not want to pursue — select them and delete them from the campaign.
-- **Exclude contacts** temporarily without removing them — use the Exclude checkbox on each row. Excluded contacts are skipped when outreach runs.
-- **Edit names and titles** inline — click any name or title cell to correct it.
-- **Sync from the spreadsheet** — the campaign connects to a Google Drive sheet. You can review and edit contacts in the sheet, then sync back.
-- **Prepare the outreach email** — the campaign page contains the email template that will be sent to every contact when the campaign is activated. This is the first and most important thing to get right. Expand the **Mail template** section on the campaign page, write a clear subject line and a personalised message body, and use the **Send test** button to send yourself a test copy before going live. Do not activate the campaign until the email looks exactly as intended.
-- **Activate the campaign** — once the contact list is clean and the email is ready, click **Activate campaign**. This marks the campaign as ready for outreach delivery and queues the emails for sending.
-
-Only activate when both the list and the email are fully prepared.
-
----
+Only activate the campaign when both the contact list and the email are fully prepared. Activation queues the emails for sending.
 
 ### Stage 3 — Follow-up takes over
 
-After a campaign is activated, outreach emails go out. From that point on the **Follow-up** page becomes the main working tool. It shows every open contact across all campaigns in a single list, without requiring you to switch between campaign pages.
-
-Access it from the navigation bar: click **Follow-up** in the top bar.
+After activation and email delivery, the **Follow-up page** becomes the primary workspace. It surfaces every open contact across all campaigns in a single unified view, so you never have to switch between campaign pages to manage conversations.
 
 ---
 
-## Filters
+## Follow-up statuses
 
-The filter bar lets you narrow the list to exactly the contacts you want to work with right now.
+The follow-up status is the single most important field for tracking where a conversation stands. Update it every time the relationship moves forward.
 
-| Filter | What it does |
+| Status | Meaning |
 |---|---|
-| **Search** | Free-text match across name, email, website, and title |
-| **Owner** | Show only contacts in campaigns assigned to a specific owner |
-| **Outreach email** | Show only contacts in campaigns using a specific outreach account — useful when you manage multiple email addresses and want to focus on one |
-| **Follow-up status** | Show contacts at a specific stage of the follow-up process |
-| **Importance** | Filter by the importance level you have assigned (High / Medium / Low / Not set) |
-| **Due date** | Filter by date status: Past due, Due today, Due this week, No date set, or Any date |
-| **Contact status** | Defaults to **Open contacts** (excludes already-sent contacts); switch to All, Pending only, Sent only, or Excluded only |
-
-All filters combine — for example, show only high-importance contacts owned by a specific person that are past their follow-up date.
-
----
-
-## Follow-up fields
-
-Each contact row has four fields you can edit directly on the page. Changes save automatically the moment you leave the field — no Save button needed. A small dot next to the field pulses while saving and turns green on success.
-
-| Field | Description |
-|---|---|
-| **Follow-up date** | When you plan to follow up next. Past-due dates are highlighted in red; dates due within seven days are highlighted in amber. |
-| **Follow-up status** | The current stage of the conversation (see statuses below) |
-| **Importance** | Your priority level for this contact — High, Medium, or Low |
-| **Comment** | Free-text note — a quick reminder, outcome, or next action |
-
-### Follow-up statuses
-
-| Status | When to use it |
-|---|---|
-| *(none)* | Not yet actioned |
-| **Open** | On your list, not yet followed up |
-| **Contacted** | You have sent a follow-up message |
-| **Replied** | The contact has replied |
+| *(none)* | Not yet reviewed or actioned |
+| **Open** | On your list; you intend to follow up but have not done so yet |
+| **Contacted** | You have sent a follow-up message beyond the initial outreach |
+| **Replied** | The contact has replied — positive, neutral, or asking for more information |
 | **Meeting booked** | A call or meeting is scheduled |
-| **Offer sent** | You have sent a proposal |
-| **Accepted offer** | The contact has said yes |
-| **Closed** | Resolved — won, lost, or no longer relevant |
-| **Not interested** | The contact has declined |
+| **Offer sent** | A proposal or offer has been sent |
+| **Accepted offer** | The contact has agreed to proceed |
+| **Closed** | Fully resolved — won, lost, or no longer relevant |
+| **Not interested** | The contact has declined or explicitly opted out |
+
+Work the statuses honestly. A contact sitting at "Open" for weeks is a signal that it needs a decision: follow up, skip, or close.
+
+---
+
+## Importance levels
+
+Importance is your own prioritisation of how valuable a contact is, independent of where they are in the conversation.
+
+| Level | When to use it |
+|---|---|
+| **High** | Ideal prospect — strong fit, high potential value, worth extra effort |
+| **Medium** | Good fit, worth pursuing but not top priority |
+| **Low** | Marginal fit or low expected value; follow up only if capacity allows |
+| *(none)* | Not yet assessed |
+
+Use importance together with the due-date filter to build a daily working list: high-importance contacts that are past due or due today.
 
 ---
 
 ## Visual date indicators
 
-Contacts with a follow-up date are colour-coded at a glance:
+Follow-up dates are colour-coded across the list so you can spot what needs attention at a glance.
 
-- **Red date + red left border** — the follow-up date has passed. Action needed.
-- **Amber date + amber left border** — the follow-up is due today or within the next seven days.
-- No highlight — the date is in the future or no date is set.
+- **Red** — the follow-up date has passed. This contact is overdue for action.
+- **Amber** — the follow-up is due today or within the next seven days. Plan to act soon.
+- No highlight — the date is in the future, or no date has been set.
+
+The same colours apply both in the main table and in the side card.
 
 ---
 
 ## The history log
 
-Every change to a contact's follow-up fields is automatically recorded in a full history log. This is one of the most important features — over time the log becomes a complete record of everything that has happened with each contact.
+Every change to a contact's follow-up fields is automatically recorded in a permanent history log. Over time this becomes a complete record of everything that has happened with each contact — what was said, when, by whom, and whether they replied.
 
 ### What gets recorded
 
-Every event is logged with the date and time, the user who made the change, and a description of what changed:
-
-| Event type | What triggers it |
+| Event | What triggers it |
 |---|---|
-| **Comment** | You update the comment field |
-| **Status** | You change the follow-up status |
-| **Follow-up date** | You set or change the follow-up date |
-| **Importance** | You change the importance level |
+| **Comment** | A comment or note is saved |
+| **Status** | The follow-up status is changed |
+| **Follow-up date** | A follow-up date is set or changed |
+| **Importance** | The importance level is changed |
 | **Email received** | An incoming email from this contact is synced |
 | **Email sent** | An outgoing email to this contact is synced |
+| **Chat** | A Google Chat conversation is opened from the contact card |
 
-### Viewing the history
-
-Click the **chevron button** (›) to the right of the comment field on any contact row. The history panel expands below, showing all entries newest-first.
-
-Email entries are colour-coded: green **IN** badge for received, blue **OUT** badge for sent.
+Every entry records the date and time, the user who made the change, and a description of what changed.
 
 ### Why this matters
 
-Because every action is logged, you can always see:
-- When you last followed up and what you said
-- Whether the contact replied and when
-- What the conversation history looks like before picking up the phone or writing again
-- What a colleague has done on a shared contact
+Because every action is logged automatically, you can always answer:
 
-The log is permanent and cannot be deleted. It builds up automatically as you work.
+- When did we last follow up, and what did we say?
+- Has this contact replied, and when?
+- What has a colleague done on a shared contact?
+- What is the full conversation thread before picking up the phone?
 
----
-
-## Email sync
-
-The Follow-up page can pull your actual email conversations into the history log, so you see emails alongside your manual notes in one place.
-
-### Sync all contacts
-
-Select a lookback period from the dropdown in the top-right (default: last 7 days), then click **Sync all emails**. The system connects to each outreach email account, finds emails sent to or received from your contacts, and adds them to the history log. A status line shows progress and confirms how many new entries were added.
-
-### Sync one contact
-
-Click the mail icon next to any contact's name to sync only that contact's email history.
-
-### Re-syncing is safe
-
-Emails already in the history are never duplicated — the system recognises each email by a unique identifier and skips anything it has already recorded.
+The log is permanent and cannot be deleted or edited. It accumulates automatically as the team works.
 
 ---
 
-## Setting follow-up dates
+## Email sync logic
 
-There are three ways to set a follow-up date, depending on whether you are working with one contact, a hand-picked group, or all contacts that have not been scheduled yet.
+The email sync connects each contact to your actual email history. When a sync runs, the system searches the outreach email accounts for any thread where the To or From address matches the contact's email. Matches are added to the history log as Email sent or Email received entries.
 
----
+Each email is identified by a unique message ID. Re-syncing the same period never duplicates entries — only genuinely new emails are added.
 
-### On a single contact
-
-Click directly in the **Follow-up date** field on any contact row and pick a date from the date picker. The date saves automatically when you leave the field. No other contacts are affected.
-
-Use this when you have just spoken to someone and want to note exactly when to call or write again.
+Email sync covers the outreach email accounts configured in the system. Personal or secondary email accounts not registered in the system are not included.
 
 ---
 
-### On a group you choose yourself
+## Shared contacts and multi-user teams
 
-1. Tick the checkboxes on the left side of the rows you want to update. You can tick as many as you like across the whole list.
-2. A bar appears at the top of the page showing how many contacts are selected.
-3. Click **Set follow-up date** in that bar.
-4. Pick a date. Optionally add a short comment that will be saved in the history log for every contact in the group (for example: *"batch scheduled after campaign review"*).
-5. Click **Apply to N selected**. All selected contacts are updated at once and the panel closes automatically.
+When multiple team members work on the same campaign, all their actions appear in the same history log. This means:
 
-Use this when you have reviewed a campaign and want to assign the same next follow-up date to a set of contacts you have chosen individually.
+- You can see at a glance whether a colleague has already followed up before you do.
+- The status a colleague sets is visible to everyone immediately.
+- Comments and notes from all team members are interleaved chronologically.
 
----
-
-### On all contacts that have no date yet
-
-Click the **Set date for contacts without one** button in the filter bar. This does two things at once: it automatically selects every contact currently visible in the list that has no follow-up date set, then opens the date panel so you can pick a date for all of them in one action.
-
-A note next to the button explains this: *"selects all visible contacts that have no follow-up date, so you can set a date for all at once"*.
-
-This is most useful at the start of a working week or after a new campaign has been activated — you can quickly bring all unscheduled contacts onto your calendar without ticking them one by one.
-
-**Tip:** Combine this with the **Due date → No date set** filter first to make sure you are only looking at contacts without a date before clicking the button. That way you only select exactly the contacts you intend to schedule.
-
----
-
-## Sorting
-
-Click any column header to sort by that column. Click again to reverse the order. You can sort by name, email, website, status, follow-up date, follow-up status, and importance.
-
----
-
-## Refreshing
-
-Click **Refresh** in the top-right corner to reload all contacts. Filter and sort state is preserved across refreshes.
+There is no locking or conflict resolution — the last save wins for editable fields. Use the history log and the comment field to coordinate.

@@ -122,8 +122,24 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 }
 .hist-count.has-entries { background: #dbeafe; color: #1d4ed8; }
 
-/* Comment input in the follow-up row — larger, more readable */
-.follow-comment-row .follow-input {
-  font-size: .95rem;
-  color: #374151;
+/* Comment row — full-width, visually prominent */
+.follow-comment-row td { padding: 0 8px 5px; border-top: none; }
+.comment-row-inner {
+  background: var(--bb-surface, #f9fafb);
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 3px 8px;
 }
+.comment-row-icon { color: var(--bb-muted); font-size: .9rem; flex-shrink: 0; }
+.comment-row-input {
+  font-size: .85rem;
+  color: #374151;
+  background: transparent;
+  border: none !important;
+  resize: vertical;
+  overflow-y: auto;
+  line-height: 1.4;
+  min-height: 1.4em;
+}
+.comment-row-input:focus { outline: none; box-shadow: none; background: transparent; }
+.comment-row-input::placeholder { color: #9ca3af; }
