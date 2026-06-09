@@ -56,7 +56,7 @@ Lists all outreach campaigns. Each campaign card shows status, contact count, si
 
 ### Actions
 
-- **Discover campaigns** — scans the master CRM contact sheet for any campaign IDs that do not yet exist in the system, creates them, and immediately kicks off a contact sync for each one. A **Master sheet** link sits to the left of the button for direct access.
+- **Discover campaigns** — scans the master CRM contact sheet for any campaign IDs that do not yet exist in the system, creates them, and immediately kicks off a contact sync for each one. Before clicking this, make sure you have updated and selected the contacts you want in **CRM Discover**.
 - **Refresh** — reloads the list.
 - **Filters** — search by name, filter by status (Draft / Do send / Sent / Cancelled) and owner.
 

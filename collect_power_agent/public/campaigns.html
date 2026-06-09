@@ -44,14 +44,15 @@
     <select id="owner-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
       <option value="">All owners</option>
     </select>
-    <a href="https://docs.google.com/spreadsheets/d/1aMglV53NiMEArjld37HN5cxliyNRGzIP2mrM4kwlupA" target="_blank"
-       class="btn btn-sm btn-outline-secondary ms-auto text-decoration-none">
-      <i class="ti ti-table me-1"></i>Master sheet
-    </a>
-    <button class="btn btn-sm btn-outline-primary" onclick="discover()" id="discover-btn">
+    <button class="btn btn-sm btn-outline-primary ms-auto" onclick="discover()" id="discover-btn">
       <i class="ti ti-search me-1"></i>Discover campaigns
     </button>
   </div>
+
+  <p class="small text-muted mb-3">
+    <i class="ti ti-info-circle me-1"></i>To create campaigns from the master sheet, first update and select contacts in
+    <a href="crm-bp.html" class="text-decoration-none">CRM Discover</a>, then click <strong>Discover campaigns</strong>.
+  </p>
 
   <div id="list-container">
     <div class="text-center py-5" style="color:var(--bb-muted)">
