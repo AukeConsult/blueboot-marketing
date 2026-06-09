@@ -50,14 +50,15 @@ def get_campaign(campaign_id):
 def create_campaign(campaign_id):
     """Create a new campaign document. Fails if already exists."""
     try:
-        db      = _get_db()
-        doc_ref = db.collection("campaigns").document(campaign_id)
-        if doc_ref.get().exists:
-            return _err(f"Campaign '{campaign_id}' already exists. Use PATCH to update.", 409)
+        from handlers.shared import _unique_campaign_id
+        db         = _get_db()
+        actual_id  = _unique_campaign_id(db, campaign_id)
+        renamed    = actual_id != campaign_id
+        doc_ref    = db.collection("campaigns").document(actual_id)
         body  = request.get_json(silent=True) or {}
         now   = datetime.now(timezone.utc).isoformat()
         data  = {
-            "campaign_id":            campaign_id,
+            "campaign_id":            actual_id,
             "status":                 "draft",
             "sent_at":                None,
             "outreach_email_account": body.get("outreach_email_account", ""),
@@ -72,7 +73,11 @@ def create_campaign(campaign_id):
             "updated_at":             now,
         }
         doc_ref.set(data)
-        return _ok(f"Campaign '{campaign_id}' created", campaign=data)
+        msg = f"Campaign '{actual_id}' created"
+        if renamed:
+            msg += f" (renamed from '{campaign_id}' — already existed)"
+        return _ok(msg, campaign=data, campaign_id=actual_id,
+                   original_id=campaign_id, renamed=renamed)
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -277,9 +282,11 @@ def discover_campaigns():
         created       = []
 
         for campaign_id in sorted(new_campaigns):
+            from handlers.shared import _unique_campaign_id
+            actual_id = _unique_campaign_id(db, campaign_id)
             now  = datetime.now(timezone.utc).isoformat()
             data = {
-                "campaign_id":            campaign_id,
+                "campaign_id":            actual_id,
                 "status":                 "draft",
                 "sent_at":                None,
                 "outreach_email_account": "",
@@ -293,10 +300,14 @@ def discover_campaigns():
                 "outreach_breakdown":     {},
                 "updated_at":             now,
             }
-            db.collection("campaigns").document(campaign_id).set(data)
-            job_id = _new_job("crm-sync", {"campaign_id": campaign_id})
-            _enqueue_task("crm-sync", job_id, {"campaign_id": campaign_id})
-            created.append({"campaign_id": campaign_id, "job_id": job_id})
+            db.collection("campaigns").document(actual_id).set(data)
+            job_id = _new_job("crm-sync", {"campaign_id": actual_id})
+            _enqueue_task("crm-sync", job_id, {"campaign_id": actual_id})
+            entry = {"campaign_id": actual_id, "job_id": job_id}
+            if actual_id != campaign_id:
+                entry["original_id"] = campaign_id
+                entry["renamed"] = True
+            created.append(entry)
 
         msg = (
             f"Found {len(sheet_campaigns)} campaign(s) in sheet. {len(new_campaigns)} new — sync jobs queued."

@@ -27,6 +27,28 @@ The **CRM** entry in the navigation bar is a dropdown menu. Click it to expand t
 
 ---
 
+## Two ways to create a campaign
+
+There are two separate routes to building a campaign, and it is important to understand the difference.
+
+### Route 1 — Filter facets (automated)
+
+You define what kind of companies you want using filters (country, sector, company size, etc.), run a count to confirm the numbers, and click **Create campaign**. The system pulls the matching contacts directly from the internal contact pool and fills the campaign automatically. No spreadsheet is involved.
+
+This is the faster route and works well when your target audience can be described by filter criteria. See the [From filter to campaign](filter-to-campaign.html) guide for a full walkthrough.
+
+### Route 2 — Master CRM sheet (manual curation)
+
+The master CRM contact sheet is a shared Google Spreadsheet that sits outside the system. It is populated through the **CRM Batch Process** (CRM → Batch process), which imports a selection of contacts from the internal pool into the sheet so a person can review them, mark the ones worth pursuing in the **Select** column, and assign a campaign name in the **Campaign** column.
+
+Once the sheet is filled and reviewed, clicking **Discover new** on the Campaigns page reads the Campaign column, finds any campaign names that do not yet exist in the system, and creates those campaigns automatically — pulling in all contacts assigned to that name in the sheet.
+
+This route gives you full human control over exactly which contacts enter a campaign. It is slower but more precise, and is suited to smaller, high-priority lists where individual review matters.
+
+**A campaign card on the list shows a green `master-sheet` badge when it was created through this route.**
+
+---
+
 ## Campaigns
 
 **URL:** `campaigns.html`
@@ -35,9 +57,30 @@ Lists all outreach campaigns. Each campaign card shows status, contact count, si
 
 ### Actions
 
-- **Discover new** — scans the master CRM contact sheet for campaign IDs not yet in the system, creates them, and runs a full CRM sync to populate their contacts. A **Master sheet** link sits to the left of the button for direct access.
+- **Discover new** — scans the master CRM contact sheet for any campaign IDs that do not yet exist in the system, creates them, and immediately kicks off a contact sync for each one. A **Master sheet** link sits to the left of the button for direct access.
 - **Refresh** — reloads the list.
 - **Filters** — search by name, filter by status (Draft / Do send / Sent / Cancelled) and owner.
+
+### How Discover new works
+
+The master CRM contact sheet is the central spreadsheet that holds all contacts across all campaigns. Each row in the sheet has a **Campaign** column that contains a campaign identifier (for example `NO_jun` or `SE_aug`).
+
+When you click **Discover new**, the system:
+
+1. Reads every unique value in the Campaign column of the master sheet.
+2. Compares that list against the campaigns that already exist in the system.
+3. For each campaign ID found in the sheet but not yet in the system, creates a new draft campaign automatically.
+4. Immediately queues a contact sync job for each new campaign — this reads the sheet and pulls the matching rows into the campaign's contact list.
+
+A confirmation bar appears at the top of the page showing which campaign IDs were created and confirming that the sync jobs have been queued. You can monitor progress on the **Jobs** page.
+
+**When to use it:** after the master CRM sheet has been updated with contacts assigned to a new campaign ID that has not been set up in the system yet. You do not need to create the campaign manually first — Discover new handles that in one click.
+
+**Nothing is overwritten.** Campaigns that already exist are never touched. Only genuinely new campaign IDs (ones the system has never seen before) result in new campaign documents being created.
+
+### Automatic campaign naming
+
+When a campaign is created — whether from a filter preset, via Discover new, or directly — the system checks whether the requested name already exists. If it does, a number is appended automatically: `NO_jun` becomes `NO_jun_2`, then `NO_jun_3`, and so on. You are never asked to choose a different name yourself; the system resolves the conflict silently and shows you what name was actually used in the confirmation message.
 
 ### Campaign statuses
 
@@ -116,16 +159,18 @@ Lists all campaign contacts with status, name, email, title, website, and sent d
 
 **URL:** `crm-bp.html` — accessible via **CRM → Batch process**
 
-A step-by-step workflow panel:
+This is the manual curation workflow that fills the **master CRM contact sheet** — the Google Spreadsheet used as the starting point for the master-sheet campaign route (see above).
 
 | Step | Action |
 |---|---|
-| 1 | **Import contacts** — pull from Leads Database into the contact sheet. Choose country and size (min pages). |
-| 2 | **Review & select** — open the contact sheet, mark contacts with the `Select` column. |
-| 3 | **Push selected to CRM** — groups selected contacts by site, adds them to the CRM template. |
-| 4 | **Work the CRM** — fill Status and Selger in the CRM template as you progress. |
-| 5 | **Sync CRM to Leads Database** — pushes `crm_status`, `crm_sales_person`, `crm_date` back to the Leads Database. |
-| 6 | **Campaign sync** — reads the master CRM contact sheet and syncs all campaigns to Firestore. New campaigns found in the sheet are created automatically. |
+| 1 | **Import contacts** — pull a selection from the internal contact pool into the master sheet. Choose country and minimum site size to narrow the import. |
+| 2 | **Review & select** — open the master sheet, review each row, and mark the contacts you want to pursue by filling the **Select** column. Fill in the **Campaign** column with the campaign name you want these contacts to belong to. |
+| 3 | **Push selected to CRM** — takes all rows you marked in step 2, groups them by company site, and writes them to the CRM template sheet for deeper review. |
+| 4 | **Work the CRM** — fill Status and Selger in the CRM template as you progress through the list. |
+| 5 | **Sync CRM to Leads Database** — pushes status and sales person data back to the internal database. |
+| 6 | **Campaign sync** — reads the master sheet and syncs contacts into their respective campaigns in the system. If a Campaign column value does not yet exist as a campaign, it is created automatically (equivalent to clicking **Discover new** on the Campaigns page). |
+
+After completing step 6, go to the **Campaigns** page and click **Discover new** if the campaigns have not yet appeared — or they will be created automatically as part of the sync.
 
 ---
 

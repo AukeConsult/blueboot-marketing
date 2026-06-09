@@ -174,6 +174,23 @@ def _get_user_role(db, email: str) -> str:
     return "guest"
 
 
+# ── Campaign ID helpers ───────────────────────────────────────────────────────
+
+def _unique_campaign_id(db, base_id: str) -> str:
+    """Return base_id if no campaign doc exists with that ID.
+    Otherwise append _2, _3 … until a free slot is found.
+    Always does at most one Firestore read for the base case.
+    """
+    if not db.collection("campaigns").document(base_id).get().exists:
+        return base_id
+    n = 2
+    while True:
+        candidate = f"{base_id}_{n}"
+        if not db.collection("campaigns").document(candidate).get().exists:
+            return candidate
+        n += 1
+
+
 # ── Flask response helpers ────────────────────────────────────────────────────
 
 def _ok(message: str, **kwargs):

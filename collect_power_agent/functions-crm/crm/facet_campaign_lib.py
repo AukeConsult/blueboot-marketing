@@ -291,6 +291,17 @@ def _run_facet_campaign_site_leads(
     if not campaign_id:
         raise ValueError("campaign_id is required")
 
+    # ── Ensure campaign_id is unique — append _2, _3 … if already taken ──────
+    import sys as _sys, os as _os
+    _sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), ".."))
+    from handlers.shared import _unique_campaign_id
+    original_id = campaign_id
+    if not dry_run:
+        campaign_id = _unique_campaign_id(db, campaign_id)
+        if campaign_id != original_id:
+            print(f"[facet-campaign] campaign '{original_id}' exists — using '{campaign_id}'",
+                  flush=True)
+
     # ── 1. Load filter preset ────────────────────────────────────────────────
     snap = _snap or db.collection(FILTER_FACETS_COLLECTION).document(facet_name).get()
     if not snap.exists:
@@ -357,6 +368,8 @@ def _run_facet_campaign_site_leads(
         print(f"[facet-campaign] DRY RUN — no writes.", flush=True)
         return {
             "campaign_id":               campaign_id,
+        "original_id":               original_id,
+        "renamed":                   campaign_id != original_id,
             "facet_name":                facet_name,
             "emails_in_other_campaigns": len(taken_emails),
             "contacts_matched":          len(matched),

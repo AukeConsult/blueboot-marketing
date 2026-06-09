@@ -159,8 +159,11 @@ async function discover() {
     const newCampaigns = d.created || [];
 
     bar.className = 'alert alert-info py-2 px-3 small mb-3';
+    const renamedList = newCampaigns.filter(c => c.renamed).map(c =>
+      `<em>${escapeHtml(c.original_id)}</em> → <strong>${escapeHtml(c.campaign_id)}</strong>`).join(', ');
     bar.innerHTML = newCampaigns.length
       ? `<i class="ti ti-check me-1 text-success"></i>${d.message} New: <strong>${newCampaigns.map(c=>c.campaign_id).join(', ')}</strong> — syncing contacts from master sheet…`
+        + (renamedList ? `<br><i class="ti ti-info-circle me-1 text-warning"></i>Renamed (already existed): ${renamedList}` : '')
       : `<i class="ti ti-refresh me-1"></i>${d.message || 'No new campaigns.'} Syncing all contacts from master sheet…`;
     bar.style.display = '';
 

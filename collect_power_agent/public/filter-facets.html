@@ -505,8 +505,11 @@ async function pollCreateCampaign(jobId, campaignId, dryRun) {
       const j = await r.json();
       if (j.status === 'done') {
         const res = j.result || {};
+        const actualId = res.campaign_id || campaignId;
+        const renamed  = res.renamed && res.original_id;
         const lines = [
           `<strong>${dryRun ? 'Dry run — no writes' : 'Done'}</strong>`,
+          renamed ? `<span class="text-warning"><i class="ti ti-info-circle me-1"></i>Created as <strong>${escapeHtml(actualId)}</strong> — <em>${escapeHtml(res.original_id)}</em> already existed</span>` : '',
           `Matched: <strong>${res.contacts_matched ?? '?'}</strong> contacts`,
           dryRun ? '' : `+${res.contacts_added ?? 0} new &nbsp; ~${res.contacts_refreshed ?? 0} refreshed &nbsp; -${res.contacts_removed ?? 0} removed`,
           `Dedup: ${res.emails_in_other_campaigns ?? 0} in other campaigns, ${res.contacts_skipped_dedup ?? 0} overlapped`,
@@ -515,7 +518,7 @@ async function pollCreateCampaign(jobId, campaignId, dryRun) {
             : '',
         ].filter(Boolean).join('<br>');
         const link = !dryRun
-          ? `<div class="mt-2"><a href="campaign.html?campaign_id=${encodeURIComponent(campaignId)}" class="btn btn-sm btn-outline-primary"><i class="ti ti-speakerphone me-1"></i>Open campaign</a></div>`
+          ? `<div class="mt-2"><a href="campaign.html?campaign_id=${encodeURIComponent(actualId)}" class="btn btn-sm btn-outline-primary"><i class="ti ti-speakerphone me-1"></i>Open campaign</a></div>`
           : '';
         fb.innerHTML = `<div class="alert alert-success py-2 small mb-0">${lines}${link}</div>`;
         document.getElementById('ccm-cancel-btn').textContent = 'Close';

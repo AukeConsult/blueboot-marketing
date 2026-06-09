@@ -2,6 +2,8 @@
 
 This guide explains how to go from a raw pool of discovered contacts to a focused outreach campaign using the Filter Facets page. No technical knowledge is required.
 
+> **Note:** this is one of two ways to create a campaign. The other is the **master sheet route** — manually curating contacts in the CRM contact sheet and then using Discover new on the Campaigns page. The filter route is faster and fully automated; the master sheet route gives you individual control over every contact. Both are described in the [User guide](../doc-viewer.html?doc=user-guide).
+
 ---
 
 ## Background
