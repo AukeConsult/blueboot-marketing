@@ -12,9 +12,10 @@ def followup_email_sync():
     try:
         body   = request.get_json(silent=True) or {}
         params = {
-            "campaign_id":    (body.get("campaign_id")    or "").strip(),
-            "contact_doc_id": (body.get("contact_doc_id") or "").strip(),
-            "days":           int(body.get("days") or 7),
+            "campaign_id":      (body.get("campaign_id")      or "").strip(),
+            "contact_doc_id":   (body.get("contact_doc_id")   or "").strip(),
+            "outreach_account": (body.get("outreach_account") or "").strip(),
+            "days":             int(body.get("days") or 7),
         }
         job_id = _new_job("followup-email-sync", params)
         _enqueue_task("followup-email-sync", job_id, params)

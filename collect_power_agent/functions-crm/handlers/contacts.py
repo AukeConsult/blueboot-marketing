@@ -162,6 +162,7 @@ def followup_contacts():
     try:
         db          = _get_db()
         campaign_id = request.args.get("campaign_id", "").strip()
+        owner_filter = request.args.get("owner", "").strip()
         limit       = min(int(request.args.get("limit", 2000)), 5000)
 
         camp_map: dict = {}
@@ -192,6 +193,12 @@ def followup_contacts():
             parts = doc.reference.path.split("/")
             cid   = parts[1] if len(parts) >= 4 else campaign_id
             info  = camp_map.get(cid, {})
+            if owner_filter:
+                if owner_filter == "__none__":
+                    if info.get("owner", ""):   # skip contacts that DO have an owner
+                        continue
+                elif info.get("owner", "") != owner_filter:
+                    continue
             contacts.append({
                 "campaign_id":         cid,
                 "doc_id":              doc.id,
@@ -206,10 +213,35 @@ def followup_contacts():
                 "followup_comment":    d.get("followup_comment", "") or "",
                 "followup_importance": d.get("followup_importance", "") or "",
                 "comment_history":     _safe_history(d.get("comment_history", [])),
+                "phone":               d.get("phone", "") or "",
                 "owner":               info.get("owner", ""),
                 "outreach_email":      info.get("outreach_email", ""),
             })
 
         return jsonify({"contacts": contacts, "count": len(contacts)})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/followup-meta", methods=["GET"])
+def followup_meta():
+    """Return owners and campaigns for populating the follow-up page header dropdowns."""
+    try:
+        db = _get_db()
+        owners = []
+        campaigns = []
+        for doc in db.collection("campaigns").stream():
+            d = doc.to_dict() or {}
+            owner = d.get("owner", "")
+            campaigns.append({
+                "id":            doc.id,
+                "owner":         owner,
+                "outreach_email": d.get("outreach_email_account", ""),
+            })
+            if owner and owner not in owners:
+                owners.append(owner)
+        owners.sort()
+        campaigns.sort(key=lambda c: c["id"])
+        return jsonify({"owners": owners, "campaigns": campaigns})
     except Exception as exc:
         return _err(str(exc), 500)

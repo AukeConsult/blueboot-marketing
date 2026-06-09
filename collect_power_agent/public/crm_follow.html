@@ -87,6 +87,71 @@
 tr.row-overdue  > td:first-of-type { border-left: 3px solid #fca5a5; }
 tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
 
+
+
+/* Secondary (nested) group header */
+.group-subheader-row td {
+  background: #f8f9ff;
+  font-weight: 600;
+  font-size: .74rem;
+  color: #6b7280;
+  padding: 4px 10px 4px 28px;
+  border-top: 1px solid #e5e7eb;
+  cursor: pointer;
+  user-select: none;
+}
+.group-subheader-row td:hover { background: #eff1ff; }
+.group-subheader-row .group-count { font-weight: 400; }
+
+/* Collapsible group headers */
+.group-header-row td { cursor: pointer; user-select: none; }
+.group-header-row td:hover { background: #e4e8ff; }
+.group-chevron { float: right; transition: transform .2s; }
+.group-chevron.collapsed { transform: rotate(-90deg); }
+
+/* Group view header rows */
+.group-header-row td {
+  background: #eef0ff;
+  font-weight: 600;
+  font-size: .78rem;
+  color: var(--bb-accent);
+  padding: 5px 10px;
+  border-top: 2px solid #c7ceff;
+  border-bottom: 1px solid #c7ceff;
+}
+.group-header-row td .group-count {
+  font-weight: 400;
+  color: var(--bb-muted);
+  margin-left: 6px;
+}
+
+
+/* Compact group-by selects in card header */
+.group-select {
+  border: 1px solid transparent; background: transparent;
+  font-size: .76rem; padding: 2px 4px; border-radius: 4px;
+  cursor: pointer; color: var(--bb-muted); max-width: 130px;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.group-select:hover { border-color: var(--bb-border); background: #fff; color: #374151; }
+.group-select:focus { border-color: var(--bb-accent); background: #fff; color: #374151; outline: none; }
+
+/* Discreet action buttons (collapse-all, sync, refresh) */
+.collapse-all-btn, .header-action-btn {
+  border: 1px solid transparent; background: transparent;
+  color: var(--bb-muted); border-radius: 4px; padding: 2px 7px;
+  cursor: pointer; font-size: .78rem; line-height: 1.6; white-space: nowrap;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.collapse-all-btn:hover, .header-action-btn:hover {
+  border-color: var(--bb-border); background: #fff; color: var(--bb-accent);
+}
+.header-action-btn.spinning i { display: inline-block; animation: spin .7s linear infinite; }
+
+/* View toggle buttons */
+.view-toggle { display: flex; gap: 2px; }
+.view-toggle .btn { padding: 2px 8px; }
+
 /* Batch bar */
 .batch-bar { display: flex; align-items: center; gap: .6rem;
   background: #eef0ff; border: 1px solid #c7ceff; border-radius: 8px;
@@ -104,19 +169,28 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
 
   <div class="page-header mb-3">
     <h5 class="page-title"><i class="ti ti-phone-check text-primary"></i>CRM Follow-up</h5>
-    <div class="d-flex align-items-center gap-2">
-      <select id="sync-period" class="form-select form-select-sm" style="max-width:120px" title="Email sync lookback period">
-        <option value="7">Last 7 days</option>
-        <option value="14">Last 14 days</option>
-        <option value="30">Last 30 days</option>
-        <option value="90">Last 90 days</option>
-        <option value="0">All time</option>
+    <div class="d-flex align-items-center gap-1">
+      <select id="owner-header" class="group-select" title="Filter by owner" onchange="onOwnerChange()" style="max-width:150px">
+        <option value="">All owners</option>
       </select>
-      <button class="btn btn-sm btn-outline-secondary" id="sync-all-btn" onclick="syncAllEmails()">
-        <i class="ti ti-mail-bolt me-1"></i>Sync all emails
+      <select id="campaign-filter" class="group-select" title="Filter by campaign" onchange="load()" style="max-width:180px">
+        <option value="">All campaigns</option>
+      </select>
+      <select id="outreach-filter" class="group-select" title="Filter by outreach email" onchange="applyFilter()" style="max-width:180px">
+        <option value="">All outreach emails</option>
+      </select>
+      <select id="sync-period" class="group-select" title="Email sync lookback period">
+        <option value="7">Sync mail for last 7 days</option>
+        <option value="14">Sync mail for last 14 days</option>
+        <option value="30">Sync mail for last 30 days</option>
+        <option value="90">Sync mail for last 90 days</option>
+        <option value="0">Sync mail for all time</option>
+      </select>
+      <button class="header-action-btn" id="sync-all-btn" onclick="syncAllEmails()" title="Sync all emails">
+        <i class="ti ti-mail-bolt me-1"></i>Sync
       </button>
-      <button class="btn btn-sm btn-outline-secondary" onclick="load()">
-        <i class="ti ti-refresh me-1"></i>Refresh
+      <button class="header-action-btn" onclick="load()" title="Refresh contacts">
+        <i class="ti ti-refresh"></i>
       </button>
     </div>
   </div>
@@ -126,13 +200,6 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
     <input id="search" class="form-control form-control-sm" style="max-width:240px"
       placeholder="Search name, email, website or title…" oninput="applyFilter()">
 
-    <select id="owner-filter" class="form-select form-select-sm" style="max-width:160px" onchange="applyFilter()">
-      <option value="">All owners</option>
-    </select>
-
-    <select id="outreach-filter" class="form-select form-select-sm" style="max-width:220px" onchange="applyFilter()">
-      <option value="">All outreach emails</option>
-    </select>
 
     <select id="followup-filter" class="form-select form-select-sm" style="max-width:170px" onchange="applyFilter()">
       <option value="">All follow-up statuses</option>
@@ -170,11 +237,6 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
       <option value="today">Due today</option>
       <option value="week">Due this week</option>
     </select>
-
-    <button class="btn btn-sm btn-outline-secondary" onclick="scheduleUnscheduled()">
-      <i class="ti ti-calendar-plus me-1"></i>Set date for contacts without one
-    </button>
-    <span class="small" style="color:var(--bb-muted)">— selects all visible contacts that have no follow-up date, so you can set a date for all at once</span>
 
     <span id="count-badge" class="small ms-auto" style="color:var(--bb-muted)"></span>
   </div>
@@ -215,21 +277,51 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
   <div class="bb-card">
     <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom bb-card-header">
       <span class="fw-500 small"><i class="ti ti-list-check me-1 text-primary"></i>Contacts</span>
+      <div class="d-flex align-items-center gap-2">
+        <div id="group-selectors" class="d-flex align-items-center gap-1" style="display:none">
+          <select id="group-primary" class="group-select" title="Group by" onchange="applyFilter()">
+            <option value="followup_status">Status</option>
+            <option value="followup_importance">Importance</option>
+            <option value="followup_date">Date</option>
+            <option value="owner">Owner</option>
+          </select>
+          <i class="ti ti-chevron-right" style="color:var(--bb-muted);font-size:.7rem"></i>
+          <select id="group-secondary" class="group-select" title="Then by" onchange="applyFilter()">
+            <option value="">then by…</option>
+            <option value="followup_status">Status</option>
+            <option value="followup_importance">Importance</option>
+            <option value="followup_date">Date</option>
+            <option value="owner">Owner</option>
+          </select>
+          <button id="collapse-all-btn" class="collapse-all-btn" onclick="toggleAllGroups()" title="Collapse all groups">
+            <i class="ti ti-arrows-minimize"></i>
+          </button>
+        </div>
+        <div class="view-toggle">
+          <button id="view-group-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleView('group')" title="Grouped view">
+            <i class="ti ti-layout-rows"></i>
+          </button>
+          <button id="view-list-btn" class="btn btn-sm btn-primary" onclick="toggleView('list')" title="List view">
+            <i class="ti ti-list"></i>
+          </button>
+        </div>
+      </div>
     </div>
     <div class="table-responsive">
       <table class="table table-sm table-hover mb-0">
         <thead class="bb-thead"><tr>
-          <th style="width:32px"><input type="checkbox" class="form-check-input" id="select-all" onclick="toggleSelectAll(this)"></th>
+          <th style="width:32px"></th>
           <th class="small bb-sortable" data-col="status"           onclick="sortBy('status')" style="min-width:85px">Status <span class="sort-icon"></span></th>
           <th class="small bb-sortable" data-col="name"             onclick="sortBy('name')">Name <span class="sort-icon"></span></th>
           <th class="small bb-sortable" data-col="email"            onclick="sortBy('email')">Email <span class="sort-icon"></span></th>
+          <th class="small" style="min-width:110px">Phone</th>
           <th class="small bb-sortable" data-col="website"          onclick="sortBy('website')" style="min-width:150px">Website <span class="sort-icon"></span></th>
           <th class="small bb-sortable" data-col="followup_date"    onclick="sortBy('followup_date')" style="min-width:135px">Follow-up date <span class="sort-icon"></span></th>
           <th class="small bb-sortable" data-col="followup_status"     onclick="sortBy('followup_status')" style="min-width:150px">Follow-up status <span class="sort-icon"></span></th>
           <th class="small bb-sortable" data-col="followup_importance" onclick="sortBy('followup_importance')" style="min-width:100px">Importance <span class="sort-icon"></span></th>
         </tr></thead>
         <tbody id="follow-tbody">
-          <tr><td colspan="8" class="text-center py-5" style="color:var(--bb-muted)">
+          <tr><td colspan="9" class="text-center py-5" style="color:var(--bb-muted)">
             <div class="spinner-border spinner-border-sm me-2"></div>Loading…
           </td></tr>
         </tbody>
@@ -253,19 +345,80 @@ tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
 let allRows  = [];
 let _sortCol = '';
 let _sortAsc = true;
+let _currentView = 'list';
+const _collapsedGroups = new Set();
+let _currentGroupKeys = [];
+let _allCampaigns = [];   // loaded from /followup-meta
 const selected = new Set();   // doc_path strings
 
 // ── Load contacts via API (no direct Firestore reads) ─────────────────────────
 
+async function loadMeta() {
+  if (_allCampaigns.length) return;   // already loaded
+  try {
+    const meta = await fetchJSON(BASE + '/api/crm/followup-meta');
+    _allCampaigns = meta.campaigns || [];
+    const owners = meta.owners || [];
+    populateSelect('owner-header', owners, 'All owners');
+    // Inject "No owner" option right after "All owners"
+    const _ownerSel = document.getElementById('owner-header');
+    if (_ownerSel) {
+      const _noneOpt = document.createElement('option');
+      _noneOpt.value = '__none__'; _noneOpt.textContent = 'No owner';
+      _ownerSel.insertBefore(_noneOpt, _ownerSel.options[1]);
+    }
+  } catch(e) { console.warn('[meta]', e); }
+}
+
+function populateCampaignDropdown(ownerVal) {
+  const filtered = ownerVal === '__none__'
+    ? _allCampaigns.filter(c => !c.owner)
+    : ownerVal
+      ? _allCampaigns.filter(c => c.owner === ownerVal)
+      : _allCampaigns;
+  const sel = document.getElementById('campaign-filter');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All campaigns</option>'
+    + filtered.map(c => `<option value="${escapeHtml(c.id)}"${c.id === cur ? ' selected' : ''}>${escapeHtml(c.id)}</option>`).join('');
+}
+
+async function onOwnerChange() {
+  const own = document.getElementById('owner-header').value;
+  populateCampaignDropdown(own);
+  // Reset campaign if the current selection doesn't belong to the new owner
+  const sel = document.getElementById('campaign-filter');
+  if (sel.value && own) {
+    const camp = _allCampaigns.find(c => c.id === sel.value);
+    if (camp) {
+      const mismatch = own === '__none__' ? !!camp.owner : camp.owner !== own;
+      if (mismatch) sel.value = '';
+    }
+  }
+  await load();
+}
+
 async function load() {
-  setTbody('<tr><td colspan="8" class="text-center py-5" style="color:var(--bb-muted)">'
+  await loadMeta();
+  // Ensure campaign dropdown reflects current owner selection
+  const ownerVal = document.getElementById('owner-header')?.value || '';
+  if (document.getElementById('campaign-filter').options.length <= 1 && _allCampaigns.length) {
+    populateCampaignDropdown(ownerVal);
+  }
+
+  setTbody('<tr><td colspan="9" class="text-center py-5" style="color:var(--bb-muted)">'
     + '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>');
   document.getElementById('follow-empty').style.display = 'none';
   document.getElementById('count-badge').textContent = '';
   setFeedback(null);
 
   try {
-    const data     = await fetchJSON(BASE + '/api/crm/followup-contacts');
+    const _camp  = document.getElementById('campaign-filter')?.value || '';
+    const _owner = document.getElementById('owner-header')?.value || '';
+    const params = new URLSearchParams();
+    if (_camp)  params.set('campaign_id', _camp);
+    if (_owner && !_camp) params.set('owner', _owner);
+    const _url  = BASE + '/api/crm/followup-contacts' + (params.toString() ? '?' + params.toString() : '');
+    const data  = await fetchJSON(_url);
     const contacts = data.contacts || [];
 
     allRows = contacts.map(c => ({
@@ -273,6 +426,7 @@ async function load() {
       email:              c.email              || '',
       title:              c.title              || '',
       website:            c.website            || '',
+      phone:              c.phone              || '',
       status:             c.status             || 'pending',
       followup_date:      c.followup_date      || '',
       followup_status:    c.followup_status    || '',
@@ -286,13 +440,15 @@ async function load() {
       outreach_email:     c.outreach_email     || '',
     }));
 
-    const owners        = [...new Set(allRows.map(r => r.owner).filter(Boolean))].sort();
     const outreachEmails = [...new Set(allRows.map(r => r.outreach_email).filter(Boolean))].sort();
-    populateSelect('owner-filter',    owners,         'All owners');
     populateSelect('outreach-filter', outreachEmails, 'All outreach emails');
+    // Auto-select if only one outreach account
+    if (outreachEmails.length === 1) {
+      document.getElementById('outreach-filter').value = outreachEmails[0];
+    }
     applyFilter();
   } catch (e) {
-    setTbody(`<tr><td colspan="8" class="text-center py-5 text-danger small">
+    setTbody(`<tr><td colspan="9" class="text-center py-5 text-danger small">
       <i class="ti ti-alert-circle me-1"></i>${escapeHtml(e.message)}</td></tr>`);
     console.error('[crm_follow] load error:', e);
   }
@@ -356,11 +512,43 @@ function applySort(list) {
   });
 }
 
+
+// ── View toggle ───────────────────────────────────────────────────────────────
+
+function toggleView(v) {
+  _currentView = v;
+  document.getElementById('view-list-btn').className =
+    'btn btn-sm ' + (v === 'list' ? 'btn-primary' : 'btn-outline-secondary');
+  document.getElementById('view-group-btn').className =
+    'btn btn-sm ' + (v === 'group' ? 'btn-primary' : 'btn-outline-secondary');
+  const gs = document.getElementById('group-selectors');
+  if (gs) gs.style.display = v === 'group' ? 'flex' : 'none';
+  _collapsedGroups.clear();
+  applyFilter();
+}
+
+
+function toggleGroup(key) {
+  if (_collapsedGroups.has(key)) _collapsedGroups.delete(key);
+  else _collapsedGroups.add(key);
+  applyFilter();
+}
+
+function toggleAllGroups() {
+  const allCollapsed = _currentGroupKeys.length > 0 && _currentGroupKeys.every(k => _collapsedGroups.has(k));
+  if (allCollapsed) {
+    _collapsedGroups.clear();
+  } else {
+    _currentGroupKeys.forEach(k => _collapsedGroups.add(k));
+  }
+  applyFilter();
+}
+
 // ── Filter ────────────────────────────────────────────────────────────────────
 
 function applyFilter() {
   const q   = document.getElementById('search').value.toLowerCase();
-  const own = document.getElementById('owner-filter').value;
+
   const out = document.getElementById('outreach-filter').value;
   const fu  = document.getElementById('followup-filter').value;
   const imp = document.getElementById('importance-filter').value;
@@ -371,7 +559,6 @@ function applyFilter() {
   const weekEnd = _weekEnd();
 
   let list = allRows.filter(r => {
-    if (own && r.owner !== own) return false;
     if (out && r.outreach_email !== out) return false;
     if (fu === '__none__') { if (r.followup_status) return false; }
     else if (fu && r.followup_status !== fu) return false;
@@ -416,6 +603,33 @@ const FU_STATUSES = [
   { value: 'closed',         label: 'Closed' },
   { value: 'not_interested', label: 'Not interested' }
 ];
+const GROUP_FIELDS = {
+  followup_status: {
+    label:   'Follow-up status',
+    order:   FU_STATUSES.map(s => s.value),
+    labelFn: v => (FU_STATUSES.find(s => s.value === v) || { label: 'No status' }).label,
+  },
+  followup_importance: {
+    label:   'Importance',
+    order:   ['high', 'medium', 'low', ''],
+    labelFn: v => (IMPORTANCE_LEVELS.find(i => i.value === v) || { label: '— —' }).label,
+  },
+  owner: {
+    label:   'Owner',
+    order:   null,
+    labelFn: v => v || '(no owner)',
+  },
+  followup_date: {
+    label:   'Follow-up date',
+    order:   null,
+    labelFn: v => {
+      if (!v) return 'No date set';
+      try { return new Date(v + 'T00:00:00').toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }); }
+      catch(e) { return v; }
+    },
+  },
+};
+
 
 function statusBadge(s) {
   const map = { pending: 'bb-badge-pending', sent: 'bb-badge-sent',
@@ -424,6 +638,7 @@ function statusBadge(s) {
 }
 
 function render(list) {
+  if (_currentView === 'group') { renderGrouped(list); return; }
   const empty = document.getElementById('follow-empty');
   if (!list.length) { setTbody(''); empty.style.display = ''; return; }
   empty.style.display = 'none';
@@ -433,9 +648,6 @@ function render(list) {
       const row = allRows[parseInt(c.dataset.gidx, 10)];
       if (row && selected.has(row.doc_path)) c.checked = true;
     });
-    const sa = document.getElementById('select-all');
-    const all = document.querySelectorAll('.row-chk');
-    if (sa && all.length) sa.checked = all.length > 0 && [...all].every(c => c.checked);
   };
 
   setTbody(list.map(r => {
@@ -464,6 +676,9 @@ function render(list) {
         ${r.title ? `<div style="font-size:.73rem;color:var(--bb-muted)">${escapeHtml(r.title)}</div>` : ''}
       </td>
       <td class="small"><a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email || '—')}</a></td>
+      <td class="small">${r.phone
+        ? `<a href="tel:${escapeHtml(r.phone)}" style="color:var(--bb-muted);white-space:nowrap">${escapeHtml(r.phone)}</a>`
+        : '—'}</td>
       <td class="small">${siteShort
         ? `<a href="${escapeHtml(r.website)}" target="_blank"
               style="color:var(--bb-muted);text-decoration:none" title="${escapeHtml(r.website)}">${escapeHtml(siteShort)}</a>`
@@ -491,7 +706,7 @@ function render(list) {
     </tr>
     <tr class="follow-comment-row">
       <td></td><td></td><td></td>
-      <td colspan="5">
+      <td colspan="6">
         <div class="d-flex align-items-center gap-1">
           <input type="text" class="follow-input flex-grow-1"
             value="${escapeHtml(r.followup_comment || '')}"
@@ -508,10 +723,164 @@ function render(list) {
     </tr>
     <tr class="follow-history-row" id="hist-${gidx}" style="display:none">
       <td></td><td></td><td></td>
-      <td colspan="5">${renderHistoryContent(r.comment_history)}</td>
+      <td colspan="6">${renderHistoryContent(r.comment_history)}</td>
     </tr>`;
   }).join(''));
   restoreChecks();
+}
+
+
+// ── Grouped view ──────────────────────────────────────────────────────────────
+
+function _orderedGroupKeys(rows, field, def) {
+  const vals = [...new Set(rows.map(r => r[field] || ''))];
+  if (def.order) {
+    const ordered = def.order.filter(v => vals.includes(v));
+    const extra   = vals.filter(v => !def.order.includes(v)).sort();
+    return [...ordered, ...extra];
+  }
+  // Natural sort; always put empty string last
+  const nonEmpty = vals.filter(v => v !== '').sort();
+  return vals.includes('') ? [...nonEmpty, ''] : nonEmpty;
+}
+
+function _contactRowsHtml(r) {
+  const gidx      = allRows.indexOf(r);
+  const siteShort = r.website
+    ? r.website.replace(/^https?:\/\//, '').replace(/\/$/, '').slice(0, 30) : '';
+  const fuOpts = FU_STATUSES.map(s =>
+    `<option value="${s.value}"${r.followup_status === s.value ? ' selected' : ''}>${escapeHtml(s.label)}</option>`
+  ).join('');
+  const impCls  = (IMPORTANCE_LEVELS.find(i => i.value === r.followup_importance) || IMPORTANCE_LEVELS[0]).cls;
+  const dueCls  = dueDateClass(r.followup_date);
+  const rowCls  = dueCls === 'overdue' ? 'row-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'row-due-soon' : '';
+  const dateCls = dueCls === 'overdue' ? 'date-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'date-due-soon' : '';
+  return `<tr data-doc="${escapeHtml(r.doc_path)}" class="${rowCls}">
+      <td class="text-center"><input type="checkbox" class="form-check-input row-chk"
+        data-gidx="${gidx}" onchange="onRowCheck(this)"></td>
+      <td>${statusBadge(r.status)}</td>
+      <td>
+        <div class="d-flex align-items-center gap-1">
+          <span class="small fw-500">${escapeHtml(r.name || '—')}</span>
+          <button class="sync-btn" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
+            <i class="ti ti-mail-bolt"></i>
+          </button>
+        </div>
+        ${r.title ? `<div style="font-size:.73rem;color:var(--bb-muted)">${escapeHtml(r.title)}</div>` : ''}
+      </td>
+      <td class="small"><a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email || '—')}</a></td>
+      <td class="small">${r.phone
+        ? `<a href="tel:${escapeHtml(r.phone)}" style="color:var(--bb-muted);white-space:nowrap">${escapeHtml(r.phone)}</a>`
+        : '—'}</td>
+      <td class="small">${siteShort
+        ? `<a href="${escapeHtml(r.website)}" target="_blank"
+              style="color:var(--bb-muted);text-decoration:none" title="${escapeHtml(r.website)}">${escapeHtml(siteShort)}</a>`
+        : '—'}</td>
+      <td>
+        <input type="date" class="follow-input ${dateCls}"
+          value="${escapeHtml(r.followup_date || '')}"
+          data-gidx="${gidx}" data-field="followup_date"
+          onchange="saveField(this)">
+      </td>
+      <td>
+        <select class="follow-select"
+          data-gidx="${gidx}" data-field="followup_status"
+          onchange="saveField(this)">
+          ${fuOpts}
+        </select>
+      </td>
+      <td>
+        <select class="imp-select ${impCls}"
+          data-gidx="${gidx}" data-field="followup_importance"
+          onchange="saveField(this);this.className='imp-select '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
+          ${IMPORTANCE_LEVELS.map(i=>`<option value="${i.value}"${r.followup_importance===i.value?' selected':''}>${i.label}</option>`).join('')}
+        </select>
+      </td>
+    </tr>
+    <tr class="follow-comment-row">
+      <td></td><td></td><td></td>
+      <td colspan="6">
+        <div class="d-flex align-items-center gap-1">
+          <input type="text" class="follow-input flex-grow-1"
+            value="${escapeHtml(r.followup_comment || '')}"
+            placeholder="Add comment…"
+            data-gidx="${gidx}" data-field="followup_comment"
+            onchange="saveField(this)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+          <button class="hist-toggle" onclick="toggleHistory(this,${gidx})" title="Show comment history">
+            <i class="ti ti-chevron-down"></i>
+            <span class="hist-count${r.comment_history.length ? ' has-entries' : ''}">${r.comment_history.length}</span>
+          </button>
+        </div>
+      </td>
+    </tr>
+    <tr class="follow-history-row" id="hist-${gidx}" style="display:none">
+      <td></td><td></td><td></td>
+      <td colspan="6">${renderHistoryContent(r.comment_history)}</td>
+    </tr>`;
+}
+
+function renderGrouped(list) {
+  const empty = document.getElementById('follow-empty');
+  if (!list.length) { setTbody(''); empty.style.display = ''; return; }
+  empty.style.display = 'none';
+
+  const primaryField   = document.getElementById('group-primary')?.value  || 'followup_status';
+  const secondaryField = document.getElementById('group-secondary')?.value || '';
+  const pDef = GROUP_FIELDS[primaryField]                   || GROUP_FIELDS.followup_status;
+  const sDef = secondaryField ? (GROUP_FIELDS[secondaryField] || null) : null;
+
+  const pKeys = _orderedGroupKeys(list, primaryField, pDef);
+  _currentGroupKeys = pKeys.map(pVal => 'p:' + primaryField + ':' + pVal);
+
+  // Update collapse-all button label
+  const cab = document.getElementById('collapse-all-btn');
+  if (cab) {
+    const allCollapsed = _currentGroupKeys.length > 0 && _currentGroupKeys.every(k => _collapsedGroups.has(k));
+    cab.innerHTML = allCollapsed
+      ? '<i class="ti ti-arrows-maximize"></i>'
+      : '<i class="ti ti-arrows-minimize"></i>';
+    cab.title = allCollapsed ? 'Expand all groups' : 'Collapse all groups';
+  }
+
+  let html = '';
+
+  pKeys.forEach(pVal => {
+    const pRows      = list.filter(r => (r[primaryField] || '') === pVal);
+    const pLabel     = pDef.labelFn(pVal);
+    const pKey       = 'p:' + primaryField + ':' + pVal;
+    const pCollapsed = _collapsedGroups.has(pKey);
+
+    html += `<tr class="group-header-row" data-group-hdr="${escapeHtml(pKey)}" onclick="toggleGroup('${escapeHtml(pKey)}')">
+      <td colspan="9"><i class="ti ti-tag me-1"></i>${escapeHtml(pLabel)}<span class="group-count">${pRows.length} contact${pRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${pCollapsed ? ' collapsed' : ''}"></i></td>
+    </tr>`;
+
+    if (pCollapsed) return;
+
+    if (sDef) {
+      const sKeys = _orderedGroupKeys(pRows, secondaryField, sDef);
+      sKeys.forEach(sVal => {
+        const sRows      = pRows.filter(r => (r[secondaryField] || '') === sVal);
+        const sLabel     = sDef.labelFn(sVal);
+        const sKey       = 's:' + primaryField + ':' + pVal + ':' + secondaryField + ':' + sVal;
+        const sCollapsed = _collapsedGroups.has(sKey);
+
+        html += `<tr class="group-subheader-row" data-group-hdr="${escapeHtml(sKey)}" onclick="toggleGroup('${escapeHtml(sKey)}')">
+          <td colspan="9"><i class="ti ti-corner-down-right me-1"></i>${escapeHtml(sLabel)}<span class="group-count">${sRows.length} contact${sRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${sCollapsed ? ' collapsed' : ''}"></i></td>
+        </tr>`;
+
+        if (!sCollapsed) html += sRows.map(r => _contactRowsHtml(r)).join('');
+      });
+    } else {
+      html += pRows.map(r => _contactRowsHtml(r)).join('');
+    }
+  });
+
+  setTbody(html);
+  document.querySelectorAll('.row-chk').forEach(c => {
+    const row = allRows[parseInt(c.dataset.gidx, 10)];
+    if (row && selected.has(row.doc_path)) c.checked = true;
+  });
 }
 
 // ── Save follow-up field via API ──────────────────────────────────────────────
@@ -630,21 +999,9 @@ function onRowCheck(chk) {
   updateSelectionUI();
 }
 
-function toggleSelectAll(chk) {
-  document.querySelectorAll('.row-chk').forEach(c => {
-    c.checked = chk.checked;
-    const row = allRows[parseInt(c.dataset.gidx, 10)];
-    if (!row) return;
-    if (chk.checked) selected.add(row.doc_path); else selected.delete(row.doc_path);
-  });
-  updateSelectionUI();
-}
-
 function clearSelection() {
   selected.clear();
   document.querySelectorAll('.row-chk').forEach(c => { c.checked = false; });
-  const sa = document.getElementById('select-all');
-  if (sa) sa.checked = false;
   updateSelectionUI();
 }
 
@@ -674,11 +1031,13 @@ async function syncContactEmails(gidx, btn) {
   if (!row || !row.email) { alert('Contact has no email address.'); return; }
   btn.classList.add('spinning'); btn.disabled = true;
   try {
-    const days = parseInt(document.getElementById('sync-period')?.value || '7', 10);
+    const days     = parseInt(document.getElementById('sync-period')?.value || '7', 10);
+    const outreach = document.getElementById('outreach-filter')?.value || '';
     const res  = await fetchJSON(`${BASE}/api/crm/followup-email-sync`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ campaign_id: row.campaign_id, contact_doc_id: row.doc_id, days }),
+      body:    JSON.stringify({ campaign_id: row.campaign_id, contact_doc_id: row.doc_id, days,
+                                ...(outreach ? { outreach_account: outreach } : {}) }),
     });
     setFeedback(
       `<i class="ti ti-clock me-1"></i>Email sync queued <code>${res.job_id}</code>`
@@ -713,11 +1072,17 @@ async function syncAllEmails() {
   btn.innerHTML = '<i class="ti ti-loader me-1" style="animation:spin .7s linear infinite;display:inline-block"></i>Queuing…';
   setFeedback(null);
   try {
-    const days = parseInt(document.getElementById('sync-period')?.value || '7', 10);
+    const days     = parseInt(document.getElementById('sync-period')?.value || '7', 10);
+    const camp     = document.getElementById('campaign-filter')?.value || '';
+    const outreach = document.getElementById('outreach-filter')?.value || '';
     const res  = await fetchJSON(`${BASE}/api/crm/followup-email-sync`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ days }),
+      body:    JSON.stringify({
+        days,
+        ...(camp     ? { campaign_id:      camp }     : {}),
+        ...(outreach ? { outreach_account: outreach } : {}),
+      }),
     });
     setFeedback(
       `<i class="ti ti-clock me-1"></i>Email sync queued <code>${res.job_id}</code>`
@@ -745,7 +1110,7 @@ async function syncAllEmails() {
     setFeedback(`<i class="ti ti-circle-x me-1"></i>Error: ${escapeHtml(e.message)}`, 'danger');
   } finally {
     btn.disabled  = false;
-    btn.innerHTML = '<i class="ti ti-mail-bolt me-1"></i>Sync all emails';
+    btn.innerHTML = '<i class="ti ti-mail-bolt me-1"></i>Sync';
   }
 }
 
@@ -790,28 +1155,7 @@ function refreshHistoryPanel(gidx) {
   if (btn) { btn.textContent = count; btn.classList.toggle('has-entries', count > 0); }
 }
 
-// ── Schedule unscheduled ──────────────────────────────────────────────────────
 
-// Select all currently visible contacts that have no follow-up date, then open
-// the batch date panel so the user can set one date for all of them at once.
-function scheduleUnscheduled() {
-  const tbody = document.getElementById('follow-tbody');
-  const chks  = tbody.querySelectorAll('.row-chk');
-  let   added = 0;
-  chks.forEach(c => {
-    const row = allRows[parseInt(c.dataset.gidx, 10)];
-    if (!row || row.followup_date) return;
-    c.checked = true;
-    selected.add(row.doc_path);
-    added++;
-  });
-  updateSelectionUI();
-  if (added === 0) {
-    setFeedback('<i class="ti ti-info-circle me-1"></i>All visible contacts already have a follow-up date.', 'info');
-    return;
-  }
-  showBatchDatePanel();
-}
 
 function setTbody(html) {
   document.getElementById('follow-tbody').innerHTML = html;
@@ -831,26 +1175,6 @@ function dueDateClass(date) {
   return '';
 }
 
-// ── Schedule unscheduled ──────────────────────────────────────────────────────
-
-function scheduleUnscheduled() {
-  const tbody = document.getElementById('follow-tbody');
-  const chks  = tbody.querySelectorAll('.row-chk');
-  let   added = 0;
-  chks.forEach(c => {
-    const row = allRows[parseInt(c.dataset.gidx, 10)];
-    if (!row || row.followup_date) return;
-    c.checked = true;
-    selected.add(row.doc_path);
-    added++;
-  });
-  updateSelectionUI();
-  if (added === 0) {
-    setFeedback('<i class="ti ti-info-circle me-1"></i>All visible contacts already have a follow-up date.', 'info');
-    return;
-  }
-  showBatchDatePanel();
-}
 
 
 load();

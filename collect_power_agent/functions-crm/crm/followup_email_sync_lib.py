@@ -184,9 +184,10 @@ def _fetch_headers(conn: imaplib.IMAP4, folder: str, cutoff: datetime | None, li
 
 def run_followup_email_sync(
     db,
-    campaign_id:    str | None = None,
-    contact_doc_id: str | None = None,
-    days:           int = 7,
+    campaign_id:      str | None = None,
+    contact_doc_id:   str | None = None,
+    days:             int = 7,
+    outreach_account: str | None = None,
 ) -> dict:
     """Fetch email history for campaign contacts and write to comment_history.
 
@@ -241,6 +242,11 @@ def run_followup_email_sync(
             for doc in camps_col.document(cid).collection(CONTACTS_SUBCOLLECTION).stream():
                 c = doc.to_dict() or {}
                 account_contacts[acc].append((cid, doc.id, c.get("email", ""), doc.reference))
+
+    # ── 2b. Filter to selected outreach account ──────────────────────────────
+    if outreach_account:
+        acc_key = outreach_account.strip().lower()
+        account_contacts = {k: v for k, v in account_contacts.items() if k == acc_key}
 
     # ── 3. Per account: connect, fetch, match, write ──────────────────────────
     total_entries  = 0
