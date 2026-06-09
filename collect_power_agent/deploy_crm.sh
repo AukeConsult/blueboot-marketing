@@ -31,4 +31,5 @@ echo "  Status:  https://us-central1-blueboot-market.cloudfunctions.net/crmApi/a
 echo "  Jobs:    https://us-central1-blueboot-market.cloudfunctions.net/crmApi/api/crm/jobs"
 echo ""
 echo "Dashboard:"
-echo " 
+echo "  https://blueboot-market.web.app/"
+echo ""

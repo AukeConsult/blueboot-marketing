@@ -399,7 +399,83 @@ python app/build_filter_facets.py --cap 300 --no-write   # JSON preview only
 
 ---
 
-## 10. Key Design Principles
+## 10. Google Cloud Batch Jobs (`cloud_batch/`)
+
+The `cloud_batch/` framework runs long-running pipeline scripts on Google Cloud so they don't time out or block local machines. Jobs are triggered from the CRM frontend, from Cloud Scheduler (cron), or manually via CLI.
+
+### Architecture
+
+```
+Cloud Scheduler / google-job.html / CLI
+          │
+          ▼ POST /api/crm/batch/jobs/{job}/run
+CRM API (Firebase Cloud Function)
+          │
+          ▼ HTTP POST /run
+Batch Runner (Cloud Run — batch-runner, min-instances=1)
+          │  ┌──────────────────────────────────────────┐
+          │  │ Flask /run  →  background thread          │
+          │  │   job_runner.py                          │
+          │  │     step 1: python -m app.site_agent ... │
+          │  │     step 2: python -m app.site_enrich ... │
+          │  │     ...                                  │
+          └──┤ writes step status to Firestore          │
+             └──────────────────────────────────────────┘
+          │
+          ▼ gcloud-batch-jobs/{job}/runs/{run_id}
+Firestore
+```
+
+### Key components
+
+`cloud_batch/job_definitions/*.json` — one JSON file per pipeline (site_pipeline, lead_pipeline, etc.) listing the steps, Cloud Scheduler cron expression, and parameter defaults.
+
+`cloud_batch/job_runner.py` — runs each step as `python -m app.<module>` via `subprocess.Popen`, captures the last 50 lines of stdout+stderr, and writes per-step progress to Firestore.
+
+`cloud_batch/entrypoint.py` — Flask HTTP server (gunicorn, 1 worker, 4 threads). Dedup-guards via Firestore (`status == "running"`), spawns a daemon thread for the job, and returns 202 immediately.
+
+`cloud_batch/job_status.py` — all Firestore helpers for the `gcloud-batch-jobs` collection.
+
+`functions-crm/handlers/batch.py` — CRM API blueprint that proxies requests to the Cloud Run runner using OIDC service-to-service authentication.
+
+### Firestore layout
+
+```
+gcloud-batch-jobs/
+  {job_name}/                      ← definition snapshot (synced at startup)
+    runs/
+      {run_id}/                    ← one doc per run
+        status:   running | done | failed
+        started:  timestamp
+        steps: [
+          { name, status, exit_code, started, finished, log_tail }
+        ]
+```
+
+### Pipelines defined
+
+| Job | Schedule | Steps |
+|---|---|---|
+| `site_pipeline` | Mon 02:00 UTC | site_agent → site_enrich → site_location → site_contact → site_email → site_smart_export → build_filter_facets |
+| `site_enrich_pipeline` | on-demand | site_enrich → site_location → site_contact → site_email → build_filter_facets |
+| `lead_pipeline` | Mon 03:00 UTC | lead_agent → lead_enrich → lead_contacts → leads_email → leads_smart_export → build_filter_facets |
+| `lead_enrich_pipeline` | on-demand | lead_enrich → lead_contacts → leads_email → build_filter_facets |
+
+### GCP services used
+
+| Service | Purpose |
+|---|---|
+| Cloud Run | Hosts the batch-runner Flask service (always-warm, min 1 instance) |
+| Cloud Scheduler | Triggers pipeline runs on cron schedule |
+| Artifact Registry | Stores the Docker image (`batch-runner`) |
+| Secret Manager | Stores all secrets (API keys, Firebase credentials) — injected as env vars |
+| Firestore | Tracks job definitions, run history, and per-step progress |
+
+Setup scripts live in `cloud_batch/setup/` (run once, in order 01→06). See `gcloud-job.md` (Documentation → Google Cloud Jobs) for the full setup guide.
+
+---
+
+## 11. Key Design Principles
 
 **Isolation** — every parallel unit of work (site crawl, contact enrichment, job worker) runs in its own class with a hard timeout. One unit failing cannot stall or corrupt siblings.
 

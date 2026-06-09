@@ -307,6 +307,40 @@ exports/email_contacts_UK_<ts>.xlsx           ← unified review Excel
 
 ---
 
+## Google Cloud Batch Jobs
+
+The `cloud_batch/` framework runs the same pipeline scripts unattended on Google Cloud — no local machine required, no timeouts.
+
+### How it works
+
+A **Cloud Run** service (`batch-runner`) hosts a Flask HTTP server. Each pipeline is defined in a JSON file under `cloud_batch/job_definitions/` listing the steps and a Cloud Scheduler cron. When triggered (from the CRM frontend, a cron schedule, or CLI), the runner spawns a background thread, executes each step as a subprocess (`python -m app.site_agent …`), and writes per-step progress to Firestore under `gcloud-batch-jobs/{job}/runs/{run_id}`. The frontend page **Google Jobs** polls this collection and shows live status, step icons, and log tails.
+
+### Pipelines
+
+| Job | Schedule | What it runs |
+|---|---|---|
+| `site_pipeline` | Mon 02:00 UTC | Full site track: discover → classify → enrich → locate → email check → export |
+| `site_enrich_pipeline` | on-demand | Enrichment only (skips discovery) |
+| `lead_pipeline` | Mon 03:00 UTC | Full lead track: discover → classify → enrich → email check → export |
+| `lead_enrich_pipeline` | on-demand | Enrichment only |
+
+### One-time GCP setup
+
+```bash
+cd cloud_batch/setup
+bash setup_all.sh          # runs scripts 01–06 in sequence
+```
+
+Scripts enable APIs, create a service account, push the Docker image to Artifact Registry, deploy Cloud Run, create Cloud Scheduler jobs, and push all secrets from `.env` to Secret Manager.
+
+### Managing jobs
+
+Open **Google Jobs** in the CRM dashboard to run jobs on demand, view run history, and see live step progress. Use `cloud_batch/setup/teardown.sh` to remove the Cloud Run service and scheduler jobs without touching Firestore data.
+
+For the full architecture, Firestore layout, and dry-run options see the [Google Cloud Jobs guide](doc/gcloud-job.md) in the Documentation menu, or `cloud_batch/README.md`.
+
+---
+
 ## Starter Scripts
 
 Two ready-to-run batch files cover the full pipeline for each track. Edit the two variables at the top before running:

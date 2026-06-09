@@ -206,6 +206,7 @@ const NAV_LINKS = [
       { href: 'doc-viewer.html?doc=system-architecture', icon: 'ti-topology-star-3', label: 'System architecture' },
       { href: 'doc-viewer.html?doc=backend-functions',   icon: 'ti-terminal',       label: 'Backend functions' },
       { href: 'doc-viewer.html?doc=installation',        icon: 'ti-download',       label: 'Installation' },
+      { href: 'doc-viewer.html?doc=gcloud-job',          icon: 'ti-cloud-computing', label: 'Google Cloud Jobs' },
     ]},
   { dropdown: 'settings', icon: 'ti-settings', label: 'Settings', roles: ['admin'],
     match: ['settings.html', 'users.html'],
