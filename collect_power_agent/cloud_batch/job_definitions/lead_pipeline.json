@@ -1,0 +1,57 @@
+{
+  "name": "lead_pipeline",
+  "description": "Full lead (agency/reseller) discovery + enrichment pipeline",
+  "schedule": "0 3 * * 1",
+  "params": {
+    "countries":  { "type": "str",  "required": true,  "help": "Comma-separated country codes, e.g. FI,SE" },
+    "campaign":   { "type": "str",  "required": true,  "help": "Campaign name, e.g. FI_jun03" },
+    "mode":       { "type": "str",  "default": "both", "help": "lead_agent mode: search | sitemap | both" },
+    "dry_run":    { "type": "bool", "default": false,  "help": "Preview only — no Firestore writes" },
+    "force":      { "type": "bool", "default": false,  "help": "Re-process already enriched items" }
+  },
+  "steps": [
+    {
+      "name": "discover",
+      "module": "lead_agent",
+      "args": ["--countries", "{countries}", "--mode", "{mode}"],
+      "dry_run_flag": "--dry-run",
+      "on_error": "abort"
+    },
+    {
+      "name": "enrich_ai",
+      "module": "lead_enrich_agent",
+      "args": ["--countries", "{countries}"],
+      "dry_run_flag": "--dry-run",
+      "force_flag": "--force",
+      "on_error": "abort"
+    },
+    {
+      "name": "enrich_contacts",
+      "module": "lead_enrich_contacts",
+      "args": ["--countries", "{countries}", "--skip-enriched"],
+      "dry_run_flag": "--dry-run",
+      "on_error": "continue"
+    },
+    {
+      "name": "email_check",
+      "module": "leads_email_check",
+      "args": ["--countries", "{countries}"],
+      "dry_run_flag": "--dry-run",
+      "force_flag": "--force",
+      "on_error": "continue"
+    },
+    {
+      "name": "export",
+      "module": "leads_smart_export",
+      "args": ["--countries", "{countries}", "--write-contacts", "--campaign", "{campaign}"],
+      "dry_run_flag": "--dry-run-contacts",
+      "on_error": "abort"
+    },
+    {
+      "name": "export_contacts",
+      "module": "email_contacts_export",
+      "args": ["--countries", "{countries}", "--campaign", "{campaign}", "--status", "pending"],
+      "on_error": "continue"
+    }
+  ]
+}

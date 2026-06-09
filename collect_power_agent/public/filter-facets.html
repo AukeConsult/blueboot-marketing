@@ -356,9 +356,7 @@ async function save(){
     if(d.job_id){
       setStatus(
         `<span class="spinner-border spinner-border-sm me-1" role="status"></span>`
-        + `Saved '${name}'. Started count job <code>${d.job_id}</code> `
-        + `(refreshing keywords + counting) — `
-        + `<a href="crm-bp.html" target="_blank">view in CRM Jobs</a>`,
+        + `Saved '${name}'. Counting keywords — please wait…`,
         'ok', true);
       pollCount(d.job_id, name);
     } else {

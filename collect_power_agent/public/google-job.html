@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Google Batch Jobs</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+.step-row { display: flex; align-items: center; gap: 6px; font-size: .8rem; padding: 3px 0; }
+.step-icon { width: 18px; text-align: center; flex-shrink: 0; }
+.step-name { min-width: 160px; font-weight: 500; }
+.step-log  { font-family: monospace; font-size: .72rem; color: var(--bb-muted);
+             white-space: pre-wrap; word-break: break-all;
+             max-height: 120px; overflow-y: auto; background: #f8f9fa;
+             border-radius: 4px; padding: 4px 6px; margin-top: 2px; display: none; }
+.step-log.show { display: block; }
+.run-card  { border-radius: 8px; border: 1.5px solid var(--bb-border);
+             background: #fff; margin-bottom: 8px; overflow: hidden; }
+.run-head  { display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+             cursor: pointer; user-select: none; }
+.run-head:hover { background: #f8f9fa; }
+.run-body  { padding: 0 14px 12px; border-top: 1px solid var(--bb-border); display: none; }
+.run-body.open { display: block; }
+.param-field { display: flex; flex-direction: column; gap: 2px; }
+.param-field label { font-size: .75rem; font-weight: 600; color: var(--bb-muted); }
+.job-section { border: 1.5px solid var(--bb-border); border-radius: 8px;
+               background: #fff; margin-bottom: 16px; overflow: hidden; }
+.job-section-head { padding: 12px 16px; background: #f8f9fa;
+                    border-bottom: 1.5px solid var(--bb-border);
+                    display: flex; align-items: center; gap: 8px; }
+.job-section-body { padding: 14px 16px; }
+.status-running { color: #d97706; }
+.status-done    { color: #16a34a; }
+.status-failed  { color: #dc2626; }
+.status-pending { color: #6b7280; }
+.status-skipped { color: #9ca3af; }
+.spinner-xs { width: 12px; height: 12px; border-width: 2px; }
+</style>
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:960px">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="page-title"><i class="ti ti-cloud me-2 text-primary"></i>Google Batch Jobs</h5>
+    <button class="btn btn-sm btn-outline-secondary" onclick="loadAll()">
+      <i class="ti ti-refresh me-1"></i>Refresh
+    </button>
+  </div>
+
+  <div id="feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
+
+  <div id="jobs-container">
+    <div class="text-center py-5" style="color:var(--bb-muted)">
+      <div class="spinner-border spinner-border-sm me-2"></div>Loading job definitions…
+    </div>
+  </div>
+
+</div>
+
+<!-- Run modal -->
+<div class="modal fade" id="runModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2 px-3">
+        <h6 class="modal-title mb-0"><i class="ti ti-player-play me-2"></i>Run job: <span id="modal-job-name"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body px-3 py-3" id="modal-params-form"></div>
+      <div class="modal-footer py-2 px-3">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="modal-run-btn" onclick="submitRun()">
+          <i class="ti ti-player-play me-1"></i>Run now
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+<script>
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let _jobs         = [];
+let _activePolls  = {};   // run_id -> intervalId
+let _modalJobName = null;
+let _modalJobDef  = null;
+
+// ── Feedback bar ──────────────────────────────────────────────────────────────
+function setFeedback(msg, type) {
+  const fb = document.getElementById('feedback');
+  if (!type) { fb.style.display = 'none'; return; }
+  fb.className = `alert alert-${type} py-2 px-3 small mb-3`;
+  fb.innerHTML  = msg;
+  fb.style.display = '';
+}
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+function statusIcon(s) {
+  return {
+    running: '<div class="spinner-border spinner-xs text-warning me-1" role="status"></div>',
+    done:    '<i class="ti ti-circle-check text-success me-1"></i>',
+    failed:  '<i class="ti ti-circle-x text-danger me-1"></i>',
+    pending: '<i class="ti ti-clock text-secondary me-1"></i>',
+    skipped: '<i class="ti ti-minus text-secondary me-1"></i>',
+  }[s] || '<i class="ti ti-minus text-secondary me-1"></i>';
+}
+
+function stepIcon(s) {
+  return {
+    running: '<div class="spinner-border spinner-xs text-warning" role="status"></div>',
+    done:    '<i class="ti ti-check text-success"></i>',
+    failed:  '<i class="ti ti-x text-danger"></i>',
+    pending: '<i class="ti ti-dots text-secondary"></i>',
+    skipped: '<i class="ti ti-minus text-muted"></i>',
+  }[s] || '<i class="ti ti-dots"></i>';
+}
+
+function statusBadge(s) {
+  const cls = { running:'warning', done:'success', failed:'danger', pending:'secondary', skipped:'secondary' };
+  return `<span class="badge bg-${cls[s]||'secondary'} text-white" style="font-size:.7rem">${s}</span>`;
+}
+
+function fmtDuration(start, end) {
+  if (!start) return '';
+  const s = new Date(end || new Date()).getTime() - new Date(start).getTime();
+  if (s < 60000) return Math.round(s/1000) + 's';
+  if (s < 3600000) return Math.round(s/60000) + 'm';
+  return (s/3600000).toFixed(1) + 'h';
+}
+
+// ── Load everything ────────────────────────────────────────────────────────────
+async function loadAll() {
+  try {
+    const data = await fetchJSON(BASE + '/api/crm/batch/jobs');
+    _jobs = data.jobs || [];
+    renderJobs();
+  } catch(e) {
+    setFeedback(`<i class="ti ti-alert-circle me-1"></i>Failed to load jobs: ${escapeHtml(e.message)}`, 'danger');
+  }
+}
+
+// ── Render job sections ───────────────────────────────────────────────────────
+function renderJobs() {
+  const container = document.getElementById('jobs-container');
+  if (!_jobs.length) {
+    container.innerHTML = '<div class="text-center py-4 small" style="color:var(--bb-muted)"><i class="ti ti-inbox me-1"></i>No job definitions found. Check that cloud_batch is deployed.</div>';
+    return;
+  }
+  container.innerHTML = _jobs.map(job => renderJobSection(job)).join('');
+}
+
+function renderJobSection(job) {
+  const lr   = job.last_run;
+  const lastRunHtml = lr
+    ? `${statusBadge(lr.status)} <span class="small ms-1" style="color:var(--bb-muted)">${fmtDateTime(lr.started_at)} · ${fmtDuration(lr.started_at, lr.ended_at)}</span>`
+    : '<span class="small" style="color:var(--bb-muted)">Never run</span>';
+
+  const schedHtml = job.schedule
+    ? `<span class="badge bg-light text-dark border small me-2"><i class="ti ti-clock me-1"></i>${escapeHtml(job.schedule)}</span>`
+    : '';
+
+  return `
+<div class="job-section" id="job-${job.name}">
+  <div class="job-section-head">
+    <div class="flex-grow-1">
+      <div class="fw-600">${escapeHtml(job.name)}</div>
+      <div class="small mt-1" style="color:var(--bb-muted)">${escapeHtml(job.description||'')} &nbsp;
+        <span class="fw-500" style="color:var(--bb-muted)">${job.step_count||0} steps</span>
+      </div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      ${schedHtml}
+      <div>${lastRunHtml}</div>
+      <button class="btn btn-sm btn-primary" onclick="openRunModal('${job.name}')">
+        <i class="ti ti-player-play me-1"></i>Run now
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadRuns('${job.name}')">
+        <i class="ti ti-history me-1"></i>History
+      </button>
+    </div>
+  </div>
+  <div class="job-section-body" id="runs-${job.name}">
+    <div class="small" style="color:var(--bb-muted)">Click History to see recent runs.</div>
+  </div>
+</div>`;
+}
+
+// ── Load + render runs ────────────────────────────────────────────────────────
+async function loadRuns(jobName) {
+  const el = document.getElementById(`runs-${jobName}`);
+  el.innerHTML = '<div class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></div>';
+  try {
+    const data = await fetchJSON(`${BASE}/api/crm/batch/jobs/${jobName}/runs?limit=10`);
+    renderRuns(jobName, data.runs || []);
+  } catch(e) {
+    el.innerHTML = `<div class="small text-danger">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderRuns(jobName, runs) {
+  const el = document.getElementById(`runs-${jobName}`);
+  if (!runs.length) {
+    el.innerHTML = '<div class="small" style="color:var(--bb-muted)">No runs yet.</div>';
+    return;
+  }
+  el.innerHTML = runs.map(run => renderRunCard(jobName, run)).join('');
+
+  // Auto-start polling for any currently running run
+  runs.filter(r => r.status === 'running').forEach(r => startPoll(jobName, r.run_id));
+}
+
+function renderRunCard(jobName, run) {
+  const steps     = run.steps || [];
+  const duration  = fmtDuration(run.started_at, run.ended_at);
+  const triggered = run.triggered_by === 'scheduler'
+    ? '<i class="ti ti-clock-play text-secondary" title="Scheduled"></i>'
+    : '<i class="ti ti-hand-click text-secondary" title="Manual"></i>';
+
+  const stepsHtml = steps.map((s, i) => `
+    <div class="step-row">
+      <div class="step-icon">${stepIcon(s.status)}</div>
+      <div class="step-name">${escapeHtml(s.name)}</div>
+      <span class="small" style="color:var(--bb-muted)">${s.exit_code !== null && s.exit_code !== undefined ? `exit ${s.exit_code}` : ''} ${s.started_at ? fmtDuration(s.started_at, s.ended_at) : ''}</span>
+      ${s.log_tail ? `<button class="btn btn-xs btn-link text-muted p-0 ms-2" style="font-size:.72rem" onclick="toggleLog('log-${run.run_id}-${i}')">log</button>` : ''}
+    </div>
+    ${s.log_tail ? `<div id="log-${run.run_id}-${i}" class="step-log">${escapeHtml(s.log_tail)}</div>` : ''}
+  `).join('');
+
+  const paramsHtml = Object.entries(run.params || {})
+    .filter(([,v]) => v !== false && v !== null && v !== '')
+    .map(([k,v]) => `<span class="badge bg-light text-dark border me-1" style="font-size:.7rem">${escapeHtml(k)}=${escapeHtml(String(v))}</span>`)
+    .join('');
+
+  return `
+<div class="run-card" id="run-card-${run.run_id}">
+  <div class="run-head" onclick="toggleRun('${run.run_id}')">
+    ${statusIcon(run.status)}
+    <span class="fw-500 small">${run.run_id}</span>
+    ${statusBadge(run.status)}
+    <span class="small ms-1" style="color:var(--bb-muted)">${fmtDateTime(run.started_at)}${duration?' · '+duration:''}</span>
+    ${triggered}
+    <div class="ms-auto d-flex gap-1">${paramsHtml}</div>
+  </div>
+  <div class="run-body" id="run-body-${run.run_id}">
+    <div class="pt-2">${stepsHtml}</div>
+  </div>
+</div>`;
+}
+
+function toggleRun(runId) {
+  const body = document.getElementById(`run-body-${runId}`);
+  body.classList.toggle('open');
+}
+
+function toggleLog(logId) {
+  const el = document.getElementById(logId);
+  if (el) el.classList.toggle('show');
+}
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+function startPoll(jobName, runId) {
+  if (_activePolls[runId]) return;
+  _activePolls[runId] = setInterval(async () => {
+    try {
+      const data = await fetchJSON(`${BASE}/api/crm/batch/jobs/${jobName}/runs/${runId}`);
+      const run  = data.run;
+      if (!run) return;
+
+      // Re-render just this card
+      const card = document.getElementById(`run-card-${runId}`);
+      if (card) {
+        const wasOpen = card.querySelector('.run-body.open') !== null;
+        card.outerHTML = renderRunCard(jobName, run);
+        if (wasOpen) {
+          const newBody = document.getElementById(`run-body-${runId}`);
+          if (newBody) newBody.classList.add('open');
+        }
+      }
+
+      if (run.status !== 'running') {
+        clearInterval(_activePolls[runId]);
+        delete _activePolls[runId];
+        // Refresh the job header to show updated last-run
+        loadAll();
+      }
+    } catch(e) { /* keep polling */ }
+  }, 3000);
+}
+
+// ── Run modal ─────────────────────────────────────────────────────────────────
+function openRunModal(jobName) {
+  _modalJobName = jobName;
+  _modalJobDef  = _jobs.find(j => j.name === jobName);
+  if (!_modalJobDef) return;
+
+  document.getElementById('modal-job-name').textContent = jobName;
+
+  const params  = _modalJobDef.params || {};
+  const form    = document.getElementById('modal-params-form');
+  const fields  = Object.entries(params).map(([name, def]) => {
+    if (def.type === 'bool') {
+      return `<div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" id="param-${name}" data-param="${name}" data-type="bool"
+               ${def.default ? 'checked' : ''}>
+        <label class="form-check-label small" for="param-${name}">${escapeHtml(name)}
+          <span style="color:var(--bb-muted); font-size:.72rem">${escapeHtml(def.help||'')}</span>
+        </label>
+      </div>`;
+    }
+    return `<div class="param-field mb-2">
+      <label for="param-${name}">${escapeHtml(name)}${def.required?'<span class="text-danger">*</span>':''}</label>
+      <input type="text" class="form-control form-control-sm" id="param-${name}"
+             data-param="${name}" data-type="${def.type||'str'}"
+             value="${escapeHtml(String(def.default ?? ''))}"
+             placeholder="${escapeHtml(def.help||'')}">
+    </div>`;
+  }).join('');
+
+  form.innerHTML = fields || '<div class="small text-muted">No parameters required.</div>';
+
+  const modal = new bootstrap.Modal(document.getElementById('runModal'));
+  modal.show();
+}
+
+async function submitRun() {
+  if (!_modalJobName) return;
+  const btn = document.getElementById('modal-run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Starting…';
+
+  // Collect params from form
+  const params = {};
+  document.querySelectorAll('#modal-params-form [data-param]').forEach(el => {
+    const key  = el.dataset.param;
+    const type = el.dataset.type;
+    if (type === 'bool')       params[key] = el.checked;
+    else if (type === 'int')   params[key] = parseInt(el.value) || undefined;
+    else if (el.value.trim()) params[key] = el.value.trim();
+  });
+
+  try {
+    const data = await fetchJSON(`${BASE}/api/crm/batch/jobs/${_modalJobName}/run`, {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body:    JSON.stringify({ params }),
+    });
+
+    bootstrap.Modal.getInstance(document.getElementById('runModal')).hide();
+
+    if (data.status === 'conflict') {
+      setFeedback(`<i class="ti ti-alert-circle me-1"></i>Job is already running.`, 'warning');
+    } else {
+      setFeedback(`<i class="ti ti-rocket me-1"></i>Run <code>${data.run_id}</code> started — polling for progress…`, 'info');
+      // Load runs for this job and start polling
+      await loadRuns(_modalJobName);
+      startPoll(_modalJobName, data.run_id);
+    }
+  } catch(e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Error: ${escapeHtml(e.message)}`, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-player-play me-1"></i>Run now';
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadAll();
+
+// Auto-refresh every 30s
+setInterval(loadAll, 30000);
+
+</script>
+</body>
+</html>

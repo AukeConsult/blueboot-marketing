@@ -39,12 +39,13 @@ from handlers.leads         import bp as leads_bp
 from handlers.statistics    import bp as statistics_bp
 from handlers.auth          import bp as auth_bp
 from handlers.user_prefs    import bp as user_prefs_bp
+from handlers.batch         import bp as batch_bp
 
 for bp in (
     campaigns_bp, contacts_bp, jobs_bp, mailbox_bp,
     mail_tags_bp, mail_accounts_bp, followup_email_bp,
     gdisk_bp, filter_facets_bp, leads_bp, statistics_bp, auth_bp,
-    user_prefs_bp,
+    user_prefs_bp, batch_bp,
 ):
     app.register_blueprint(bp)
 
@@ -64,6 +65,7 @@ _BLUEPRINT_MIN_READ_ROLES: dict[str, str] = {
     "auth":          "campaign-user",  # user role docs (settings/users)
     "mail_tags":     "campaign-user",  # settings/mail_tag_statuses
     "mailbox":       "campaign-user",  # IMAP mailbox contents — no read for user/guest
+    "batch":         "campaign-user",  # cloud_batch job definitions and run history
 }
 
 # Endpoints that trigger background jobs or monitor job state.
@@ -87,6 +89,11 @@ _JOB_ENDPOINTS = frozenset({
     "statistics.collect_statistics",
     # move contacts job trigger (contacts blueprint)
     "contacts.move_campaign_contacts",
+    # cloud_batch job triggers and run status
+    "batch.trigger_run",
+    "batch.list_jobs",
+    "batch.list_runs",
+    "batch.get_run",
 })
 
 # Minimum role required for mutating requests (POST / PATCH / PUT / DELETE).
@@ -120,6 +127,7 @@ _BLUEPRINT_MIN_ROLES: dict[str, str] = {
     "mail_accounts":  "admin",
     "auth":           "admin",
     "user_prefs":     "campaign-user",
+    "batch":          "campaign-user",
 }
 
 

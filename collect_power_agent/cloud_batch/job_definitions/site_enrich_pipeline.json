@@ -1,0 +1,52 @@
+{
+  "name": "site_enrich_pipeline",
+  "description": "Site enrichment only — skips discovery, runs on already-found site_leads",
+  "schedule": null,
+  "params": {
+    "countries":  { "type": "str",  "required": true,  "help": "Comma-separated country codes" },
+    "campaign":   { "type": "str",  "required": true,  "help": "Campaign name for export" },
+    "dry_run":    { "type": "bool", "default": false,  "help": "Preview only — no Firestore writes" },
+    "force":      { "type": "bool", "default": false,  "help": "Re-process already enriched items" }
+  },
+  "steps": [
+    {
+      "name": "enrich_ai",
+      "module": "site_enrich_agent",
+      "args": ["--countries", "{countries}"],
+      "dry_run_flag": "--dry-run",
+      "force_flag": "--force",
+      "on_error": "abort"
+    },
+    {
+      "name": "enrich_contacts",
+      "module": "site_contact_enrich",
+      "args": ["--countries", "{countries}"],
+      "dry_run_flag": "--dry-run",
+      "force_flag": "--force",
+      "on_error": "continue"
+    },
+    {
+      "name": "enrich_location",
+      "module": "site_location_enrich",
+      "args": ["--countries", "{countries}"],
+      "dry_run_flag": "--dry-run",
+      "force_flag": "--force",
+      "on_error": "continue"
+    },
+    {
+      "name": "email_check",
+      "module": "site_email_check",
+      "args": ["--countries", "{countries}"],
+      "dry_run_flag": "--dry-run",
+      "force_flag": "--force",
+      "on_error": "continue"
+    },
+    {
+      "name": "export",
+      "module": "site_smart_export",
+      "args": ["--countries", "{countries}", "--write-contacts", "--campaign", "{campaign}"],
+      "dry_run_flag": "--dry-run-contacts",
+      "on_error": "abort"
+    }
+  ]
+}
