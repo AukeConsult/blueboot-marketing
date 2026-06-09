@@ -171,6 +171,112 @@ def remove_campaign_contacts(campaign_id):
         return _err(str(exc), 500)
 
 
+@bp.route("/api/crm/campaigns/<src_campaign_id>/contacts/move", methods=["POST"])
+def move_campaign_contacts(src_campaign_id):
+    """Move selected contacts from one campaign to another.
+
+    Body:
+        doc_ids            list[str]  — doc IDs within the source campaign
+        target_campaign_id str        — existing campaign ID  (one of these two required)
+        new_campaign_name  str        — name for a brand-new campaign to create
+    """
+    try:
+        from flask import g as _g
+        db   = _get_db()
+        body = request.get_json(silent=True) or {}
+
+        doc_ids = body.get("doc_ids", [])
+        if not doc_ids or not isinstance(doc_ids, list):
+            return _err("Body must contain a non-empty 'doc_ids' list", 400)
+
+        target_id   = (body.get("target_campaign_id") or "").strip()
+        new_name    = (body.get("new_campaign_name") or "").strip()
+        if not target_id and not new_name:
+            return _err("Provide either 'target_campaign_id' or 'new_campaign_name'", 400)
+        if target_id and new_name:
+            return _err("Provide 'target_campaign_id' OR 'new_campaign_name', not both", 400)
+
+        user  = getattr(_g, "user_email", None) or "api"
+        now   = datetime.now(timezone.utc).isoformat()
+
+        src_ref = db.collection("campaigns").document(src_campaign_id)
+        if not src_ref.get().exists:
+            return _err(f"Source campaign '{src_campaign_id}' not found", 404)
+
+        # ── Phase A: resolve target campaign ─────────────────────────────────
+        if target_id:
+            tgt_ref = db.collection("campaigns").document(target_id)
+            if not tgt_ref.get().exists:
+                return _err(f"Target campaign '{target_id}' not found", 404)
+        else:
+            # Create new campaign — sanitise the name into a Firestore-friendly ID
+            import re as _re
+            safe_id = _re.sub(r"[^a-z0-9_-]", "_", new_name.lower())[:80] or "campaign"
+            tgt_ref = db.collection("campaigns").document(safe_id)
+            # If the derived ID already exists, append a timestamp suffix
+            if tgt_ref.get().exists:
+                safe_id = f"{safe_id}_{int(datetime.now(timezone.utc).timestamp())}"
+                tgt_ref = db.collection("campaigns").document(safe_id)
+            tgt_ref.set({
+                "name":          new_name,
+                "owner":         user,
+                "status":        "active",
+                "created_at":    now,
+                "updated_at":    now,
+                "contact_count": 0,
+            })
+            target_id = safe_id
+
+        # ── Phase B: copy each contact as-is, then delete from source ────────
+        src_col = src_ref.collection("campaign_contacts")
+        tgt_col = tgt_ref.collection("campaign_contacts")
+
+        moved  = 0
+        errors = []
+        for did in doc_ids:
+            try:
+                src_doc_ref = src_col.document(did)
+                snap = src_doc_ref.get()
+                if not snap.exists:
+                    errors.append({"doc_id": did, "error": "not found"})
+                    continue
+                data = snap.to_dict() or {}
+                # Write to target with a new doc ID (preserve original ID if no collision)
+                new_ref = tgt_col.document(did)
+                if new_ref.get().exists:
+                    new_ref = tgt_col.document()   # auto-id on collision
+                new_ref.set(data)
+                src_doc_ref.delete()
+                moved += 1
+            except Exception as e:
+                errors.append({"doc_id": did, "error": str(e)})
+
+        # ── Phase C: update contact_count on both campaigns ───────────────────
+        if moved:
+            src_count = sum(1 for _ in src_col.stream())
+            tgt_count = sum(1 for _ in tgt_col.stream())
+            src_ref.update({"contact_count": src_count, "updated_at": now})
+            tgt_ref.update({"contact_count": tgt_count, "updated_at": now})
+
+            # Trigger export re-generation on source campaign
+            from handlers.shared import _new_job, _enqueue_task
+            export_params  = {"campaign_id": src_campaign_id}
+            export_job_id  = _new_job("campaign-export", export_params)
+            _enqueue_task("campaign-export", export_job_id, export_params)
+        else:
+            export_job_id = None
+
+        return jsonify({
+            "status":        "ok",
+            "moved":         moved,
+            "errors":        errors,
+            "target_campaign_id": target_id,
+            "export_job_id": export_job_id,
+        })
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @bp.route("/api/crm/followup-contacts", methods=["GET"])
 def followup_contacts():
     """Return all campaign_contacts with campaign owner + outreach_email joined."""
@@ -210,7 +316,7 @@ def followup_contacts():
             info  = camp_map.get(cid, {})
             if owner_filter:
                 if owner_filter == "__none__":
-                    if info.get("owner", ""):   # skip contacts that DO have an owner
+                    if info.get("owner", ""):
                         continue
                 elif info.get("owner", "") != owner_filter:
                     continue

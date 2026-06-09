@@ -314,6 +314,10 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
     <button class="btn btn-sm btn-outline-primary py-0" onclick="showBatchDatePanel()">
       <i class="ti ti-calendar me-1"></i>Set follow-up date
     </button>
+    <div class="batch-divider"></div>
+    <button class="btn btn-sm btn-outline-secondary py-0" onclick="showMovePanel()">
+      <i class="ti ti-folders me-1"></i>Move to campaign
+    </button>
   </div>
 
   <!-- Batch date panel -->
@@ -328,6 +332,34 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
       </button>
       <button class="btn btn-sm btn-outline-secondary" onclick="hideBatchDatePanel()">Cancel</button>
       <span id="batch-date-status" class="small ms-1" style="color:var(--bb-muted)"></span>
+    </div>
+  </div>
+
+  <!-- Move-to-campaign panel -->
+  <div id="move-panel" class="bb-card p-3 mb-3" style="display:none">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <span class="small fw-500" style="color:var(--bb-muted)">Move <span id="move-count">0</span> selected to:</span>
+      <div class="d-flex align-items-center gap-2">
+        <div class="form-check form-check-inline mb-0">
+          <input class="form-check-input" type="radio" name="move-target" id="move-opt-existing" value="existing" checked onchange="onMoveOptionChange()">
+          <label class="form-check-label small" for="move-opt-existing">Existing campaign</label>
+        </div>
+        <div class="form-check form-check-inline mb-0">
+          <input class="form-check-input" type="radio" name="move-target" id="move-opt-new" value="new" onchange="onMoveOptionChange()">
+          <label class="form-check-label small" for="move-opt-new">New campaign</label>
+        </div>
+      </div>
+      <div id="move-existing-wrap">
+        <select id="move-campaign-select" class="form-select form-select-sm" style="max-width:260px"></select>
+      </div>
+      <div id="move-new-wrap" style="display:none">
+        <input type="text" id="move-new-name" class="form-control form-control-sm" style="max-width:260px" placeholder="New campaign name…">
+      </div>
+      <button class="btn btn-sm btn-primary" id="move-apply-btn" onclick="applyMove()">
+        <i class="ti ti-check me-1"></i>Move
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="hideMovePanel()">Cancel</button>
+      <span id="move-status" class="small ms-1" style="color:var(--bb-muted)"></span>
     </div>
   </div>
 
@@ -1472,6 +1504,102 @@ async function applyBatchDate() {
 
   applyFilter();
   if (!errors) { hideBatchDatePanel(); clearSelection(); }
+}
+
+// ── Move contacts ────────────────────────────────────────────────────────────
+
+function showMovePanel() {
+  document.getElementById('move-count').textContent = selected.size;
+  document.getElementById('move-status').textContent = '';
+  // Populate existing-campaign dropdown (exclude current campaign if single-campaign view)
+  const currentCampId = document.getElementById('campaign-filter').value;
+  const sel = document.getElementById('move-campaign-select');
+  sel.innerHTML = _allCampaigns
+    .filter(c => c.id !== currentCampId)
+    .map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.id)}</option>`)
+    .join('');
+  // Reset to existing option
+  document.getElementById('move-opt-existing').checked = true;
+  onMoveOptionChange();
+  document.getElementById('move-new-name').value = '';
+  document.getElementById('batch-date-panel').style.display = 'none';
+  document.getElementById('move-panel').style.display = '';
+}
+
+function hideMovePanel() {
+  document.getElementById('move-panel').style.display = 'none';
+}
+
+function onMoveOptionChange() {
+  const isNew = document.getElementById('move-opt-new').checked;
+  document.getElementById('move-existing-wrap').style.display = isNew ? 'none' : '';
+  document.getElementById('move-new-wrap').style.display     = isNew ? '' : 'none';
+  if (isNew) document.getElementById('move-new-name').focus();
+}
+
+async function applyMove() {
+  const isNew   = document.getElementById('move-opt-new').checked;
+  const statusEl = document.getElementById('move-status');
+  const btn      = document.getElementById('move-apply-btn');
+
+  let body = {};
+  if (isNew) {
+    const name = document.getElementById('move-new-name').value.trim();
+    if (!name) { statusEl.style.color = '#dc2626'; statusEl.textContent = 'Enter a campaign name.'; return; }
+    body.new_campaign_name = name;
+  } else {
+    const campId = document.getElementById('move-campaign-select').value;
+    if (!campId) { statusEl.style.color = '#dc2626'; statusEl.textContent = 'Select a target campaign.'; return; }
+    body.target_campaign_id = campId;
+  }
+
+  // Group selected rows by source campaign_id
+  const rowsToMove = allRows.filter(r => selected.has(r.doc_path));
+  if (!rowsToMove.length) return;
+
+  // Group by campaign_id (multi-campaign view support)
+  const byCampaign = {};
+  for (const r of rowsToMove) {
+    if (!byCampaign[r.campaign_id]) byCampaign[r.campaign_id] = [];
+    byCampaign[r.campaign_id].push(r.doc_id);
+  }
+
+  btn.disabled = true;
+  statusEl.style.color = 'var(--bb-muted)';
+  statusEl.textContent = `Moving ${rowsToMove.length} contact${rowsToMove.length === 1 ? '' : 's'}…`;
+
+  let totalMoved = 0, totalErrors = 0, targetName = body.target_campaign_id || body.new_campaign_name;
+
+  try {
+    for (const [srcCampId, docIds] of Object.entries(byCampaign)) {
+      const res = await fetchJSON(
+        `${BASE}/api/crm/campaigns/${encodeURIComponent(srcCampId)}/contacts/move`,
+        { method: 'POST', body: JSON.stringify({ ...body, doc_ids: docIds }) }
+      );
+      totalMoved  += res.moved  || 0;
+      totalErrors += (res.errors || []).length;
+      if (res.target_campaign_id) targetName = res.target_campaign_id;
+    }
+  } catch (e) {
+    statusEl.style.color = '#dc2626';
+    statusEl.textContent = `Failed: ${e.message}`;
+    btn.disabled = false;
+    return;
+  }
+
+  // Remove moved rows from allRows
+  const movedPaths = new Set(rowsToMove.map(r => r.doc_path));
+  for (let i = allRows.length - 1; i >= 0; i--) {
+    if (movedPaths.has(allRows[i].doc_path)) allRows.splice(i, 1);
+  }
+  clearSelection();
+  applyFilter();
+  hideMovePanel();
+  setFeedback(
+    `<i class="ti ti-check me-1"></i>${totalMoved} contact${totalMoved === 1 ? '' : 's'} moved to <strong>${escapeHtml(targetName)}</strong>${totalErrors ? ` (${totalErrors} failed)` : ''}.`,
+    totalErrors ? 'warning' : 'success'
+  );
+  btn.disabled = false;
 }
 
 // ── Selection ─────────────────────────────────────────────────────────────────
