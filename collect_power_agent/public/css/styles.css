@@ -31,7 +31,7 @@ body.bg-alt { background: var(--bb-bg-alt); }
 /* Top navigation */
 .bb-nav { background: #fff; border-bottom: 1px solid var(--bb-border); padding: .6rem 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0; position: relative; }
 .bb-nav-user { display: flex; align-items: center; gap: .5rem; position: absolute; right: 1.5rem; top: 50%; transform: translateY(-50%); }
-.bb-nav .brand { color: #111; font-weight: 700; font-size: .95rem; text-decoration: none; display: flex; align-items: center; gap: .5rem; margin-right: 2rem; }
+.bb-nav .brand { color: #111; font-weight: 700; font-size: 1.1rem; text-decoration: none; display: flex; align-items: center; gap: .5rem; margin-right: 2rem; }
 .bb-nav .brand i { color: var(--bb-accent); }
 .bb-nav .nav-link { color: var(--bb-muted); font-size: .85rem; text-decoration: none; padding: .3rem .65rem; border-radius: 6px; transition: color .15s, background .15s; display: flex; align-items: center; gap: .35rem; }
 .bb-nav .nav-link:hover { color: #111; background: #f4f5f7; }
@@ -123,16 +123,15 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 .hist-count.has-entries { background: #dbeafe; color: #1d4ed8; }
 
 /* Comment row — full-width, visually prominent */
-.follow-comment-row td { padding: 0 8px 5px; border-top: none; }
+.follow-comment-row td { padding: 5px 8px 5px; border-top: none; }
 .comment-row-inner {
-  background: var(--bb-surface, #f9fafb);
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 3px 8px;
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
 }
 .comment-row-icon { color: var(--bb-muted); font-size: .9rem; flex-shrink: 0; }
 .comment-row-input {
-  font-size: .85rem;
+  font-size: .95rem;
   color: #374151;
   background: transparent;
   border: none !important;

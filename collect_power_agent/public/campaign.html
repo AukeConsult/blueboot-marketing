@@ -954,7 +954,6 @@ function renderLeadModal(d, website) {
     ai_client_base:     'Client base',
     reseller_score:     'Score',
     ai_specialisation:  'Specialisation',
-    keywords:           'Keywords',
   };
   const ORDER = Object.keys(LABEL);
   const pipeline = d.source_pipeline;
@@ -1205,12 +1204,12 @@ async function populateOwnerSelect(currentOwner) {
       const label = u.displayName
                 ? `${u.displayName} (${u.email})`
                 : u.email;
-      const val   = u.displayName || u.email;   // store display name for compat
+      const val   = u.email;   // always store email
       const sel_  = val === currentOwner ? ' selected' : '';
       return `<option value="${escapeHtml(val)}"${sel_}>${escapeHtml(label)}</option>`;
     }).join('');
   // If currentOwner not in list, add as a manual entry so it isn't lost
-  if (currentOwner && !_usersForOwner.find(u => (u.displayName||u.email) === currentOwner)) {
+  if (currentOwner && !_usersForOwner.find(u => u.email === currentOwner)) {
     sel.innerHTML += `<option value="${escapeHtml(currentOwner)}" selected>${escapeHtml(currentOwner)} (manual)</option>`;
   }
 }
@@ -1218,7 +1217,7 @@ async function populateOwnerSelect(currentOwner) {
 async function ownerChanged() {
   const ownerVal = document.getElementById('c-owner-select').value;
   // Auto-fill email account from user's defaultMailbox (only if currently empty)
-  const user = _usersForOwner.find(u => (u.displayName || u.email) === ownerVal);
+  const user = _usersForOwner.find(u => u.email === ownerVal);
   if (user && user.defaultMailbox) {
     const mailSel = document.getElementById('c-email-account-select');
     const currentMail = mailSel.value;

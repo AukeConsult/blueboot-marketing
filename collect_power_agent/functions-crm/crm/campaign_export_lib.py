@@ -37,6 +37,7 @@ CONTACT_COLUMNS = [
     ("Follow-up date",       "followup_date"),
     ("Follow-up status",     "followup_status"),
     ("Follow-up importance", "followup_importance"),
+    ("Follow-up owner",      "followup_owner"),
     ("Lead ID",              "lead_id"),
     ("Doc ID",               "doc_id"),
     ("Comment",              "followup_comment"),
@@ -206,3 +207,5 @@ def run_campaign_export(db, svc, gd, campaign_id: str) -> dict:
         "by_status":    dict(status_counts),
         "url":          f"https://docs.google.com/spreadsheets/d/{sheet_id}",
     }
+
+

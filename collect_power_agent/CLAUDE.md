@@ -1,5 +1,23 @@
 # Coding Rules for this Project
 
+## RULE: Check for SKILL.md in the same subdirectory before working on any file
+
+Before reading, writing, or editing any file under a subdirectory, check whether a
+`SKILL.md` file exists in that same directory. If it does, read it first — it contains
+subdirectory-specific conventions, patterns, and constraints that take precedence over
+general project rules.
+
+```
+# Example: editing functions-crm/handlers/contacts.py
+# → check for functions-crm/handlers/SKILL.md
+# → check for functions-crm/SKILL.md
+# → then apply general CLAUDE.md rules
+```
+
+Walk up one level too: if no `SKILL.md` in the immediate directory, check the parent
+subdirectory (but not the project root — that is this file).
+
+
 ## THE OVERARCHING RULE: parallel work → isolated classes
 
 Whenever you create parallel processes — whether with `asyncio` (gather, queues,
@@ -974,3 +992,54 @@ def my_endpoint():
 
 **Reference implementations:** `handlers/statistics.py` (simple GET + job trigger),
 `handlers/user_prefs.py` (GET + PUT with per-user Firestore scoping via `g.user_email`).
+
+
+## Owner / user dropdowns
+
+### RULE: always display users as "Name (email)" — store email only
+
+Whenever a user or owner is shown in a `<select>` or any dropdown UI, the visible
+label must always be `DisplayName (email@...)`. If the user has no display name, show
+just the email. The **stored value** (the `<option value="...">`) must always be the
+email address — never the display name, never the UID.
+
+```js
+// Correct label + value pattern
+const label = u.displayName ? `${u.displayName} (${u.email})` : u.email;
+const value = u.email;   // always email
+```
+
+This applies to campaign owner, followup_owner, and any future user-assignment field.
+
+## Owner filter on the follow-up page
+
+### RULE: owner filter checks followup_owner first, then falls back to campaign owner
+
+When filtering contacts by owner (the `owner` query param on `/api/crm/followup-contacts`),
+apply this priority order:
+
+1. If the contact has a `followup_owner` set → match against that field only.
+2. If `followup_owner` is empty → fall back to the campaign-level `owner`.
+3. For `__none__` (no owner) → the contact must have neither `followup_owner` nor
+   campaign `owner` set.
+
+This means a contact with an explicit `followup_owner` is **always** owned by that
+person regardless of which campaign it belongs to, while unassigned contacts inherit
+their campaign's owner.
+
+Reference implementation: `handlers/contacts.py` → `followup_contacts()`.
+
+## Frontend / table layout rules
+
+### RULE: Name and email columns must never overlap — always use explicit widths
+
+In any table that shows both a name and an email column, both columns must have
+explicit pixel widths (never `width:auto` on either). Use at minimum:
+
+```html
+<th style="width:180px;min-width:140px">Name</th>
+<th style="width:200px">Email</th>
+```
+
+`width:auto` on Name causes it to collapse into the Email column when other
+columns are added or the viewport shrinks. Always set a concrete width.

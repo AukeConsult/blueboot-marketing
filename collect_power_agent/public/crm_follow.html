@@ -50,6 +50,51 @@
 /* .hist-count sizing and comment input font — defined in css/styles.css */
 
 /* History row */
+/* ── Contact card grouping ───────────────────────────────────────────────── */
+/* Each contact = data row + comment row (+ optional history row).           */
+/* Together they form one visual card with a shared border and background.   */
+
+/* Data row — top of card */
+.follow-data-row > td {
+  background: #fff;
+  border-top: 1px solid #e5e7eb !important;
+  border-bottom: none !important;
+}
+.follow-data-row > td:first-child  { border-left:  2px solid #e5e7eb; }
+.follow-data-row > td:last-child   { border-right: 2px solid #e5e7eb; }
+
+/* Comment row — bottom of card, same background as data row */
+.follow-comment-row > td {
+  background: #fff;
+  border-top: none !important;
+  border-bottom: 2px solid #e5e7eb !important;
+}
+.follow-comment-row > td:first-child { border-left:  2px solid #e5e7eb; }
+.follow-comment-row > td:last-child  { border-right: 2px solid #e5e7eb; }
+
+/* History row — extends card when open */
+.follow-history-row > td {
+  background: #f5f6ff;
+  border-top: 1px dashed #c7ceff !important;
+  border-bottom: 2px solid #e5e7eb !important;
+  border-left:  2px solid #e5e7eb;
+  border-right: 2px solid #e5e7eb;
+}
+
+/* Overdue / due-soon accent on left edge of data row only */
+tr.row-overdue  > td:first-child  { border-left: 3px solid #fca5a5 !important; }
+tr.row-due-soon > td:first-child  { border-left: 3px solid #fde68a !important; }
+
+/* Hover lifts the whole card */
+.follow-data-row:hover > td,
+.follow-data-row:hover + .follow-comment-row > td {
+  background: #f5f6ff;
+}
+
+/* Active (side-panel) card */
+tr.row-sp-active > td,
+tr.row-sp-active + .follow-comment-row > td { background: #eef0ff !important; }
+
 .follow-history-row td { border-top: none; }
 .hist-row-td { padding: 0 8px 8px; }
 .hist-list { display: flex; flex-direction: column; gap: 3px; padding: 4px 0 0; }
@@ -100,8 +145,7 @@
 /* Overdue / due-soon date highlighting */
 .date-overdue  { color: #b91c1c !important; font-weight: 600; }
 .date-due-soon { color: #92400e !important; font-weight: 600; }
-tr.row-overdue  > td:first-of-type { border-left: 3px solid #fca5a5; }
-tr.row-due-soon > td:first-of-type { border-left: 3px solid #fde68a; }
+/* overdue/due-soon borders moved to contact-card section above */
 
 
 
@@ -175,6 +219,10 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 .sp-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 5px; font-size: .8rem; }
 .sp-row i { font-size: 14px; color: var(--bb-muted); flex-shrink: 0; margin-top: 1px; }
 .sp-muted { color: var(--bb-muted); }
+.bb-field-grid { display:grid; grid-template-columns:auto 1fr; gap:3px 12px; align-items:baseline; }
+.bb-field-label { font-size:11px; color:var(--bb-muted); white-space:nowrap; padding:2px 0; }
+.bb-field-value { font-size:12px; color:#111; padding:2px 0; border-bottom:.5px solid #f0f0f0; }
+.sp-company-grid .bb-field-value { font-size:11px; }
 .sp-btn-panel { display: flex; gap: .5rem; padding: 10px 14px; }
 .sp-ch-btn { color: var(--bb-accent) !important; background: #eef0ff; border-color: #c7ceff; }
 .group-header-row td .group-count {
@@ -193,6 +241,33 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 }
 .group-select:hover { border-color: var(--bb-border); background: #fff; color: #374151; }
 .group-select:focus { border-color: var(--bb-accent); background: #fff; color: #374151; outline: none; }
+
+/* Header filter pill groups */
+.hdr-group {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 8px;
+}
+.hdr-group-label {
+  font-size: .66rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--bb-muted); white-space: nowrap; margin-right: 2px;
+}
+.hdr-group-filter {
+  background: #eef0ff; border: 1px solid #c7ceff;
+}
+.hdr-group-actions {
+  background: #f3f4f6; border: 1px solid #e5e7eb;
+}
+
+/* Primary header selectors — owner and campaign — more prominent */
+.bb-header-select {
+  border: 1px solid var(--bb-border); background: #fff;
+  font-size: .82rem; font-weight: 600; padding: 4px 8px; border-radius: 6px;
+  color: #374151; cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+.bb-header-select:hover { border-color: var(--bb-accent); box-shadow: 0 0 0 3px rgba(79,110,247,.1); }
+.bb-header-select:focus { border-color: var(--bb-accent); outline: none; box-shadow: 0 0 0 3px rgba(79,110,247,.15); }
 
 /* Discreet action buttons (collapse-all, sync, refresh) */
 .collapse-all-btn, .header-action-btn {
@@ -230,34 +305,42 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 
   <div class="page-header mb-3">
     <h5 class="page-title"><i class="ti ti-phone-check text-primary"></i>CRM Follow-up</h5>
-    <div class="d-flex align-items-center gap-1">
-      <select id="owner-header" class="group-select" title="Filter by owner" onchange="onOwnerChange()" style="max-width:150px">
-        <option value="">All owners</option>
-      </select>
-      <select id="campaign-filter" class="group-select" title="Filter by campaign" onchange="load()" style="max-width:180px">
-        <option value="">All campaigns</option>
-      </select>
-      <select id="outreach-filter" class="group-select" title="Filter by outreach email" onchange="applyFilter()" style="max-width:180px">
-        <option value="">All outreach emails</option>
-      </select>
-      <select id="sync-period" class="group-select" title="Email sync lookback period">
-        <option value="7">Sync mail for last 7 days</option>
-        <option value="14">Sync mail for last 14 days</option>
-        <option value="30">Sync mail for last 30 days</option>
-        <option value="90">Sync mail for last 90 days</option>
-        <option value="0">Sync mail for all time</option>
-      </select>
-      <button class="header-action-btn" id="sync-all-btn" onclick="syncAllEmails()" title="Sync all emails">
-        <i class="ti ti-mail-bolt me-1"></i>Sync
-      </button>
-      <button class="header-action-btn" onclick="load()" title="Refresh contacts">
-        <i class="ti ti-refresh"></i>
-      </button>
-      <a href="doc-viewer.html?doc=followup-page-usage" target="_blank" class="header-action-btn" title="Follow-up page help">
-        <i class="ti ti-help"></i>
-      </a>
-    </div>
-  </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+
+      <!-- Filter group: owner / campaign / outreach -->
+      <div class="hdr-group hdr-group-filter">
+        <span class="hdr-group-label"><i class="ti ti-filter me-1"></i>Filter</span>
+        <select id="owner-header" class="group-select bb-header-select" title="Filter by owner" onchange="onOwnerChange()" style="max-width:150px">
+          <option value="">All owners</option>
+        </select>
+        <select id="campaign-filter" class="group-select bb-header-select" title="Filter by campaign" onchange="load()" style="max-width:180px">
+          <option value="">All campaigns</option>
+        </select>
+      </div>
+
+      <!-- Actions group: sync period / sync / refresh / help -->
+      <div class="hdr-group hdr-group-actions">
+        <span class="hdr-group-label"><i class="ti ti-mail me-1"></i>Mail</span>
+        <select id="sync-period" class="group-select" title="Email sync lookback period">
+          <option value="7">Last 7 days</option>
+          <option value="14">Last 14 days</option>
+          <option value="30">Last 30 days</option>
+          <option value="90">Last 90 days</option>
+          <option value="0">All time</option>
+        </select>
+        <button class="header-action-btn" id="sync-all-btn" onclick="syncAllEmails()" title="Sync all emails">
+          <i class="ti ti-mail-bolt me-1"></i>Sync
+        </button>
+        <button class="header-action-btn" onclick="load()" title="Refresh contacts">
+          <i class="ti ti-refresh"></i>
+        </button>
+        <a href="doc-viewer.html?doc=followup-page-usage" target="_blank" class="header-action-btn" title="Follow-up page help">
+          <i class="ti ti-help"></i>
+        </a>
+      </div><!-- /.hdr-group-actions -->
+
+    </div><!-- /.d-flex header row -->
+  </div><!-- /.page-header -->
 
   <!-- Filters -->
   <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
@@ -324,6 +407,10 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
       <button class="btn btn-sm btn-outline-secondary py-0" id="ab-move-btn" onclick="showMovePanel()">
         <i class="ti ti-folders me-1"></i>Move to campaign
       </button>
+      <div class="action-bar-divider"></div>
+      <button class="btn btn-sm btn-outline-secondary py-0" id="ab-owner-btn" onclick="showAssignOwnerPanel()">
+        <i class="ti ti-user-check me-1"></i>Assign owner
+      </button>
     </div>
 
     <!-- Inline date panel -->
@@ -368,6 +455,19 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
       <button class="btn btn-sm btn-outline-secondary" onclick="hideMovePanel()">Cancel</button>
       <span id="move-status" class="small ms-1" style="color:var(--bb-muted)"></span>
     </div>
+
+    <!-- Inline assign-owner panel -->
+    <div id="assign-owner-panel" class="action-bar-panel" style="display:none">
+      <span class="small fw-500" style="color:var(--bb-muted)">Assign <span id="assign-owner-count">0</span> selected to owner:</span>
+      <select id="assign-owner-select" class="form-select form-select-sm" style="max-width:260px">
+        <option value="">— clear owner —</option>
+      </select>
+      <button class="btn btn-sm btn-primary" id="assign-owner-apply-btn" onclick="applyAssignOwner()">
+        <i class="ti ti-check me-1"></i>Apply
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="hideAssignOwnerPanel()">Cancel</button>
+      <span id="assign-owner-status" class="small ms-1" style="color:var(--bb-muted)"></span>
+    </div>
   </div>
 
   <!-- Job status feedback -->
@@ -385,6 +485,7 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
             <option value="followup_importance">Importance</option>
             <option value="followup_date">Date</option>
             <option value="owner">Owner</option>
+            <option value="followup_owner">F/U owner</option>
           </select>
           <i class="ti ti-chevron-right" style="color:var(--bb-muted);font-size:.7rem"></i>
           <select id="group-secondary" class="group-select" title="Then by" onchange="applyFilter()">
@@ -393,6 +494,7 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
             <option value="followup_importance">Importance</option>
             <option value="followup_date">Date</option>
             <option value="owner">Owner</option>
+            <option value="followup_owner">F/U owner</option>
           </select>
           <button id="collapse-all-btn" class="collapse-all-btn" onclick="toggleAllGroups()" title="Collapse all groups">
             <i class="ti ti-arrows-minimize"></i>
@@ -416,16 +518,17 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
         <thead class="bb-thead"><tr>
           <th style="width:32px"><input type="checkbox" class="form-check-input" id="select-all" onclick="toggleSelectAll(this)"></th>
           <th class="small bb-sortable d-none d-lg-table-cell" data-col="status"           onclick="sortBy('status')" style="width:95px">Status <span class="sort-icon"></span></th>
-          <th class="small bb-sortable d-none d-xl-table-cell" data-col="name"             onclick="sortBy('name')" style="width:auto">Name <span class="sort-icon"></span></th>
+          <th class="small bb-sortable d-none d-xl-table-cell" data-col="name"             onclick="sortBy('name')" style="width:180px;min-width:140px">Name <span class="sort-icon"></span></th>
           <th class="small bb-sortable"                         data-col="email"            onclick="sortBy('email')" style="width:200px">Email <span class="sort-icon"></span></th>
           <th class="small d-none d-xxl-table-cell" style="width:130px">Phone</th>
           <th class="small bb-sortable d-none d-xxl-table-cell" data-col="website"          onclick="sortBy('website')" style="width:155px">Website <span class="sort-icon"></span></th>
           <th class="small bb-sortable d-none d-lg-table-cell" data-col="followup_date"    onclick="sortBy('followup_date')" style="width:135px">Follow-up date <span class="sort-icon"></span></th>
           <th class="small bb-sortable"                         data-col="followup_status"  onclick="sortBy('followup_status')" style="width:155px">Follow-up status <span class="sort-icon"></span></th>
           <th class="small bb-sortable d-none d-xl-table-cell" data-col="followup_importance" onclick="sortBy('followup_importance')" style="width:105px">Importance <span class="sort-icon"></span></th>
+          <th class="small bb-sortable d-none d-xl-table-cell" data-col="followup_owner" onclick="sortBy('followup_owner')" style="width:130px">F/U owner <span class="sort-icon"></span></th>
         </tr></thead>
         <tbody id="follow-tbody">
-          <tr><td colspan="9" class="text-center py-5" style="color:var(--bb-muted)">
+          <tr><td colspan="10" class="text-center py-5" style="color:var(--bb-muted)">
             <div class="spinner-border spinner-border-sm me-2"></div>Loading…
           </td></tr>
         </tbody>
@@ -469,6 +572,7 @@ let _currentView = 'list';
 const _collapsedGroups = new Set();
 let _currentGroupKeys = [];
 let _allCampaigns = [];   // loaded from /followup-meta
+let _allUsers     = [];   // loaded from /followup-meta (for followup_owner dropdown)
 const selected = new Set();   // doc_path strings
 let _groupDocPaths = {};              // groupKey -> [doc_path, ...] built by renderGrouped
 const _CHANNEL_HREF = {
@@ -485,8 +589,8 @@ const _CHANNEL_HREF = {
 let _sideOpen      = false;           // side panel visible
 let _sidePanelGidx = -1;
 let _spChannelsOpen = false;          // channels section collapsed by default             // which contact is shown in side panel
+let _spCompanyOpen  = true;           // company info section open by default
 let _prefsReady       = false;  // true only after first load() completes with prefs applied
-let _pendingOutreach  = '';     // outreach pref applied after load() populates dropdown
 let _loadedPrefs      = null;   // prefs fetched by loadUserPrefs(); applied inside load()
 
 // ── Load contacts via API (no direct Firestore reads) ─────────────────────────
@@ -496,6 +600,7 @@ async function loadMeta() {
   try {
     const meta = await fetchJSON(BASE + '/api/crm/followup-meta');
     _allCampaigns = meta.campaigns || [];
+    _allUsers     = meta.users     || [];
     const owners = meta.owners || [];
     populateSelect('owner-header', owners, 'All owners');
     // Inject "No owner" option right after "All owners"
@@ -559,7 +664,7 @@ async function load() {
     }
   }
 
-  setTbody('<tr><td colspan="9" class="text-center py-5" style="color:var(--bb-muted)">'
+  setTbody('<tr><td colspan="10" class="text-center py-5" style="color:var(--bb-muted)">'
     + '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>');
   document.getElementById('follow-empty').style.display = 'none';
   document.getElementById('count-badge').textContent = '';
@@ -595,6 +700,7 @@ async function load() {
       followup_status:    c.followup_status    || '',
       followup_comment:   c.followup_comment   || '',
       followup_importance: c.followup_importance || '',
+      followup_owner:     c.followup_owner     || '',
       comment_history:    c.comment_history    || [],
       campaign_id:        c.campaign_id,
       doc_id:             c.doc_id,
@@ -604,18 +710,6 @@ async function load() {
       new_mail:           !!c.new_mail,
     }));
 
-    const outreachEmails = [...new Set(allRows.map(r => r.outreach_email).filter(Boolean))].sort();
-    populateSelect('outreach-filter', outreachEmails, 'All outreach emails');
-    // Auto-select if only one outreach account
-    if (outreachEmails.length === 1) {
-      document.getElementById('outreach-filter').value = outreachEmails[0];
-    }
-    // Apply deferred outreach pref (populated after dropdown is built)
-    if (_pendingOutreach) {
-      const el = document.getElementById('outreach-filter');
-      if ([...el.options].some(o => o.value === _pendingOutreach)) el.value = _pendingOutreach;
-      _pendingOutreach = '';
-    }
     // Apply all remaining prefs (static controls: filters, view, sort) after first load
     if (_loadedPrefs && !_prefsReady) {
       const sv = (id, v) => { if (v !== undefined) { const el = document.getElementById(id); if (el) el.value = v; } };
@@ -637,6 +731,8 @@ async function load() {
       if (_loadedPrefs.sort_col !== undefined) _sortCol = _loadedPrefs.sort_col;
       if (_loadedPrefs.sort_asc !== undefined) _sortAsc  = _loadedPrefs.sort_asc;
       if (_loadedPrefs.side_open) { _sideOpen = true; _updateSidePanelBtn(); _updateSidePanelVisibility(); }
+      if (_loadedPrefs.sp_channels_open !== undefined) _spChannelsOpen = !!_loadedPrefs.sp_channels_open;
+      if (_loadedPrefs.sp_company_open  !== undefined) _spCompanyOpen  = !!_loadedPrefs.sp_company_open;
       if (_sortCol) {
         document.querySelectorAll('.bb-sortable').forEach(th => {
           const ic = th.querySelector('.sort-icon'); if (!ic) return;
@@ -648,7 +744,7 @@ async function load() {
     _prefsReady = true;
     applyFilter();
   } catch (e) {
-    setTbody(`<tr><td colspan="9" class="text-center py-5 text-danger small">
+    setTbody(`<tr><td colspan="10" class="text-center py-5 text-danger small">
       <i class="ti ti-alert-circle me-1"></i>${escapeHtml(e.message)}</td></tr>`);
     console.error('[crm_follow] load error:', e);
   }
@@ -752,7 +848,6 @@ function applyFilter() {
   if (_prefsReady) _savePrefsDebounced();
   const q   = document.getElementById('search').value.toLowerCase();
 
-  const out = document.getElementById('outreach-filter').value;
   const fu  = document.getElementById('followup-filter').value;
   const imp = document.getElementById('importance-filter').value;
   const cst = document.getElementById('contact-status-filter').value;
@@ -762,7 +857,6 @@ function applyFilter() {
   const weekEnd = _weekEnd();
 
   let list = allRows.filter(r => {
-    if (out && r.outreach_email !== out) return false;
     if (fu === '__none__') { if (r.followup_status) return false; }
     else if (fu && r.followup_status !== fu) return false;
     if (imp === '__none__') { if (r.followup_importance) return false; }
@@ -823,6 +917,11 @@ const GROUP_FIELDS = {
     order:   null,
     labelFn: v => v || '(no owner)',
   },
+  followup_owner: {
+    label:   'Follow-up owner',
+    order:   null,
+    labelFn: v => v || '(unassigned)',
+  },
   followup_date: {
     label:   'Follow-up date',
     order:   null,
@@ -869,7 +968,7 @@ function render(list) {
     const rowCls  = dueCls === 'overdue' ? 'row-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'row-due-soon' : '';
     const dateCls = dueCls === 'overdue' ? 'date-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'date-due-soon' : '';
 
-    return `<tr data-doc="${escapeHtml(r.doc_path)}" class="${rowCls}" onclick="onRowClick(event,${gidx})" style="cursor:pointer">
+    return `<tr data-doc="${escapeHtml(r.doc_path)}" class="follow-data-row ${rowCls}" onclick="onRowClick(event,${gidx})" style="cursor:pointer">
       <td class="text-center"><input type="checkbox" class="form-check-input row-chk"
         data-gidx="${gidx}" onchange="onRowCheck(this)"></td>
       <td class="d-none d-lg-table-cell">${statusBadge(r.status)}</td>
@@ -927,9 +1026,17 @@ function render(list) {
           ${IMPORTANCE_LEVELS.map(i=>`<option value="${i.value}"${r.followup_importance===i.value?' selected':''}>${i.label}</option>`).join('')}
         </select>
       </td>
+      <td class="d-none d-xl-table-cell">
+        <select class="follow-select"
+          data-gidx="${gidx}" data-field="followup_owner"
+          onchange="saveField(this)">
+          <option value="">—</option>
+          ${_allUsers.map(u=>`<option value="${escapeHtml(u.email)}"${r.followup_owner===u.email?' selected':''}>${escapeHtml(u.displayName ? u.displayName+' ('+u.email+')' : u.email)}</option>`).join('')}
+        </select>
+      </td>
     </tr>
     <tr class="follow-comment-row">
-      <td colspan="9">
+      <td colspan="10">
         <div class="d-flex align-items-center gap-2 comment-row-inner">
           <i class="ti ti-message-circle comment-row-icon"></i>
           <textarea class="follow-input comment-row-input flex-grow-1"
@@ -947,7 +1054,7 @@ function render(list) {
       </td>
     </tr>
     <tr class="follow-history-row" id="hist-${gidx}" style="display:none">
-      <td colspan="9" class="hist-row-td">${renderHistoryContent(r.comment_history)}</td>
+      <td colspan="10" class="hist-row-td">${renderHistoryContent(r.comment_history)}</td>
     </tr>`;
   }).join(''));
   restoreChecks();
@@ -979,7 +1086,7 @@ function _contactRowsHtml(r) {
   const dueCls  = dueDateClass(r.followup_date);
   const rowCls  = dueCls === 'overdue' ? 'row-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'row-due-soon' : '';
   const dateCls = dueCls === 'overdue' ? 'date-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'date-due-soon' : '';
-  return `<tr data-doc="${escapeHtml(r.doc_path)}" class="${rowCls}" onclick="onRowClick(event,${gidx})" style="cursor:pointer">
+  return `<tr data-doc="${escapeHtml(r.doc_path)}" class="follow-data-row ${rowCls}" onclick="onRowClick(event,${gidx})" style="cursor:pointer">
       <td class="text-center"><input type="checkbox" class="form-check-input row-chk"
         data-gidx="${gidx}" onchange="onRowCheck(this)"></td>
       <td class="d-none d-lg-table-cell">${statusBadge(r.status)}</td>
@@ -1037,9 +1144,17 @@ function _contactRowsHtml(r) {
           ${IMPORTANCE_LEVELS.map(i=>`<option value="${i.value}"${r.followup_importance===i.value?' selected':''}>${i.label}</option>`).join('')}
         </select>
       </td>
+      <td class="d-none d-xl-table-cell">
+        <select class="follow-select"
+          data-gidx="${gidx}" data-field="followup_owner"
+          onchange="saveField(this)">
+          <option value="">—</option>
+          ${_allUsers.map(u=>`<option value="${escapeHtml(u.email)}"${r.followup_owner===u.email?' selected':''}>${escapeHtml(u.displayName ? u.displayName+' ('+u.email+')' : u.email)}</option>`).join('')}
+        </select>
+      </td>
     </tr>
     <tr class="follow-comment-row">
-      <td colspan="9">
+      <td colspan="10">
         <div class="d-flex align-items-center gap-2 comment-row-inner">
           <i class="ti ti-message-circle comment-row-icon"></i>
           <textarea class="follow-input comment-row-input flex-grow-1"
@@ -1057,7 +1172,7 @@ function _contactRowsHtml(r) {
       </td>
     </tr>
     <tr class="follow-history-row" id="hist-${gidx}" style="display:none">
-      <td colspan="9" class="hist-row-td">${renderHistoryContent(r.comment_history)}</td>
+      <td colspan="10" class="hist-row-td">${renderHistoryContent(r.comment_history)}</td>
     </tr>`;
 }
 
@@ -1097,7 +1212,7 @@ function renderGrouped(list) {
     _groupDocPaths[pKey] = pRows.map(r => r.doc_path);
 
     html += `<tr class="group-header-row" data-group-hdr="${escapeHtml(pKey)}" onclick="toggleGroup('${escapeHtml(pKey)}')">
-      <td colspan="9"><input type="checkbox" class="form-check-input group-chk" data-gkey="${escapeHtml(pKey)}" onclick="toggleGroupSelect(event,'${escapeHtml(pKey)}')" tabindex="-1"><i class="ti ti-tag me-1"></i>${escapeHtml(pLabel)}<span class="group-count">${pRows.length} contact${pRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${pCollapsed ? ' collapsed' : ''}"></i></td>
+      <td colspan="10"><input type="checkbox" class="form-check-input group-chk" data-gkey="${escapeHtml(pKey)}" onclick="toggleGroupSelect(event,'${escapeHtml(pKey)}')" tabindex="-1"><i class="ti ti-tag me-1"></i>${escapeHtml(pLabel)}<span class="group-count">${pRows.length} contact${pRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${pCollapsed ? ' collapsed' : ''}"></i></td>
     </tr>`;
 
     if (pCollapsed) return;
@@ -1113,7 +1228,7 @@ function renderGrouped(list) {
         _groupDocPaths[sKey] = sRows.map(r => r.doc_path);
 
         html += `<tr class="group-subheader-row" data-group-hdr="${escapeHtml(sKey)}" onclick="toggleGroup('${escapeHtml(sKey)}')">
-          <td colspan="9"><input type="checkbox" class="form-check-input group-chk" data-gkey="${escapeHtml(sKey)}" onclick="toggleGroupSelect(event,'${escapeHtml(sKey)}')" tabindex="-1"><i class="ti ti-corner-down-right me-1"></i>${escapeHtml(sLabel)}<span class="group-count">${sRows.length} contact${sRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${sCollapsed ? ' collapsed' : ''}"></i></td>
+          <td colspan="10"><input type="checkbox" class="form-check-input group-chk" data-gkey="${escapeHtml(sKey)}" onclick="toggleGroupSelect(event,'${escapeHtml(sKey)}')" tabindex="-1"><i class="ti ti-corner-down-right me-1"></i>${escapeHtml(sLabel)}<span class="group-count">${sRows.length} contact${sRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${sCollapsed ? ' collapsed' : ''}"></i></td>
         </tr>`;
 
         if (!sCollapsed) html += sRows.map(r => _contactRowsHtml(r)).join('');
@@ -1164,6 +1279,7 @@ function closeSidePanel() {
 
 function toggleSpChannels() {
   _spChannelsOpen = !_spChannelsOpen;
+  if (_prefsReady) saveUserPrefs();
   const body = document.querySelector('.sp-channels-body');
   const icon = document.querySelector('.sp-channels-section .sp-collapsible .ti');
   if (body) body.style.display = _spChannelsOpen ? 'block' : 'none';
@@ -1236,6 +1352,7 @@ function openSidePanel(gidx) {
   if (tr) tr.classList.add('row-sp-active');
   try {
     document.getElementById('sp-body').innerHTML = _renderSidePanel(row);
+    _loadSpCompany(row);
   } catch(e) {
     console.error('[side-panel] render error:', e);
     document.getElementById('sp-body').innerHTML =
@@ -1300,6 +1417,15 @@ function _renderSidePanel(r) {
         onfocus="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
         oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
         rows="1">${escapeHtml(r.followup_comment || '')}</textarea>
+    </div>
+    <div class="sp-section" id="sp-company-section">
+      <div class="sp-section-label sp-collapsible" onclick="toggleSpCompany()" style="cursor:pointer;user-select:none">
+        <i class="ti ti-building me-1" style="font-size:13px"></i>Company
+        <i class="ti ${_spCompanyOpen ? 'ti-chevron-up' : 'ti-chevron-down'} ms-1" style="font-size:12px;vertical-align:middle"></i>
+      </div>
+      <div class="sp-company-body" style="display:${_spCompanyOpen ? 'block' : 'none'}">
+        <div class="small sp-muted py-1">Loading…</div>
+      </div>
     </div>
     <div class="sp-section sp-channels-section">
       <div class="sp-section-label sp-collapsible" onclick="toggleSpChannels()" style="cursor:pointer;user-select:none">
@@ -1373,11 +1499,98 @@ function _renderSidePanel(r) {
           ${impOpts}
         </select>
       </div>
+      <div class="sp-row">
+        <i class="ti ti-user-check" style="margin-top:5px"></i>
+        <select class="follow-select small" data-gidx="${gidx}" data-field="followup_owner" onchange="saveField(this)">
+          <option value="">— unassigned —</option>
+          ${_allUsers.map(u=>`<option value="${escapeHtml(u.email)}"${r.followup_owner===u.email?' selected':''}>${escapeHtml(u.displayName ? u.displayName+' ('+u.email+')' : u.email)}</option>`).join('')}
+        </select>
+      </div>
     </div>
     <div class="sp-section" id="sp-history-section">
       ${_spHistoryHtml(r)}
     </div>
 `;
+}
+
+function toggleSpCompany() {
+  _spCompanyOpen = !_spCompanyOpen;
+  if (_prefsReady) saveUserPrefs();
+  const body = document.querySelector('#sp-company-section .sp-company-body');
+  const icon = document.querySelector('#sp-company-section .sp-collapsible .ti-chevron-up, #sp-company-section .sp-collapsible .ti-chevron-down');
+  if (body) body.style.display = _spCompanyOpen ? 'block' : 'none';
+  if (icon) { icon.classList.toggle('ti-chevron-up', _spCompanyOpen); icon.classList.toggle('ti-chevron-down', !_spCompanyOpen); }
+}
+
+async function _loadSpCompany(r) {
+  const section = document.getElementById('sp-company-section');
+  if (!section) return;
+  const body = section.querySelector('.sp-company-body');
+  if (!body) return;
+  if (!r.website) {
+    body.innerHTML = '<div class="small sp-muted py-1">No website on this contact.</div>';
+    return;
+  }
+  const domain = r.website.replace(/^https?:\/\//, '').replace(/\/$/, '').split('/')[0];
+  try {
+    const resp = await fetch(`${BASE}/api/crm/leads/by-domain/${encodeURIComponent(domain)}`);
+    if (!resp.ok) { body.innerHTML = '<div class="small sp-muted py-1">No company data found.</div>'; return; }
+    const d = await resp.json();
+    const LABEL = {
+      location:              'Location',
+      location_country:      'Country',
+      ai_company_type:       'Type',
+      ai_sector:             'Sector',
+      ai_platform:           'Platform',
+      page_count:            'Pages',
+      title:                 'Page title',
+      description:           'Description',
+      ai_summary:            'AI summary',
+      ai_reseller_potential: 'Reseller potential',
+      ai_client_base:        'Client base',
+      reseller_score:        'Score',
+      ai_specialisation:     'Specialisation',
+    };
+    const ORDER = Object.keys(LABEL);
+    let rows = '';
+    for (const key of ORDER) {
+      const val = d[key];
+      if (val === undefined || val === null || val === '' || (Array.isArray(val) && !val.length)) continue;
+      let display = '';
+      if (Array.isArray(val)) {
+        display = val.map(v => `<span class="bb-pill">${escapeHtml(String(v))}</span>`).join('');
+      } else if (key === 'ai_summary') {
+        display = `<em style="font-size:11px;line-height:1.5;color:#555">${escapeHtml(String(val))}</em>`;
+      } else if (key === 'description') {
+        display = `<span style="font-size:11px;line-height:1.5;color:#555">${escapeHtml(String(val))}</span>`;
+      } else if (key === 'ai_reseller_potential') {
+        const color = val === 'high' ? '#15803d' : val === 'medium' ? '#92400e' : '#6b7280';
+        display = `<span style="font-weight:500;color:${color}">${escapeHtml(String(val))}</span>`;
+      } else if (key === 'page_count') {
+        const band = val > 100000 ? 'ultra' : val > 10000 ? 'huge' : val > 3000 ? 'large' : val > 500 ? 'medium' : val > 50 ? 'small' : 'micro';
+        display = `${Number(val).toLocaleString()} <span style="font-size:11px;color:var(--bb-muted)">(${band})</span>`;
+      } else {
+        display = escapeHtml(String(val));
+      }
+      rows += `<div class="bb-field-label">${LABEL[key]}</div><div class="bb-field-value">${display}</div>`;
+    }
+    const pipeBadge = d.source_pipeline === 'leads'
+      ? '<span class="bb-pill" style="background:#dcfce7;color:#15803d;margin-bottom:6px;display:inline-block">leads pipeline</span>'
+      : d.source_pipeline === 'site_leads'
+        ? '<span class="bb-pill" style="background:#dbeafe;color:#1d4ed8;margin-bottom:6px;display:inline-block">site pipeline</span>'
+        : '';
+    if (d.company) {
+      const companyEl = section.querySelector('.sp-section-label');
+      if (companyEl) companyEl.innerHTML = `<i class="ti ti-building me-1" style="font-size:13px"></i>${escapeHtml(d.company)} <i class="ti ${_spCompanyOpen ? 'ti-chevron-up' : 'ti-chevron-down'} ms-1" style="font-size:12px;vertical-align:middle"></i>`;
+    }
+    if (!rows) {
+      body.innerHTML = pipeBadge + '<div class="small sp-muted py-1">No detailed company data.</div>';
+    } else {
+      body.innerHTML = (pipeBadge ? `<div>${pipeBadge}</div>` : '') + `<div class="bb-field-grid sp-company-grid">${rows}</div>`;
+    }
+  } catch(e) {
+    body.innerHTML = `<div class="small text-danger py-1">Error: ${escapeHtml(e.message)}</div>`;
+  }
 }
 
 function _spHistoryHtml(r) {
@@ -1449,12 +1662,14 @@ function buildLocalHistoryEntry(field, value, user) {
     followup_comment:    'COMMENT',
     followup_date:       'FOLLOWUP',
     followup_importance: 'IMPORTANCE',
+    followup_owner:      'OWNER',
   };
   const textMap = {
     followup_status:     v => { const l = (FU_STATUSES.find(s => s.value === v) || {}).label || v || '(none)'; return `Status → ${l}`; },
     followup_comment:    v => v || '(comment cleared)',
     followup_date:       v => v ? `Follow-up date set to ${v}` : 'Follow-up date cleared',
     followup_importance: v => { const l = (IMPORTANCE_LEVELS.find(i => i.value === v) || {}).label || v || '(none)'; return `Importance → ${l}`; },
+    followup_owner:      v => v ? `Owner → ${v}` : 'Owner cleared',
   };
   if (!typeMap[field]) return null;
   return { date: new Date().toISOString(), user, text: textMap[field](value), type: typeMap[field] };
@@ -1524,7 +1739,7 @@ async function applyBatchDate() {
 
 // ── Action bar panel helpers ─────────────────────────────────────────────────
 
-const _ACTION_PANELS = ['batch-date-panel', 'move-panel'];
+const _ACTION_PANELS = ['batch-date-panel', 'move-panel', 'assign-owner-panel'];
 
 function _showActionPanel(id) {
   _ACTION_PANELS.forEach(p => {
@@ -1535,6 +1750,8 @@ function _showActionPanel(id) {
   document.getElementById('ab-date-btn').classList.toggle('btn-outline-primary', id !== 'batch-date-panel');
   document.getElementById('ab-move-btn').classList.toggle('btn-secondary', id === 'move-panel');
   document.getElementById('ab-move-btn').classList.toggle('btn-outline-secondary', id !== 'move-panel');
+  document.getElementById('ab-owner-btn').classList.toggle('btn-secondary', id === 'assign-owner-panel');
+  document.getElementById('ab-owner-btn').classList.toggle('btn-outline-secondary', id !== 'assign-owner-panel');
 }
 
 function _hideActionPanel(id) {
@@ -1545,6 +1762,61 @@ function _hideActionPanel(id) {
   if (id === 'move-panel') {
     document.getElementById('ab-move-btn').classList.replace('btn-secondary', 'btn-outline-secondary');
   }
+  if (id === 'assign-owner-panel') {
+    document.getElementById('ab-owner-btn').classList.replace('btn-secondary', 'btn-outline-secondary');
+  }
+}
+
+// ── Assign owner (batch) ─────────────────────────────────────────────────────
+
+function showAssignOwnerPanel() {
+  if (!selected.size) return;
+  _showActionPanel('assign-owner-panel');
+  document.getElementById('assign-owner-count').textContent = selected.size;
+  document.getElementById('assign-owner-status').textContent = '';
+  const sel = document.getElementById('assign-owner-select');
+  sel.innerHTML = '<option value="">— clear owner —</option>'
+    + _allUsers.map(u => `<option value="${escapeHtml(u.email)}">${escapeHtml(u.displayName ? u.displayName + ' (' + u.email + ')' : u.email)}</option>`).join('');
+}
+
+function hideAssignOwnerPanel() {
+  _hideActionPanel('assign-owner-panel');
+}
+
+async function applyAssignOwner() {
+  const ownerEmail = document.getElementById('assign-owner-select').value;
+  const statusEl   = document.getElementById('assign-owner-status');
+  const btn        = document.getElementById('assign-owner-apply-btn');
+  const rows       = allRows.filter(r => selected.has(r.doc_path));
+  if (!rows.length) return;
+
+  btn.disabled = true;
+  statusEl.style.color = 'var(--bb-muted)';
+  statusEl.textContent = `Updating ${rows.length} contact${rows.length === 1 ? '' : 's'}…`;
+
+  let done = 0, errors = 0;
+  for (const r of rows) {
+    try {
+      await apiPatchContact(r, { followup_owner: ownerEmail });
+      r.followup_owner = ownerEmail;
+      buildLocalHistoryEntry(r, 'followup_owner', ownerEmail);
+      done++;
+    } catch(e) {
+      errors++;
+      console.error('[assign-owner]', r.email, e.message);
+    }
+  }
+
+  if (errors) {
+    statusEl.style.color = '#dc2626';
+    statusEl.textContent = `Done with ${errors} error${errors === 1 ? '' : 's'}.`;
+  } else {
+    hideAssignOwnerPanel();
+    clearSelection();
+  }
+
+  btn.disabled = false;
+  applyFilter();
 }
 
 // ── Move contacts ────────────────────────────────────────────────────────────
@@ -1760,12 +2032,10 @@ async function syncContactEmails(gidx, btn) {
   btn.classList.add('spinning'); btn.disabled = true;
   try {
     const days     = parseInt(document.getElementById('sync-period')?.value || '7', 10);
-    const outreach = document.getElementById('outreach-filter')?.value || '';
     const res  = await fetchJSON(`${BASE}/api/crm/followup-email-sync`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ campaign_id: row.campaign_id, contact_doc_id: row.doc_id, days,
-                                ...(outreach ? { outreach_account: outreach } : {}) }),
+      body:    JSON.stringify({ campaign_id: row.campaign_id, contact_doc_id: row.doc_id, days }),
     });
     setFeedback(
       `<i class="ti ti-clock me-1"></i>Email sync queued <code>${res.job_id}</code>`
@@ -1802,14 +2072,12 @@ async function syncAllEmails() {
   try {
     const days     = parseInt(document.getElementById('sync-period')?.value || '7', 10);
     const camp     = document.getElementById('campaign-filter')?.value || '';
-    const outreach = document.getElementById('outreach-filter')?.value || '';
     const res  = await fetchJSON(`${BASE}/api/crm/followup-email-sync`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
         days,
-        ...(camp     ? { campaign_id:      camp }     : {}),
-        ...(outreach ? { outreach_account: outreach } : {}),
+        ...(camp ? { campaign_id: camp } : {}),
       }),
     });
     setFeedback(
@@ -1979,48 +2247,50 @@ function _savePrefsDebounced() {
 async function saveUserPrefs() {
   if (!_prefsReady) return;
   const prefs = {
-    owner:                  document.getElementById('owner-header')?.value          || '',
-    campaign:               document.getElementById('campaign-filter')?.value       || '',
-    outreach:               document.getElementById('outreach-filter')?.value       || '',
-    sync_period:            document.getElementById('sync-period')?.value           || '7',
-    view:                   _currentView,
-    group_primary:          document.getElementById('group-primary')?.value         || 'followup_status',
-    group_secondary:        document.getElementById('group-secondary')?.value       || '',
-    search:                 document.getElementById('search')?.value                || '',
-    filter_followup_status: document.getElementById('followup-filter')?.value       || '',
-    filter_importance:      document.getElementById('importance-filter')?.value     || '',
-    filter_contact_status:  document.getElementById('contact-status-filter')?.value || '',
-    filter_due:             document.getElementById('due-filter')?.value            || '',
-    sort_col:               _sortCol,
-    sort_asc:               _sortAsc,
-    side_open:              _sideOpen,
+    owner:                 document.getElementById('owner-header')?.value       || '',
+    campaign:              document.getElementById('campaign-filter')?.value    || '',
+    filter_followup_status: document.getElementById('followup-filter')?.value   || '',
+    filter_importance:     document.getElementById('importance-filter')?.value  || '',
+    filter_contact_status: document.getElementById('contact-status-filter')?.value || '',
+    filter_due:            document.getElementById('due-filter')?.value         || '',
+    search:                document.getElementById('search')?.value             || '',
+    group_primary:         document.getElementById('group-primary')?.value      || '',
+    group_secondary:       document.getElementById('group-secondary')?.value    || '',
+    view:                  _currentView,
+    sort_col:              _sortCol,
+    sort_asc:              _sortAsc,
+    side_open:             _sideOpen,
+    sync_period:           document.getElementById('sync-period')?.value        || '',
+    sp_channels_open:      _spChannelsOpen,
+    sp_company_open:       _spCompanyOpen,
   };
   try {
-    await fetchJSON(BASE + '/api/crm/user-prefs?page=followup', {
+    await fetchJSON(`${BASE}/api/crm/user-prefs?page=followup`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(prefs),
     });
-  } catch (e) {
-    console.warn('[prefs] save failed:', e.message);
-  }
+  } catch(e) { /* silent — prefs are best-effort */ }
 }
 
 async function loadUserPrefs() {
-  // Fetch prefs and store. All application happens inside load() once dropdowns are ready.
   try {
-    const prefs = await fetchJSON(BASE + '/api/crm/user-prefs?page=followup');
-    if (prefs && Object.keys(prefs).length) {
-      _loadedPrefs = prefs;
-      if (prefs.outreach) _pendingOutreach = prefs.outreach;
-    }
-  } catch (e) {
-    console.warn('[prefs] load failed:', e.message);
+    const prefs = await fetchJSON(`${BASE}/api/crm/user-prefs?page=followup`);
+    _loadedPrefs = prefs || {};
+  } catch(e) {
+    _loadedPrefs = {};
   }
-  // _prefsReady is set inside load() after all prefs are applied
 }
 
-(async () => { await loadUserPrefs(); load(); })();
+// ── Page init ─────────────────────────────────────────────────────────────────
+
+(async () => {
+  await requireAuth();
+  requireRole(['campaign-user', 'admin']);
+  await loadUserPrefs();
+  await load();
+})();
+
 </script>
 </body>
 </html>

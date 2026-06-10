@@ -8,13 +8,14 @@ bp = Blueprint("contacts", __name__)
 
 # ── Follow-up field helpers ───────────────────────────────────────────────────
 
-_FOLLOWUP_FIELDS = {"followup_date", "followup_status", "followup_comment", "followup_importance"}
+_FOLLOWUP_FIELDS = {"followup_date", "followup_status", "followup_comment", "followup_importance", "followup_owner"}
 
 _FOLLOWUP_HISTORY_TYPE = {
     "followup_status":     "STATUS",
     "followup_comment":    "COMMENT",
     "followup_date":       "FOLLOWUP",
     "followup_importance": "IMPORTANCE",
+    "followup_owner":      "OWNER",
 }
 
 
@@ -27,6 +28,8 @@ def _followup_history_text(field: str, value: str) -> str:
         return f"Follow-up date set to {value}" if value else "Follow-up date cleared"
     if field == "followup_importance":
         return f"Importance → {value}" if value else "Importance cleared"
+    if field == "followup_owner":
+        return f"Owner → {value}" if value else "Owner cleared"
     return value
 
 
@@ -67,6 +70,7 @@ def get_campaign_contact(campaign_id, doc_id):
             "followup_status":     d.get("followup_status", "") or "",
             "followup_comment":    d.get("followup_comment", "") or "",
             "followup_importance": d.get("followup_importance", "") or "",
+            "followup_owner":      d.get("followup_owner", "") or "",
             "comment_history":     _safe_history(d.get("comment_history", [])),
             "new_mail":            bool(d.get("new_mail", False)),
         })
@@ -250,11 +254,21 @@ def followup_contacts():
             cid   = parts[1] if len(parts) >= 4 else campaign_id
             info  = camp_map.get(cid, {})
             if owner_filter:
+                fu_owner   = d.get("followup_owner", "") or ""
+                camp_owner = info.get("owner", "") or ""
                 if owner_filter == "__none__":
-                    if info.get("owner", ""):
+                    # no followup_owner AND no campaign owner
+                    if fu_owner or camp_owner:
                         continue
-                elif info.get("owner", "") != owner_filter:
-                    continue
+                else:
+                    # 1. explicit followup_owner match
+                    # 2. fallback: campaign owner matches AND no followup_owner set
+                    if fu_owner:
+                        if fu_owner != owner_filter:
+                            continue
+                    else:
+                        if camp_owner != owner_filter:
+                            continue
             contacts.append({
                 "campaign_id":         cid,
                 "doc_id":              doc.id,
@@ -268,6 +282,7 @@ def followup_contacts():
                 "followup_status":     d.get("followup_status", "") or "",
                 "followup_comment":    d.get("followup_comment", "") or "",
                 "followup_importance": d.get("followup_importance", "") or "",
+                "followup_owner":      d.get("followup_owner", "") or "",
                 "comment_history":     _safe_history(d.get("comment_history", [])),
                 "phone":               d.get("phone", "") or "",
                 "linkedin":            d.get("linkedin", "") or "",
@@ -291,7 +306,7 @@ def followup_contacts():
 
 @bp.route("/api/crm/followup-meta", methods=["GET"])
 def followup_meta():
-    """Return owners and campaigns for populating the follow-up page header dropdowns."""
+    """Return owners, campaigns and users for populating the follow-up page dropdowns."""
     try:
         db = _get_db()
         owners = []
@@ -308,6 +323,18 @@ def followup_meta():
                 owners.append(owner)
         owners.sort()
         campaigns.sort(key=lambda c: c["id"])
-        return jsonify({"owners": owners, "campaigns": campaigns})
+
+        # Users for the followup_owner dropdown
+        users = []
+        for doc in (db.collection("settings").document("users")
+                      .collection("users").order_by("email").limit(500).stream()):
+            d = doc.to_dict() or {}
+            email = d.get("email") or doc.id
+            users.append({
+                "email":       email,
+                "displayName": d.get("displayName", "") or "",
+            })
+
+        return jsonify({"owners": owners, "campaigns": campaigns, "users": users})
     except Exception as exc:
         return _err(str(exc), 500)
