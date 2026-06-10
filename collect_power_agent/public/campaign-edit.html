@@ -28,7 +28,7 @@
     <div class="d-flex align-items-center gap-2">
       <a id="back-link" href="campaigns.html" class="btn btn-sm btn-outline-secondary" onclick="return goBack()"><i class="ti ti-arrow-left"></i></a>
       <div>
-        <div class="fw-600" style="font-size:1rem">Mail editor</div>
+        <div class="fw-600" style="font-size:1rem">Mail editor<span id="page-step-label" style="display:none;color:var(--bb-muted);font-weight:400"> — <span id="page-step-name"></span></span></div>
         <div class="small" style="color:var(--bb-muted)" id="c-campaign-id">loading…</div>
       </div>
     </div>
@@ -254,6 +254,7 @@ const CAMPAIGN_ID = urlParams.get('campaign_id') || '';
 const STEP_ID     = urlParams.get('step') || '';        // editing a mail_schedule step
 const STEP_NEW    = urlParams.get('step_new') === '1';  // brand-new step
 const STEP_DELAY  = parseInt(urlParams.get('delay') || '0', 10);
+const STEP_NAME   = urlParams.get('step_name') || '';   // preset name (Intro, Reminder 1, …)
 
 let quill = null;
 let _saveTimer = null;
@@ -485,6 +486,14 @@ const _DEFAULT_CSS = `.mail-wrap, .mail-wrap p, .mail-wrap div, .mail-wrap span,
 .mail-wrap ul, .mail-wrap ol { margin: 0 0 8px 20px; padding: 0; }
 .mail-wrap li { margin-bottom: 4px; }`;
 
+function _updateStepLabel(name) {
+  const lbl = document.getElementById('page-step-label');
+  const nm  = document.getElementById('page-step-name');
+  if (!lbl || !nm) return;
+  if (name) { nm.textContent = name; lbl.style.display = ''; }
+  else { lbl.style.display = 'none'; }
+}
+
 function _applyMail(mail) {
   const mt = mail.type || 'plain';
   document.getElementById('c-subject').value   = mail.subject || '';
@@ -523,11 +532,14 @@ async function loadCampaign() {
         document.getElementById('step-name').value  = step.name || '';
         document.getElementById('step-delay').value = step.delay_days != null ? step.delay_days : 0;
         _applyMail(step.mail || {});
+        _updateStepLabel(step.name || '');
       } else {
-        // New step — pre-fill delay from URL param
-        document.getElementById('step-name').value  = '';
+        // New step — pre-fill name, delay, and subject from URL params
+        document.getElementById('step-name').value  = STEP_NAME;
         document.getElementById('step-delay').value = isNaN(STEP_DELAY) ? 0 : STEP_DELAY;
+        if (STEP_NAME) document.getElementById('c-subject').value = STEP_NAME;
         _applyMail({});
+        _updateStepLabel(STEP_NAME);
       }
     } else {
       _applyMail(c.mail || {});

@@ -270,6 +270,7 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
       <option value="__none__">No status set</option>
       <option value="open">Open</option>
       <option value="contacted">Contacted</option>
+      <option value="send_mail">Send mail</option>
       <option value="replied">Replied</option>
       <option value="meeting">Meeting booked</option>
       <option value="offer_sent">Offer sent</option>
@@ -329,6 +330,10 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
     <div id="batch-date-panel" class="action-bar-panel" style="display:none">
       <label class="small fw-500 mb-0" style="color:var(--bb-muted)">Date</label>
       <input type="date" id="batch-date-input" class="form-control form-control-sm" style="max-width:160px">
+      <label class="small fw-500 mb-0" style="color:var(--bb-muted)">Status</label>
+      <select id="batch-date-status-select" class="form-select form-select-sm" style="max-width:180px">
+        <option value="">— keep current —</option>
+      </select>
       <label class="small fw-500 mb-0" style="color:var(--bb-muted)">Comment</label>
       <input type="text" id="batch-date-comment" class="form-control form-control-sm" style="max-width:280px" placeholder="Optional note…">
       <button class="btn btn-sm btn-primary" onclick="applyBatchDate()">
@@ -794,6 +799,7 @@ const FU_STATUSES = [
   { value: '',               label: '— none —' },
   { value: 'open',           label: 'Open' },
   { value: 'contacted',      label: 'Contacted' },
+  { value: 'send_mail',      label: 'Send mail' },
   { value: 'replied',        label: 'Replied' },
   { value: 'meeting',        label: 'Meeting booked' },
   { value: 'offer_sent',     label: 'Offer sent' },
@@ -1463,6 +1469,11 @@ function getSyncCutoff() {
 }
 
 function showBatchDatePanel() {
+  // Populate status options from FU_STATUSES (skip the '— none —' blank entry)
+  const sel = document.getElementById('batch-date-status-select');
+  sel.innerHTML = '<option value="">— keep current —</option>'
+    + FU_STATUSES.filter(s => s.value).map(s =>
+        `<option value="${s.value}">${escapeHtml(s.label)}</option>`).join('');
   _showActionPanel('batch-date-panel');
   document.getElementById('batch-apply-count').textContent = selected.size;
   document.getElementById('batch-date-status').textContent = '';
@@ -1488,11 +1499,14 @@ async function applyBatchDate() {
   let done = 0, errors = 0;
   await Promise.all(rows.map(async r => {
     try {
+      const statusVal = document.getElementById('batch-date-status-select').value;
       const fields = { followup_date: date };
-      if (comment) fields.followup_comment = comment;
+      if (comment)   fields.followup_comment  = comment;
+      if (statusVal) fields.followup_status   = statusVal;
       await apiPatchContact(r, fields);
       r.followup_date = date;
-      if (comment) r.followup_comment = comment;
+      if (comment)   r.followup_comment = comment;
+      if (statusVal) r.followup_status  = statusVal;
       const user = (window._authUser && (window._authUser.email || window._authUser.uid)) || 'unknown';
       r.comment_history.push({ date: new Date().toISOString(), user,
         text: comment ? `Follow-up date set to ${date} — ${comment}` : `Follow-up date set to ${date}`,

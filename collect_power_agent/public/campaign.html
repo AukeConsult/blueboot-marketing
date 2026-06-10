@@ -135,13 +135,27 @@
         <span class="fw-500 small"><i class="ti ti-mail me-1 text-primary"></i>Mail schedule
           <span id="mail-schedule-count" class="ms-1" style="color:var(--bb-muted);font-weight:400"></span>
         </span>
-        <button class="btn btn-sm btn-outline-primary py-0" style="font-size:.78rem" onclick="addScheduleStep()">
-          <i class="ti ti-plus me-1"></i>Add step
-        </button>
+        <div class="d-flex align-items-center gap-2">
+          <button class="bb-btn-refresh" title="Refresh" onclick="refreshMailSchedule()"><i class="ti ti-refresh"></i></button>
+          <div class="dropdown">
+          <button class="btn btn-sm btn-outline-primary py-0 dropdown-toggle" style="font-size:.78rem"
+                  data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="ti ti-plus me-1"></i>Add step
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:160px;font-size:.85rem">
+            <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Intro');return false">
+              <i class="ti ti-mail me-2 text-primary"></i>Intro</a></li>
+            <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Reminder 1');return false">
+              <i class="ti ti-bell me-2 text-warning"></i>Reminder 1</a></li>
+            <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Reminder 2');return false">
+              <i class="ti ti-bell-ringing me-2 text-danger"></i>Reminder 2</a></li>
+          </ul>
+          </div>
+        </div>
       </div>
       <div id="mail-schedule-body" class="px-3 pt-2 pb-1">
         <div class="text-center py-3 small" style="color:var(--bb-muted)" id="mail-schedule-empty">
-          No mail steps yet — click <strong>Add step</strong> to create the first one.
+          No mail steps yet — use <strong>Add step</strong> to add Intro, Reminder 1, or Reminder 2.
         </div>
       </div>
     </div>
@@ -399,6 +413,11 @@ function toggleDetails() {
 }
 
 // ── Mail schedule ────────────────────────────────────────────────────────
+function refreshMailSchedule() {
+  const id = document.getElementById('campaign-select').value;
+  if (id) loadCampaign(id);
+}
+
 function renderMailSchedule(campaign) {
   const steps   = campaign.mail_schedule || [];
   const body    = document.getElementById('mail-schedule-body');
@@ -459,15 +478,23 @@ function renderMailSchedule(campaign) {
   });
 }
 
-function addScheduleStep() {
+const MAIL_STEP_DEFAULTS = {
+  'Intro':      { delay: 0  },
+  'Reminder 1': { delay: 5  },
+  'Reminder 2': { delay: 12 },
+};
+
+function addScheduleStep(name) {
   const id = document.getElementById('campaign-select').value;
   if (!id) return;
   const stepId = 'step_' + Date.now();
-  // guess next delay: last step's delay_days + 5, or 0 for first
-  const steps = (window._campaignData || {}).mail_schedule || [];
+  const steps  = (window._campaignData || {}).mail_schedule || [];
+  // Use preset delay if defined, otherwise increment from last step
+  const preset = name && MAIL_STEP_DEFAULTS[name];
   const lastDelay = steps.length ? (steps[steps.length - 1].delay_days ?? 0) : -5;
-  const delay = steps.length ? lastDelay + 5 : 0;
-  window.location.href = `campaign-edit.html?campaign_id=${encodeURIComponent(id)}&step=${encodeURIComponent(stepId)}&step_new=1&delay=${delay}`;
+  const delay = preset ? preset.delay : (steps.length ? lastDelay + 5 : 0);
+  const nameParam = name ? `&step_name=${encodeURIComponent(name)}` : '';
+  window.location.href = `campaign-edit.html?campaign_id=${encodeURIComponent(id)}&step=${encodeURIComponent(stepId)}&step_new=1&delay=${delay}${nameParam}`;
 }
 
 async function deleteScheduleStep(stepId, name) {
