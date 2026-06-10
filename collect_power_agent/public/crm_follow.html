@@ -193,17 +193,35 @@ tr.row-sp-active + .follow-comment-row > td { background: #eef0ff !important; }
 #follow-layout { display: flex; align-items: flex-start; gap: 0; }
 #follow-layout .bb-card { flex: 1; min-width: 0; }
 .follow-side-panel {
-  width: 0; overflow: hidden;
+  width: 0;
+  overflow: hidden;
   transition: width .2s ease, opacity .2s ease;
   opacity: 0;
   flex-shrink: 0;
 }
 .follow-side-panel.sp-open {
-  width: 25vw;
+  width: clamp(400px, 30vw, 550px);
   opacity: 1;
   margin-left: 12px;
 }
-.follow-side-panel .bb-card { width: 25vw; min-width: 25vw; }
+.follow-side-panel .bb-card {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Mobile drawer — overlay on small screens */
+#sp-backdrop {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.35); z-index: 1049;
+}
+@media (max-width: 767.98px) {
+  .follow-side-panel {
+    position: fixed; top: 0; right: 0; bottom: 0;
+    z-index: 1050; margin-left: 0 !important; opacity: 1 !important;
+  }
+  .follow-side-panel.sp-open { width: min(100vw, 420px); }
+  .follow-side-panel .bb-card { width: 100%; min-width: 0; border-radius: 0; border-right: none; border-top: none; border-bottom: none; }
+}
 tr.row-sp-active > td { background: #f0f2ff !important; }
 .sp-avatar {
   width: 42px; height: 42px; border-radius: 50%;
@@ -225,6 +243,13 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 .sp-company-grid .bb-field-value { font-size:11px; }
 .sp-btn-panel { display: flex; gap: .5rem; padding: 10px 14px; }
 .sp-ch-btn { color: var(--bb-accent) !important; background: #eef0ff; border-color: #c7ceff; }
+.sp-quick-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.sp-quick-actions .btn { font-size: .72rem; padding: 2px 7px; }
+.focus-active-note {
+  display: none; color: var(--bb-accent); background: #eef0ff;
+  border: 1px solid #c7ceff; border-radius: 5px; padding: 2px 7px; font-size: .74rem;
+}
+.focus-active-note.is-active { display: inline-flex; align-items: center; gap: 4px; }
 .group-header-row td .group-count {
   font-weight: 400;
   color: var(--bb-muted);
@@ -256,6 +281,43 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 }
 .hdr-group-actions {
   background: #f3f4f6; border: 1px solid #e5e7eb;
+}
+
+/* Responsive header */
+.page-header-top { display: flex; align-items: center; justify-content: space-between; }
+.hdr-toggle-btn {
+  border: 1px solid var(--bb-border); background: #fff; color: var(--bb-muted);
+  border-radius: 6px; padding: 5px 9px; cursor: pointer; font-size: .95rem;
+  display: none; align-items: center; gap: 4px; line-height: 1;
+  transition: border-color .15s, color .15s;
+}
+.hdr-toggle-btn:hover { border-color: var(--bb-accent); color: var(--bb-accent); }
+
+@media (max-width: 767.98px) {
+  /* Keep header as a single row (title left, hamburger right) */
+  .page-header { position: relative; flex-direction: row !important; align-items: center !important; }
+  .hdr-toggle-btn { display: inline-flex; }
+  /* Action groups become an absolute dropdown panel */
+  #hdr-action-groups {
+    display: none !important;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 350;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.14);
+    padding: 12px;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    min-width: 280px;
+  }
+  #hdr-action-groups.hdr-open { display: flex !important; }
+  .hdr-group { width: 100%; flex-wrap: wrap; }
+  .hdr-group .group-select,
+  .hdr-group .bb-header-select { max-width: 100% !important; width: 100% !important; flex: 1; }
 }
 
 /* Primary header selectors — owner and campaign — more prominent */
@@ -295,17 +357,254 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 .action-bar-panel { border-top: 1px solid #c7ceff; padding: .6rem .85rem;
   background: #f5f6ff; display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
 
+/* ── Scrollable tbody: only the contact list scrolls ─────────────────────── */
+html, body { height: 100%; overflow: hidden; }
+body { display: flex; flex-direction: column; }
+#main-container { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; max-width: none !important; }
+#follow-layout { flex: 1; min-height: 0; align-items: stretch; overflow: hidden; }
+#follow-layout > .bb-card { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+#follow-layout > .bb-card .table-responsive { flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; scrollbar-gutter: stable; }
+/* Sticky thead inside the scrolling container */
+.bb-thead th { position: sticky; top: 0; z-index: 2; background: #f9fafb; box-shadow: 0 1px 0 #e5e7eb; overflow: hidden; }
+/* Clip cell content — text truncates, nothing escapes column */
+#follow-layout > .bb-card td, #follow-layout > .bb-card th { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Allow comment row and history row to wrap normally */
+#follow-layout > .bb-card .follow-comment-row td,
+#follow-layout > .bb-card .follow-history-row td { white-space: normal; overflow: visible; }
+/* Side panel: stretch to full layout height, inner body scrolls */
+.follow-side-panel { align-self: stretch; }
+.follow-side-panel .bb-card { height: 100%; display: flex; flex-direction: column; }
+#sp-body { flex: 1; overflow-y: auto; min-height: 0; max-height: none !important; }
+
+/* Wide CRM detail panel: gives notes/timeline enough room without breaking smaller screens. */
+@media (min-width: 768px) {
+  #follow-layout.sp-panel-open > .bb-card,
+  #follow-layout:has(.follow-side-panel.sp-open) > .bb-card {
+    min-width: 0;
+  }
+}
+@media (max-width: 1199.98px) and (min-width: 768px) {
+  .follow-side-panel.sp-open {
+    width: clamp(360px, 38vw, 460px);
+  }
+}
+
+
+/* Stable responsive contact-list layout: no more breakpoint-dependent hidden business columns. */
+.crm-contact-cell { white-space: normal !important; overflow: hidden !important; min-width: 0; }
+.crm-contact-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; }
+.crm-contact-name { min-width: 0; flex: 1 1 auto; }
+.crm-contact-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+
+/* Contact meta is a true responsive grid.
+   Wide: email / phone / website / owner on one line.
+   Medium: two columns.
+   Mobile: one column.
+   Every field can shrink without pushing outside the viewport. */
+.crm-contact-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, .85fr);
+  gap: 4px 12px;
+  align-items: center;
+  margin-top: 5px;
+  font-size: .74rem;
+  color: var(--bb-muted);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+.crm-contact-meta > span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.crm-contact-meta i {
+  flex: 0 0 auto;
+  color: var(--bb-muted);
+}
+.crm-contact-meta a,
+.crm-contact-meta .crm-owner-meta,
+.crm-contact-meta .crm-owner-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crm-contact-meta a {
+  color: var(--bb-muted);
+  text-decoration: none;
+  display: block;
+}
+.crm-contact-meta a:hover { color: var(--bb-accent); }
+.crm-contact-meta .crm-phone-meta .follow-input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+.crm-contact-meta .newmail-btn { flex: 0 0 auto; }
+
+.crm-status-line { margin-top: 5px; }
+.crm-followup-cell { width: 360px; white-space: normal !important; overflow: visible !important; }
+.crm-followup-grid { display: grid; grid-template-columns: minmax(120px,1fr) 96px 78px; gap: 6px; align-items: center; }
+.crm-followup-owner { margin-top: 5px; display: flex; align-items: center; gap: 5px; font-size: .74rem; color: var(--bb-muted); }
+.crm-followup-owner .follow-select { max-width: 100%; }
+.crm-mobile-label { display: none; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--bb-muted); margin-bottom: 2px; }
+.followup-head { width: 360px; }
+
+/* Keep the fixed 3-column table only when there is enough horizontal room. */
+* { box-sizing: border-box; }
+#follow-layout > .bb-card table { max-width: 100%; min-width: 0; }
+.crm-followup-cell, .followup-head { width: clamp(240px, 30vw, 340px); max-width: 40vw; }
+.crm-followup-grid > div,
+.crm-followup-grid select,
+.crm-followup-grid input,
+.crm-followup-owner,
+.crm-followup-owner select,
+.crm-contact-cell,
+.crm-contact-name,
+.crm-contact-meta { min-width: 0; max-width: 100%; }
+
+@media (max-width: 1399.98px) {
+  .crm-contact-meta {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1199.98px) {
+  .crm-followup-cell, .followup-head { width: clamp(220px, 34vw, 280px); max-width: 38vw; }
+  .crm-followup-grid { grid-template-columns: 1fr 92px; }
+  .crm-followup-grid .imp-select { grid-column: 1 / -1; width: 100%; }
+}
+
+/* Tablet and phone: turn each contact into a card. This prevents the right column
+   from pushing outside the viewport and gives every row the same information layout. */
+@media (max-width: 991.98px) {
+  html, body { height: auto; overflow-x: hidden; overflow-y: auto; }
+  #main-container { padding: 12px !important; overflow: visible; max-width: 100% !important; }
+  #follow-layout, #follow-layout > .bb-card, #follow-layout > .bb-card .table-responsive { overflow: visible; max-width: 100%; }
+  #hdr-filter-row { display: grid !important; grid-template-columns: 1fr; }
+  #hdr-filter-row > * { max-width: 100% !important; width: 100%; }
+  #count-badge { margin-left: 0 !important; }
+  .bb-card-header { flex-direction: column; align-items: stretch !important; gap: 8px; }
+  .bb-card-header > div { justify-content: space-between; flex-wrap: wrap; }
+  .view-toggle { width: 100%; justify-content: flex-end; }
+  .table-responsive { overflow: visible !important; max-width: 100%; }
+  table, thead, tbody, tr, td { display: block; width: 100% !important; max-width: 100% !important; }
+  thead { display: none; }
+  .follow-data-row { margin-bottom: 0; }
+  .follow-data-row > td, .follow-comment-row > td, .follow-history-row > td {
+    display: block; border-left: 2px solid #e5e7eb !important; border-right: 2px solid #e5e7eb !important;
+    white-space: normal !important; overflow: visible !important;
+  }
+  .follow-data-row > td:first-child { border-radius: 10px 10px 0 0; padding: 8px 10px 0; text-align: left !important; }
+  .crm-contact-cell { padding: 8px 10px !important; }
+  .crm-followup-cell { padding: 8px 10px !important; }
+  .follow-comment-row > td { border-radius: 0 0 10px 10px; margin-bottom: 10px; }
+  .crm-followup-grid { grid-template-columns: 1fr; }
+  .crm-mobile-label { display: block; }
+  .crm-followup-grid select, .crm-followup-grid input, .crm-followup-owner select { width: 100%; font-size: 16px; }
+  .follow-input, .follow-select, .comment-row-input { font-size: 16px; }
+  .crm-contact-main { align-items: flex-start; }
+  .crm-contact-meta { grid-template-columns: 1fr; gap: 3px; overflow: visible; }
+  .crm-contact-meta > span { width: 100%; }
+  .action-bar-top, .action-bar-panel { flex-direction: column; align-items: stretch; }
+  .action-bar-divider { display: none; }
+  .action-bar button, .action-bar select, .action-bar input { width: 100%; max-width: 100% !important; }
+}
+
+
+
+/* Mobile full-width polish: remove wasted left/right margins on phones. */
+@media (max-width: 767.98px) {
+  html, body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  #main-container {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .page-header,
+  #hdr-filter-row,
+  #action-bar,
+  #sync-feedback {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+
+  .bb-card {
+    border-radius: 0 !important;
+    border-left: none !important;
+    border-right: none !important;
+  }
+
+  #follow-layout,
+  #follow-layout > .bb-card,
+  #follow-layout > .bb-card .table-responsive {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .follow-data-row > td,
+  .follow-comment-row > td,
+  .follow-history-row > td {
+    border-left: none !important;
+    border-right: none !important;
+  }
+
+  .follow-data-row > td:first-child,
+  .follow-comment-row > td {
+    border-radius: 0 !important;
+  }
+
+  .follow-comment-row > td {
+    margin-bottom: 8px;
+  }
+
+  .follow-side-panel.sp-open {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+
+  .follow-side-panel .bb-card {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    border-radius: 0 !important;
+  }
+}
 </style>
 </head>
 <body>
 
 <div id="nav"></div>
 
-<div class="container-fluid py-4 px-4" style="max-width:1600px">
+<div id="main-container" class="container-fluid py-4 px-4">
 
   <div class="page-header mb-3">
-    <h5 class="page-title"><i class="ti ti-phone-check text-primary"></i>CRM Follow-up</h5>
-    <div class="d-flex align-items-center gap-2 flex-wrap">
+    <div class="page-header-top">
+      <h5 class="page-title"><i class="ti ti-phone-check text-primary"></i>CRM Follow-up</h5>
+      <button id="hdr-toggle" class="hdr-toggle-btn" type="button" onclick="toggleHdrControls()" title="Filters &amp; actions">
+        <i class="ti ti-adjustments-horizontal"></i>
+      </button>
+    </div>
+    <div id="hdr-action-groups" class="d-flex align-items-center gap-2 flex-wrap">
 
       <!-- Filter group: owner / campaign / outreach -->
       <div class="hdr-group hdr-group-filter">
@@ -343,7 +642,7 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
   </div><!-- /.page-header -->
 
   <!-- Filters -->
-  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+  <div id="hdr-filter-row" class="d-flex flex-wrap align-items-center gap-2 mb-3">
     <input id="search" class="form-control form-control-sm" style="max-width:240px"
       placeholder="Search name, email, website or title…" oninput="applyFilter()">
 
@@ -354,6 +653,7 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
       <option value="open">Open</option>
       <option value="contacted">Contacted</option>
       <option value="send_mail">Send mail</option>
+      <option value="waiting">Waiting</option>
       <option value="replied">Replied</option>
       <option value="meeting">Meeting booked</option>
       <option value="offer_sent">Offer sent</option>
@@ -479,6 +779,7 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
     <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom bb-card-header">
       <span class="fw-500 small"><i class="ti ti-list-check me-1 text-primary"></i>Contacts</span>
       <div class="d-flex align-items-center gap-2">
+        <span id="focus-active-note" class="focus-active-note"><i class="ti ti-target"></i>Focus queue</span>
         <div id="group-selectors" class="d-flex align-items-center gap-1" style="display:none">
           <select id="group-primary" class="group-select" title="Group by" onchange="applyFilter()">
             <option value="followup_status">Status</option>
@@ -501,6 +802,9 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
           </button>
         </div>
         <div class="view-toggle">
+          <button id="focus-queue-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleFocusQueue()" title="Today / overdue focus queue">
+            <i class="ti ti-target-arrow"></i>
+          </button>
           <button id="view-group-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleView('group')" title="Grouped view">
             <i class="ti ti-layout-rows"></i>
           </button>
@@ -516,19 +820,12 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
     <div class="table-responsive">
       <table class="table table-sm table-hover mb-0" style="table-layout:fixed;width:100%">
         <thead class="bb-thead"><tr>
-          <th style="width:32px"><input type="checkbox" class="form-check-input" id="select-all" onclick="toggleSelectAll(this)"></th>
-          <th class="small bb-sortable d-none d-lg-table-cell" data-col="status"           onclick="sortBy('status')" style="width:95px">Status <span class="sort-icon"></span></th>
-          <th class="small bb-sortable d-none d-xl-table-cell" data-col="name"             onclick="sortBy('name')" style="width:180px;min-width:140px">Name <span class="sort-icon"></span></th>
-          <th class="small bb-sortable"                         data-col="email"            onclick="sortBy('email')" style="width:200px">Email <span class="sort-icon"></span></th>
-          <th class="small d-none d-xxl-table-cell" style="width:130px">Phone</th>
-          <th class="small bb-sortable d-none d-xxl-table-cell" data-col="website"          onclick="sortBy('website')" style="width:155px">Website <span class="sort-icon"></span></th>
-          <th class="small bb-sortable d-none d-lg-table-cell" data-col="followup_date"    onclick="sortBy('followup_date')" style="width:135px">Follow-up date <span class="sort-icon"></span></th>
-          <th class="small bb-sortable"                         data-col="followup_status"  onclick="sortBy('followup_status')" style="width:155px">Follow-up status <span class="sort-icon"></span></th>
-          <th class="small bb-sortable d-none d-xl-table-cell" data-col="followup_importance" onclick="sortBy('followup_importance')" style="width:105px">Importance <span class="sort-icon"></span></th>
-          <th class="small bb-sortable d-none d-xl-table-cell" data-col="followup_owner" onclick="sortBy('followup_owner')" style="width:130px">F/U owner <span class="sort-icon"></span></th>
+          <th style="width:34px"><input type="checkbox" class="form-check-input" id="select-all" onclick="toggleSelectAll(this)"></th>
+          <th class="small bb-sortable" data-col="name" onclick="sortBy('name')">Contact <span class="sort-icon"></span></th>
+          <th class="small bb-sortable followup-head" data-col="followup_date" onclick="sortBy('followup_date')">Follow-up <span class="sort-icon"></span></th>
         </tr></thead>
         <tbody id="follow-tbody">
-          <tr><td colspan="10" class="text-center py-5" style="color:var(--bb-muted)">
+          <tr><td colspan="3" class="text-center py-5" style="color:var(--bb-muted)">
             <div class="spinner-border spinner-border-sm me-2"></div>Loading…
           </td></tr>
         </tbody>
@@ -553,6 +850,7 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
       </div>
     </div>
   </div>
+  <div id="sp-backdrop" onclick="closeSidePanel()"></div>
   </div><!-- /#follow-layout -->
 
 </div>
@@ -566,9 +864,10 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 'use strict';
 
 let allRows  = [];
-let _sortCol = '';
+let _sortCol = 'followup_date';
 let _sortAsc = true;
 let _currentView = 'list';
+let _focusQueue = false;
 const _collapsedGroups = new Set();
 let _currentGroupKeys = [];
 let _allCampaigns = [];   // loaded from /followup-meta
@@ -625,6 +924,25 @@ function populateCampaignDropdown(ownerVal) {
     + filtered.map(c => `<option value="${escapeHtml(c.id)}"${c.id === cur ? ' selected' : ''}>${escapeHtml(c.id)}</option>`).join('');
 }
 
+function toggleHdrControls() {
+  const groups = document.getElementById('hdr-action-groups');
+  const btn    = document.getElementById('hdr-toggle');
+  const open   = groups.classList.toggle('hdr-open');
+  btn.innerHTML = open
+    ? '<i class="ti ti-x"></i>'
+    : '<i class="ti ti-adjustments-horizontal"></i>';
+}
+// Close the dropdown when clicking outside of it
+document.addEventListener('click', (e) => {
+  const groups = document.getElementById('hdr-action-groups');
+  const btn    = document.getElementById('hdr-toggle');
+  if (!groups || !groups.classList.contains('hdr-open')) return;
+  if (!groups.contains(e.target) && !btn.contains(e.target)) {
+    groups.classList.remove('hdr-open');
+    btn.innerHTML = '<i class="ti ti-adjustments-horizontal"></i>';
+  }
+});
+
 async function onOwnerChange() {
   const own = document.getElementById('owner-header').value;
   populateCampaignDropdown(own);
@@ -664,7 +982,7 @@ async function load() {
     }
   }
 
-  setTbody('<tr><td colspan="10" class="text-center py-5" style="color:var(--bb-muted)">'
+  setTbody('<tr><td colspan="3" class="text-center py-5" style="color:var(--bb-muted)">'
     + '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>');
   document.getElementById('follow-empty').style.display = 'none';
   document.getElementById('count-badge').textContent = '';
@@ -721,6 +1039,10 @@ async function load() {
         const _gs = document.getElementById('group-selectors');
         if (_gs) _gs.style.display = _currentView === 'group' ? 'flex' : 'none';
       }
+      if (_loadedPrefs.focus_queue !== undefined) {
+        _focusQueue = !!_loadedPrefs.focus_queue;
+        _updateFocusQueueBtn();
+      }
       const gp = document.getElementById('group-primary');   if (gp && _loadedPrefs.group_primary) gp.value = _loadedPrefs.group_primary;
       const gs2 = document.getElementById('group-secondary'); if (gs2 && _loadedPrefs.group_secondary !== undefined) gs2.value = _loadedPrefs.group_secondary;
       sv('search',                _loadedPrefs.search);
@@ -728,23 +1050,17 @@ async function load() {
       sv('importance-filter',     _loadedPrefs.filter_importance);
       sv('contact-status-filter', _loadedPrefs.filter_contact_status);
       sv('due-filter',            _loadedPrefs.filter_due);
-      if (_loadedPrefs.sort_col !== undefined) _sortCol = _loadedPrefs.sort_col;
+      if (_loadedPrefs.sort_col !== undefined) _sortCol = _loadedPrefs.sort_col || 'followup_date';
       if (_loadedPrefs.sort_asc !== undefined) _sortAsc  = _loadedPrefs.sort_asc;
       if (_loadedPrefs.side_open) { _sideOpen = true; _updateSidePanelBtn(); _updateSidePanelVisibility(); }
       if (_loadedPrefs.sp_channels_open !== undefined) _spChannelsOpen = !!_loadedPrefs.sp_channels_open;
       if (_loadedPrefs.sp_company_open  !== undefined) _spCompanyOpen  = !!_loadedPrefs.sp_company_open;
-      if (_sortCol) {
-        document.querySelectorAll('.bb-sortable').forEach(th => {
-          const ic = th.querySelector('.sort-icon'); if (!ic) return;
-          if (th.dataset.col === _sortCol) { ic.textContent = _sortAsc ? ' ▲' : ' ▼'; th.style.color = 'var(--bb-accent)'; }
-          else { ic.textContent = ''; th.style.color = ''; }
-        });
-      }
+      _updateSortIndicators();
     }
     _prefsReady = true;
     applyFilter();
   } catch (e) {
-    setTbody(`<tr><td colspan="10" class="text-center py-5 text-danger small">
+    setTbody(`<tr><td colspan="3" class="text-center py-5 text-danger small">
       <i class="ti ti-alert-circle me-1"></i>${escapeHtml(e.message)}</td></tr>`);
     console.error('[crm_follow] load error:', e);
   }
@@ -789,24 +1105,48 @@ async function apiPatchContact(row, fields) {
 // ── Sort ──────────────────────────────────────────────────────────────────────
 
 function sortBy(col) {
+  if (_focusQueue) {
+    _focusQueue = false;
+    _updateFocusQueueBtn();
+  }
   if (_sortCol === col) { _sortAsc = !_sortAsc; }
   else { _sortCol = col; _sortAsc = true; }
-  document.querySelectorAll('.bb-sortable').forEach(th => {
-    const ic = th.querySelector('.sort-icon');
-    if (th.dataset.col === col) { ic.textContent = _sortAsc ? ' ▲' : ' ▼'; th.style.color = 'var(--bb-accent)'; }
-    else { ic.textContent = ''; th.style.color = ''; }
-  });
+  _updateSortIndicators();
   applyFilter();
   saveUserPrefs();
+}
+
+function _updateSortIndicators() {
+  document.querySelectorAll('.bb-sortable').forEach(th => {
+    const ic = th.querySelector('.sort-icon');
+    if (th.dataset.col === _sortCol) { ic.textContent = _sortAsc ? ' ▲' : ' ▼'; th.style.color = 'var(--bb-accent)'; }
+    else { ic.textContent = ''; th.style.color = ''; }
+  });
 }
 
 function applySort(list) {
   if (!_sortCol) return list;
   return [...list].sort((a, b) => {
+    if (_sortCol === 'followup_date') return compareFollowupDate(a, b, _sortAsc);
     const va = String(a[_sortCol] || '').toLowerCase();
     const vb = String(b[_sortCol] || '').toLowerCase();
     return _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
   });
+}
+
+function compareFollowupDate(a, b, asc = true) {
+  const da = a.followup_date || '';
+  const db = b.followup_date || '';
+  if (!da && !db) return String(a.name || '').localeCompare(String(b.name || ''));
+  if (!da) return 1;
+  if (!db) return -1;
+  const cmp = da.localeCompare(db);
+  if (cmp) return asc ? cmp : -cmp;
+  const impRank = { high: 0, medium: 1, low: 2, '': 3 };
+  const ia = impRank[a.followup_importance || ''] ?? 3;
+  const ib = impRank[b.followup_importance || ''] ?? 3;
+  if (ia !== ib) return ia - ib;
+  return String(a.name || '').localeCompare(String(b.name || ''));
 }
 
 
@@ -814,6 +1154,10 @@ function applySort(list) {
 
 function toggleView(v) {
   _currentView = v;
+  if (v === 'group' && _focusQueue) {
+    _focusQueue = false;
+    _updateFocusQueueBtn();
+  }
   document.getElementById('view-list-btn').className =
     'btn btn-sm ' + (v === 'list' ? 'btn-primary' : 'btn-outline-secondary');
   document.getElementById('view-group-btn').className =
@@ -823,6 +1167,30 @@ function toggleView(v) {
   _collapsedGroups.clear();
   applyFilter();
   saveUserPrefs();
+}
+
+function toggleFocusQueue() {
+  _focusQueue = !_focusQueue;
+  if (_focusQueue) {
+    _currentView = 'list';
+    _sortCol = 'followup_date';
+    _sortAsc = true;
+    _updateSortIndicators();
+    document.getElementById('view-list-btn').className = 'btn btn-sm btn-primary';
+    document.getElementById('view-group-btn').className = 'btn btn-sm btn-outline-secondary';
+    const gs = document.getElementById('group-selectors');
+    if (gs) gs.style.display = 'none';
+  }
+  _updateFocusQueueBtn();
+  applyFilter();
+  saveUserPrefs();
+}
+
+function _updateFocusQueueBtn() {
+  const btn = document.getElementById('focus-queue-btn');
+  if (btn) btn.className = 'btn btn-sm ' + (_focusQueue ? 'btn-primary' : 'btn-outline-secondary');
+  const note = document.getElementById('focus-active-note');
+  if (note) note.classList.toggle('is-active', _focusQueue);
 }
 
 
@@ -874,10 +1242,35 @@ function applyFilter() {
     return true;
   });
 
-  list = applySort(list);
+  if (_focusQueue) {
+    list = _focusQueueSort(list.filter(r => {
+      const status = r.followup_status || '';
+      return r.followup_date
+        && r.followup_date <= weekEnd
+        && !['accepted', 'closed', 'not_interested'].includes(status);
+    }));
+  } else {
+    list = applySort(list);
+  }
   document.getElementById('count-badge').textContent =
     `${list.length} contact${list.length === 1 ? '' : 's'}`;
   render(list);
+  if (_focusQueue) _openFirstFocusContact(list);
+}
+
+function _focusQueueSort(list) {
+  return [...list].sort((a, b) => compareFollowupDate(a, b, true));
+}
+
+function _openFirstFocusContact(list) {
+  if (!_focusQueue || !list.length) return;
+  const current = allRows[_sidePanelGidx];
+  if (_sideOpen && current && list.includes(current)) return;
+  _sideOpen = true;
+  _updateSidePanelBtn();
+  _updateSidePanelVisibility();
+  const gidx = allRows.indexOf(list[0]);
+  if (gidx >= 0) requestAnimationFrame(() => openSidePanel(gidx));
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -894,6 +1287,7 @@ const FU_STATUSES = [
   { value: 'open',           label: 'Open' },
   { value: 'contacted',      label: 'Contacted' },
   { value: 'send_mail',      label: 'Send mail' },
+  { value: 'waiting',        label: 'Waiting' },
   { value: 'replied',        label: 'Replied' },
   { value: 'meeting',        label: 'Meeting booked' },
   { value: 'offer_sent',     label: 'Offer sent' },
@@ -940,6 +1334,70 @@ function statusBadge(s) {
   return `<span class="bb-badge ${map[s] || 'bb-badge-muted'}">${escapeHtml(s || 'pending')}</span>`;
 }
 
+
+function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
+  const phoneHtml = r.phone
+    ? `<span class="crm-phone-meta"><i class="ti ti-phone"></i><input type="tel" class="follow-input crm-inline-input" value="${escapeHtml(r.phone || '')}" placeholder="Phone" data-gidx="${gidx}" data-field="phone" onchange="saveField(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"></span>`
+    : `<span class="crm-phone-meta"><i class="ti ti-phone"></i><input type="tel" class="follow-input crm-inline-input" value="" placeholder="Phone" data-gidx="${gidx}" data-field="phone" onchange="saveField(this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}"></span>`;
+  const emailHtml = `<span class="crm-email-meta"><i class="ti ti-mail"></i><a href="mailto:${escapeHtml(r.email)}" title="${escapeHtml(r.email || '')}">${escapeHtml(r.email || '—')}</a>${r.new_mail ? `<button class="newmail-btn" title="New mail — click to acknowledge" onclick="ackNewMail(${gidx},event)"><i class="ti ti-mail-opened"></i></button>` : ''}</span>`;
+  const websiteHtml = siteShort
+    ? `<span class="crm-website-meta"><i class="ti ti-world"></i><a href="${escapeHtml(r.website)}" target="_blank" title="${escapeHtml(r.website)}">${escapeHtml(siteShort)}</a></span>`
+    : `<span class="crm-website-meta"><i class="ti ti-world"></i><span>—</span></span>`;
+  return `<td class="text-center"><input type="checkbox" class="form-check-input row-chk"
+        data-gidx="${gidx}" onchange="onRowCheck(this)"></td>
+      <td class="crm-contact-cell">
+        <div class="crm-contact-main">
+          <div class="crm-contact-name">
+            <input type="text" class="follow-input small fw-500"
+              value="${escapeHtml(r.name || '')}" placeholder="Name"
+              data-gidx="${gidx}" data-field="name"
+              onchange="saveField(this)"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+            <input type="text" class="follow-input contact-title"
+              value="${escapeHtml(r.title || '')}" placeholder="Title…"
+              data-gidx="${gidx}" data-field="title"
+              onchange="saveField(this)"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+          </div>
+          <div class="crm-contact-actions">
+            ${statusBadge(r.status)}
+            <button class="sync-btn" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
+              <i class="ti ti-mail-bolt"></i>
+            </button>
+          </div>
+        </div>
+        <div class="crm-contact-meta">
+          ${emailHtml}
+          ${phoneHtml}
+          ${websiteHtml}
+          <span class="crm-owner-meta"><i class="ti ti-user"></i><span class="crm-owner-text">${escapeHtml(r.owner || 'No owner')}</span></span>
+        </div>
+      </td>
+      <td class="crm-followup-cell">
+        <div class="crm-followup-grid">
+          <div><span class="crm-mobile-label">Status</span><select class="follow-select"
+            data-gidx="${gidx}" data-field="followup_status"
+            onchange="saveField(this)">${fuOpts}</select></div>
+          <div><span class="crm-mobile-label">Date</span><input type="date" class="follow-input ${dateCls}"
+            value="${escapeHtml(r.followup_date || '')}"
+            data-gidx="${gidx}" data-field="followup_date"
+            onchange="saveField(this)"></div>
+          <div><span class="crm-mobile-label">Importance</span><select class="imp-select ${impCls}"
+            data-gidx="${gidx}" data-field="followup_importance"
+            onchange="saveField(this);this.className='imp-select '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
+            ${IMPORTANCE_LEVELS.map(i=>`<option value="${i.value}"${r.followup_importance===i.value?' selected':''}>${i.label}</option>`).join('')}
+          </select></div>
+        </div>
+        <div class="crm-followup-owner">
+          <i class="ti ti-user-check"></i>
+          <select class="follow-select" data-gidx="${gidx}" data-field="followup_owner" onchange="saveField(this)">
+            <option value="">— follow-up owner —</option>
+            ${_allUsers.map(u=>`<option value="${escapeHtml(u.email)}"${r.followup_owner===u.email?' selected':''}>${escapeHtml(u.displayName ? u.displayName+' ('+u.email+')' : u.email)}</option>`).join('')}
+          </select>
+        </div>
+      </td>`;
+}
+
 function render(list) {
   if (_currentView === 'group') { renderGrouped(list); return; }
   const empty = document.getElementById('follow-empty');
@@ -969,74 +1427,10 @@ function render(list) {
     const dateCls = dueCls === 'overdue' ? 'date-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'date-due-soon' : '';
 
     return `<tr data-doc="${escapeHtml(r.doc_path)}" class="follow-data-row ${rowCls}" onclick="onRowClick(event,${gidx})" style="cursor:pointer">
-      <td class="text-center"><input type="checkbox" class="form-check-input row-chk"
-        data-gidx="${gidx}" onchange="onRowCheck(this)"></td>
-      <td class="d-none d-lg-table-cell">${statusBadge(r.status)}</td>
-      <td class="d-none d-xl-table-cell">
-        <div class="d-flex align-items-center gap-1">
-          <input type="text" class="follow-input small fw-500"
-            value="${escapeHtml(r.name || '')}" placeholder="Name"
-            data-gidx="${gidx}" data-field="name"
-            onchange="saveField(this)"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
-          <button class="sync-btn flex-shrink-0" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
-            <i class="ti ti-mail-bolt"></i>
-          </button>
-        </div>
-        <input type="text" class="follow-input contact-title"
-          value="${escapeHtml(r.title || '')}" placeholder="Title…"
-          data-gidx="${gidx}" data-field="title"
-          onchange="saveField(this)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
-      </td>
-      <td class="small">
-        <div class="d-flex align-items-center gap-1 min-w-0">
-          <a href="mailto:${escapeHtml(r.email)}" class="text-truncate">${escapeHtml(r.email || '—')}</a>
-          ${r.new_mail ? `<button class="newmail-btn" title="New mail — click to acknowledge" onclick="ackNewMail(${gidx},event)"><i class="ti ti-mail-opened"></i></button>` : ''}
-        </div>
-      </td>
-      <td class="small d-none d-xxl-table-cell">
-        <input type="tel" class="follow-input"
-          value="${escapeHtml(r.phone || '')}" placeholder="Phone"
-          data-gidx="${gidx}" data-field="phone"
-          onchange="saveField(this)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
-      </td>
-      <td class="small d-none d-xxl-table-cell">${siteShort
-        ? `<a href="${escapeHtml(r.website)}" target="_blank"
-              style="color:var(--bb-muted);text-decoration:none" title="${escapeHtml(r.website)}">${escapeHtml(siteShort)}</a>`
-        : '—'}</td>
-      <td class="d-none d-lg-table-cell">
-        <input type="date" class="follow-input ${dateCls}"
-          value="${escapeHtml(r.followup_date || '')}"
-          data-gidx="${gidx}" data-field="followup_date"
-          onchange="saveField(this)">
-      </td>
-      <td class="">
-        <select class="follow-select"
-          data-gidx="${gidx}" data-field="followup_status"
-          onchange="saveField(this)">
-          ${fuOpts}
-        </select>
-      </td>
-      <td class="d-none d-xl-table-cell">
-        <select class="imp-select ${impCls}"
-          data-gidx="${gidx}" data-field="followup_importance"
-          onchange="saveField(this);this.className='imp-select '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
-          ${IMPORTANCE_LEVELS.map(i=>`<option value="${i.value}"${r.followup_importance===i.value?' selected':''}>${i.label}</option>`).join('')}
-        </select>
-      </td>
-      <td class="d-none d-xl-table-cell">
-        <select class="follow-select"
-          data-gidx="${gidx}" data-field="followup_owner"
-          onchange="saveField(this)">
-          <option value="">—</option>
-          ${_allUsers.map(u=>`<option value="${escapeHtml(u.email)}"${r.followup_owner===u.email?' selected':''}>${escapeHtml(u.displayName ? u.displayName+' ('+u.email+')' : u.email)}</option>`).join('')}
-        </select>
-      </td>
+      ${renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls)}
     </tr>
     <tr class="follow-comment-row">
-      <td colspan="10">
+      <td colspan="3">
         <div class="d-flex align-items-center gap-2 comment-row-inner">
           <i class="ti ti-message-circle comment-row-icon"></i>
           <textarea class="follow-input comment-row-input flex-grow-1"
@@ -1054,10 +1448,12 @@ function render(list) {
       </td>
     </tr>
     <tr class="follow-history-row" id="hist-${gidx}" style="display:none">
-      <td colspan="10" class="hist-row-td">${renderHistoryContent(r.comment_history)}</td>
+      <td colspan="3" class="hist-row-td">${renderHistoryContent(r.comment_history)}</td>
     </tr>`;
   }).join(''));
   restoreChecks();
+  // Recompute column widths now that the table is populated at the current viewport
+  requestAnimationFrame(_relayoutTable);
 }
 
 
@@ -1087,74 +1483,10 @@ function _contactRowsHtml(r) {
   const rowCls  = dueCls === 'overdue' ? 'row-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'row-due-soon' : '';
   const dateCls = dueCls === 'overdue' ? 'date-overdue' : (dueCls === 'due-soon' || dueCls === 'due-today') ? 'date-due-soon' : '';
   return `<tr data-doc="${escapeHtml(r.doc_path)}" class="follow-data-row ${rowCls}" onclick="onRowClick(event,${gidx})" style="cursor:pointer">
-      <td class="text-center"><input type="checkbox" class="form-check-input row-chk"
-        data-gidx="${gidx}" onchange="onRowCheck(this)"></td>
-      <td class="d-none d-lg-table-cell">${statusBadge(r.status)}</td>
-      <td class="d-none d-xl-table-cell">
-        <div class="d-flex align-items-center gap-1">
-          <input type="text" class="follow-input small fw-500"
-            value="${escapeHtml(r.name || '')}" placeholder="Name"
-            data-gidx="${gidx}" data-field="name"
-            onchange="saveField(this)"
-            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
-          <button class="sync-btn flex-shrink-0" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
-            <i class="ti ti-mail-bolt"></i>
-          </button>
-        </div>
-        <input type="text" class="follow-input contact-title"
-          value="${escapeHtml(r.title || '')}" placeholder="Title…"
-          data-gidx="${gidx}" data-field="title"
-          onchange="saveField(this)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
-      </td>
-      <td class="small">
-        <div class="d-flex align-items-center gap-1 min-w-0">
-          <a href="mailto:${escapeHtml(r.email)}" class="text-truncate">${escapeHtml(r.email || '—')}</a>
-          ${r.new_mail ? `<button class="newmail-btn" title="New mail — click to acknowledge" onclick="ackNewMail(${gidx},event)"><i class="ti ti-mail-opened"></i></button>` : ''}
-        </div>
-      </td>
-      <td class="small d-none d-xxl-table-cell">
-        <input type="tel" class="follow-input"
-          value="${escapeHtml(r.phone || '')}" placeholder="Phone"
-          data-gidx="${gidx}" data-field="phone"
-          onchange="saveField(this)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
-      </td>
-      <td class="small d-none d-xxl-table-cell">${siteShort
-        ? `<a href="${escapeHtml(r.website)}" target="_blank"
-              style="color:var(--bb-muted);text-decoration:none" title="${escapeHtml(r.website)}">${escapeHtml(siteShort)}</a>`
-        : '—'}</td>
-      <td class="d-none d-lg-table-cell">
-        <input type="date" class="follow-input ${dateCls}"
-          value="${escapeHtml(r.followup_date || '')}"
-          data-gidx="${gidx}" data-field="followup_date"
-          onchange="saveField(this)">
-      </td>
-      <td class="">
-        <select class="follow-select"
-          data-gidx="${gidx}" data-field="followup_status"
-          onchange="saveField(this)">
-          ${fuOpts}
-        </select>
-      </td>
-      <td class="d-none d-xl-table-cell">
-        <select class="imp-select ${impCls}"
-          data-gidx="${gidx}" data-field="followup_importance"
-          onchange="saveField(this);this.className='imp-select '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
-          ${IMPORTANCE_LEVELS.map(i=>`<option value="${i.value}"${r.followup_importance===i.value?' selected':''}>${i.label}</option>`).join('')}
-        </select>
-      </td>
-      <td class="d-none d-xl-table-cell">
-        <select class="follow-select"
-          data-gidx="${gidx}" data-field="followup_owner"
-          onchange="saveField(this)">
-          <option value="">—</option>
-          ${_allUsers.map(u=>`<option value="${escapeHtml(u.email)}"${r.followup_owner===u.email?' selected':''}>${escapeHtml(u.displayName ? u.displayName+' ('+u.email+')' : u.email)}</option>`).join('')}
-        </select>
-      </td>
+      ${renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls)}
     </tr>
     <tr class="follow-comment-row">
-      <td colspan="10">
+      <td colspan="3">
         <div class="d-flex align-items-center gap-2 comment-row-inner">
           <i class="ti ti-message-circle comment-row-icon"></i>
           <textarea class="follow-input comment-row-input flex-grow-1"
@@ -1172,7 +1504,7 @@ function _contactRowsHtml(r) {
       </td>
     </tr>
     <tr class="follow-history-row" id="hist-${gidx}" style="display:none">
-      <td colspan="10" class="hist-row-td">${renderHistoryContent(r.comment_history)}</td>
+      <td colspan="3" class="hist-row-td">${renderHistoryContent(r.comment_history)}</td>
     </tr>`;
 }
 
@@ -1212,7 +1544,7 @@ function renderGrouped(list) {
     _groupDocPaths[pKey] = pRows.map(r => r.doc_path);
 
     html += `<tr class="group-header-row" data-group-hdr="${escapeHtml(pKey)}" onclick="toggleGroup('${escapeHtml(pKey)}')">
-      <td colspan="10"><input type="checkbox" class="form-check-input group-chk" data-gkey="${escapeHtml(pKey)}" onclick="toggleGroupSelect(event,'${escapeHtml(pKey)}')" tabindex="-1"><i class="ti ti-tag me-1"></i>${escapeHtml(pLabel)}<span class="group-count">${pRows.length} contact${pRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${pCollapsed ? ' collapsed' : ''}"></i></td>
+      <td colspan="3"><input type="checkbox" class="form-check-input group-chk" data-gkey="${escapeHtml(pKey)}" onclick="toggleGroupSelect(event,'${escapeHtml(pKey)}')" tabindex="-1"><i class="ti ti-tag me-1"></i>${escapeHtml(pLabel)}<span class="group-count">${pRows.length} contact${pRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${pCollapsed ? ' collapsed' : ''}"></i></td>
     </tr>`;
 
     if (pCollapsed) return;
@@ -1228,7 +1560,7 @@ function renderGrouped(list) {
         _groupDocPaths[sKey] = sRows.map(r => r.doc_path);
 
         html += `<tr class="group-subheader-row" data-group-hdr="${escapeHtml(sKey)}" onclick="toggleGroup('${escapeHtml(sKey)}')">
-          <td colspan="10"><input type="checkbox" class="form-check-input group-chk" data-gkey="${escapeHtml(sKey)}" onclick="toggleGroupSelect(event,'${escapeHtml(sKey)}')" tabindex="-1"><i class="ti ti-corner-down-right me-1"></i>${escapeHtml(sLabel)}<span class="group-count">${sRows.length} contact${sRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${sCollapsed ? ' collapsed' : ''}"></i></td>
+          <td colspan="3"><input type="checkbox" class="form-check-input group-chk" data-gkey="${escapeHtml(sKey)}" onclick="toggleGroupSelect(event,'${escapeHtml(sKey)}')" tabindex="-1"><i class="ti ti-corner-down-right me-1"></i>${escapeHtml(sLabel)}<span class="group-count">${sRows.length} contact${sRows.length === 1 ? '' : 's'}</span><i class="ti ti-chevron-down group-chevron${sCollapsed ? ' collapsed' : ''}"></i></td>
         </tr>`;
 
         if (!sCollapsed) html += sRows.map(r => _contactRowsHtml(r)).join('');
@@ -1247,6 +1579,7 @@ function renderGrouped(list) {
   const all = document.querySelectorAll('.row-chk');
   if (sa && all.length) sa.checked = all.length > 0 && [...all].every(c => c.checked);
   _syncGroupCheckboxes();
+  requestAnimationFrame(_relayoutTable);
 }
 
 // ── Save follow-up field via API ──────────────────────────────────────────────
@@ -1341,6 +1674,8 @@ function _updateSidePanelVisibility() {
   if (!panel) return;
   if (_sideOpen) panel.classList.add('sp-open');
   else panel.classList.remove('sp-open');
+  const backdrop = document.getElementById('sp-backdrop');
+  if (backdrop) backdrop.style.display = (_sideOpen && window.innerWidth < 768) ? 'block' : 'none';
 }
 
 function openSidePanel(gidx) {
@@ -1481,6 +1816,23 @@ function _renderSidePanel(r) {
     </div>
     <div class="sp-section">
       <div class="sp-section-label">Follow-up</div>
+      <div class="sp-quick-actions">
+        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'tomorrow')">
+          <i class="ti ti-calendar-plus me-1"></i>+1 day
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'next_week')">
+          <i class="ti ti-calendar-plus me-1"></i>+1 week
+        </button>
+        <button class="btn btn-sm btn-outline-primary" onclick="quickFollowupAction(${gidx},'contacted')">
+          <i class="ti ti-check me-1"></i>Contacted
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'waiting')">
+          <i class="ti ti-clock me-1"></i>Waiting
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="quickFollowupAction(${gidx},'not_interested')">
+          <i class="ti ti-circle-x me-1"></i>Not relevant
+        </button>
+      </div>
       <div class="sp-row">
         <i class="ti ti-calendar" style="margin-top:5px"></i>
         <input type="date" class="follow-input small ${dateCls}" value="${escapeHtml(r.followup_date || '')}"
@@ -1611,6 +1963,43 @@ function _refreshSidePanelHistory() {
   const el  = document.getElementById('sp-history-section');
   if (!row || !el) return;
   el.innerHTML = _spHistoryHtml(row);
+}
+
+function _datePlus(days) {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+async function quickFollowupAction(gidx, action) {
+  const row = allRows[gidx];
+  if (!row) return;
+
+  const actionMap = {
+    tomorrow:       { fields: { followup_date: _datePlus(1) }, label: 'Snoozed to tomorrow' },
+    next_week:      { fields: { followup_date: _datePlus(7) }, label: 'Snoozed one week' },
+    contacted:      { fields: { followup_status: 'contacted', followup_date: _datePlus(7) }, label: 'Marked contacted; next follow-up in one week' },
+    waiting:        { fields: { followup_status: 'waiting', followup_date: _datePlus(7) }, label: 'Marked waiting; next follow-up in one week' },
+    not_interested: { fields: { followup_status: 'not_interested', followup_date: '' }, label: 'Marked not relevant' },
+  };
+  const cfg = actionMap[action];
+  if (!cfg) return;
+
+  const entry = { date: new Date().toISOString(), type: 'QUICK_ACTION', text: cfg.label };
+  try {
+    await apiPatchContact(row, { ...cfg.fields, _history_entry: entry });
+    Object.assign(row, cfg.fields);
+    row.comment_history = row.comment_history || [];
+    row.comment_history.push({ ...entry, user: (window._authUser && window._authUser.email) || '' });
+    setFeedback(`<i class="ti ti-check me-1"></i>${escapeHtml(cfg.label)} for <strong>${escapeHtml(row.name || row.email || 'contact')}</strong>.`, 'success');
+    applyFilter();
+    const newIdx = allRows.indexOf(row);
+    if (_sideOpen && newIdx >= 0 && (!_focusQueue || document.querySelector(`tr[data-doc="${CSS.escape(row.doc_path)}"]`))) {
+      openSidePanel(newIdx);
+    }
+  } catch(e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Quick action failed: ${escapeHtml(e.message)}`, 'danger');
+  }
 }
 
 async function saveField(el) {
@@ -2257,6 +2646,7 @@ async function saveUserPrefs() {
     group_primary:         document.getElementById('group-primary')?.value      || '',
     group_secondary:       document.getElementById('group-secondary')?.value    || '',
     view:                  _currentView,
+    focus_queue:           _focusQueue,
     sort_col:              _sortCol,
     sort_asc:              _sortAsc,
     side_open:             _sideOpen,
@@ -2280,6 +2670,23 @@ async function loadUserPrefs() {
   } catch(e) {
     _loadedPrefs = {};
   }
+}
+
+// ── Force table relayout when Bootstrap breakpoints show/hide columns ─────────
+// table-layout:fixed computes widths once; toggling to auto forces recalc so
+// hidden columns release their space and visible ones fill 100%.
+function _relayoutTable() {
+  const t = document.querySelector('#follow-layout .table-responsive table');
+  if (!t) return;
+  t.style.tableLayout = 'auto';
+  requestAnimationFrame(() => { t.style.tableLayout = 'fixed'; });
+}
+{
+  let _bpTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(_bpTimer);
+    _bpTimer = setTimeout(_relayoutTable, 80);
+  });
 }
 
 // ── Page init ─────────────────────────────────────────────────────────────────

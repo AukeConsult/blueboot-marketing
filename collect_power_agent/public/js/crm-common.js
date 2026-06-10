@@ -249,10 +249,12 @@ function renderNav(targetId){
     + '<span id="bb-nav-email" class="small text-muted me-2" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>'
     + '<button class="btn btn-sm btn-outline-secondary" style="font-size:.78rem;padding:.2rem .6rem" onclick="signOutUser()">'
     + '<i class="ti ti-logout me-1"></i>Sign out</button></div>';
+  const hamburger = '<button class="bb-nav-toggle" onclick="_bbNavToggle()" title="Menu"><i class="ti ti-menu-2"></i></button>';
   el.outerHTML = '<nav id="nav" class="bb-nav">'
     + '<a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>'
     + '<div class="nav-links">' + links + '</div>'
-    + userArea + '</nav>';
+    + '<div class="bb-nav-right">' + userArea + hamburger + '</div>'
+    + '</nav>';
   // Show user area only when signed in; add role badge when available
   if (typeof firebase !== 'undefined') {
     firebase.auth().onAuthStateChanged(u => {
@@ -263,13 +265,32 @@ function renderNav(targetId){
     });
   }
 
-  // Close dropdown when clicking outside
+  // Close sub-dropdowns when clicking outside
   document.addEventListener('click', e => {
     document.querySelectorAll('.nav-dropdown.open').forEach(d => {
       if (!d.contains(e.target)) d.classList.remove('open');
     });
+    // Close mobile nav panel when clicking outside the nav bar
+    const nav = document.getElementById('nav');
+    if (nav && !nav.contains(e.target)) {
+      const links = nav.querySelector('.nav-links');
+      const btn   = nav.querySelector('.bb-nav-toggle i');
+      if (links) links.classList.remove('nav-open');
+      if (btn) btn.className = 'ti ti-menu-2';
+    }
   }, { once: false, capture: true });
 }
+
+// Mobile nav toggle (global so inline onclick can reach it)
+window._bbNavToggle = function () {
+  const nav   = document.getElementById('nav');
+  if (!nav) return;
+  const links = nav.querySelector('.nav-links');
+  const icon  = nav.querySelector('.bb-nav-toggle i');
+  if (!links) return;
+  const open  = links.classList.toggle('nav-open');
+  if (icon) icon.className = open ? 'ti ti-x' : 'ti ti-menu-2';
+};
 
 // auto-render on any page that has a #nav placeholder, and require auth.
 // Public pages (no sign-in required): login.html, index.html, doc-viewer.html
