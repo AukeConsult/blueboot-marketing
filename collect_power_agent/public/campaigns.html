@@ -22,11 +22,17 @@
 
 <div class="container py-4" style="max-width:860px">
 
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <h5 class="page-title"><i class="ti ti-speakerphone me-2 text-primary"></i>Campaigns</h5>
-    <button class="btn btn-sm btn-outline-secondary" onclick="load()">
-      <i class="ti ti-refresh me-1"></i>Refresh
-    </button>
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <h5 class="page-title mb-0"><i class="ti ti-speakerphone me-2 text-primary"></i>Campaigns</h5>
+    <div class="ms-auto d-flex gap-2">
+      <a href="filter-facets.html" class="btn btn-sm btn-outline-success">
+        <i class="ti ti-filter me-1"></i>Filter new campaigns
+      </a>
+      <button class="btn btn-sm btn-outline-primary" onclick="discover()" id="discover-btn">
+        <i class="ti ti-search me-1"></i>Discover campaigns
+      </button>
+      <button class="bb-btn-refresh" onclick="load()" title="Refresh"><i class="ti ti-refresh"></i></button>
+    </div>
   </div>
 
   <div id="discover-bar" class="alert py-2 px-3 small mb-3" style="display:none"></div>
@@ -44,15 +50,8 @@
     <select id="owner-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
       <option value="">All owners</option>
     </select>
-    <button class="btn btn-sm btn-outline-primary ms-auto" onclick="discover()" id="discover-btn">
-      <i class="ti ti-search me-1"></i>Discover campaigns
-    </button>
-  </div>
 
-  <p class="small text-muted mb-3">
-    <i class="ti ti-info-circle me-1"></i>To create campaigns from the master sheet, first update and select contacts in
-    <a href="crm-bp.html" class="text-decoration-none">CRM Discover</a>, then click <strong>Discover campaigns</strong>.
-  </p>
+  </div>
 
   <div id="list-container">
     <div class="text-center py-5" style="color:var(--bb-muted)">

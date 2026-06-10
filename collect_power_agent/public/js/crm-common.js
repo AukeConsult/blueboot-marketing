@@ -185,18 +185,21 @@ const NAV_LINKS = [
   { href: 'crm-bp.html', icon: 'ti-server-2', label: 'CRM discover',
     match: ['crm-bp.html', 'crm-sync.html'],
     roles: ['admin', 'campaign-user', 'user'] },
-  { dropdown: 'data-sources',   icon: 'ti-database',          label: 'Data collect', roles: ['admin', 'campaign-user', 'user'],
+  { dropdown: 'daily-admin', icon: 'ti-tool', label: 'Daily Admin',
+    roles: ['admin', 'campaign-user', 'user'],
+    match: ['statistics.html', 'filter-facets.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html'],
     children: [
-      { href: 'statistics.html',    icon: 'ti-chart-bar', label: 'Statistics' },
-      { href: 'filter-facets.html', icon: 'ti-filter',    label: 'Filter facets' },
-    ]},
-  { href: 'gdisk.html',         icon: 'ti-brand-google-drive',label: 'Drive Folder', roles: ['admin', 'campaign-user', 'user'] },
-  { href: 'mailbox.html',       icon: 'ti-inbox',             label: 'Message box', roles: ['admin', 'campaign-user', 'user'] },
-  { dropdown: 'batch-services', icon: 'ti-server-bolt', label: 'Batch Services', roles: ['admin'],
-    match: ['jobs.html', 'cloud-batch.html'],
-    children: [
-      { href: 'jobs.html',       icon: 'ti-list-check',      label: 'Jobs' },
-      { href: 'cloud-batch.html', icon: 'ti-cloud-computing', label: 'Cloud Batch' },
+      { href: 'statistics.html',    icon: 'ti-chart-bar',             label: 'Statistics' },
+      { href: 'filter-facets.html', icon: 'ti-filter',                label: 'Filter facets' },
+      { divider: true },
+      { href: 'gdisk.html',         icon: 'ti-brand-google-drive',    label: 'Drive Folder' },
+      { href: 'mailbox.html',       icon: 'ti-inbox',                 label: 'Message Box' },
+      { divider: true, roles: ['admin'] },
+      { href: 'jobs.html',          icon: 'ti-list-check',            label: 'Jobs',        roles: ['admin'] },
+      { href: 'cloud-batch.html',   icon: 'ti-cloud-computing',       label: 'Cloud Batch', roles: ['admin'] },
+      { divider: true, roles: ['admin'] },
+      { href: 'settings.html',      icon: 'ti-adjustments-horizontal',label: 'Settings',    roles: ['admin'] },
+      { href: 'users.html',         icon: 'ti-users',                 label: 'Users',       roles: ['admin'] },
     ]},
   { dropdown: 'docs',  match: ['doc-viewer.html'],           icon: 'ti-book',              label: 'Documentation',
     children: [
@@ -212,12 +215,7 @@ const NAV_LINKS = [
       { href: 'doc-viewer.html?doc=installation',        icon: 'ti-download',       label: 'Installation' },
       { href: 'doc-viewer.html?doc=cloud-batch',          icon: 'ti-cloud-computing', label: 'Cloud Batch' },
     ]},
-  { dropdown: 'settings', icon: 'ti-settings', label: 'Settings', roles: ['admin'],
-    match: ['settings.html', 'users.html'],
-    children: [
-      { href: 'settings.html', icon: 'ti-adjustments-horizontal', label: 'Settings' },
-      { href: 'users.html',    icon: 'ti-users',                  label: 'Users' },
-    ]},
+
 ];
 
 function renderNav(targetId){
@@ -230,7 +228,7 @@ function renderNav(targetId){
     if (l.dropdown) {
       // Dropdown group
       const childActive = l.children.some(c => (c.match || [c.href]).includes(cur));
-      const items = l.children.map(c => {
+      const items = l.children.filter(c => !c.roles || c.roles.includes(role) || role === 'admin').map(c => {
         if (c.divider) return '<div class="nav-dropdown-divider"></div>';
         const a = (c.match || [c.href]).includes(cur) ? ' active' : '';
         return '<a href="' + c.href + '" class="nav-dropdown-item' + a + '">'

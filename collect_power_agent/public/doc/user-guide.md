@@ -15,14 +15,27 @@ The top navigation bar gives access to all sections:
 | **Campaigns** | Manage and run outreach campaigns |
 | **Follow-up** | Cross-campaign follow-up tracker with inline editable status and comments |
 | **CRM discover** | Manual discovery workflow — export contacts, review, push to CRM work sheet |
-| **Jobs** | Monitor background job progress |
-| **Data collect** → Statistics | Aggregated pipeline statistics |
-| **Data collect** → Filter facets | Lead filter configuration |
-| **Drive Folder** | Files in the connected Google Drive folder |
-| **Mailbox** | Read emails from configured outreach accounts |
-| **Settings** | Mail accounts and Drive folder configuration |
+| **Daily Admin** | Day-to-day operational tools — see below |
+| **Documentation** | User guides and system docs |
 
 **CRM discover** is a direct link in the top navigation bar. **Follow-up** is a standalone link immediately to the left of it.
+
+### Daily Admin
+
+**Daily Admin** is the hub for routine operational work on the system. It groups the tools you use regularly to keep the pipeline running:
+
+| Item | Purpose |
+|---|---|
+| **Statistics** | Aggregated pipeline statistics across all leads and sites |
+| **Filter facets** | Configure and test lead filter criteria |
+| **Drive Folder** | Browse files in the connected Google Drive folder |
+| **Message Box** | Read emails from configured outreach mail accounts |
+| **Jobs** *(admin)* | Monitor background job progress |
+| **Cloud Batch** *(admin)* | Trigger and manage cloud batch processing runs |
+| **Settings** *(admin)* | Mail accounts and Drive folder configuration |
+| **Users** *(admin)* | Manage user accounts and roles |
+
+Items marked *(admin)* are only visible to administrators.
 
 ---
 
@@ -164,3 +177,30 @@ This is the manual curation workflow that fills the **master CRM contact sheet**
 |---|---|
 | 1 | **Export contacts** — pull a selection from the internal contact pool into the master sheet. Choose country and minimum site size to narrow the import. |
 | 2 | **Review & select** — open the master sheet, review each row, and mark the contac
+---
+
+## Filter Facets
+
+**URL:** `filter-facets.html` — accessible via **Daily Admin → Filter facets**
+
+Filter Facets is where you define and save the audience criteria used to build campaigns automatically. A saved set of criteria is called a **facet**.
+
+### Loading a facet
+
+Pick an existing facet from the **Load facets** dropdown. The filters update immediately to reflect the saved selection. Use the refresh icon next to the dropdown to reload the list if you have just saved a new facet elsewhere.
+
+### Adjusting filters
+
+Each card represents one filter dimension (country, sector, company size, etc.). Check or uncheck values to narrow or broaden the audience. The selection summary bar at the top shows how many values are selected across how many categories, and updates as you make changes.
+
+Use **Show selected only** in the summary bar to focus on what is active. **Clear all** resets every filter in one click.
+
+### Saving a facet
+
+Type a name in the **Facet name** field and click **Save & count**. Type a new name to create a new facet — type the name of an existing facet to overwrite it. After saving, the system runs a contact count and shows how many leads and contacts match the current filters.
+
+### Creating a campaign from a facet
+
+Once a facet has been saved and counted, the **Create campaign from filter** button becomes active in the selection summary bar. Click it to open the campaign creation dialog, enter a campaign ID, and confirm. The system pulls all matching contacts into a new campaign automatically. If the campaign ID already exists, its contact list is refreshed instead of creating a new one.
+
+Tick **Dry run** to see the contact count without writing anything.

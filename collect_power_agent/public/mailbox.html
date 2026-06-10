@@ -69,9 +69,7 @@
           <button class="btn btn-outline-secondary btn-sm px-2 py-0" style="line-height:1.6" onclick="stepLimit(50)">+</button>
         </div>
       </div>
-      <button class="btn btn-sm btn-outline-secondary ms-auto" onclick="loadMailbox()" id="refresh-btn">
-        <i class="ti ti-refresh me-1"></i>Refresh
-      </button>
+      <button class="bb-btn-refresh" onclick="loadMailbox()" id="refresh-btn" title="Refresh"><i class="ti ti-refresh"></i></button>
       <a href="settings.html" class="btn btn-sm btn-outline-secondary">
         <i class="ti ti-settings me-1"></i>Manage accounts
       </a>
@@ -321,7 +319,7 @@ async function loadMailbox() {
     fb.textContent = 'Error: ' + e.message; fb.style.display = '';
   }
   btn.disabled = false;
-  btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Refresh';
+  btn.innerHTML = '<i class="ti ti-refresh"></i>';
 }
 
 // ── filtering ───────────────────────────────────────────────────────────────
