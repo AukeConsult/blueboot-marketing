@@ -18,8 +18,8 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from collections import deque
-from datetime import datetime, timezone
 from pathlib import Path
 
 from cloud_batch.job_status import (
@@ -27,7 +27,6 @@ from cloud_batch.job_status import (
     finish_run,
     update_step_done,
     update_step_start,
-    now_iso,
 )
 
 # Project root — two levels up from this file (cloud_batch/job_runner.py)
@@ -70,10 +69,7 @@ class JobRunner:
                 update_step_done(self.job_name, self.run_id, i, 0, "", "skipped")
                 continue
 
-            print(f"[batch]   step {i+1}/{len(steps)} {step_name}: {' '.join(cmd)}", flush=True)
-            update_step_start(self.job_name, self.run_id, i)
-
-            exit_code, log_tail = self._run_subprocess(cmd)
+            exit_code, log_tail = self._run_step_with_retries(i, len(steps), step, cmd)
 
             step_status = "done" if exit_code == 0 else "failed"
             update_step_done(self.job_name, self.run_id, i, exit_code, log_tail, step_status)
@@ -141,6 +137,63 @@ class JobRunner:
 
         module = f"app.{step['module']}"
         return [sys.executable, "-m", module] + resolved
+
+    def _run_step_with_retries(
+        self,
+        step_index: int,
+        step_count: int,
+        step: dict,
+        cmd: list[str],
+    ) -> tuple[int, str]:
+        """Run one step, retrying failed subprocess exits when configured.
+
+        Step fields:
+            retries: extra attempts after the first failure (default 0)
+            retry_delay_sec: seconds to wait between attempts (default 30)
+        """
+        step_name = step["name"]
+        retries = max(int(step.get("retries", 0) or 0), 0)
+        max_attempts = retries + 1
+        retry_delay_sec = max(float(step.get("retry_delay_sec", 30) or 0), 0)
+
+        final_exit_code = 1
+        final_log_tail = ""
+
+        for attempt in range(1, max_attempts + 1):
+            attempt_msg = f" attempt {attempt}/{max_attempts}" if max_attempts > 1 else ""
+            print(
+                f"[batch]   step {step_index+1}/{step_count} {step_name}{attempt_msg}: {' '.join(cmd)}",
+                flush=True,
+            )
+            update_step_start(self.job_name, self.run_id, step_index, attempt=attempt)
+
+            exit_code, log_tail = self._run_subprocess(cmd)
+            final_exit_code = exit_code
+            final_log_tail = log_tail
+
+            if exit_code == 0:
+                if attempt > 1:
+                    final_log_tail = (
+                        f"[batch] retry succeeded on attempt {attempt}/{max_attempts}\n"
+                        + final_log_tail
+                    )
+                return final_exit_code, final_log_tail
+
+            if attempt < max_attempts:
+                print(
+                    f"[batch]   step {step_name} failed on attempt {attempt}/{max_attempts} "
+                    f"(exit {exit_code}); retrying in {retry_delay_sec:g}s",
+                    flush=True,
+                )
+                final_log_tail = (
+                    f"[batch] attempt {attempt}/{max_attempts} failed with exit {exit_code}; "
+                    f"retrying in {retry_delay_sec:g}s\n"
+                    + final_log_tail
+                )
+                if retry_delay_sec:
+                    time.sleep(retry_delay_sec)
+
+        return final_exit_code, final_log_tail
 
     # ── Subprocess runner ─────────────────────────────────────────────────────
 

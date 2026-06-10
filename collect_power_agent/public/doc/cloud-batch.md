@@ -349,7 +349,7 @@ One-off data repair and export scripts — suitable for scheduled maintenance jo
     "countries": { "type": "str", "required": true, "help": "..." }
   },
   "steps": [
-    { "name": "step1", "module": "my_script", "args": ["--countries", "{countries}"], "on_error": "abort" }
+    { "name": "step1", "module": "my_script", "args": ["--countries", "{countries}"], "retries": 2, "retry_delay_sec": 60, "on_error": "abort" }
   ]
 }
 ```
@@ -369,6 +369,15 @@ bash deploy_batch.sh
 |---|---|
 | `abort` | Stop all remaining steps, mark run as `failed` |
 | `continue` | Mark step as `failed`, continue with next step. Run final status is `failed` even if later steps succeed. |
+
+Optional retry fields can be added to any step:
+
+| Field | Behaviour |
+|---|---|
+| `retries` | Extra attempts after the first failed subprocess exit. Default `0`. |
+| `retry_delay_sec` | Seconds to wait between attempts. Default `30`. |
+
+Retries happen before `on_error` is applied. If the last attempt still fails, `abort` or `continue` controls the rest of the run.
 
 ---
 

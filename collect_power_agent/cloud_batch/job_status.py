@@ -93,19 +93,23 @@ def create_run(job_name: str, run_id: str, params: dict, triggered_by: str, step
                 "started_at": None,
                 "ended_at":   None,
                 "log_tail":   "",
+                "attempt":    0,
+                "max_attempts": int(s.get("retries", 0) or 0) + 1,
             }
             for s in steps
         ],
     })
 
 
-def update_step_start(job_name: str, run_id: str, step_index: int) -> None:
+def update_step_start(job_name: str, run_id: str, step_index: int, attempt: int = 1) -> None:
     ref  = _run_doc(job_name, run_id)
     doc  = ref.get().to_dict()
     steps = doc.get("steps", [])
     if step_index < len(steps):
         steps[step_index]["status"]     = "running"
-        steps[step_index]["started_at"] = now_iso()
+        if not steps[step_index].get("started_at"):
+            steps[step_index]["started_at"] = now_iso()
+        steps[step_index]["attempt"]    = attempt
     ref.update({"steps": steps})
 
 

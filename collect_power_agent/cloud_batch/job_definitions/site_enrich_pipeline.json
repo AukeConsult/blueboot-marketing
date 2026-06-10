@@ -38,6 +38,8 @@
       ],
       "dry_run_flag": "--dry-run",
       "force_flag": "--force",
+      "retries": 2,
+      "retry_delay_sec": 60,
       "on_error": "abort"
     },
     {
@@ -49,6 +51,8 @@
       ],
       "dry_run_flag": "--dry-run",
       "force_flag": "--force",
+      "retries": 2,
+      "retry_delay_sec": 60,
       "on_error": "continue"
     },
     {
@@ -60,6 +64,8 @@
       ],
       "dry_run_flag": "--dry-run",
       "force_flag": "--force",
+      "retries": 1,
+      "retry_delay_sec": 60,
       "on_error": "continue"
     },
     {
@@ -71,6 +77,8 @@
       ],
       "dry_run_flag": "--dry-run",
       "force_flag": "--force",
+      "retries": 2,
+      "retry_delay_sec": 60,
       "on_error": "continue"
     },
     {
@@ -84,6 +92,8 @@
         "{campaign}"
       ],
       "dry_run_flag": "--dry-run-contacts",
+      "retries": 1,
+      "retry_delay_sec": 60,
       "on_error": "abort",
       "gdisk_flag": "--gdisk"
     }

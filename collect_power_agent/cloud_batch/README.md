@@ -430,7 +430,7 @@ python -m cloud_batch.scheduler_setup --runner-url $BATCH_RUNNER_URL
     "dry_run":   { "type": "bool", "default": false, "help": "Preview only" }
   },
   "steps": [
-    { "name": "step_one",  "module": "my_script",       "args": ["--countries", "{countries}"], "on_error": "abort" },
+    { "name": "step_one",  "module": "my_script",       "args": ["--countries", "{countries}"], "retries": 2, "retry_delay_sec": 60, "on_error": "abort" },
     { "name": "step_two",  "module": "my_other_script",  "args": ["--countries", "{countries}"], "on_error": "continue" }
   ]
 }
@@ -457,6 +457,16 @@ python app/seed_batch_jobs.py # definition changes only
 | `continue` | Mark step `failed`, keep going. Run status = `failed` even if later steps pass. |
 
 Discovery and export steps default to `abort`. Enrichment steps default to `continue`.
+
+Optional retry fields can be added to any step:
+
+| Field | Behaviour |
+|---|---|
+| `retries` | Extra attempts after the first failed subprocess exit. Default `0`. |
+| `retry_delay_sec` | Seconds to wait between attempts. Default `30`. |
+
+Retries happen before `on_error` is applied. If the last attempt still fails,
+`abort` or `continue` decides what happens to the rest of the pipeline.
 
 ---
 
