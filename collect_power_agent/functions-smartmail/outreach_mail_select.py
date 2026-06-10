@@ -75,7 +75,8 @@ class CampaignMail:
     subject_template: str   # may contain {{contact_name}} etc.
     body_html:        str   # Quill HTML, may contain template vars
     sender_email:     str   # account email stored on the campaign doc
-    extra:            dict = field(default_factory=dict)
+    mail_sequence:    list  = field(default_factory=list)  # ordered MailStep dicts from campaign doc
+    extra:            dict  = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -144,7 +145,8 @@ _CONTACT_KNOWN = {
 }
 
 _CAMPAIGN_KNOWN = {
-    "name", "status", "mail", "outreach_email_account", "sender_account",
+    "name", "status", "mail", "mail_sequence",
+    "outreach_email_account", "sender_account",
     "created_at", "updated_at", "started_at", "_type",
 }
 
@@ -195,6 +197,10 @@ def _load_campaign(db, campaign_id: str) -> CampaignMail | None:
         d.get("outreach_email_account") or
         d.get("sender_account") or ""
     ).strip()
+    mail_sequence = d.get("mail_sequence") or []
+    if not isinstance(mail_sequence, list):
+        mail_sequence = []
+
     return CampaignMail(
         campaign_id      = campaign_id,
         campaign_name    = d.get("name", ""),
@@ -202,6 +208,7 @@ def _load_campaign(db, campaign_id: str) -> CampaignMail | None:
         subject_template = mail_cfg.get("subject", ""),
         body_html        = mail_cfg.get("body", ""),
         sender_email     = sender,
+        mail_sequence    = mail_sequence,
         extra            = {k: v for k, v in d.items() if k not in _CAMPAIGN_KNOWN},
     )
 
@@ -211,10 +218,17 @@ def _load_campaign(db, campaign_id: str) -> CampaignMail | None:
 # ---------------------------------------------------------------------------
 
 def read_outreach(
-    status: str | list[str] = "pending",
-    limit:  int              = 500,
+    mode:  str = "intro",
+    limit: int = 500,
 ) -> list[AccountBatch]:
-    """Read all pending outreach work grouped by sending account.
+    """Read outreach candidates grouped by sending account.
+
+    Two modes:
+
+      "intro"    — contacts where status == "pending"
+                   (first-ever mail, always mail_sequence[0])
+      "followup" — contacts where followup_status == "Send mail"
+                   (next step = mail_sequence[len(contact.mail_sent)])
 
     Queries the campaign_contacts collectionGroup in one round-trip, groups
     contacts by campaign, resolves each campaign's mail template and sending
@@ -226,9 +240,8 @@ def read_outreach(
 
     Parameters
     ----------
-    status : str or list[str]
-        Contact status value(s) to include. Default "pending".
-        Pass a list for multiple values, e.g. ["pending", "retry"].
+    mode : "intro" | "followup"
+        Selects the Firestore filter. Default "intro".
     limit : int
         Maximum total contacts to read across all campaigns.
 
@@ -243,23 +256,21 @@ def read_outreach(
 
     Usage
     -----
-    for batch in read_outreach():
+    for batch in read_outreach(mode="intro"):
         # open one SMTP connection for batch.account
         for cwc in batch.campaigns:
             for contact in cwc.contacts:
-                # render cwc.campaign.subject_template / body_html
-                # send to contact.email
+                # render and send
     """
-    status_values: list[str] = [status] if isinstance(status, str) else list(status)
-
     db = _get_db()
 
-    # Step 1: collectionGroup query - one round-trip for all campaigns
+    # Step 1: collectionGroup query — filter depends on mode
+    from google.cloud.firestore_v1.base_query import FieldFilter
     col_group = db.collection_group("campaign_contacts")
-    if len(status_values) == 1:
-        query = col_group.where("status", "==", status_values[0])
+    if mode == "followup":
+        query = col_group.where(filter=FieldFilter("followup_status", "==", "Send mail"))
     else:
-        query = col_group.where("status", "in", status_values)
+        query = col_group.where(filter=FieldFilter("status", "==", "pending"))
 
     # Group contacts by campaign_id (extracted from the Firestore path:
     # campaigns/{campaign_id}/campaign_contacts/{doc_id})
@@ -295,6 +306,13 @@ def read_outreach(
         campaign = _load_campaign(db, campaign_id)
         if campaign is None:
             print(f"[outreach_mail_select] campaign '{campaign_id}' not found -- skipping")
+            continue
+
+        if not campaign.mail_sequence:
+            print(
+                f"[outreach_mail_select] campaign '{campaign_id}' has no mail_sequence defined"
+                f" -- skipping (add mail_sequence array to the campaign doc)"
+            )
             continue
 
         sender_email = campaign.sender_email
