@@ -118,6 +118,38 @@ def update_campaign(campaign_id):
             merged_mail.update(body["mail"])
             update["mail"] = merged_mail
 
+        # --- mail_schedule support -----------------------------------------
+        # Full schedule replace: PATCH with {"mail_schedule": [...]}
+        # Single-step upsert:   PATCH with {"mail_schedule_step": {...}}
+        #   The step must contain a "step_id".  It is merged into (or appended
+        #   to) the existing array.  To delete a step send {"delete_step": id}.
+        if "mail_schedule" in body:
+            sched = body["mail_schedule"]
+            if not isinstance(sched, list):
+                return _err("mail_schedule must be an array", 400)
+            update["mail_schedule"] = sched
+
+        if "mail_schedule_step" in body:
+            step = body["mail_schedule_step"]
+            if not isinstance(step, dict) or not step.get("step_id"):
+                return _err("mail_schedule_step must be an object with step_id", 400)
+            existing_schedule = list((doc.to_dict() or {}).get("mail_schedule") or [])
+            idx = next((i for i, s in enumerate(existing_schedule)
+                        if s.get("step_id") == step["step_id"]), None)
+            if idx is not None:
+                merged = dict(existing_schedule[idx])
+                merged.update(step)
+                existing_schedule[idx] = merged
+            else:
+                existing_schedule.append(step)
+            update["mail_schedule"] = existing_schedule
+
+        if "delete_step" in body:
+            step_id = body["delete_step"]
+            existing_schedule = list((doc.to_dict() or {}).get("mail_schedule") or [])
+            update["mail_schedule"] = [s for s in existing_schedule
+                                       if s.get("step_id") != step_id]
+
         if "imap" in body or "gmail" in body or "mail_account_type" in body:
             campaign_data    = doc.to_dict() or {}
             outreach_account = (

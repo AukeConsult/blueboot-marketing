@@ -41,10 +41,27 @@
     </div>
   </div>
 
+  <!-- Step context bar (shown when editing a mail_schedule step) -->
+  <div id="step-context-bar" class="bb-card p-3 mb-3" style="display:none;background:#eff6ff;border-color:#bfdbfe">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label small fw-500 mb-1">Step name</label>
+        <input id="step-name" class="form-control form-control-sm" placeholder="e.g. Initial outreach" oninput="autoSave()">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-500 mb-1">Send after (days)</label>
+        <input id="step-delay" class="form-control form-control-sm" type="number" min="0" placeholder="0" oninput="autoSave()">
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <div class="small" style="color:#3b82f6"><i class="ti ti-info-circle me-1"></i>Day 0 = send on campaign activation</div>
+      </div>
+    </div>
+  </div>
+
   <!-- Meta fields -->
   <div class="bb-card p-3 mb-3">
     <div class="row g-3">
-      <div class="col-md-6">
+      <div class="col-md-6" id="email-account-col">
         <label class="form-label small fw-500 mb-1">Outreach email account</label>
         <input id="c-email-account-edit" class="form-control form-control-sm" placeholder="sender@example.com" oninput="autoSave()">
       </div>
@@ -234,6 +251,9 @@
 // BASE + helpers from js/crm-common.js
 const urlParams = new URLSearchParams(window.location.search);
 const CAMPAIGN_ID = urlParams.get('campaign_id') || '';
+const STEP_ID     = urlParams.get('step') || '';        // editing a mail_schedule step
+const STEP_NEW    = urlParams.get('step_new') === '1';  // brand-new step
+const STEP_DELAY  = parseInt(urlParams.get('delay') || '0', 10);
 
 let quill = null;
 let _saveTimer = null;
@@ -427,10 +447,25 @@ async function saveCampaign(silent = false) {
   if (!silent) { fb.textContent = 'Saving…'; fb.style.color = 'var(--bb-muted)'; fb.style.display = ''; }
   try {
     const css = document.getElementById('c-mail-css').value;
+    let payload;
+    if (STEP_ID) {
+      // Save a specific mail_schedule step
+      const stepName  = document.getElementById('step-name').value.trim() || `Step`;
+      const stepDelay = parseInt(document.getElementById('step-delay').value || '0', 10);
+      payload = {
+        mail_schedule_step: {
+          step_id:    STEP_ID,
+          name:       stepName,
+          delay_days: isNaN(stepDelay) ? 0 : stepDelay,
+          mail:       { subject, body, type: mode, css },
+        }
+      };
+    } else {
+      payload = { mail: { subject, body, type: mode, css }, outreach_email_account: account };
+    }
     const r = await fetch(`${BASE}/api/crm/campaigns/${CAMPAIGN_ID}`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ mail: {subject, body, type: mode, css}, outreach_email_account: account })
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
     });
     const d = await r.json();
     fb.style.color = d.status === 'ok' ? '#16a34a' : '#dc2626';
@@ -442,9 +477,30 @@ async function saveCampaign(silent = false) {
   }
 }
 
+const _DEFAULT_CSS = `.mail-wrap, .mail-wrap p, .mail-wrap div, .mail-wrap span, .mail-wrap td { margin: 0; padding: 0; }
+.mail-wrap p { margin-bottom: 8px; }
+.mail-wrap { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; color: #333; max-width: 600px; }
+.mail-wrap a { color: #0066cc; text-decoration: none; }
+.mail-wrap h1, .mail-wrap h2, .mail-wrap h3 { font-weight: bold; margin-bottom: 8px; }
+.mail-wrap ul, .mail-wrap ol { margin: 0 0 8px 20px; padding: 0; }
+.mail-wrap li { margin-bottom: 4px; }`;
+
+function _applyMail(mail) {
+  const mt = mail.type || 'plain';
+  document.getElementById('c-subject').value   = mail.subject || '';
+  document.getElementById('c-body').value      = mail.body    || '';
+  document.getElementById('c-body-html').value = mail.body    || '';
+  document.getElementById('c-mail-css').value  = mail.css     || _DEFAULT_CSS;
+  const mtEl = document.querySelector(`input[name="mail-type"][value="${mt}"]`);
+  if (mtEl) { mtEl.checked = true; switchMode(); }
+  if (mt === 'html') { initQuill(); if (quill) quill.root.innerHTML = mail.body || ''; }
+}
+
 async function loadCampaign() {
   if (!CAMPAIGN_ID) { document.getElementById('c-campaign-id').textContent = 'No campaign selected'; return; }
-  document.getElementById('c-campaign-id').textContent = CAMPAIGN_ID;
+  // Title line: show step label if editing a step
+  const titleSuffix = STEP_ID ? ` · step` : '';
+  document.getElementById('c-campaign-id').textContent = CAMPAIGN_ID + titleSuffix;
   document.getElementById('back-link').href = `campaign.html?campaign_id=${encodeURIComponent(CAMPAIGN_ID)}`;
   try {
     const r = await fetch(`${BASE}/api/crm/campaigns/${CAMPAIGN_ID}`);
@@ -453,23 +509,28 @@ async function loadCampaign() {
     const badge = document.getElementById('c-status-badge');
     badge.className = `bb-badge bb-badge-${st}`; badge.textContent = st;
     document.getElementById('c-email-account-edit').value = c.outreach_email_account || '';
-    const mail = c.mail || {};
-    document.getElementById('c-subject').value   = mail.subject || '';
-    document.getElementById('c-body').value      = mail.body    || '';
-    document.getElementById('c-body-html').value = mail.body    || '';
-    document.getElementById('c-mail-css').value = mail.css || `.mail-wrap, .mail-wrap p, .mail-wrap div, .mail-wrap span, .mail-wrap td { margin: 0; padding: 0; }
-.mail-wrap p { margin-bottom: 8px; }
-.mail-wrap { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; color: #333; max-width: 600px; }
-.mail-wrap a { color: #0066cc; text-decoration: none; }
-.mail-wrap h1, .mail-wrap h2, .mail-wrap h3 { font-weight: bold; margin-bottom: 8px; }
-.mail-wrap ul, .mail-wrap ol { margin: 0 0 8px 20px; padding: 0; }
-.mail-wrap li { margin-bottom: 4px; }`;
-    const mt = mail.type || 'plain';
-    const mtEl = document.querySelector(`input[name="mail-type"][value="${mt}"]`);
-    if (mtEl) { mtEl.checked = true; switchMode(); }
-    if (mt === 'html') {
-      initQuill();
-      if (quill) quill.root.innerHTML = mail.body || '';
+
+    if (STEP_ID) {
+      // Show step context bar
+      document.getElementById('step-context-bar').style.display = '';
+      // Hide the email-account column (not relevant per-step; subject stays visible)
+      const emailCol = document.getElementById('email-account-col');
+      if (emailCol) emailCol.style.display = 'none';
+
+      const steps = c.mail_schedule || [];
+      const step  = steps.find(s => s.step_id === STEP_ID);
+      if (step) {
+        document.getElementById('step-name').value  = step.name || '';
+        document.getElementById('step-delay').value = step.delay_days != null ? step.delay_days : 0;
+        _applyMail(step.mail || {});
+      } else {
+        // New step — pre-fill delay from URL param
+        document.getElementById('step-name').value  = '';
+        document.getElementById('step-delay').value = isNaN(STEP_DELAY) ? 0 : STEP_DELAY;
+        _applyMail({});
+      }
+    } else {
+      _applyMail(c.mail || {});
     }
   } catch(e) {
     document.getElementById('c-campaign-id').textContent = `Error: ${e.message}`;
