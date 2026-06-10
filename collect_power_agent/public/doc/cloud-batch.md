@@ -1,8 +1,8 @@
-# Google Batch Jobs — Architecture & Setup Guide
+# Cloud Batch — Architecture & Setup Guide
 
 ## Overview
 
-`cloud_batch/` is a long-running job orchestration framework for the Blueboot pipeline scripts. It runs pipeline steps as isolated subprocesses on a Cloud Run service, tracks progress in Firestore, and exposes job management through the CRM frontend (`google-job.html`).
+`cloud_batch/` is a long-running job orchestration framework for the Blueboot pipeline scripts. It runs pipeline steps as isolated subprocesses on a Cloud Run service, tracks progress in Firestore, and exposes job management through the CRM frontend (`cloud-batch.html` — Batch Services → Cloud Batch).
 
 ---
 
@@ -13,7 +13,7 @@
 │  TRIGGER LAYER                                                              │
 │                                                                             │
 │   Cloud Scheduler          CRM Frontend            Manual CLI              │
-│   (cron per job)          (google-job.html)     (scheduler_setup.py)      │
+│   (cron per job)          (cloud-batch.html)     (scheduler_setup.py)      │
 │        │                        │                        │                 │
 │        └──────── POST /run ─────┴────────────────────────┘                 │
 └─────────────────────────────────────────────────┬───────────────────────────┘
@@ -175,7 +175,7 @@ functions-crm/handlers/
   batch.py               CRM API blueprint (list jobs, trigger run, poll run)
 
 public/
-  google-job.html        Frontend: run jobs on demand, live step progress, history
+  cloud-batch.html        Frontend: run jobs on demand, live step progress, history
 ```
 
 ---
@@ -212,7 +212,7 @@ bash cloud_batch/setup/05_setup_scheduler.sh
 ## Triggering a Job Manually
 
 ### From the CRM frontend
-Open `google-job.html` → click **Run now** on any job → fill params → submit.
+Open `cloud-batch.html` → click **Run now** on any job → fill params → submit.
 
 ### Via the API
 ```bash

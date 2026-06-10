@@ -399,14 +399,14 @@ python app/build_filter_facets.py --cap 300 --no-write   # JSON preview only
 
 ---
 
-## 10. Google Cloud Batch Jobs (`cloud_batch/`)
+## 10. Cloud Batch (`cloud_batch/`)
 
 The `cloud_batch/` framework runs long-running pipeline scripts on Google Cloud so they don't time out or block local machines. Jobs are triggered from the CRM frontend, from Cloud Scheduler (cron), or manually via CLI.
 
 ### Architecture
 
 ```
-Cloud Scheduler / google-job.html / CLI
+Cloud Scheduler / cloud-batch.html / CLI
           │
           ▼ POST /api/crm/batch/jobs/{job}/run
 CRM API (Firebase Cloud Function)
@@ -471,7 +471,7 @@ gcloud-batch-jobs/
 | Secret Manager | Stores all secrets (API keys, Firebase credentials) — injected as env vars |
 | Firestore | Tracks job definitions, run history, and per-step progress |
 
-Setup scripts live in `cloud_batch/setup/` (run once, in order 01→06). See `gcloud-job.md` (Documentation → Google Cloud Jobs) for the full setup guide.
+Setup scripts live in `cloud_batch/setup/` (run once, in order 01→06). See `cloud-batch.md` (Documentation → Cloud Batch) for the full setup guide.
 
 ---
 

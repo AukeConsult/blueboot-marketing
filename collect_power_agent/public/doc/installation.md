@@ -259,9 +259,9 @@ firebase deploy --only hosting
 
 ---
 
-## 6. Google Cloud Batch Jobs (optional)
+## 6. Cloud Batch (optional)
 
-The `cloud_batch/` framework runs the pipeline scripts unattended on Google Cloud. Set this up if you want scheduled weekly runs or want to trigger pipelines from the Google Jobs page in the dashboard.
+The `cloud_batch/` framework runs the pipeline scripts unattended on Google Cloud. Set this up if you want scheduled weekly runs or want to trigger pipelines from the Cloud Batch page in the dashboard (admin only).
 
 ### 6.1 Prerequisites
 
@@ -320,7 +320,7 @@ gcloud run services describe batch-runner \
   --format "value(status.url)"
 ```
 
-Open the dashboard → **Google Jobs** to confirm jobs are listed and try a manual run.
+Open the dashboard → **Batch Services → Cloud Batch** to confirm jobs are listed and try a manual run.
 
 ---
 

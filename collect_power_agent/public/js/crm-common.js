@@ -166,13 +166,13 @@ const PAGE_ROLES = {
   'crm-bp.html':        ['admin', 'user'],
   'crm-sync.html':      ['admin', 'user'],
   'crm_follow.html':    ['admin', 'campaign-user', 'user'],
-  'jobs.html':          ['admin', 'campaign-user', 'user'],
+  'jobs.html':          ['admin'],
   'statistics.html':    ['admin', 'campaign-user', 'user'],
   'filter-facets.html': ['admin', 'campaign-user', 'user'],
   'gdisk.html':         ['admin', 'campaign-user', 'user'],
   'settings.html':      ['admin'],
   'users.html':         ['admin'],
-  'google-job.html':    ['admin', 'campaign-user'],
+  'cloud-batch.html':    ['admin'],
   // doc-viewer.html and index.html are PUBLIC_PAGES — no role check
 };
 
@@ -192,8 +192,12 @@ const NAV_LINKS = [
     ]},
   { href: 'gdisk.html',         icon: 'ti-brand-google-drive',label: 'Drive Folder', roles: ['admin', 'campaign-user', 'user'] },
   { href: 'mailbox.html',       icon: 'ti-inbox',             label: 'Message box', roles: ['admin', 'campaign-user', 'user'] },
-  { href: 'jobs.html',          icon: 'ti-list-check',        label: 'Jobs',        roles: ['admin', 'campaign-user', 'user'] },
-  { href: 'google-job.html',    icon: 'ti-cloud-computing',   label: 'Google Jobs', roles: ['admin', 'campaign-user'] },
+  { dropdown: 'batch-services', icon: 'ti-server-bolt', label: 'Batch Services', roles: ['admin'],
+    match: ['jobs.html', 'cloud-batch.html'],
+    children: [
+      { href: 'jobs.html',       icon: 'ti-list-check',      label: 'Jobs' },
+      { href: 'cloud-batch.html', icon: 'ti-cloud-computing', label: 'Cloud Batch' },
+    ]},
   { dropdown: 'docs',  match: ['doc-viewer.html'],           icon: 'ti-book',              label: 'Documentation',
     children: [
       { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user',           label: 'User guide' },
@@ -206,7 +210,7 @@ const NAV_LINKS = [
       { href: 'doc-viewer.html?doc=system-architecture', icon: 'ti-topology-star-3', label: 'System architecture' },
       { href: 'doc-viewer.html?doc=backend-functions',   icon: 'ti-terminal',       label: 'Backend functions' },
       { href: 'doc-viewer.html?doc=installation',        icon: 'ti-download',       label: 'Installation' },
-      { href: 'doc-viewer.html?doc=gcloud-job',          icon: 'ti-cloud-computing', label: 'Google Cloud Jobs' },
+      { href: 'doc-viewer.html?doc=cloud-batch',          icon: 'ti-cloud-computing', label: 'Cloud Batch' },
     ]},
   { dropdown: 'settings', icon: 'ti-settings', label: 'Settings', roles: ['admin'],
     match: ['settings.html', 'users.html'],

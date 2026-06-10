@@ -66,13 +66,21 @@ def _make_http_target(job_name: str, task_id: str):
 def sync_all() -> dict:
     """Read all tasks from Firestore and create/update Cloud Scheduler jobs.
 
-    Returns a summary dict with counts: created, updated, skipped, errors.
+    Returns a summary dict: created, updated, skipped, errors, jobs.
+    If BATCH_RUNNER_URL is not set, returns immediately with a warning (no error).
     """
     from google.cloud import scheduler_v1
     from google.api_core.exceptions import NotFound
 
     if not _RUNNER:
-        raise RuntimeError("BATCH_RUNNER_URL is not set — cannot build scheduler targets")
+        # BATCH_RUNNER_URL not configured (local dev / pre-deploy) — skip silently
+        return {
+            "created": 0, "updated": 0, "skipped": 0, "errors": [], "jobs": [],
+            "warning": (
+                "BATCH_RUNNER_URL is not set — scheduler sync skipped. "
+                "Set this env var on the Cloud Run service after deploying."
+            ),
+        }
 
     client  = scheduler_v1.CloudSchedulerClient()
     summary = {"created": 0, "updated": 0, "skipped": 0, "errors": [], "jobs": []}
@@ -88,7 +96,7 @@ def sync_all() -> dict:
             active   = task.get("active", True)
             name     = task.get("name", task_id)
 
-            # No schedule or inactive → skip (leave any existing scheduler job as-is)
+            # No schedule or inactive — skip (leave any existing scheduler job as-is)
             if not schedule or not active:
                 summary["skipped"] += 1
                 continue
@@ -101,21 +109,21 @@ def sync_all() -> dict:
                 http_target=_make_http_target(job_name, task_id),
                 schedule=schedule,
                 time_zone="UTC",
-                attempt_deadline={"seconds": 1800},  # 30 minutes
+                attempt_deadline={"seconds": 1800},
             )
 
             try:
-                # Try to update (job exists)
                 client.get_job(name=sched_name)
                 client.update_job(
                     job=job,
-                    update_mask={"paths": ["http_target", "schedule", "time_zone",
-                                           "attempt_deadline", "description"]},
+                    update_mask={"paths": [
+                        "http_target", "schedule", "time_zone",
+                        "attempt_deadline", "description",
+                    ]},
                 )
                 summary["updated"] += 1
                 summary["jobs"].append({"action": "updated", "name": sched_name, "task": name})
             except NotFound:
-                # Create new
                 try:
                     client.create_job(parent=_PARENT, job=job)
                     summary["created"] += 1

@@ -56,7 +56,13 @@ from cloud_batch.job_runner import run_in_background
 
 for _d in _JOB_DEFS.values():
     try:
-        sync_definition(_d)
+        # Only seed if the Firestore doc is missing — never overwrite user edits on restart.
+        # To force-update: run  python app/seed_batch_jobs.py --force
+        if not get_definition(_d["name"]):
+            sync_definition(_d)
+            print(f"[batch] seeded new job def: {_d['name']}")
+        else:
+            print(f"[batch] job def exists, skipping seed: {_d['name']}")
     except Exception as _e:
         print(f"[batch] warn: could not sync def {_d['name']}: {_e}")
 
@@ -207,10 +213,3 @@ def sync_schedulers():
         return _err(f"Scheduler sync failed: {e}", 500)
 
     return jsonify({"status": "ok", "summary": summary}), 200
-
-
-# ── Main ──────────────────────────────────────────────────────────────────────
-
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8080))
-    app.run(host="0.0.0.0", port=port, debug=False)
