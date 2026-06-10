@@ -114,15 +114,22 @@ All data lives under the single collection `gcloud-batch-jobs`.
 
 ```
 gcloud-batch-jobs/
-  site_pipeline                    ← job definition document
+  site_pipeline                    ← job definition document (schema only, no schedule)
     name:        "site_pipeline"
     description: "Full site discovery + enrichment pipeline"
-    schedule:    "0 2 * * 1"
     params:      { countries:{...}, campaign:{...}, workers:{...}, ... }
     steps:       [ {name, module, args, on_error}, ... ]
     updated_at:  "2026-06-09T..."
 
-    runs/                          ← subcollection
+    tasks/                         ← subcollection: scheduled run configs
+      abc123                       ← one task = one Cloud Scheduler job
+        task_id:  "abc123"
+        name:     "NO monday"
+        schedule: "0 2 * * 1"     ← cron expression
+        active:   true
+        params:   { countries: "NO", campaign: "NO_jun02" }
+
+    runs/                          ← subcollection: execution history
       20260609_143201_a1b2c3       ← run document
         run_id:       "20260609_143201_a1b2c3"
         job:          "site_pipeline"
@@ -139,8 +146,18 @@ gcloud-batch-jobs/
         ]
 
   lead_pipeline                    ← same structure
+    tasks/ ...
     runs/ ...
 ```
+
+### Schedule model
+
+Schedules live on **tasks**, not on job definitions. Each task maps to exactly one Cloud Scheduler job (named `batch-{job}-{task_id}`). A job definition can have multiple tasks running on different schedules with different params (e.g. one task for Norway on Mondays, another for Sweden on Tuesdays).
+
+Clicking **Sync schedules** in the frontend calls `POST /sync-schedulers` on the Cloud Run service, which:
+1. Creates Cloud Scheduler jobs for all active tasks that have a schedule
+2. Updates existing Cloud Scheduler jobs if the schedule or params changed
+3. Deletes Cloud Scheduler jobs whose task was removed or deactivated
 
 ---
 
@@ -180,31 +197,39 @@ public/
 
 ---
 
-## First-Time Setup
+## Deployment
+
+### Redeploy (normal workflow)
+
+Run from the project root whenever `cloud_batch/` or `app/` scripts change:
 
 ```bash
-# 1. Set environment
-export GCP_PROJECT=blueboot-market
-export GCP_LOCATION=us-central1
-
-# 2. Run all setup steps
-bash cloud_batch/setup/setup_all.sh
-
-# 3. Set BATCH_RUNNER_URL in the CRM Cloud Function env vars
-#    (printed at end of setup_all.sh)
-gcloud functions deploy crmApi \
-  --update-env-vars BATCH_RUNNER_URL=https://batch-runner-xxx-uc.a.run.app
+bash deploy_batch.sh
 ```
 
-Or run individual steps:
+This does 4 steps in order:
+1. Build Docker image via Cloud Build
+2. Deploy to Cloud Run (4 CPU, 4 GB RAM, concurrency 2, timeout 3600 s)
+3. Set `BATCH_RUNNER_URL` env var on the service (needed by scheduler sync)
+4. Seed any new job definitions into Firestore (skips existing docs)
+
+After deploying, click **Sync schedules** in the frontend (Batch Services → Cloud Batch) to update Cloud Scheduler cron jobs.
+
+### First-Time Setup
 
 ```bash
+# 1. Enable GCP APIs, create service account, set up Artifact Registry
 bash cloud_batch/setup/01_enable_apis.sh
 bash cloud_batch/setup/02_service_account.sh
-bash cloud_batch/setup/06_secrets.sh          # stores OPENAI_KEY, BATCH_SECRET, BING_KEY
 bash cloud_batch/setup/03_artifact_registry.sh
-bash cloud_batch/setup/04_deploy_cloudrun.sh
-bash cloud_batch/setup/05_setup_scheduler.sh
+bash cloud_batch/setup/06_secrets.sh    # push OPENAI_KEY, BATCH_SECRET, BING_KEY
+
+# 2. Deploy
+bash deploy_batch.sh
+
+# 3. Set BATCH_RUNNER_URL in the CRM Cloud Function
+gcloud functions deploy crmApi \
+  --update-env-vars BATCH_RUNNER_URL=https://batch-runner-xxx-uc.a.run.app
 ```
 
 ---
@@ -273,9 +298,26 @@ bash cloud_batch/setup/05_setup_scheduler.sh
 
 | Service | Purpose |
 |---|---|
-| Cloud Run | Hosts the batch-runner Flask service (min-instances=1, no timeout) |
-| Cloud Scheduler | Fires HTTP POST /run on cron schedule per job definition |
+| Cloud Run | Hosts the batch-runner Flask service (4 CPU, 4 GB RAM, concurrency 2, timeout 3600 s) |
+| Cloud Scheduler | Fires HTTP POST /run on cron schedule — one job per task |
 | Artifact Registry | Stores the Docker image for the batch-runner |
 | Secret Manager | Stores OPENAI_API_KEY, BING_API_KEY, BATCH_SECRET |
-| Firestore | Job definitions + run status in `gcloud-batch-jobs/` |
-| IAM | `batch-runner` service account with `datastore.user`, `secretmanager.secretAccessor`, `run.invoker` |
+| Firestore | Job definitions, tasks, and run status in `gcloud-batch-jobs/` |
+| IAM | `batch-runner` service account with `datastore.user`, `secretmanager.secretAccessor`, `run.invoker`, `cloudscheduler.admin` |
+
+---
+
+## Cloud Run Resource Settings
+
+Set in `deploy_batch.sh` and applied on every deploy:
+
+| Setting | Value | Reason |
+|---|---|---|
+| `--memory` | 4 Gi | Pipeline scripts (site_agent, enrich) are memory-heavy |
+| `--cpu` | 4 | Each step runs as a subprocess; 4 cores prevents CPU starvation |
+| `--no-cpu-throttling` | always on | Critical for background threads — without this Cloud Run throttles CPU as soon as the 202 response is sent, starving the pipeline |
+| `--min-instances` | 1 | Keeps one instance always warm so scheduled jobs don't cold-start |
+| `--max-instances` | 3 | Allows Cloud Run to spin up extra instances if jobs queue up |
+| `--timeout` | 3600 s | Pipeline jobs run for hours; Cloud Run default (300 s) would kill them |
+
+`--concurrency` is intentionally omitted. `/run` returns 202 immediately and jobs run in background threads, so Cloud Run never sees concurrent requests. Job concurrency is controlled by the `is_running()` dedup guard in `entrypoint.py` — the same job cannot run twice simultaneously, but two different jobs scheduled at the same time will both run, each in its own background thread sharing the instance CPU and memory.

@@ -20,7 +20,7 @@ import os
 
 from cloud_batch.job_status import list_definitions, list_tasks
 
-# ── Constants ─────────────────────────────────────────────────────────────────
+# -- Constants -----------------------------------------------------------------
 
 _PROJECT  = os.getenv("GCP_PROJECT",  "blueboot-market")
 _LOCATION = os.getenv("GCP_LOCATION", "us-central1")
@@ -64,26 +64,32 @@ def _make_http_target(job_name: str, task_id: str):
 
 
 def sync_all() -> dict:
-    """Read all tasks from Firestore and create/update Cloud Scheduler jobs.
+    """Read all tasks from Firestore and create/update/delete Cloud Scheduler jobs.
 
-    Returns a summary dict: created, updated, skipped, errors, jobs.
+    Returns a summary dict: created, updated, deleted, skipped, errors, jobs.
     If BATCH_RUNNER_URL is not set, returns immediately with a warning (no error).
+
+    Deletion: any existing Cloud Scheduler job whose name starts with 'batch-'
+    that no longer corresponds to an active task with a schedule is deleted.
     """
     from google.cloud import scheduler_v1
     from google.api_core.exceptions import NotFound
 
     if not _RUNNER:
-        # BATCH_RUNNER_URL not configured (local dev / pre-deploy) — skip silently
         return {
-            "created": 0, "updated": 0, "skipped": 0, "errors": [], "jobs": [],
+            "created": 0, "updated": 0, "deleted": 0, "skipped": 0,
+            "errors": [], "jobs": [],
             "warning": (
-                "BATCH_RUNNER_URL is not set — scheduler sync skipped. "
+                "BATCH_RUNNER_URL is not set -- scheduler sync skipped. "
                 "Set this env var on the Cloud Run service after deploying."
             ),
         }
 
     client  = scheduler_v1.CloudSchedulerClient()
-    summary = {"created": 0, "updated": 0, "skipped": 0, "errors": [], "jobs": []}
+    summary = {"created": 0, "updated": 0, "deleted": 0, "skipped": 0, "errors": [], "jobs": []}
+
+    # Track which scheduler job names are still active (used for deletion pass below)
+    expected_names: set = set()
 
     defs = list_definitions()
     for defn in sorted(defs, key=lambda d: d.get("name", "")):
@@ -91,17 +97,17 @@ def sync_all() -> dict:
         tasks    = list_tasks(job_name)
 
         for task in tasks:
-            task_id  = task.get("task_id", "")
-            schedule = (task.get("schedule") or "").strip()
-            active   = task.get("active", True)
-            name     = task.get("name", task_id)
+            task_id    = task.get("task_id", "")
+            schedule   = (task.get("schedule") or "").strip()
+            active     = task.get("active", True)
+            name       = task.get("name", task_id)
+            sched_name = _sched_job_name(job_name, task_id)
 
-            # No schedule or inactive — skip (leave any existing scheduler job as-is)
             if not schedule or not active:
                 summary["skipped"] += 1
                 continue
 
-            sched_name = _sched_job_name(job_name, task_id)
+            expected_names.add(sched_name)
 
             job = scheduler_v1.Job(
                 name=sched_name,
@@ -132,5 +138,23 @@ def sync_all() -> dict:
                     summary["errors"].append({"task": name, "error": str(exc)})
             except Exception as exc:
                 summary["errors"].append({"task": name, "error": str(exc)})
+
+    # -- Delete orphaned scheduler jobs ----------------------------------------
+    # Any batch-* Cloud Scheduler job that has no corresponding active task.
+    prefix = f"{_PARENT}/jobs/batch-"
+    try:
+        for existing in client.list_jobs(parent=_PARENT):
+            if not existing.name.startswith(prefix):
+                continue
+            if existing.name in expected_names:
+                continue
+            try:
+                client.delete_job(name=existing.name)
+                summary["deleted"] += 1
+                summary["jobs"].append({"action": "deleted", "name": existing.name})
+            except Exception as exc:
+                summary["errors"].append({"task": existing.name, "error": str(exc)})
+    except Exception as exc:
+        summary["errors"].append({"task": "__list_jobs__", "error": str(exc)})
 
     return summary

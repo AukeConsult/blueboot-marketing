@@ -14,10 +14,18 @@ set -euo pipefail
 
 PROJECT="${GCP_PROJECT:-blueboot-market}"
 LOCATION="${GCP_LOCATION:-us-central1}"
+MEMORY="${BATCH_MEMORY:-4Gi}"
+CPU="${BATCH_CPU:-2}"
+TIMEOUT="${BATCH_TIMEOUT:-3600}"
+MIN_INSTANCES="${BATCH_MIN_INSTANCES:-1}"
+MAX_INSTANCES="${BATCH_MAX_INSTANCES:-3}"
 
 echo "=== Batch Runner Deploy ==="
-echo "  Project:  $PROJECT"
-echo "  Location: $LOCATION"
+echo "  Project:     $PROJECT"
+echo "  Location:    $LOCATION"
+echo "  Memory:      $MEMORY"
+echo "  CPU:         $CPU"
+echo "  Timeout:     ${TIMEOUT}s"
 echo ""
 
 echo "[1/4] Building image via Cloud Build..."
@@ -35,7 +43,16 @@ gcloud run deploy batch-runner \
   --platform managed \
   --region "$LOCATION" \
   --project "$PROJECT" \
+  --memory "$MEMORY" \
+  --cpu "$CPU" \
+  --timeout "$TIMEOUT" \
+  --no-cpu-throttling \
+  --min-instances "$MIN_INSTANCES" \
+  --max-instances "$MAX_INSTANCES" \
   --quiet
+# Note: --concurrency is intentionally omitted. /run returns 202 immediately and
+# jobs run in background threads, so Cloud Run never sees concurrent requests.
+# Job concurrency is controlled by the is_running() dedup guard in entrypoint.py.
 
 # Resolve the runner URL right after deployment
 RUNNER_URL=$(gcloud run services describe batch-runner \

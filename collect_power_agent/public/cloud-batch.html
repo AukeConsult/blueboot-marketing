@@ -828,8 +828,11 @@ async function syncSchedulers(silent) {
       body:    '{}',
     });
     const s = data.summary || {};
-    const msg = `Scheduler sync — ${s.created||0} created, ${s.updated||0} updated, ${s.skipped||0} skipped` +
-                (s.errors?.length ? `, <strong>${s.errors.length} error(s)</strong>` : '');
+    const summary = `Scheduler sync — ${s.created||0} created, ${s.updated||0} updated, ${s.deleted||0} deleted, ${s.skipped||0} skipped`;
+    const errorLines = (s.errors || []).map(e =>
+      `<br><i class="ti ti-alert-triangle me-1"></i><strong>${escapeHtml(e.task||'?')}</strong>: ${escapeHtml(e.error||'unknown error')}`
+    ).join('');
+    const msg = summary + (errorLines ? ` — <strong>${s.errors.length} error(s)</strong>${errorLines}` : '');
     if (!silent || s.errors?.length) {
       setFeedback(`<i class="ti ti-calendar-check me-1"></i>${msg}`,
                   s.errors?.length ? 'warning' : 'success');
