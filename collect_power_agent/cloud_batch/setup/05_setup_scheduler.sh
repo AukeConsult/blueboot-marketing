@@ -1,6 +1,12 @@
 #!/bin/bash
-# 05_setup_scheduler.sh — Create Cloud Scheduler jobs from job_definitions/*.json
-# Delegates to scheduler_setup.py which reads the JSON files and calls gcloud.
+# 05_setup_scheduler.sh — Trigger a full Cloud Scheduler sync via the batch runner API.
+#
+# NOTE: Scheduler jobs are now managed via tasks stored in Firestore, not from
+# job_definitions/*.json. The sync is done by the Cloud Run service itself via
+# POST /sync-schedulers (scheduler_sync.py). This script calls that endpoint.
+#
+# Preferred method: click "Sync schedules" in the frontend (Batch Services -> Cloud Batch).
+# This script is provided for CI/CD or first-time setup after 04_deploy_cloudrun.sh.
 set -euo pipefail
 
 PROJECT="${GCP_PROJECT:-blueboot-market}"
@@ -24,19 +30,24 @@ if [ -z "${BATCH_RUNNER_URL:-}" ]; then
   exit 1
 fi
 
-echo "Setting up Cloud Scheduler jobs..."
+echo "Syncing Cloud Scheduler jobs via batch runner..."
 echo "  Runner URL: $BATCH_RUNNER_URL"
 echo "  Project:    $PROJECT / $LOCATION"
 echo ""
 
-cd "$(dirname "$0")/../.."
-python -m cloud_batch.scheduler_setup \
-  --project    "$PROJECT" \
-  --location   "$LOCATION" \
-  --runner-url "$BATCH_RUNNER_URL" \
-  --service-account "$SA_EMAIL" \
-  ${BATCH_SECRET:+--secret "$BATCH_SECRET"}
+TOKEN=$(gcloud auth print-identity-token 2>/dev/null || true)
+if [ -z "$TOKEN" ]; then
+  echo "ERROR: Could not get identity token. Run: gcloud auth login"
+  exit 1
+fi
+
+RESPONSE=$(curl -s -X POST "${BATCH_RUNNER_URL}/sync-schedulers" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "${BATCH_SECRET:+{\"secret\":\"${BATCH_SECRET}\"}}" )
+
+echo "$RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$RESPONSE"
 
 echo ""
-echo "Scheduler jobs created. View in:"
+echo "View Cloud Scheduler jobs:"
 echo "  https://console.cloud.google.com/cloudscheduler?project=$PROJECT"

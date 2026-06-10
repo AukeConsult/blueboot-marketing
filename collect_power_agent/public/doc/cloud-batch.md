@@ -174,25 +174,27 @@ cloud_batch/
   job_status.py          Firestore helpers (gcloud-batch-jobs)
   job_runner.py          Runs steps as subprocesses, updates Firestore
   entrypoint.py          Flask HTTP server (Cloud Run target)
-  scheduler_setup.py     CLI: read job defs → create Cloud Scheduler jobs
+  scheduler_sync.py      Syncs Firestore tasks → Cloud Scheduler jobs (called via /sync-schedulers)
   Dockerfile             Build from project root: docker build -f cloud_batch/Dockerfile .
-  requirements.txt       Flask, firebase-admin, gunicorn
+  requirements.txt       Flask, firebase-admin, gunicorn, google-cloud-scheduler
 
   setup/
-    01_enable_apis.sh    Enable Cloud Run, Scheduler, Artifact Registry, Secret Manager
-    02_service_account.sh  Create batch-runner SA + grant IAM roles
+    01_enable_apis.sh      Enable Cloud Run, Scheduler, Artifact Registry, Secret Manager
+    02_service_account.sh  Create batch-runner SA + grant all IAM roles (including actAs itself)
     03_artifact_registry.sh  Create repo, build + push Docker image
-    04_deploy_cloudrun.sh  Deploy Cloud Run service (min-instances=1)
-    05_setup_scheduler.sh  Create Cloud Scheduler jobs from job_definitions/
-    06_secrets.sh        Push API keys to Secret Manager
-    setup_all.sh         Runs 01 → 06 in order (idempotent)
-    teardown.sh          Delete Cloud Run + Scheduler jobs (keeps Firestore)
+    04_deploy_cloudrun.sh  Deploy Cloud Run (4CPU/4Gi/no-throttle) + set env vars + IAM
+    05_setup_scheduler.sh  Trigger /sync-schedulers on the deployed service
+    06_secrets.sh          Push API keys to Secret Manager
+    setup_all.sh           Runs 01 → 06 in order (idempotent)
+    teardown.sh            Delete Cloud Run + Scheduler jobs (keeps Firestore)
 
 functions-crm/handlers/
-  batch.py               CRM API blueprint (list jobs, trigger run, poll run)
+  batch.py               CRM API blueprint (list jobs, trigger run, poll run, sync schedulers)
 
 public/
-  cloud-batch.html        Frontend: run jobs on demand, live step progress, history
+  cloud-batch.html       Frontend: manage jobs/tasks, run on demand, live progress, sync schedules
+
+deploy_batch.sh          Day-to-day redeploy script (build + deploy + env vars + IAM + seed)
 ```
 
 ---
@@ -209,27 +211,35 @@ bash deploy_batch.sh
 
 This does 4 steps in order:
 1. Build Docker image via Cloud Build
-2. Deploy to Cloud Run (4 CPU, 4 GB RAM, concurrency 2, timeout 3600 s)
-3. Set `BATCH_RUNNER_URL` env var on the service (needed by scheduler sync)
+2. Deploy to Cloud Run (4 CPU, 4 GB RAM, no-cpu-throttling, min 1 / max 3 instances, timeout 3600 s)
+3. Set `BATCH_RUNNER_URL` and `BATCH_SA` env vars on the service; grant `run.invoker` and `iam.serviceAccountUser` to the SA
 4. Seed any new job definitions into Firestore (skips existing docs)
 
 After deploying, click **Sync schedules** in the frontend (Batch Services → Cloud Batch) to update Cloud Scheduler cron jobs.
 
+All settings are overridable via env vars before running the script:
+
+```bash
+BATCH_MEMORY=8Gi BATCH_CPU=8 BATCH_MIN_INSTANCES=2 bash deploy_batch.sh
+```
+
 ### First-Time Setup
 
 ```bash
-# 1. Enable GCP APIs, create service account, set up Artifact Registry
+# 1. Enable GCP APIs, create service account + all IAM grants, build image, push secrets
 bash cloud_batch/setup/01_enable_apis.sh
-bash cloud_batch/setup/02_service_account.sh
+bash cloud_batch/setup/02_service_account.sh   # creates SA + grants all roles incl. actAs itself
 bash cloud_batch/setup/03_artifact_registry.sh
-bash cloud_batch/setup/06_secrets.sh    # push OPENAI_KEY, BATCH_SECRET, BING_KEY
+bash cloud_batch/setup/06_secrets.sh           # push OPENAI_KEY, BATCH_SECRET, BING_KEY
 
-# 2. Deploy
+# 2. Deploy (sets env vars + IAM on the service automatically)
 bash deploy_batch.sh
 
 # 3. Set BATCH_RUNNER_URL in the CRM Cloud Function
-gcloud functions deploy crmApi \
-  --update-env-vars BATCH_RUNNER_URL=https://batch-runner-xxx-uc.a.run.app
+bash deploy_crm.sh   # auto-copies BATCH_RUNNER_URL + BATCH_SA from root .env
+
+# 4. Sync Cloud Scheduler jobs (or click Sync schedules in the frontend)
+bash cloud_batch/setup/05_setup_scheduler.sh
 ```
 
 ---
@@ -272,16 +282,12 @@ curl https://.../api/crm/batch/jobs/site_pipeline/runs/20260609_143201_a1b2c3 \
 }
 ```
 
-2. Redeploy the Cloud Run service:
+2. Redeploy:
 ```bash
-bash cloud_batch/setup/03_artifact_registry.sh
-bash cloud_batch/setup/04_deploy_cloudrun.sh
+bash deploy_batch.sh
 ```
 
-3. If the job has a `schedule`, re-run the scheduler setup:
-```bash
-bash cloud_batch/setup/05_setup_scheduler.sh
-```
+3. Create tasks with schedules in the frontend (Batch Services → Cloud Batch → Add task), then click **Sync schedules**.
 
 ---
 
@@ -298,12 +304,12 @@ bash cloud_batch/setup/05_setup_scheduler.sh
 
 | Service | Purpose |
 |---|---|
-| Cloud Run | Hosts the batch-runner Flask service (4 CPU, 4 GB RAM, concurrency 2, timeout 3600 s) |
-| Cloud Scheduler | Fires HTTP POST /run on cron schedule — one job per task |
+| Cloud Run | Hosts the batch-runner Flask service (4 CPU, 4 GB RAM, no-cpu-throttling, min 1 / max 3 instances, timeout 3600 s) |
+| Cloud Scheduler | Fires HTTP POST /run on cron schedule — one job per task, with OIDC auth |
 | Artifact Registry | Stores the Docker image for the batch-runner |
 | Secret Manager | Stores OPENAI_API_KEY, BING_API_KEY, BATCH_SECRET |
 | Firestore | Job definitions, tasks, and run status in `gcloud-batch-jobs/` |
-| IAM | `batch-runner` service account with `datastore.user`, `secretmanager.secretAccessor`, `run.invoker`, `cloudscheduler.admin` |
+| IAM | `batch-runner` SA with `datastore.user`, `secretmanager.secretAccessor`, `run.invoker`, `cloudscheduler.admin`, `iam.serviceAccountUser` (actAs itself for OIDC token creation) |
 
 ---
 

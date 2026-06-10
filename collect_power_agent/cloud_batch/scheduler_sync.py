@@ -4,14 +4,15 @@ Uses the google-cloud-scheduler Python client — no gcloud CLI needed.
 Called from entrypoint.py /sync-schedulers which runs inside the Cloud Run service.
 
 Required IAM on the Cloud Run service account:
-    roles/cloudscheduler.admin   (to create/update/delete scheduler jobs)
+    roles/cloudscheduler.admin      (to create/update/delete scheduler jobs)
+    roles/iam.serviceAccountUser    (to act as itself when setting OIDC token)
 
-Environment variables read:
-    GCP_PROJECT      — GCP project id (default: blueboot-market)
-    GCP_LOCATION     — region for Cloud Scheduler (default: us-central1)
-    BATCH_RUNNER_URL — Cloud Run service URL (used as HTTP target)
-    BATCH_SA         — service account email for OIDC auth on scheduled calls
-    BATCH_SECRET     — optional shared secret added to scheduler request body
+Environment variables read at call time (not import time):
+    GCP_PROJECT      -- GCP project id (default: blueboot-market)
+    GCP_LOCATION     -- region for Cloud Scheduler (default: us-central1)
+    BATCH_RUNNER_URL -- Cloud Run service URL (used as HTTP target)
+    BATCH_SA         -- service account email for OIDC auth on scheduled calls
+    BATCH_SECRET     -- optional shared secret added to scheduler request body
 """
 from __future__ import annotations
 
@@ -20,14 +21,9 @@ import os
 
 from cloud_batch.job_status import list_definitions, list_tasks
 
-# -- Constants -----------------------------------------------------------------
-
+# GCP_PROJECT and GCP_LOCATION are stable at startup — safe to read at import time.
 _PROJECT  = os.getenv("GCP_PROJECT",  "blueboot-market")
 _LOCATION = os.getenv("GCP_LOCATION", "us-central1")
-_RUNNER   = os.getenv("BATCH_RUNNER_URL", "").rstrip("/")
-_SA       = os.getenv("BATCH_SA", "")
-_SECRET   = os.getenv("BATCH_SECRET", "")
-
 _PARENT   = f"projects/{_PROJECT}/locations/{_LOCATION}"
 
 
@@ -36,7 +32,7 @@ def _sched_job_name(job_name: str, task_id: str) -> str:
     return f"{_PARENT}/jobs/batch-{safe}-{task_id}"
 
 
-def _make_http_target(job_name: str, task_id: str):
+def _make_http_target(job_name: str, task_id: str, runner: str, sa: str, secret: str):
     """Build an HttpTarget proto for the given task."""
     from google.cloud import scheduler_v1
 
@@ -44,20 +40,20 @@ def _make_http_target(job_name: str, task_id: str):
         "job":          job_name,
         "task_id":      task_id,
         "triggered_by": "scheduler",
-        **( {"secret": _SECRET} if _SECRET else {} ),
+        **( {"secret": secret} if secret else {} ),
     }).encode()
 
     target = scheduler_v1.HttpTarget(
-        uri=f"{_RUNNER}/run",
+        uri=f"{runner}/run",
         http_method=scheduler_v1.HttpMethod.POST,
         body=body,
         headers={"Content-Type": "application/json"},
     )
 
-    if _SA:
+    if sa:
         target.oidc_token = scheduler_v1.OidcToken(
-            service_account_email=_SA,
-            audience=_RUNNER,
+            service_account_email=sa,
+            audience=runner,
         )
 
     return target
@@ -65,6 +61,9 @@ def _make_http_target(job_name: str, task_id: str):
 
 def sync_all() -> dict:
     """Read all tasks from Firestore and create/update/delete Cloud Scheduler jobs.
+
+    Env vars are read at call time so that updates to BATCH_RUNNER_URL or BATCH_SA
+    take effect immediately without restarting the service.
 
     Returns a summary dict: created, updated, deleted, skipped, errors, jobs.
     If BATCH_RUNNER_URL is not set, returns immediately with a warning (no error).
@@ -75,7 +74,12 @@ def sync_all() -> dict:
     from google.cloud import scheduler_v1
     from google.api_core.exceptions import NotFound
 
-    if not _RUNNER:
+    # Read at call time so env-var updates take effect without a restart.
+    runner = os.getenv("BATCH_RUNNER_URL", "").rstrip("/")
+    sa     = os.getenv("BATCH_SA", "")
+    secret = os.getenv("BATCH_SECRET", "")
+
+    if not runner:
         return {
             "created": 0, "updated": 0, "deleted": 0, "skipped": 0,
             "errors": [], "jobs": [],
@@ -112,7 +116,7 @@ def sync_all() -> dict:
             job = scheduler_v1.Job(
                 name=sched_name,
                 description=f"{job_name} / {name}"[:499],
-                http_target=_make_http_target(job_name, task_id),
+                http_target=_make_http_target(job_name, task_id, runner, sa, secret),
                 schedule=schedule,
                 time_zone="UTC",
                 attempt_deadline={"seconds": 1800},

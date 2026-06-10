@@ -12,7 +12,7 @@ gcloud iam service-accounts create "$SA_NAME" \
   --project "$PROJECT" \
   || echo "  (already exists — skipping)"
 
-echo "[2/3] Granting roles..."
+echo "[2/3] Granting project-level roles..."
 for ROLE in \
   roles/datastore.user \
   roles/secretmanager.secretAccessor \
@@ -27,6 +27,15 @@ do
     --quiet
   echo "  granted $ROLE"
 done
+
+# Grant the SA permission to act as itself when creating Cloud Scheduler jobs
+# with an OIDC token. Required by scheduler_sync.py.
+echo "  Granting iam.serviceAccountUser to ${SA_EMAIL} on itself..."
+gcloud iam service-accounts add-iam-policy-binding "${SA_EMAIL}" \
+  --member="serviceAccount:${SA_EMAIL}" \
+  --role="roles/iam.serviceAccountUser" \
+  --project "$PROJECT"
+echo "  granted roles/iam.serviceAccountUser (actAs itself)"
 
 echo "[3/3] Granting Cloud Build service account Artifact Registry write access..."
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')

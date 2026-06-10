@@ -19,6 +19,7 @@ CPU="${BATCH_CPU:-2}"
 TIMEOUT="${BATCH_TIMEOUT:-3600}"
 MIN_INSTANCES="${BATCH_MIN_INSTANCES:-1}"
 MAX_INSTANCES="${BATCH_MAX_INSTANCES:-3}"
+SA="${BATCH_SA:-batch-runner@${PROJECT}.iam.gserviceaccount.com}"
 
 echo "=== Batch Runner Deploy ==="
 echo "  Project:     $PROJECT"
@@ -60,15 +61,35 @@ RUNNER_URL=$(gcloud run services describe batch-runner \
   --format "value(status.url)")
 
 echo ""
-echo "[3/4] Setting BATCH_RUNNER_URL on the Cloud Run service..."
-# scheduler_sync.py reads this at import time to build Cloud Scheduler HTTP targets.
-# The service needs to know its own URL so it can point cron jobs back to itself.
+echo "[3/4] Configuring env vars and IAM on the Cloud Run service..."
+# BATCH_RUNNER_URL — scheduler_sync.py uses this to build Cloud Scheduler HTTP targets.
+# BATCH_SA         — scheduler_sync.py sets this as the OIDC token SA on each scheduler job,
+#                    allowing Cloud Scheduler to call the authenticated Cloud Run endpoint.
 gcloud run services update batch-runner \
-  --update-env-vars "BATCH_RUNNER_URL=${RUNNER_URL}" \
+  --update-env-vars "BATCH_RUNNER_URL=${RUNNER_URL},BATCH_SA=${SA}" \
   --region "$LOCATION" \
   --project "$PROJECT" \
   --quiet
 echo "  BATCH_RUNNER_URL=${RUNNER_URL}"
+echo "  BATCH_SA=${SA}"
+
+# Grant the SA permission to invoke the Cloud Run service (idempotent).
+echo "  Granting run.invoker to ${SA}..."
+gcloud run services add-iam-policy-binding batch-runner \
+  --region "$LOCATION" \
+  --project "$PROJECT" \
+  --member "serviceAccount:${SA}" \
+  --role "roles/run.invoker" \
+  --quiet
+
+# Grant the SA permission to act as itself when creating scheduler jobs with OIDC token.
+# Required by scheduler_sync.py: creating a Cloud Scheduler job with an OIDC token
+# pointing to this SA requires iam.serviceAccounts.actAs on the SA itself.
+echo "  Granting serviceAccountUser to ${SA} (actAs itself)..."
+gcloud iam service-accounts add-iam-policy-binding "${SA}" \
+  --member "serviceAccount:${SA}" \
+  --role "roles/iam.serviceAccountUser" \
+  --project "$PROJECT"
 
 echo ""
 echo "[4/4] Seeding job definitions into Firestore..."
@@ -82,4 +103,5 @@ python app/seed_batch_jobs.py
 echo ""
 echo "=== Done ==="
 echo "  Runner:    $RUNNER_URL"
+echo "  SA:        $SA"
 echo "  Dashboard: https://blueboot-market.web.app/cloud-batch.html"
