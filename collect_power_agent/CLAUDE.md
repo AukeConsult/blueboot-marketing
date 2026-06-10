@@ -730,7 +730,29 @@ async function runJob() {
 ```
 
 **Reference implementation:** `crm_follow.html` — `syncAllEmails()` and `syncContactEmails()`
-                                                                                      
+
+---
+
+## Cloud Batch script registry
+
+### RULE: Every new `app/` script with `main()` must be added to cloud-batch.md
+
+Whenever a new Python script is added to `app/` that has a `main(argv=None)` entry
+point (i.e. it is a runnable CLI script), it MUST be added to the **Available App
+Scripts** table in `public/doc/cloud-batch.md` before the work is considered done.
+
+Place it in the appropriate table:
+- **Currently in pipelines** -- if it is being added as a step in a new or existing
+  `cloud_batch/job_definitions/*.json` pipeline
+- **Pipeline candidates** -- if it is a new batch-eligible script not yet wired into
+  a pipeline
+- **Maintenance scripts** -- if it is a one-off data repair, export, or admin tool
+- **Not suitable** -- if it is a dev diagnostic, smoke test, or dry-run-only tool
+
+The table lives at: `public/doc/cloud-batch.md` under `## Available App Scripts`.
+
+Verify the script appears there before closing the task.
+
 ---
 
 ## Documentation rules

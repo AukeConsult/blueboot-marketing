@@ -265,6 +265,78 @@ curl https://.../api/crm/batch/jobs/site_pipeline/runs/20260609_143201_a1b2c3 \
 
 ---
 
+## Available App Scripts
+
+Every `app/` script that has a `main()` entry point can be used as a batch step.
+Set `"module": "script_name"` (without `.py`) in the job definition JSON.
+
+```
+"module": "site_agent"  →  python -m app.site_agent  (i.e. app/site_agent.py)
+```
+
+### Currently in pipelines
+
+These are already used in `cloud_batch/job_definitions/`:
+
+| Module | Script | Pipeline |
+|---|---|---|
+| `site_agent` | `app/site_agent.py` | site_pipeline |
+| `site_enrich_agent` | `app/site_enrich_agent.py` | site_pipeline |
+| `site_contact_enrich` | `app/site_contact_enrich.py` | site_pipeline |
+| `site_location_enrich` | `app/site_location_enrich.py` | site_pipeline |
+| `site_email_check` | `app/site_email_check.py` | site_pipeline |
+| `site_smart_export` | `app/site_smart_export.py` | site_pipeline |
+| `email_contacts_export` | `app/email_contacts_export.py` | site_pipeline, lead_pipeline |
+| `lead_agent` | `app/lead_agent.py` | lead_pipeline |
+| `lead_enrich_agent` | `app/lead_enrich_agent.py` | lead_pipeline |
+| `lead_enrich_contacts` | `app/lead_enrich_contacts.py` | lead_pipeline |
+| `leads_email_check` | `app/leads_email_check.py` | lead_pipeline |
+| `leads_smart_export` | `app/leads_smart_export.py` | lead_pipeline |
+
+### Pipeline candidates (not yet in any job definition)
+
+These scripts are ready to be used as steps in new or extended pipelines:
+
+| Module | Script | What it does |
+|---|---|---|
+| `campaign_exporter` | `app/campaign_exporter.py` | Export campaign contacts to Excel |
+| `campaign_name_enrich` | `app/campaign_name_enrich.py` | Enrich missing campaign names via AI |
+| `filter_site_leads` | `app/filter_site_leads.py` | Filter site_leads by criteria into a campaign |
+| `followup_email_sync` | `app/followup_email_sync.py` | Sync IMAP replies back to CRM follow-up status |
+| `wp_plugin_leads` | `app/wp_plugin_leads.py` | Discover WordPress plugin leads via Bing |
+| `build_filter_facets` | `app/build_filter_facets.py` | Build facet index for lead filter UI |
+| `facet_campaign` | `app/facet_campaign.py` | Apply facet-based filter to create a campaign |
+| `push_to_firebase` | `app/push_to_firebase.py` | Push local data files to Firestore |
+| `sync_auth_users` | `app/sync_auth_users.py` | Sync Firebase Auth users to Firestore settings |
+
+### Maintenance scripts
+
+One-off data repair and export scripts — suitable for scheduled maintenance jobs:
+
+| Module | Script | What it does |
+|---|---|---|
+| `maint_firestore_snapshot` | `app/maint_firestore_snapshot.py` | Export Firestore collection to JSON snapshot |
+| `maint_fix_contact_country` | `app/maint_fix_contact_country.py` | Backfill missing country on contacts |
+| `maint_fix_rescrape_contacts` | `app/maint_fix_rescrape_contacts.py` | Re-scrape contacts for sites missing them |
+| `maint_site_excluded_recheck` | `app/maint_site_excluded_recheck.py` | Re-evaluate excluded sites |
+| `maint_site_leads_export` | `app/maint_site_leads_export.py` | Raw export of site_leads to Excel |
+| `maint_site_sitemap_backfill` | `app/maint_site_sitemap_backfill.py` | Backfill sitemap page counts |
+| `maint_statistics` | `app/maint_statistics.py` | Recalculate campaign statistics in Firestore |
+| `campaign_manager` | `app/campaign_manager.py` | CLI to create/edit campaigns from terminal |
+
+### Not suitable for batch steps
+
+| Script | Reason |
+|---|---|
+| `batch_test` | Smoke test only — used by test_job to verify Cloud Run setup |
+| `seed_batch_jobs` | Bootstrapping tool — seeding runs via `deploy_batch.sh` |
+| `outreach_select_run` | Dry-run preview only, no Firestore writes |
+| `test_sitemap` | Dev diagnostic — not a pipeline step |
+
+> **Rule:** Whenever a new `app/` script with a `main()` entry point is added to the project, add it to the appropriate table above. See [CLAUDE.md](../../CLAUDE.md) — "Cloud Batch script registry" rule.
+
+---
+
 ## Adding a New Pipeline
 
 1. Create `cloud_batch/job_definitions/my_pipeline.json`:
