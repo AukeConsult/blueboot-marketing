@@ -1,6 +1,6 @@
 # app/smart_mail/config_mail.py
 """
-Campaign-pipeline tuning config for the smart-mail system.
+Campaign-pipeline tuning config for the smart-mail-not-in-use system.
 
 Account resolution (MAIL_ACCOUNTS / get_account / SSL-vs-STARTTLS) lives in
 app/mail_accounts_config.py -- the single source of truth shared with
