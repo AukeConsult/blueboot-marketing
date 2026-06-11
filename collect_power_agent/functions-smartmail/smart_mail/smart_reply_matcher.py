@@ -1,5 +1,5 @@
 # functions-smartmail/smart_mail/smart_reply_matcher.py
-# Adapted copy of app/smart-mail/smart_reply_matcher.py -- logic identical
+# Adapted copy of app/smart-mail-not-in-use/smart_reply_matcher.py -- logic identical
 # (Message-ID threading match -> from_email fallback -> mark + refresh
 # stats); only the two imports are relative and the CLI __main__ block is
 # dropped (main.py's /run-replies route is the entry point here).

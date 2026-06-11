@@ -13,12 +13,10 @@ Use send_outreach() for campaign outreach.
 from __future__ import annotations
 
 import os
-import smtplib
+import sys
 import time
 from datetime import datetime, timedelta, timezone
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.utils import make_msgid
+from pathlib import Path
 
 from .firestore_client import get_firestore
 from .smart_campaign_stats import refresh_campaign_stats
@@ -32,23 +30,13 @@ from .config import (
 )
 
 
+_CRM_DIR = Path(__file__).resolve().parents[2] / "functions-crm"
+if str(_CRM_DIR) not in sys.path:
+    sys.path.insert(0, str(_CRM_DIR))
+
 SEND_DELAY_SECONDS = int(os.getenv("CAMPAIGN_SEND_DELAY_SECONDS", str(_CFG_SEND_DELAY)))
 
 _MIN_ATTEMPTS_BEFORE_BREAKER = 8
-
-
-# ---------------------------------------------------------------------------
-# Password resolution
-# ---------------------------------------------------------------------------
-
-def _get_smtp_password(account_email: str) -> str:
-    """Derive the SMTP password env-var name from the account email and return it.
-
-    Convention: sales@blueboot.ai  ->  SALES_SMTP_PASSWORD
-                info@blueboot.ai   ->  INFO_SMTP_PASSWORD
-    """
-    alias = account_email.split("@")[0].upper()
-    return os.getenv(f"{alias}_SMTP_PASSWORD", "")
 
 
 # ---------------------------------------------------------------------------
@@ -117,67 +105,18 @@ def _build_unsubscribe_headers(contact_doc_id: str | None) -> tuple[str, str]:
     return unsub, unsub_post
 
 
-# ---------------------------------------------------------------------------
-# SMTP send helper (account-settings-aware, no Firestore writes)
-# ---------------------------------------------------------------------------
-
-def _send_smtp(
-    account,                    # MailAccountSettings from outreach_mail_select
-    password: str,
-    to_email: str,
-    subject: str,
-    text_body: str,
-    html_body: str | None,
-    in_reply_to: str | None = None,
-    contact_doc_id: str | None = None,
-) -> str:
-    """Build and send one SMTP message. Returns the Message-ID header value.
-
-    Uses account.host / account.port / account.use_ssl from MailAccountSettings.
-    Does NOT write to Firestore -- call confirm_sent() after this returns.
-    """
-    message_id = make_msgid()
-
-    msg = MIMEMultipart("alternative")
-    msg["Message-ID"] = message_id
-    msg["Subject"]    = subject
-    msg["From"]       = f"{account.from_name} <{account.email}>"
-    msg["To"]         = to_email
-
-    if in_reply_to:
-        msg["In-Reply-To"] = in_reply_to
-        msg["References"]  = in_reply_to
-
-    unsub, unsub_post = _build_unsubscribe_headers(contact_doc_id)
-    if unsub:
-        msg["List-Unsubscribe"] = unsub
-    if unsub_post:
-        msg["List-Unsubscribe-Post"] = unsub_post
-
-    # RFC 2045: plain FIRST, HTML SECOND (clients render the last part they understand)
-    msg.attach(MIMEText(text_body, "plain", "utf-8"))
-    if html_body:
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-    if account.use_ssl:
-        server = smtplib.SMTP_SSL(account.host, account.port, timeout=30)
-    else:
-        server = smtplib.SMTP(account.host, account.port, timeout=30)
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-
-    try:
-        server.login(account.username, password)
-        server.send_message(msg)
-    finally:
-        try:
-            server.quit()
-        except Exception:
-            pass
-
-    print(f"[smtp] -> {to_email}  via {account.email}  ({account.host}:{account.port})")
-    return message_id
+def _account_ready(account) -> tuple[bool, str]:
+    if account.account_type == "gmail":
+        if account.access_token or (account.client_id and account.client_secret and account.refresh_token):
+            return True, ""
+        return False, "Gmail account is missing OAuth settings in mail account configuration"
+    if not account.host:
+        return False, "IMAP/SMTP account is missing smtp_host/host in mail account configuration"
+    if not account.username:
+        return False, "IMAP/SMTP account is missing username in mail account configuration"
+    if not account.password:
+        return False, "IMAP/SMTP account is missing password in mail account configuration"
+    return True, ""
 
 
 
@@ -185,19 +124,63 @@ def _send_smtp(
 # Main send loop
 # ---------------------------------------------------------------------------
 
-def send_outreach(mode: str = "intro") -> dict:
+def _account_settings(account) -> dict:
+    settings = dict(account.raw or {})
+    settings["email"] = settings.get("email") or account.email
+    settings["account_type"] = settings.get("account_type") or account.account_type
+    settings["username"] = settings.get("username") or account.username
+    settings["password"] = settings.get("password") or account.password
+    settings["display_name"] = settings.get("display_name") or account.from_name
+    settings["smtp_host"] = settings.get("smtp_host") or account.host
+    settings["smtp_port"] = settings.get("smtp_port") or account.port
+    settings["smtp_ssl"] = settings.get("smtp_ssl") or account.use_ssl
+    return settings
+
+
+def _print_preview(contact, step, rendered, preview: bool) -> None:
+    print(
+        "    %-35s  %-20s  [step %d: %s]  subj: %r" % (
+            contact.email,
+            (contact.company or "")[:20],
+            step.index,
+            step.mail_type,
+            rendered.subject[:60],
+        )
+    )
+    if preview:
+        body = (rendered.html_body or rendered.text_body or "").strip()
+        snippet = " ".join(body[:200].split())
+        if len(body) > 200:
+            snippet += " ..."
+        print("      body: %s" % snippet)
+
+
+def send_outreach(
+    mode: str = "intro",
+    *,
+    limit: int = 500,
+    campaign_id: str | None = None,
+    dry_run: bool = False,
+    preview: bool = False,
+) -> dict:
     """One-pass send loop for intro or followup outreach.
 
     Reads candidates from Firestore via read_outreach(mode), renders each mail
-    via render_mail(), sends via SMTP, and records each success via confirm_sent().
+    via render_mail(), sends via MailSender, and records each success via confirm_sent().
+    With dry_run=True, the same selection and rendering path runs, but no sender
+    is opened and no Firestore confirmation is written.
 
     mode "intro"    -- pending contacts with no sent mail; uses Intro step.
     mode "followup" -- pending contacts with sent mail; uses next due sequence step.
 
-    Returns a summary dict: {"mode", "sent", "failed", "skipped"}.
+    Returns a summary dict.
     """
     # Lazy imports -- outreach_mail_select and outreach_render_mail live at the
     # functions-smartmail/ root (parent of this smart_mail/ package).
+    if not dry_run:
+        from crm.mail_sender import MailSender                     # noqa: PLC0415
+    else:
+        MailSender = None
     from outreach_mail_select import read_outreach, confirm_sent, prepare_mail_sequences  # noqa: PLC0415
     from outreach_render_mail import render_mail, MailStep        # noqa: PLC0415
 
@@ -206,102 +189,171 @@ def send_outreach(mode: str = "intro") -> dict:
     # Prepare current campaigns that have mail_schedule but no mail_sequence.
     prepare_mail_sequences(db)
 
-    summary: dict = {"mode": mode, "sent": 0, "failed": 0, "skipped": 0}
+    summary: dict = {
+        "mode": mode,
+        "dry_run": dry_run,
+        "sent": 0,
+        "failed": 0,
+        "skipped": 0,
+        "would_send": 0,
+    }
 
-    batches = read_outreach(mode=mode)
+    batches = read_outreach(mode=mode, limit=limit)
     if not batches:
         print(f"[sender] no outreach candidates for mode={mode!r}")
         return summary
 
     for batch in batches:
         account  = batch.account
-        password = _get_smtp_password(account.email)
+        campaigns = [
+            cwc for cwc in batch.campaigns
+            if not campaign_id or cwc.campaign.campaign_id == campaign_id
+        ]
+        if not campaigns:
+            continue
 
-        if not password:
-            print(f"[sender] no SMTP password for {account.email} -- skipping batch")
+        ready, reason = _account_ready(account)
+        if not ready:
+            skipped = sum(len(cwc.contacts) for cwc in campaigns)
+            summary["skipped"] += skipped
+            print(f"[sender] {reason} for {account.email} -- skipping {skipped} contact(s)")
             continue
 
         budget = compute_send_budget(db, account.email)
         if budget <= 0:
-            print(f"[sender] {account.email} budget exhausted -- skipping batch")
+            skipped = sum(len(cwc.contacts) for cwc in campaigns)
+            summary["skipped"] += skipped
+            print(f"[sender] {account.email} budget exhausted -- skipping {skipped} contact(s)")
             continue
+
+        sender = None
+        if not dry_run:
+            sender = MailSender(_account_settings(account))
+            open_result = sender.open()
+            if open_result.get("status") != "ok":
+                skipped = sum(len(cwc.contacts) for cwc in campaigns)
+                summary["skipped"] += skipped
+                print(
+                    f"[sender] cannot open sender for {account.email}: "
+                    f"{open_result.get('message', 'unknown error')} -- skipping {skipped} contact(s)"
+                )
+                continue
+
+        print(
+            "\nAccount : %s  (%s)  host=%s:%d  %s  budget=%d  campaigns=%d  contacts=%d%s"
+            % (
+                account.email,
+                account.from_name,
+                account.host,
+                account.port,
+                "SSL" if account.use_ssl else "STARTTLS",
+                budget,
+                len(campaigns),
+                sum(len(cwc.contacts) for cwc in campaigns),
+                "  [dry-run]" if dry_run else "",
+            )
+        )
 
         sent_batch   = 0
         failed_batch = 0
+        tried_batch  = 0
 
-        for cwc in batch.campaigns:
-            campaign = cwc.campaign
-            print(
-                f"[sender] campaign={campaign.campaign_id!r}  "
-                f"contacts={len(cwc.contacts)}  account={account.email}"
-            )
-
-            for contact in cwc.contacts:
-                # Stop if budget used up for this account
-                if sent_batch + failed_batch >= budget:
-                    print(f"[sender] budget reached for {account.email}")
-                    break
-
-                step_dict = contact.selected_step or {}
-                step = MailStep(
-                    index     = step_dict.get("index",     contact.next_mail_index),
-                    mail_type = step_dict.get("mail_type", mode),
-                    subject   = step_dict.get("subject",   ""),
-                    body_html = step_dict.get("body_html", ""),
-                    body_text = step_dict.get("body_text", ""),
+        try:
+            for cwc in campaigns:
+                campaign = cwc.campaign
+                print(
+                    f"[sender] campaign={campaign.campaign_id!r}  "
+                    f"contacts={len(cwc.contacts)}  account={account.email}"
                 )
 
-                rendered = render_mail(step, contact)
+                for contact in cwc.contacts:
+                    # Stop if budget used up for this account
+                    if tried_batch >= budget:
+                        print(f"[sender] budget reached for {account.email}")
+                        break
 
-                try:
-                    message_id = _send_smtp(
-                        account        = account,
-                        password       = password,
-                        to_email       = contact.email,
-                        subject        = rendered.subject,
-                        text_body      = rendered.text_body,
-                        html_body      = rendered.html_body,
-                        in_reply_to    = contact.in_reply_to,
-                        contact_doc_id = contact.contact_doc_id,
+                    step_dict = contact.selected_step or {}
+                    step = MailStep(
+                        index     = step_dict.get("index",     contact.next_mail_index),
+                        mail_type = step_dict.get("mail_type", mode),
+                        subject   = step_dict.get("subject",   ""),
+                        body_html = step_dict.get("body_html", ""),
+                        body_text = step_dict.get("body_text", ""),
                     )
 
-                    confirm_sent(
-                        campaign_id    = contact.campaign_id,
-                        contact_doc_id = contact.contact_doc_id,
-                        message_id     = message_id,
-                        mail_type      = step.mail_type,
-                        mode           = mode,
-                        sender_account = account.email,
-                    )
+                    rendered = render_mail(step, contact)
 
-                    sent_batch      += 1
-                    summary["sent"] += 1
-                    print(f"[sender] sent {contact.email}")
+                    try:
+                        if dry_run:
+                            _print_preview(contact, step, rendered, preview)
+                            sent_batch += 1
+                            tried_batch += 1
+                            summary["would_send"] += 1
+                            continue
 
-                except Exception as ex:
-                    failed_batch       += 1
-                    summary["failed"]  += 1
-                    print(f"[sender] FAILED {contact.email}: {ex}")
+                        unsub, unsub_post = _build_unsubscribe_headers(contact.contact_doc_id)
+                        headers = {}
+                        if unsub:
+                            headers["List-Unsubscribe"] = unsub
+                        if unsub_post:
+                            headers["List-Unsubscribe-Post"] = unsub_post
 
-                if bounce_rate_tripped(sent_batch, failed_batch):
-                    print(
-                        f"[breaker] {account.email}: failure rate "
-                        f"{failed_batch}/{sent_batch + failed_batch} exceeded "
-                        f"{BOUNCE_RATE_PAUSE_THRESHOLD:.0%} -- stopping batch"
-                    )
-                    break
+                        result = sender.send_open(
+                            to          = contact.email,
+                            subject     = rendered.subject,
+                            body_plain  = rendered.text_body,
+                            body_html   = rendered.html_body,
+                            in_reply_to = contact.in_reply_to,
+                            headers     = headers,
+                        )
+                        if result.get("status") != "ok":
+                            raise RuntimeError(result.get("message", "send failed"))
+                        message_id = result.get("message_id", "")
 
-                time.sleep(SEND_DELAY_SECONDS)
+                        confirm_sent(
+                            campaign_id    = contact.campaign_id,
+                            contact_doc_id = contact.contact_doc_id,
+                            message_id     = message_id,
+                            mail_type      = step.mail_type,
+                            mode           = mode,
+                            sender_account = account.email,
+                        )
 
-            # Refresh campaign stats after finishing each campaign's contacts
-            try:
-                refresh_campaign_stats(campaign.campaign_id)
-            except Exception as ex:
-                print(f"[sender] stats refresh failed for {campaign.campaign_id}: {ex}")
+                        sent_batch      += 1
+                        tried_batch     += 1
+                        summary["sent"] += 1
+                        print(f"[sender] sent {contact.email}")
+
+                    except Exception as ex:
+                        failed_batch       += 1
+                        tried_batch        += 1
+                        summary["failed"]  += 1
+                        print(f"[sender] FAILED {contact.email}: {ex}")
+
+                    if not dry_run and bounce_rate_tripped(sent_batch, failed_batch):
+                        print(
+                            f"[breaker] {account.email}: failure rate "
+                            f"{failed_batch}/{sent_batch + failed_batch} exceeded "
+                            f"{BOUNCE_RATE_PAUSE_THRESHOLD:.0%} -- stopping batch"
+                        )
+                        break
+
+                    if not dry_run:
+                        time.sleep(SEND_DELAY_SECONDS)
+
+                # Refresh campaign stats after finishing each campaign's contacts
+                if not dry_run:
+                    try:
+                        refresh_campaign_stats(campaign.campaign_id)
+                    except Exception as ex:
+                        print(f"[sender] stats refresh failed for {campaign.campaign_id}: {ex}")
+        finally:
+            if sender is not None:
+                sender.close()
 
     print(
-        f"[sender] done  mode={mode!r}  "
+        f"[sender] done  mode={mode!r}  dry_run={dry_run}  "
         f"sent={summary['sent']}  failed={summary['failed']}  "
-        f"skipped={summary['skipped']}"
+        f"skipped={summary['skipped']}  would_send={summary['would_send']}"
     )
     return summary

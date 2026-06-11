@@ -1,4 +1,4 @@
-"""Local wrapper for the central smart-mail sender.
+"""Local wrapper for the central smart-mail-not-in-use sender.
 
 Selection and sent-confirmation rules live in
 functions-smartmail/outreach_mail_select.py. This module only preserves the

@@ -1,4 +1,4 @@
-# functions-smartmail/smart_mail/smart_template_engine.py  (verbatim copy of app/smart-mail/smart_template_engine.py)
+# functions-smartmail/smart_mail/smart_template_engine.py  (verbatim copy of app/smart-mail-not-in-use/smart_template_engine.py)
 
 from typing import Any
 

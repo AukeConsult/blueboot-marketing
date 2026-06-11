@@ -1,5 +1,5 @@
 # functions-smartmail/smart_mail/smart_campaign_stats.py
-# Adapted copy of app/smart-mail/smart_campaign_stats.py -- only the
+# Adapted copy of app/smart-mail-not-in-use/smart_campaign_stats.py -- only the
 # Firestore import is relative.
 from .firestore_client import get_firestore
 
