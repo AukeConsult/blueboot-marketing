@@ -230,6 +230,7 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
   color: #185fa5; flex-shrink: 0;
 }
 .sp-section { padding: 10px 14px; border-bottom: 1px solid var(--bb-border); }
+.sp-section.sp-primary { background: #fbfcff; }
 .sp-section-label {
   font-size: .68rem; color: var(--bb-muted); text-transform: uppercase;
   letter-spacing: .05em; margin-bottom: 8px; font-weight: 600;
@@ -245,6 +246,15 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 .sp-ch-btn { color: var(--bb-accent) !important; background: #eef0ff; border-color: #c7ceff; }
 .sp-quick-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .sp-quick-actions .btn { font-size: .72rem; padding: 2px 7px; }
+.sp-workbench-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.sp-workbench-grid .sp-row { margin-bottom: 0; }
+.sp-note-input { min-height: 4.4em; }
+.sp-queue-nav {
+  position: sticky; bottom: 0; z-index: 2; display: flex; gap: 8px;
+  padding: 9px 14px; background: #fff; border-top: 1px solid var(--bb-border);
+  box-shadow: 0 -6px 16px rgba(0,0,0,.06);
+}
+.sp-queue-nav .btn { flex: 1; }
 .focus-active-note {
   display: none; color: var(--bb-accent); background: #eef0ff;
   border: 1px solid #c7ceff; border-radius: 5px; padding: 2px 7px; font-size: .74rem;
@@ -295,7 +305,7 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 
 @media (max-width: 767.98px) {
   /* Keep header as a single row (title left, hamburger right) */
-  .page-header { position: relative; flex-direction: row !important; align-items: center !important; }
+  .page-header { position: relative; z-index: 500; flex-direction: row !important; align-items: center !important; }
   .hdr-toggle-btn { display: inline-flex; }
   /* Action groups become an absolute dropdown panel */
   #hdr-action-groups {
@@ -309,15 +319,54 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
     border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0,0,0,.14);
     padding: 12px;
-    flex-direction: column !important;
-    align-items: stretch !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
     gap: 8px !important;
-    min-width: 280px;
+    min-width: min(560px, calc(100vw - 16px));
   }
-  #hdr-action-groups.hdr-open { display: flex !important; }
-  .hdr-group { width: 100%; flex-wrap: wrap; }
+  #hdr-action-groups.hdr-open { display: grid !important; }
+  .hdr-group {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: center;
+  }
+  .hdr-group-label { grid-column: 1 / -1; }
   .hdr-group .group-select,
-  .hdr-group .bb-header-select { max-width: 100% !important; width: 100% !important; flex: 1; }
+  .hdr-group .bb-header-select,
+  .hdr-group .header-action-btn { max-width: 100% !important; width: 100% !important; min-width: 0; }
+  .hdr-group-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .hdr-group-actions .group-select { width: 100% !important; }
+  .hdr-group-actions .header-action-btn {
+    width: auto !important;
+    min-width: 34px;
+    justify-content: center;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  .hdr-group-actions #sync-all-btn {
+    min-width: 70px;
+  }
+}
+
+@media (max-width: 479.98px) {
+  #hdr-action-groups {
+    min-width: calc(100vw - 16px);
+    grid-template-columns: 1fr;
+  }
+  .hdr-group {
+    grid-template-columns: 1fr;
+  }
+  .hdr-group-actions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hdr-group-actions #sync-all-btn {
+    grid-column: 1 / -1;
+    width: 100% !important;
+  }
 }
 
 /* Primary header selectors — owner and campaign — more prominent */
@@ -394,16 +443,27 @@ body { display: flex; flex-direction: column; }
 .crm-contact-cell { white-space: normal !important; overflow: hidden !important; min-width: 0; }
 .crm-contact-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; }
 .crm-contact-name { min-width: 0; flex: 1 1 auto; }
+@media (min-width: 1200px) {
+  .crm-contact-name {
+    display: grid;
+    grid-template-columns: minmax(150px, .95fr) minmax(120px, 1.05fr);
+    gap: 6px;
+    align-items: center;
+  }
+}
 .crm-contact-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.detail-btn { background: none; border: none; cursor: pointer; padding: 1px 4px;
+  border-radius: 4px; color: var(--bb-muted); font-size: .9rem; line-height: 1; }
+.detail-btn:hover { color: var(--bb-accent); background: #eef0ff; }
 
 /* Contact meta is a true responsive grid.
-   Wide: email / phone / website / owner on one line.
+   Wide: email / phone / website on one line.
    Medium: two columns.
    Mobile: one column.
    Every field can shrink without pushing outside the viewport. */
 .crm-contact-meta {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, .85fr);
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.35fr);
   gap: 4px 12px;
   align-items: center;
   margin-top: 5px;
@@ -457,6 +517,9 @@ body { display: flex; flex-direction: column; }
 .crm-followup-owner .follow-select { max-width: 100%; }
 .crm-mobile-label { display: none; font-size: .66rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--bb-muted); margin-bottom: 2px; }
 .followup-head { width: 360px; }
+.followup-sort-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.followup-sort-head .bb-sortable { cursor: pointer; white-space: nowrap; }
+.followup-sort-head .sort-secondary { color: var(--bb-muted); font-weight: 500; }
 
 /* Keep the fixed 3-column table only when there is enough horizontal room. */
 * { box-sizing: border-box; }
@@ -600,9 +663,14 @@ body { display: flex; flex-direction: column; }
   <div class="page-header mb-3">
     <div class="page-header-top">
       <h5 class="page-title"><i class="ti ti-phone-check text-primary"></i>CRM Follow-up</h5>
-      <button id="hdr-toggle" class="hdr-toggle-btn" type="button" onclick="toggleHdrControls()" title="Filters &amp; actions">
-        <i class="ti ti-adjustments-horizontal"></i>
-      </button>
+      <div class="d-flex align-items-center gap-1">
+        <a href="doc-viewer.html?doc=followup-page-usage" target="_blank" class="header-action-btn" title="Follow-up page help">
+          <i class="ti ti-help"></i>
+        </a>
+        <button id="hdr-toggle" class="hdr-toggle-btn" type="button" onclick="toggleHdrControls(event)" title="Filters &amp; actions">
+          <i class="ti ti-adjustments-horizontal"></i>
+        </button>
+      </div>
     </div>
     <div id="hdr-action-groups" class="d-flex align-items-center gap-2 flex-wrap">
 
@@ -630,12 +698,6 @@ body { display: flex; flex-direction: column; }
         <button class="header-action-btn" id="sync-all-btn" onclick="syncAllEmails()" title="Sync all emails">
           <i class="ti ti-mail-bolt me-1"></i>Sync
         </button>
-        <button class="header-action-btn" onclick="load()" title="Refresh contacts">
-          <i class="ti ti-refresh"></i>
-        </button>
-        <a href="doc-viewer.html?doc=followup-page-usage" target="_blank" class="header-action-btn" title="Follow-up page help">
-          <i class="ti ti-help"></i>
-        </a>
       </div><!-- /.hdr-group-actions -->
 
     </div><!-- /.d-flex header row -->
@@ -808,11 +870,8 @@ body { display: flex; flex-direction: column; }
           <button id="view-group-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleView('group')" title="Grouped view">
             <i class="ti ti-layout-rows"></i>
           </button>
-          <button id="view-list-btn" class="btn btn-sm btn-primary" onclick="toggleView('list')" title="List view">
+          <button id="view-list-btn" class="btn btn-sm btn-primary" onclick="toggleView('list')" title="Full list view">
             <i class="ti ti-list"></i>
-          </button>
-          <button id="side-panel-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleSidePanel()" title="Toggle contact detail panel">
-            <i class="ti ti-layout-sidebar-right"></i>
           </button>
         </div>
       </div>
@@ -822,7 +881,12 @@ body { display: flex; flex-direction: column; }
         <thead class="bb-thead"><tr>
           <th style="width:34px"><input type="checkbox" class="form-check-input" id="select-all" onclick="toggleSelectAll(this)"></th>
           <th class="small bb-sortable" data-col="name" onclick="sortBy('name')">Contact <span class="sort-icon"></span></th>
-          <th class="small bb-sortable followup-head" data-col="followup_date" onclick="sortBy('followup_date')">Follow-up <span class="sort-icon"></span></th>
+          <th class="small followup-head">
+            <div class="followup-sort-head">
+              <span class="bb-sortable" data-col="followup_date" onclick="sortBy('followup_date')">Follow-up <span class="sort-icon"></span></span>
+              <span class="bb-sortable sort-secondary" data-col="followup_importance" onclick="sortBy('followup_importance')">Importance <span class="sort-icon"></span></span>
+            </div>
+          </th>
         </tr></thead>
         <tbody id="follow-tbody">
           <tr><td colspan="3" class="text-center py-5" style="color:var(--bb-muted)">
@@ -868,6 +932,7 @@ let _sortCol = 'followup_date';
 let _sortAsc = true;
 let _currentView = 'list';
 let _focusQueue = false;
+let _visibleRows = [];
 const _collapsedGroups = new Set();
 let _currentGroupKeys = [];
 let _allCampaigns = [];   // loaded from /followup-meta
@@ -888,7 +953,7 @@ const _CHANNEL_HREF = {
 let _sideOpen      = false;           // side panel visible
 let _sidePanelGidx = -1;
 let _spChannelsOpen = false;          // channels section collapsed by default             // which contact is shown in side panel
-let _spCompanyOpen  = true;           // company info section open by default
+let _spCompanyOpen  = false;          // company info section collapsed by default
 let _prefsReady       = false;  // true only after first load() completes with prefs applied
 let _loadedPrefs      = null;   // prefs fetched by loadUserPrefs(); applied inside load()
 
@@ -924,10 +989,13 @@ function populateCampaignDropdown(ownerVal) {
     + filtered.map(c => `<option value="${escapeHtml(c.id)}"${c.id === cur ? ' selected' : ''}>${escapeHtml(c.id)}</option>`).join('');
 }
 
-function toggleHdrControls() {
+function toggleHdrControls(event) {
+  if (event) event.stopPropagation();
   const groups = document.getElementById('hdr-action-groups');
   const btn    = document.getElementById('hdr-toggle');
+  if (!groups || !btn) return;
   const open   = groups.classList.toggle('hdr-open');
+  groups.style.display = open ? 'grid' : '';
   btn.innerHTML = open
     ? '<i class="ti ti-x"></i>'
     : '<i class="ti ti-adjustments-horizontal"></i>';
@@ -939,6 +1007,7 @@ document.addEventListener('click', (e) => {
   if (!groups || !groups.classList.contains('hdr-open')) return;
   if (!groups.contains(e.target) && !btn.contains(e.target)) {
     groups.classList.remove('hdr-open');
+    groups.style.display = '';
     btn.innerHTML = '<i class="ti ti-adjustments-horizontal"></i>';
   }
 });
@@ -1128,6 +1197,7 @@ function applySort(list) {
   if (!_sortCol) return list;
   return [...list].sort((a, b) => {
     if (_sortCol === 'followup_date') return compareFollowupDate(a, b, _sortAsc);
+    if (_sortCol === 'followup_importance') return compareImportance(a, b, _sortAsc);
     const va = String(a[_sortCol] || '').toLowerCase();
     const vb = String(b[_sortCol] || '').toLowerCase();
     return _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
@@ -1149,11 +1219,26 @@ function compareFollowupDate(a, b, asc = true) {
   return String(a.name || '').localeCompare(String(b.name || ''));
 }
 
+function compareImportance(a, b, asc = true) {
+  const rank = { high: 0, medium: 1, low: 2, '': 3 };
+  const ia = rank[a.followup_importance || ''] ?? 3;
+  const ib = rank[b.followup_importance || ''] ?? 3;
+  if (ia !== ib) return asc ? ia - ib : ib - ia;
+  return compareFollowupDate(a, b, true);
+}
+
 
 // ── View toggle ───────────────────────────────────────────────────────────────
 
 function toggleView(v) {
   _currentView = v;
+  if (v === 'list' && _sideOpen) {
+    _sideOpen = false;
+    _sidePanelGidx = -1;
+    _updateSidePanelBtn();
+    _updateSidePanelVisibility();
+    document.querySelectorAll('tr.row-sp-active').forEach(tr => tr.classList.remove('row-sp-active'));
+  }
   if (v === 'group' && _focusQueue) {
     _focusQueue = false;
     _updateFocusQueueBtn();
@@ -1254,6 +1339,7 @@ function applyFilter() {
   }
   document.getElementById('count-badge').textContent =
     `${list.length} contact${list.length === 1 ? '' : 's'}`;
+  _visibleRows = list;
   render(list);
   if (_focusQueue) _openFirstFocusContact(list);
 }
@@ -1361,6 +1447,9 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
           </div>
           <div class="crm-contact-actions">
             ${statusBadge(r.status)}
+            <button class="detail-btn" onclick="openSidePanelFromButton(${gidx}, event)" title="Open contact details">
+              <i class="ti ti-layout-sidebar-right"></i>
+            </button>
             <button class="sync-btn" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
               <i class="ti ti-mail-bolt"></i>
             </button>
@@ -1370,7 +1459,6 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
           ${emailHtml}
           ${phoneHtml}
           ${websiteHtml}
-          <span class="crm-owner-meta"><i class="ti ti-user"></i><span class="crm-owner-text">${escapeHtml(r.owner || 'No owner')}</span></span>
         </div>
       </td>
       <td class="crm-followup-cell">
@@ -1387,13 +1475,6 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
             onchange="saveField(this);this.className='imp-select '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
             ${IMPORTANCE_LEVELS.map(i=>`<option value="${i.value}"${r.followup_importance===i.value?' selected':''}>${i.label}</option>`).join('')}
           </select></div>
-        </div>
-        <div class="crm-followup-owner">
-          <i class="ti ti-user-check"></i>
-          <select class="follow-select" data-gidx="${gidx}" data-field="followup_owner" onchange="saveField(this)">
-            <option value="">— follow-up owner —</option>
-            ${_allUsers.map(u=>`<option value="${escapeHtml(u.email)}"${r.followup_owner===u.email?' selected':''}>${escapeHtml(u.displayName ? u.displayName+' ('+u.email+')' : u.email)}</option>`).join('')}
-          </select>
         </div>
       </td>`;
 }
@@ -1587,11 +1668,24 @@ function renderGrouped(list) {
 // ── Side panel ────────────────────────────────────────────────────────────────
 
 function onRowClick(event, gidx) {
-  if (event.target.closest('button,a,label,select')) return;
+  if (event.target.closest('button,a,label,select,input,textarea')) return;
   onRowExpand(gidx);            // expand comment/history for this row
+  if (window.innerWidth < 768) {
+    openSidePanelFromButton(gidx, event);
+    return;
+  }
   if (!_sideOpen) return;
   if (_sidePanelGidx === gidx) return;
   openSidePanel(gidx);
+}
+
+function openSidePanelFromButton(gidx, event) {
+  if (event) event.stopPropagation();
+  _sideOpen = true;
+  _updateSidePanelBtn();
+  _updateSidePanelVisibility();
+  openSidePanel(gidx);
+  saveUserPrefs();
 }
 
 function toggleSidePanel() {
@@ -1745,22 +1839,64 @@ function _renderSidePanel(r) {
         ${r.messenger  ? `<a href="${escapeHtml(_CHANNEL_HREF.messenger(r.messenger))}" target="_blank" class="collapse-all-btn sp-ch-btn" title="${escapeHtml(r.messenger)}"><i class="ti ti-brand-messenger"></i></a>` : ''}
       </div>
     </div>
+    <div class="sp-section sp-primary">
+      <div class="sp-section-label">Next action</div>
+      <div class="sp-quick-actions">
+        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'tomorrow')">
+          <i class="ti ti-calendar-plus me-1"></i>+1 day
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'next_week')">
+          <i class="ti ti-calendar-plus me-1"></i>+1 week
+        </button>
+        <button class="btn btn-sm btn-outline-primary" onclick="quickFollowupAction(${gidx},'contacted')">
+          <i class="ti ti-check me-1"></i>Contacted
+        </button>
+        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'waiting')">
+          <i class="ti ti-clock me-1"></i>Waiting
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="quickFollowupAction(${gidx},'not_interested')">
+          <i class="ti ti-circle-x me-1"></i>Not relevant
+        </button>
+      </div>
+      <div class="sp-workbench-grid">
+        <div class="sp-row">
+          <i class="ti ti-flag" style="margin-top:5px"></i>
+          <select class="follow-select small" data-gidx="${gidx}" data-field="followup_status" onchange="saveField(this)">
+            ${fuOpts}
+          </select>
+        </div>
+        <div class="sp-row">
+          <i class="ti ti-calendar" style="margin-top:5px"></i>
+          <input type="date" class="follow-input small ${dateCls}" value="${escapeHtml(r.followup_date || '')}"
+            data-gidx="${gidx}" data-field="followup_date" onchange="saveField(this)">
+        </div>
+        <div class="sp-row">
+          <i class="ti ti-star" style="margin-top:5px"></i>
+          <select class="imp-select ${impCls} small" data-gidx="${gidx}" data-field="followup_importance"
+            onchange="saveField(this);this.className='imp-select small '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
+            ${impOpts}
+          </select>
+        </div>
+        <div class="sp-row">
+          <i class="ti ti-user-check" style="margin-top:5px"></i>
+          <select class="follow-select small" data-gidx="${gidx}" data-field="followup_owner" onchange="saveField(this)">
+            <option value="">— unassigned —</option>
+            ${_allUsers.map(u=>`<option value="${escapeHtml(u.email)}"${r.followup_owner===u.email?' selected':''}>${escapeHtml(u.displayName ? u.displayName+' ('+u.email+')' : u.email)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>
     <div class="sp-section">
-      <textarea class="follow-input small w-100 sp-comment-input"
+      <div class="sp-section-label">Note</div>
+      <textarea class="follow-input small w-100 sp-comment-input sp-note-input"
         placeholder="Add comment…" data-gidx="${gidx}" data-field="followup_comment"
         onchange="saveField(this)"
         onfocus="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
         oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
-        rows="1">${escapeHtml(r.followup_comment || '')}</textarea>
+        rows="3">${escapeHtml(r.followup_comment || '')}</textarea>
     </div>
-    <div class="sp-section" id="sp-company-section">
-      <div class="sp-section-label sp-collapsible" onclick="toggleSpCompany()" style="cursor:pointer;user-select:none">
-        <i class="ti ti-building me-1" style="font-size:13px"></i>Company
-        <i class="ti ${_spCompanyOpen ? 'ti-chevron-up' : 'ti-chevron-down'} ms-1" style="font-size:12px;vertical-align:middle"></i>
-      </div>
-      <div class="sp-company-body" style="display:${_spCompanyOpen ? 'block' : 'none'}">
-        <div class="small sp-muted py-1">Loading…</div>
-      </div>
+    <div class="sp-section" id="sp-history-section">
+      ${_spHistoryHtml(r)}
     </div>
     <div class="sp-section sp-channels-section">
       <div class="sp-section-label sp-collapsible" onclick="toggleSpChannels()" style="cursor:pointer;user-select:none">
@@ -1814,54 +1950,16 @@ function _renderSidePanel(r) {
       ${siteShort ? `<div class="sp-row"><i class="ti ti-world"></i><a href="${escapeHtml(r.website)}" target="_blank" class="small sp-muted">${escapeHtml(siteShort)}</a></div>` : ''}
       ${!r.email && !r.phone && !siteShort ? '<div class="small sp-muted">No contact info.</div>' : ''}
     </div>
-    <div class="sp-section">
-      <div class="sp-section-label">Follow-up</div>
-      <div class="sp-quick-actions">
-        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'tomorrow')">
-          <i class="ti ti-calendar-plus me-1"></i>+1 day
-        </button>
-        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'next_week')">
-          <i class="ti ti-calendar-plus me-1"></i>+1 week
-        </button>
-        <button class="btn btn-sm btn-outline-primary" onclick="quickFollowupAction(${gidx},'contacted')">
-          <i class="ti ti-check me-1"></i>Contacted
-        </button>
-        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'waiting')">
-          <i class="ti ti-clock me-1"></i>Waiting
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="quickFollowupAction(${gidx},'not_interested')">
-          <i class="ti ti-circle-x me-1"></i>Not relevant
-        </button>
+    <div class="sp-section" id="sp-company-section">
+      <div class="sp-section-label sp-collapsible" onclick="toggleSpCompany()" style="cursor:pointer;user-select:none">
+        <i class="ti ti-building me-1" style="font-size:13px"></i>Company
+        <i class="ti ${_spCompanyOpen ? 'ti-chevron-up' : 'ti-chevron-down'} ms-1" style="font-size:12px;vertical-align:middle"></i>
       </div>
-      <div class="sp-row">
-        <i class="ti ti-calendar" style="margin-top:5px"></i>
-        <input type="date" class="follow-input small ${dateCls}" value="${escapeHtml(r.followup_date || '')}"
-          data-gidx="${gidx}" data-field="followup_date" onchange="saveField(this)">
-      </div>
-      <div class="sp-row">
-        <i class="ti ti-flag" style="margin-top:5px"></i>
-        <select class="follow-select small" data-gidx="${gidx}" data-field="followup_status" onchange="saveField(this)">
-          ${fuOpts}
-        </select>
-      </div>
-      <div class="sp-row">
-        <i class="ti ti-star" style="margin-top:5px"></i>
-        <select class="imp-select ${impCls} small" data-gidx="${gidx}" data-field="followup_importance"
-          onchange="saveField(this);this.className='imp-select small '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
-          ${impOpts}
-        </select>
-      </div>
-      <div class="sp-row">
-        <i class="ti ti-user-check" style="margin-top:5px"></i>
-        <select class="follow-select small" data-gidx="${gidx}" data-field="followup_owner" onchange="saveField(this)">
-          <option value="">— unassigned —</option>
-          ${_allUsers.map(u=>`<option value="${escapeHtml(u.email)}"${r.followup_owner===u.email?' selected':''}>${escapeHtml(u.displayName ? u.displayName+' ('+u.email+')' : u.email)}</option>`).join('')}
-        </select>
+      <div class="sp-company-body" style="display:${_spCompanyOpen ? 'block' : 'none'}">
+        <div class="small sp-muted py-1">Loading…</div>
       </div>
     </div>
-    <div class="sp-section" id="sp-history-section">
-      ${_spHistoryHtml(r)}
-    </div>
+    ${_focusQueueNavHtml(r)}
 `;
 }
 
@@ -1947,8 +2045,10 @@ async function _loadSpCompany(r) {
 
 function _spHistoryHtml(r) {
   if (!r.comment_history || !r.comment_history.length) return '<div class="small sp-muted">No history yet.</div>';
-  return `<div class="sp-section-label">History (${r.comment_history.length})</div>` +
-    r.comment_history.slice(-5).reverse().map(h => `
+  const shown = r.comment_history.slice(-3).reverse();
+  const suffix = r.comment_history.length > shown.length ? ` <span class="sp-muted" style="font-weight:400">latest ${shown.length}</span>` : '';
+  return `<div class="sp-section-label">Recent history (${r.comment_history.length})${suffix}</div>` +
+    shown.map(h => `
       <div class="sp-row">
         <i class="ti ti-clock-hour-4"></i>
         <div class="small">
@@ -1963,6 +2063,30 @@ function _refreshSidePanelHistory() {
   const el  = document.getElementById('sp-history-section');
   if (!row || !el) return;
   el.innerHTML = _spHistoryHtml(row);
+}
+
+function _focusQueueNavHtml(r) {
+  if (!_focusQueue || !_visibleRows.length) return '';
+  const idx = _visibleRows.indexOf(r);
+  if (idx < 0) return '';
+  return `<div class="sp-queue-nav">
+    <button class="btn btn-sm btn-outline-secondary" onclick="focusQueueStep(-1)" ${idx <= 0 ? 'disabled' : ''}>
+      <i class="ti ti-chevron-left me-1"></i>Previous
+    </button>
+    <button class="btn btn-sm btn-primary" onclick="focusQueueStep(1)" ${idx >= _visibleRows.length - 1 ? 'disabled' : ''}>
+      Next<i class="ti ti-chevron-right ms-1"></i>
+    </button>
+  </div>`;
+}
+
+function focusQueueStep(delta) {
+  if (!_visibleRows.length) return;
+  const current = allRows[_sidePanelGidx];
+  const idx = Math.max(0, _visibleRows.indexOf(current));
+  const nextIdx = Math.min(_visibleRows.length - 1, Math.max(0, idx + delta));
+  const row = _visibleRows[nextIdx];
+  const gidx = allRows.indexOf(row);
+  if (gidx >= 0) openSidePanel(gidx);
 }
 
 function _datePlus(days) {
