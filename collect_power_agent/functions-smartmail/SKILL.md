@@ -18,6 +18,14 @@ description: >
 
 **File:** `functions-smartmail/smart_mail/outreach_mail_select.py`
 
+Follow-up mailbox sync also belongs in this package:
+`functions-smartmail/smart_mail/followup_email_sync_lib.py`. CRM may trigger it
+through jobs or HTTP routes, but IMAP/Gmail mailbox reading, sent-folder matching,
+message-id deduplication, and mail-account protocol handling stay in smart-mail.
+Use `campaign_ids` for campaign filters in this flow. CLI flags use
+`--campaigns` with space, comma, semicolon, or pipe separated values. Empty or
+omitted campaign filters mean all campaigns.
+
 Read-only selection library — no SMTP, no sending. Two public functions.
 
 ---

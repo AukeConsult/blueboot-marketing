@@ -2817,7 +2817,7 @@ async function syncContactEmails(gidx, btn) {
     const res  = await fetchJSON(`${BASE}/api/crm/followup-email-sync`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ campaign_id: row.campaign_id, contact_doc_id: row.doc_id, days }),
+      body:    JSON.stringify({ campaign_ids: [row.campaign_id], contact_doc_id: row.doc_id, days }),
     });
     setFeedback(
       `<i class="ti ti-clock me-1"></i>Email sync queued <code>${res.job_id}</code>`
@@ -2827,9 +2827,11 @@ async function syncContactEmails(gidx, btn) {
     await pollJob(res.job_id, {
       onDone: async result => {
         const n = result.synced_entries || 0;
+        const u = result.updated_contacts ?? result.synced_contacts ?? 0;
         setFeedback(
           `<i class="ti ti-check me-1"></i><strong>${escapeHtml(row.email)}</strong>`
-          + ` — ${n} new email${n === 1 ? '' : 's'} synced.`,
+          + ` — ${n} new email${n === 1 ? '' : 's'} synced; `
+          + `<strong>${u}</strong> contact${u === 1 ? '' : 's'} updated.`,
           n > 0 ? 'success' : 'info'
         );
         if (n > 0) await refreshContactHistory(gidx);
@@ -2859,7 +2861,7 @@ async function syncAllEmails() {
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
         days,
-        ...(camp ? { campaign_id: camp } : {}),
+        ...(camp ? { campaign_ids: [camp] } : {}),
       }),
     });
     setFeedback(
@@ -2871,10 +2873,12 @@ async function syncAllEmails() {
       onDone: result => {
         const n = result.synced_entries || 0;
         const c = result.synced_contacts || 0;
+        const u = result.updated_contacts ?? c;
         setFeedback(
           `<i class="ti ti-check me-1"></i>Sync complete — `
           + `<strong>${n}</strong> new email${n === 1 ? '' : 's'} across `
-          + `<strong>${c}</strong> contact${c === 1 ? '' : 's'}.`
+          + `<strong>${c}</strong> contact${c === 1 ? '' : 's'}; `
+          + `<strong>${u}</strong> updated.`
           + (result.errors && result.errors.length ? ` <span class="text-danger">${result.errors.length} error(s).</span>` : ''),
           n > 0 ? 'success' : 'info'
         );

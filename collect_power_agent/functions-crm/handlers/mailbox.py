@@ -232,8 +232,8 @@ def read_mailbox(email):
         messages     = []
 
         if account_type == "imap":
-            host     = ma.get("host", "").strip()
-            port     = int(ma.get("port") or 993)
+            host     = (ma.get("imap_host") or ma.get("host") or "").strip()
+            port     = int(ma.get("imap_port") or ma.get("port") or 993)
             username = ma.get("username", "").strip()
             password = ma.get("password", "")
             use_ssl  = ma.get("ssl", True)
@@ -412,8 +412,8 @@ def read_message_body(email):
 
         account_type = ma.get("account_type", "imap")
         if account_type == "imap":
-            host    = ma.get("host", "").strip()
-            port    = int(ma.get("port") or 993)
+            host    = (ma.get("imap_host") or ma.get("host") or "").strip()
+            port    = int(ma.get("imap_port") or ma.get("port") or 993)
             use_ssl = ma.get("ssl", True)
             if not host:
                 return _err("IMAP host not configured", 400)

@@ -240,7 +240,7 @@ class MailSender:
     # ── SMTP (IMAP account) ───────────────────────────────────────────────
 
     def _smtp_params(self):
-        imap_host = self.ma.get("host", "").strip()
+        imap_host = (self.ma.get("imap_host") or self.ma.get("host") or "").strip()
         username  = self.ma.get("username", "").strip()
         password  = self.ma.get("password", "")
         smtp_host = self.ma.get("smtp_host", "").strip() or (
@@ -266,14 +266,15 @@ class MailSender:
             server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
             server.ehlo()
             server.starttls()
+            server.ehlo()
         server.login(username, password)
         return server, username, smtp_host, smtp_port
 
     def _send_smtp(self, msg, to: str) -> dict:
         username = self.ma.get("username", "").strip()
         _, _, smtp_host, smtp_port, _ = self._smtp_params()
-        if not self.ma.get("host") or not username:
-            return {"status": "error", "message": "IMAP host and username are required"}
+        if not smtp_host or not username:
+            return {"status": "error", "message": "SMTP host and username are required"}
         msg["From"] = self._from_header(username)
         try:
             server, username, smtp_host, smtp_port = self._smtp_connect()
@@ -292,8 +293,8 @@ class MailSender:
     # ── IMAP helpers (connect, find Sent, append) ─────────────────────────
 
     def _imap_connect(self):
-        host     = self.ma.get("host", "").strip()
-        port     = int(self.ma.get("port") or 993)
+        host     = (self.ma.get("imap_host") or self.ma.get("host") or "").strip()
+        port     = int(self.ma.get("imap_port") or self.ma.get("port") or 993)
         username = self.ma.get("username", "").strip()
         password = self.ma.get("password", "")
         use_ssl  = self._as_bool(self.ma.get("ssl", True))

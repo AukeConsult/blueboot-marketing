@@ -16,11 +16,12 @@ Usage examples
   # Sync last 30 days for all contacts
   python app/followup_email_sync.py --days 30
 
-  # Sync all time for a single campaign
-  python app/followup_email_sync.py --campaign NO_jun --days 0
+  # Sync all time for one or more campaigns
+  python app/followup_email_sync.py --campaigns NO_jun SE_jun --days 0
+  python app/followup_email_sync.py --campaigns NO_jun,SE_jun --days 0
 
   # Sync one specific contact
-  python app/followup_email_sync.py --campaign NO_jun --contact john_doe_example_com
+  python app/followup_email_sync.py --campaigns NO_jun --contact john_doe_example_com
 
   # Preview what would be synced without writing to Firestore
   python app/followup_email_sync.py --dry-run
@@ -28,16 +29,17 @@ Usage examples
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 import _pathsetup  # noqa: F401 — sets up Windows event loop policy + path
 
-# Make the functions-crm package importable so we can reuse the shared lib.
-_FUNCTIONS_CRM = os.path.join(os.path.dirname(__file__), "..", "functions-crm")
-if _FUNCTIONS_CRM not in sys.path:
-    sys.path.insert(0, os.path.abspath(_FUNCTIONS_CRM))
+# Make the smart-mail package importable so we can reuse the shared mail sync lib.
+_FUNCTIONS_SMARTMAIL = os.path.join(os.path.dirname(__file__), "..", "functions-smartmail")
+if _FUNCTIONS_SMARTMAIL not in sys.path:
+    sys.path.insert(0, os.path.abspath(_FUNCTIONS_SMARTMAIL))
 
-from crm.followup_email_sync_lib import run_followup_email_sync
+from smart_mail.followup_email_sync_lib import run_followup_email_sync
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -54,6 +56,15 @@ def _list_campaigns(db) -> list[str]:
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
+def _split_list_arg(values) -> list[str]:
+    if not values:
+        return []
+    out: list[str] = []
+    for item in values:
+        out.extend(v.strip() for v in re.split(r"[,;|\n]", str(item)) if v.strip())
+    return out
+
+
 def main(argv=None) -> None:
     try:
         from dotenv import load_dotenv
@@ -68,16 +79,17 @@ def main(argv=None) -> None:
         epilog=__doc__.split("Usage examples")[1] if "Usage examples" in __doc__ else "",
     )
     p.add_argument(
-        "--campaign", "-c",
+        "--campaigns", "-c",
+        nargs="+",
         default=None,
         metavar="CAMPAIGN_ID",
-        help="Only sync contacts in this campaign (default: all campaigns)",
+        help="Only sync contacts in these campaign IDs. Accepts space, comma, semicolon, or pipe separated values. Default: all campaigns.",
     )
     p.add_argument(
         "--contact", "-d",
         default=None,
         metavar="DOC_ID",
-        help="Only sync this specific contact doc ID (requires --campaign)",
+        help="Only sync this specific contact doc ID (requires exactly one --campaigns value)",
     )
     p.add_argument(
         "--days", "-n",
@@ -98,9 +110,10 @@ def main(argv=None) -> None:
     )
 
     args = p.parse_args(argv)
+    campaign_ids = _split_list_arg(args.campaigns)
 
-    if args.contact and not args.campaign:
-        p.error("--contact requires --campaign to be specified as well")
+    if args.contact and len(campaign_ids) != 1:
+        p.error("--contact requires exactly one --campaigns value")
 
     db = _get_db()
 
@@ -119,7 +132,7 @@ def main(argv=None) -> None:
     print("=" * 60)
     print("  FOLLOW-UP EMAIL SYNC")
     print("=" * 60)
-    scope = args.campaign or "ALL campaigns"
+    scope = ", ".join(campaign_ids) if campaign_ids else "ALL campaigns"
     if args.contact:
         scope += f"  /  contact: {args.contact}"
     window = f"last {args.days} day{'s' if args.days != 1 else ''}" if args.days else "all time"
@@ -135,7 +148,7 @@ def main(argv=None) -> None:
     else:
         result = run_followup_email_sync(
             db             = db,
-            campaign_id    = args.campaign or None,
+            campaign_ids   = campaign_ids,
             contact_doc_id = args.contact  or None,
             days           = args.days,
         )
@@ -145,7 +158,7 @@ def main(argv=None) -> None:
 def _run_dry(db, args):
     """Dry run: import the matching logic, skip the Firestore writes."""
     import re
-    from crm.followup_email_sync_lib import (
+    from smart_mail.followup_email_sync_lib import (
         _imap_connect, _find_sent_folder, _fetch_headers,
         _extract_email, _msg_key,
         CAMPAIGNS_COLLECTION, CONTACTS_SUBCOLLECTION,
@@ -155,6 +168,7 @@ def _run_dry(db, args):
 
     now    = datetime.now(timezone.utc)
     cutoff = (now - timedelta(days=args.days)) if args.days > 0 else None
+    campaign_ids = _split_list_arg(args.campaigns)
 
     ma_col  = db.collection(SETTINGS_COLLECTION).document(MAIL_ACCOUNTS_DOC).collection("accounts")
     all_mas = {d.id: d.to_dict() for d in ma_col.stream()}
@@ -165,22 +179,24 @@ def _run_dry(db, args):
     camps_col = db.collection(CAMPAIGNS_COLLECTION)
     account_contacts: dict[str, list] = {acc: [] for acc in all_mas}
 
-    if args.campaign and args.contact:
-        ref  = camps_col.document(args.campaign).collection(CONTACTS_SUBCOLLECTION).document(args.contact)
+    if args.contact:
+        campaign_id = campaign_ids[0]
+        ref  = camps_col.document(campaign_id).collection(CONTACTS_SUBCOLLECTION).document(args.contact)
         snap = ref.get()
         if snap.exists:
             c  = snap.to_dict() or {}
-            cd = camps_col.document(args.campaign).get().to_dict() or {}
+            cd = camps_col.document(campaign_id).get().to_dict() or {}
             acc = (cd.get("outreach_email_account") or "").strip().lower()
             if acc in account_contacts:
-                account_contacts[acc].append((args.campaign, args.contact, c.get("email", ""), ref))
-    elif args.campaign:
-        cd  = camps_col.document(args.campaign).get().to_dict() or {}
-        acc = (cd.get("outreach_email_account") or "").strip().lower()
-        if acc in account_contacts:
-            for doc in camps_col.document(args.campaign).collection(CONTACTS_SUBCOLLECTION).stream():
-                c = doc.to_dict() or {}
-                account_contacts[acc].append((args.campaign, doc.id, c.get("email", ""), doc.reference))
+                account_contacts[acc].append((campaign_id, args.contact, c.get("email", ""), ref))
+    elif campaign_ids:
+        for campaign_id in campaign_ids:
+            cd  = camps_col.document(campaign_id).get().to_dict() or {}
+            acc = (cd.get("outreach_email_account") or "").strip().lower()
+            if acc in account_contacts:
+                for doc in camps_col.document(campaign_id).collection(CONTACTS_SUBCOLLECTION).stream():
+                    c = doc.to_dict() or {}
+                    account_contacts[acc].append((campaign_id, doc.id, c.get("email", ""), doc.reference))
     else:
         for camp_doc in camps_col.stream():
             cid = camp_doc.id
@@ -193,6 +209,7 @@ def _run_dry(db, args):
                 account_contacts[acc].append((cid, doc.id, c.get("email", ""), doc.reference))
 
     total = 0
+    would_update_contacts: set[str] = set()
     for acc_email, contacts in account_contacts.items():
         if not contacts:
             continue
@@ -221,6 +238,7 @@ def _run_dry(db, args):
                     direction = "OUT" if is_sent else "IN "
                     print(f"  [{direction}] {msg['date'][:10]}  {match_e:<35}  {msg['subject'][:50]}")
                     total += 1
+                    would_update_contacts.add(match_e)
         finally:
             try:
                 conn.logout()
@@ -228,7 +246,10 @@ def _run_dry(db, args):
                 pass
 
     print()
-    print(f"  Dry run complete — {total} email(s) would be synced (no writes made)")
+    print(
+        f"  Dry run complete — {total} email(s) would be synced; "
+        f"{len(would_update_contacts)} contact(s) would be updated (no writes made)"
+    )
     print()
 
 
@@ -239,6 +260,7 @@ def _print_result(result: dict) -> None:
     print("=" * 60)
     print(f"  New entries    : {result.get('synced_entries', 0)}")
     print(f"  Contacts hit   : {result.get('synced_contacts', 0)}")
+    print(f"  Contacts updated: {result.get('updated_contacts', result.get('synced_contacts', 0))}")
     print(f"  Window         : {result.get('days', '?')} days")
     errors = result.get("errors") or []
     if errors:

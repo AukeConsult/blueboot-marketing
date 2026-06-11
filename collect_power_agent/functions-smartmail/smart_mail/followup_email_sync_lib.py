@@ -5,11 +5,12 @@ them against campaign_contacts by email address. Matched emails are appended to
 the contact's comment_history array using Firestore ArrayUnion — idempotent because
 each entry carries a unique email_id; identical maps are never inserted twice.
 
-Used by the crmWorker 'followup-email-sync' job.
+Used by the crmWorker 'followup-email-sync' job and the local
+app/followup_email_sync.py runner.
 
 Parameters (all optional):
-  campaign_id     str   Only sync contacts belonging to this campaign
-  contact_doc_id  str   Only sync this specific contact (requires campaign_id)
+  campaign_ids    list  Only sync contacts belonging to these campaigns
+  contact_doc_id  str   Only sync this specific contact (requires one campaign)
   days            int   Lookback window in days (default 7, 0 = all time)
 """
 from __future__ import annotations
@@ -68,6 +69,20 @@ def _msg_key(message_id: str, folder: str, uid: str) -> str:
     return re.sub(r"[/]", "_", f"{folder}__{uid}")
 
 
+def _coerce_id_set(values) -> set[str]:
+    """Coerce string-or-list campaign filters into a normalized id set."""
+    if not values:
+        return set()
+    if isinstance(values, str):
+        return {v.strip() for v in re.split(r"[,;|\n]", values) if v.strip()}
+    out: set[str] = set()
+    for item in values:
+        if item is None:
+            continue
+        out.update(v.strip() for v in re.split(r"[,;|\n]", str(item)) if v.strip())
+    return out
+
+
 def _find_sent_folder(conn: imaplib.IMAP4) -> str | None:
     for name in _SENT_CANDIDATES:
         try:
@@ -85,8 +100,8 @@ def _imap_connect(ma: dict, account_email: str) -> imaplib.IMAP4:
     account_type = ma.get("account_type", "imap")
 
     if account_type == "imap":
-        host    = ma.get("host", "").strip()
-        port    = int(ma.get("port") or 993)
+        host    = (ma.get("imap_host") or ma.get("host") or "").strip()
+        port    = int(ma.get("imap_port") or ma.get("port") or 993)
         use_ssl = ma.get("ssl", True)
         if not host:
             raise ValueError(f"IMAP host not configured for {account_email}")
@@ -115,7 +130,7 @@ def _imap_connect(ma: dict, account_email: str) -> imaplib.IMAP4:
             access_token = td.get("access_token", "")
             if not access_token:
                 raise ValueError(f"Gmail token refresh failed: {td.get('error_description', 'unknown')}")
-        auth_str = f"user={account_email}auth=Bearer {access_token}"
+        auth_str = f"user={account_email}\x01auth=Bearer {access_token}\x01\x01"
         conn = imaplib.IMAP4_SSL("imap.gmail.com", 993, ssl_context=ssl.create_default_context())
         conn.authenticate("XOAUTH2", lambda _: auth_str.encode())
         return conn
@@ -184,7 +199,7 @@ def _fetch_headers(conn: imaplib.IMAP4, folder: str, cutoff: datetime | None, li
 
 def run_followup_email_sync(
     db,
-    campaign_id:      str | None = None,
+    campaign_ids:     list[str] | str | None = None,
     contact_doc_id:   str | None = None,
     days:             int = 7,
     outreach_account: str | None = None,
@@ -206,13 +221,31 @@ def run_followup_email_sync(
                  .collection("accounts"))
     all_mas = {d.id: d.to_dict() for d in ma_col.stream()}
     if not all_mas:
-        return {"error": "No mail accounts configured", "synced_entries": 0, "synced_contacts": 0}
+        return {
+            "error": "No mail accounts configured",
+            "synced_entries": 0,
+            "synced_contacts": 0,
+            "updated_contacts": 0,
+        }
 
     # ── 2. Build: account_email → [(campaign_id, doc_id, contact_email, ref)] ─
     camps_col = db.collection(CAMPAIGNS_COLLECTION)
     account_contacts: dict[str, list] = {acc: [] for acc in all_mas}
+    campaign_filter = _coerce_id_set(campaign_ids)
 
-    if campaign_id and contact_doc_id:
+    if contact_doc_id:
+        if len(campaign_filter) != 1:
+            message = "contact_doc_id requires exactly one campaign in campaign_ids"
+            return {
+                "error": message,
+                "synced_entries": 0,
+                "synced_contacts": 0,
+                "updated_contacts": 0,
+                "days": days,
+                "campaign_ids": sorted(campaign_filter),
+                "errors": [message],
+            }
+        campaign_id = next(iter(campaign_filter))
         ref  = (camps_col.document(campaign_id)
                          .collection(CONTACTS_SUBCOLLECTION)
                          .document(contact_doc_id))
@@ -224,13 +257,14 @@ def run_followup_email_sync(
             if acc in account_contacts:
                 account_contacts[acc].append((campaign_id, contact_doc_id, c.get("email", ""), ref))
 
-    elif campaign_id:
-        cd  = camps_col.document(campaign_id).get().to_dict() or {}
-        acc = (cd.get("outreach_email_account") or "").strip().lower()
-        if acc in account_contacts:
-            for doc in camps_col.document(campaign_id).collection(CONTACTS_SUBCOLLECTION).stream():
-                c = doc.to_dict() or {}
-                account_contacts[acc].append((campaign_id, doc.id, c.get("email", ""), doc.reference))
+    elif campaign_filter:
+        for campaign_id in sorted(campaign_filter):
+            cd  = camps_col.document(campaign_id).get().to_dict() or {}
+            acc = (cd.get("outreach_email_account") or "").strip().lower()
+            if acc in account_contacts:
+                for doc in camps_col.document(campaign_id).collection(CONTACTS_SUBCOLLECTION).stream():
+                    c = doc.to_dict() or {}
+                    account_contacts[acc].append((campaign_id, doc.id, c.get("email", ""), doc.reference))
 
     else:
         for camp_doc in camps_col.stream():
@@ -251,6 +285,7 @@ def run_followup_email_sync(
     # ── 3. Per account: connect, fetch, match, write ──────────────────────────
     total_entries  = 0
     total_contacts = 0
+    updated_contacts = 0
     errors: list[str] = []
 
     for acc_email, contacts in account_contacts.items():
@@ -318,14 +353,17 @@ def run_followup_email_sync(
                 ref.update(update_doc)
                 total_entries  += len(entries)
                 total_contacts += 1
+                updated_contacts += 1
                 print(f"  {match_e}: +{len(entries)} entries", flush=True)
             except Exception as exc:
                 errors.append(f"{match_e}: write failed — {exc}")
 
-    print(f"[followup-email-sync] done — {total_entries} entries / {total_contacts} contacts", flush=True)
+    print(f"[followup-email-sync] done — {total_entries} entries / {updated_contacts} updated contacts", flush=True)
     return {
         "synced_entries":  total_entries,
         "synced_contacts": total_contacts,
+        "updated_contacts": updated_contacts,
         "days":            days,
+        "campaign_ids":    sorted(campaign_filter),
         "errors":          errors,
     }

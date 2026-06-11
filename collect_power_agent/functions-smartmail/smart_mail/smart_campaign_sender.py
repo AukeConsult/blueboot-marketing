@@ -127,6 +127,9 @@ def _account_settings(account) -> dict:
     settings["username"] = settings.get("username") or account.username
     settings["password"] = settings.get("password") or account.password
     settings["display_name"] = settings.get("display_name") or account.from_name
+    settings["host"] = settings.get("host") or account.imap_host
+    settings["imap_host"] = settings.get("imap_host") or account.imap_host
+    settings["port"] = settings.get("port") or account.imap_port
     settings["smtp_host"] = settings.get("smtp_host") or account.host
     settings["smtp_port"] = settings.get("smtp_port") or account.port
     settings["smtp_ssl"] = settings.get("smtp_ssl") or account.use_ssl

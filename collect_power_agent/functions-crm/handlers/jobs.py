@@ -249,10 +249,15 @@ def worker(name, job_id):
                 )
 
         elif name == "followup-email-sync":
-            from crm.followup_email_sync_lib import run_followup_email_sync
+            from smart_mail.followup_email_sync_lib import run_followup_email_sync
             result = run_followup_email_sync(
                 db               = db,
-                campaign_id      = body.get("campaign_id")      or None,
+                campaign_ids     = (
+                    body.get("campaign_ids")
+                    or body.get("campaigns")
+                    or body.get("campaign_id")
+                    or None
+                ),
                 contact_doc_id   = body.get("contact_doc_id")   or None,
                 outreach_account = body.get("outreach_account") or None,
                 days             = int(body.get("days") or 7),

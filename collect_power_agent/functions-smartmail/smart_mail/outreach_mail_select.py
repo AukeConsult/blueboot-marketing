@@ -186,7 +186,7 @@ def _load_account(db, sender_email: str) -> MailAccountSettings | None:
         return None
     d = doc.to_dict() or {}
     account_type = str(d.get("account_type") or "imap").strip().lower()
-    imap_host = str(d.get("host") or "").strip()
+    imap_host = str(d.get("imap_host") or d.get("host") or "").strip()
     smtp_host = str(d.get("smtp_host") or "").strip()
     if not smtp_host and imap_host.startswith("imap."):
         smtp_host = imap_host.replace("imap.", "smtp.", 1)
