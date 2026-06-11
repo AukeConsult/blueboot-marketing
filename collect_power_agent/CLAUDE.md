@@ -130,6 +130,25 @@ Never put `queue.task_done()` inside the `try` body where an exception or a nest
 
 ## File Editing
 
+## Command Line Arguments
+
+### RULE: List filters use space-separated args plus common item delimiters
+
+For command-line list filters, prefer `nargs="+"` so repeated items can be passed as
+normal space-separated arguments. Also split each argument token on comma, semicolon,
+pipe, and newline so pasted lists work consistently.
+
+Example:
+```bash
+python app/outreach_send_run.py --campaigns NO_jun SE_jun
+python app/outreach_send_run.py --campaigns NO_jun,SE_jun
+python app/outreach_send_run.py --campaigns NO_jun;SE_jun
+python app/outreach_send_run.py --campaigns NO_jun|SE_jun
+```
+
+Use this same strategy for campaign lists and any other CLI parameter that represents
+a list of IDs. Omitting the list parameter must mean "all", not "none".
+
 ### RULE: Never use Edit/Write tools on large Python files directly
 
 The Edit and Write tools truncate `site_agent.py` and similar large files at a fixed byte

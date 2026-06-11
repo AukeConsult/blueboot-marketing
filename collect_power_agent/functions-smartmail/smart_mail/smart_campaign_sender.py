@@ -14,6 +14,7 @@ Use send_outreach() for campaign outreach.
 from __future__ import annotations
 
 import os
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -132,6 +133,20 @@ def _account_settings(account) -> dict:
     return settings
 
 
+def _coerce_id_set(values) -> set[str]:
+    """Coerce string-or-list campaign filters into a normalized id set."""
+    if not values:
+        return set()
+    if isinstance(values, str):
+        return {v.strip() for v in re.split(r"[,;|\n]", values) if v.strip()}
+    out: set[str] = set()
+    for item in values:
+        if item is None:
+            continue
+        out.update(v.strip() for v in re.split(r"[,;|\n]", str(item)) if v.strip())
+    return out
+
+
 def _print_preview(contact, step, rendered, preview: bool) -> None:
     print(
         "    %-35s  %-20s  [step %d: %s]  subj: %r" % (
@@ -154,7 +169,7 @@ def send_outreach(
     mode: str = "intro",
     *,
     limit: int = 500,
-    campaign_id: str | None = None,
+    campaign_ids: list[str] | None = None,
     dry_run: bool = False,
     preview: bool = False,
 ) -> dict:
@@ -164,6 +179,8 @@ def send_outreach(
     via render_mail(), sends via MailSender, and records each success via confirm_sent().
     With dry_run=True, the same selection and rendering path runs, but no sender
     is opened and no Firestore confirmation is written.
+    When campaign_ids is provided it is applied in read_outreach() and checked
+    again before sending.
 
     mode "intro"    -- pending contacts with no sent mail; uses Intro step.
     mode "followup" -- pending contacts with sent mail; uses next due sequence step.
@@ -191,8 +208,9 @@ def send_outreach(
         "skipped": 0,
         "would_send": 0,
     }
+    campaign_filter = _coerce_id_set(campaign_ids)
 
-    batches = read_outreach(mode=mode, limit=limit)
+    batches = read_outreach(mode=mode, limit=limit, campaign_ids=sorted(campaign_filter))
     if not batches:
         print(f"[sender] no outreach candidates for mode={mode!r}")
         return summary
@@ -201,7 +219,7 @@ def send_outreach(
         account  = batch.account
         campaigns = [
             cwc for cwc in batch.campaigns
-            if not campaign_id or cwc.campaign.campaign_id == campaign_id
+            if not campaign_filter or cwc.campaign.campaign_id in campaign_filter
         ]
         if not campaigns:
             continue
@@ -261,6 +279,14 @@ def send_outreach(
                 )
 
                 for contact in cwc.contacts:
+                    if campaign_filter and contact.campaign_id not in campaign_filter:
+                        summary["skipped"] += 1
+                        print(
+                            f"[sender] guard skipped {contact.email}: "
+                            f"contact campaign {contact.campaign_id!r} not in {sorted(campaign_filter)!r}"
+                        )
+                        continue
+
                     # Stop if budget used up for this account
                     if tried_batch >= budget:
                         print(f"[sender] budget reached for {account.email}")

@@ -283,8 +283,9 @@ python app/outreach_select_run.py
 # Followup mode
 python app/outreach_select_run.py --mode followup
 
-# Filter to one campaign
-python app/outreach_select_run.py --campaign NO_jun
+# Filter to one or more campaigns
+python app/outreach_select_run.py --campaigns NO_jun SE_jun
+python app/outreach_select_run.py --campaigns NO_jun,SE_jun
 
 # Cap contacts fetched
 python app/outreach_select_run.py --limit 50
@@ -301,7 +302,7 @@ python app/outreach_select_run.py --list-campaigns
 | flag | short | default | notes |
 |------|-------|---------|-------|
 | `--mode` | `-m` | `intro` | `intro` or `followup` |
-| `--campaign` | `-c` | all | filter to one campaign ID |
+| `--campaigns` | `-c` | all | filter to one or more campaign IDs; accepts space, comma, semicolon, or pipe separated values |
 | `--limit` | `-n` | `500` | max total contacts to fetch |
 | `--verbose` | `-v` | off | print subject template per campaign |
 | `--list-campaigns` | | | list campaign IDs and exit |

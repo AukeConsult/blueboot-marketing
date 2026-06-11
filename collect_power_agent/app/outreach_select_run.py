@@ -12,8 +12,9 @@ Usage examples
   # Dry-run followup mode
   python app/outreach_select_run.py --mode followup
 
-  # Limit output to one campaign
-  python app/outreach_select_run.py --campaign NO_jun
+  # Limit output to one or more campaigns
+  python app/outreach_select_run.py --campaigns NO_jun SE_jun
+  python app/outreach_select_run.py --campaigns NO_jun,SE_jun
 
   # Limit total contacts shown
   python app/outreach_select_run.py --limit 50
@@ -24,6 +25,7 @@ Usage examples
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 import _pathsetup  # noqa: F401 -- sets up Windows event loop policy + path
@@ -47,12 +49,21 @@ def _list_campaigns(db) -> list[str]:
     return sorted(d.id for d in db.collection("campaigns").stream())
 
 
+def _split_list_arg(values) -> list[str]:
+    if not values:
+        return []
+    out: list[str] = []
+    for item in values:
+        out.extend(v.strip() for v in re.split(r"[,;|\n]", str(item)) if v.strip())
+    return out
+
+
 def _print_batch(batch, campaign_filter, verbose) -> int:
     """Print one AccountBatch; return number of contacts printed."""
     printed = 0
     for cwc in batch.campaigns:
         cid = cwc.campaign.campaign_id
-        if campaign_filter and cid != campaign_filter:
+        if campaign_filter and cid not in campaign_filter:
             continue
         contacts = cwc.contacts
         print(
@@ -99,10 +110,11 @@ def main(argv=None) -> None:
         help="intro = pending contacts with no sent mail; followup = pending contacts with a due sequence step",
     )
     p.add_argument(
-        "--campaign", "-c",
+        "--campaigns", "-c",
+        nargs="+",
         default=None,
         metavar="CAMPAIGN_ID",
-        help="Only show contacts in this campaign (default: all campaigns)",
+        help="Only show contacts in these campaign IDs. Accepts space, comma, semicolon, or pipe separated values. Default: all campaigns.",
     )
     p.add_argument(
         "--limit", "-n",
@@ -139,10 +151,11 @@ def main(argv=None) -> None:
     from smart_mail.outreach_mail_select import read_outreach
 
     print("[dry-run] read_outreach  mode=%s  limit=%d" % (args.mode, args.limit))
-    if args.campaign:
-        print("[dry-run] filtering to campaign: %s" % args.campaign)
+    campaign_filter = set(_split_list_arg(args.campaigns))
+    if campaign_filter:
+        print("[dry-run] filtering to campaigns: %s" % ", ".join(sorted(campaign_filter)))
 
-    batches = read_outreach(mode=args.mode, limit=args.limit)
+    batches = read_outreach(mode=args.mode, limit=args.limit, campaign_ids=sorted(campaign_filter))
 
     if not batches:
         print("No outreach candidates found.")
@@ -155,7 +168,7 @@ def main(argv=None) -> None:
         acc = batch.account
         matching = [
             cwc for cwc in batch.campaigns
-            if not args.campaign or cwc.campaign.campaign_id == args.campaign
+            if not campaign_filter or cwc.campaign.campaign_id in campaign_filter
         ]
         if not matching:
             continue
@@ -168,7 +181,7 @@ def main(argv=None) -> None:
                 len(matching), n_contacts,
             )
         )
-        printed = _print_batch(batch, args.campaign, args.verbose)
+        printed = _print_batch(batch, campaign_filter, args.verbose)
         total_contacts += printed
         total_campaigns += len(matching)
 

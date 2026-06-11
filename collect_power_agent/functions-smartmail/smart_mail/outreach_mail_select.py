@@ -26,6 +26,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
+import re
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +261,20 @@ def _parse_dt(value):
         return None
 
 
+def _coerce_id_set(values) -> set[str]:
+    """Coerce string-or-list campaign filters into a normalized id set."""
+    if not values:
+        return set()
+    if isinstance(values, str):
+        return {v.strip() for v in re.split(r"[,;|\n]", values) if v.strip()}
+    out: set[str] = set()
+    for item in values:
+        if item is None:
+            continue
+        out.update(v.strip() for v in re.split(r"[,;|\n]", str(item)) if v.strip())
+    return out
+
+
 def _next_step_due(contact: ContactRow, campaign: CampaignMail, now: datetime) -> bool:
     mail_sent = contact.mail_sent or []
     next_idx = len(mail_sent)
@@ -363,8 +378,9 @@ def prepare_mail_sequences(db=None) -> int:
 # ---------------------------------------------------------------------------
 
 def read_outreach(
-    mode:  str = "intro",
-    limit: int = 500,
+    mode:        str = "intro",
+    limit:       int = 500,
+    campaign_ids: list[str] | None = None,
 ) -> list[AccountBatch]:
     """Read outreach candidates grouped by sending account.
 
@@ -389,6 +405,9 @@ def read_outreach(
         Selects the Firestore filter. Default "intro".
     limit : int
         Maximum total contacts to read across all campaigns.
+    campaign_ids : list[str] | None
+        Optional campaign guard. When set, only contacts whose parent campaign
+        document id is in this list are selected.
 
     Returns
     -------
@@ -409,43 +428,69 @@ def read_outreach(
     """
     db = _get_db()
 
-    # Step 1: collectionGroup query — filter depends on mode
+    # Step 1: query contacts. If campaign_ids is set, read those campaigns'
+    # subcollections directly so non-matching campaigns can never leak in.
     from google.cloud.firestore_v1.base_query import FieldFilter
-    col_group = db.collection_group("campaign_contacts")
-    query = col_group.where(filter=FieldFilter("status", "==", "pending"))
+    campaign_filter = _coerce_id_set(campaign_ids)
+    if campaign_filter:
+        queries = []
+        for cid in sorted(campaign_filter):
+            camp_doc = db.collection("campaigns").document(cid).get()
+            if not camp_doc.exists:
+                print(f"[outreach_mail_select] campaign '{cid}' not found -- skipping")
+                continue
+            queries.append(
+                db.collection("campaigns")
+                .document(cid)
+                .collection("campaign_contacts")
+                .where(filter=FieldFilter("status", "==", "pending"))
+            )
+        if not queries:
+            print("[outreach_mail_select] no requested campaigns found -- no candidates")
+            return []
+    else:
+        queries = [(
+            db.collection_group("campaign_contacts")
+            .where(filter=FieldFilter("status", "==", "pending"))
+        )]
 
     # Group contacts by campaign_id (extracted from the Firestore path:
     # campaigns/{campaign_id}/campaign_contacts/{doc_id})
     by_campaign: dict[str, list[ContactRow]] = defaultdict(list)
     total = 0
-    for doc in query.stream():
+    for query in queries:
+        for doc in query.stream():
+            if total >= limit:
+                break
+            d           = doc.to_dict() or {}
+            contact_status = str(d.get("status", "")).strip().lower()
+            mail_sent = d.get("mail_sent") or []
+            if not isinstance(mail_sent, list):
+                mail_sent = []
+            if contact_status != "pending":
+                continue
+            if mode == "followup" and not mail_sent:
+                continue
+            if mode != "followup" and mail_sent:
+                continue
+            doc_campaign_id = doc.reference.parent.parent.id
+            if campaign_filter and doc_campaign_id not in campaign_filter:
+                continue
+            by_campaign[doc_campaign_id].append(ContactRow(
+                contact_doc_id = doc.id,
+                campaign_id    = doc_campaign_id,
+                email          = d.get("email", ""),
+                contact_name   = d.get("contact_name", ""),
+                company        = d.get("company", ""),
+                domain         = d.get("domain", ""),
+                country        = d.get("country", ""),
+                status         = contact_status,
+                mail_sent      = mail_sent,
+                extra          = {k: v for k, v in d.items() if k not in _CONTACT_KNOWN},
+            ))
+            total += 1
         if total >= limit:
             break
-        d           = doc.to_dict() or {}
-        contact_status = str(d.get("status", "")).strip().lower()
-        mail_sent = d.get("mail_sent") or []
-        if not isinstance(mail_sent, list):
-            mail_sent = []
-        if contact_status != "pending":
-            continue
-        if mode == "followup" and not mail_sent:
-            continue
-        if mode != "followup" and mail_sent:
-            continue
-        campaign_id = doc.reference.parent.parent.id
-        by_campaign[campaign_id].append(ContactRow(
-            contact_doc_id = doc.id,
-            campaign_id    = campaign_id,
-            email          = d.get("email", ""),
-            contact_name   = d.get("contact_name", ""),
-            company        = d.get("company", ""),
-            domain         = d.get("domain", ""),
-            country        = d.get("country", ""),
-            status         = contact_status,
-            mail_sent      = mail_sent,
-            extra          = {k: v for k, v in d.items() if k not in _CONTACT_KNOWN},
-        ))
-        total += 1
 
     if not by_campaign:
         return []

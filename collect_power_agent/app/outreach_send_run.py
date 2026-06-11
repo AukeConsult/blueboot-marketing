@@ -3,12 +3,13 @@
 
 By default this is a dry run: it uses the same smart sender selection and
 rendering path as a real send, but does not open a mail account, send mail, or
-call confirm_sent(). Add --send to dispatch real mail and write confirmations.
+call confirm_sent(). Use --dry-run explicitly for preview, or --send to dispatch
+real mail and write confirmations.
 
 Usage examples
 --------------
   # Dry-run intro mode
-  python app/outreach_send_run.py
+  python app/outreach_send_run.py --dry-run
 
   # Dry-run followup mode with rendered body snippet
   python app/outreach_send_run.py --mode followup --preview
@@ -19,8 +20,9 @@ Usage examples
   # Send both intro and followup passes
   python app/outreach_send_run.py --send --mode both
 
-  # Filter to one campaign
-  python app/outreach_send_run.py --campaign ram-test1
+  # Filter to one or more campaigns
+  python app/outreach_send_run.py --campaigns ram-test1 ram-test2
+  python app/outreach_send_run.py --campaigns ram-test1,ram-test2
 
   # Cap contacts fetched
   python app/outreach_send_run.py --limit 20
@@ -31,6 +33,7 @@ Usage examples
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 import _pathsetup  # noqa: F401 -- sets up Windows event loop policy + path
@@ -52,25 +55,38 @@ def _list_campaigns(db) -> list[str]:
     return sorted(d.id for d in db.collection("campaigns").stream())
 
 
+def _split_list_arg(values) -> list[str]:
+    if not values:
+        return []
+    out: list[str] = []
+    for item in values:
+        out.extend(v.strip() for v in re.split(r"[,;|\n]", str(item)) if v.strip())
+    return out
+
+
 def _run(args) -> None:
     from smart_mail.smart_campaign_sender import send_outreach
 
     dry_run = not args.send
     modes = ["intro", "followup"] if args.mode == "both" else [args.mode]
+    campaign_ids = _split_list_arg(args.campaigns)
 
     print(
         "[%s] outreach send loop  mode=%s  limit=%d"
         % ("dry-run" if dry_run else "live", args.mode, args.limit)
     )
-    if args.campaign:
-        print("[%s] filtering to campaign: %s" % ("dry-run" if dry_run else "live", args.campaign))
+    if campaign_ids:
+        print("[%s] filtering to campaigns: %s" % (
+            "dry-run" if dry_run else "live",
+            ", ".join(campaign_ids),
+        ))
 
     summaries = {}
     for mode in modes:
         summaries[mode] = send_outreach(
             mode=mode,
             limit=args.limit,
-            campaign_id=args.campaign,
+            campaign_ids=campaign_ids,
             dry_run=dry_run,
             preview=args.preview,
         )
@@ -112,10 +128,11 @@ def main(argv=None) -> None:
         help="intro, followup, or both passes",
     )
     parser.add_argument(
-        "--campaign", "-c",
+        "--campaigns", "-c",
+        nargs="+",
         default=None,
         metavar="CAMPAIGN_ID",
-        help="Only process contacts in this campaign",
+        help="Only process contacts in these campaign IDs. Accepts space, comma, semicolon, or pipe separated values.",
     )
     parser.add_argument(
         "--limit", "-n",
@@ -129,11 +146,20 @@ def main(argv=None) -> None:
         action="store_true",
         help="In dry-run mode, show rendered body snippets",
     )
-    parser.add_argument(
-        "--send",
-        action="store_true",
-        help="Send real mail and call confirm_sent(). Without this flag, this command is dry-run only.",
+    send_mode = parser.add_mutually_exclusive_group()
+    send_mode.add_argument(
+        "--dry-run",
+        dest="send",
+        action="store_false",
+        help="Preview using the real sender selection/render path, but do not send or write confirmations. This is the default.",
     )
+    send_mode.add_argument(
+        "--send",
+        dest="send",
+        action="store_true",
+        help="Send real mail and call confirm_sent().",
+    )
+    parser.set_defaults(send=False)
     parser.add_argument(
         "--list-campaigns",
         action="store_true",
