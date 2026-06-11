@@ -1,4 +1,4 @@
-"""functions-smartmail/outreach_render_mail.py — Mail rendering for outreach.
+"""functions-smartmail/smart_mail/outreach_render_mail.py — Mail rendering for outreach.
 
 Single public function:
 

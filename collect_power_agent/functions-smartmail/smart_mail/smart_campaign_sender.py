@@ -170,14 +170,13 @@ def send_outreach(
 
     Returns a summary dict.
     """
-    # Lazy imports -- outreach_mail_select and outreach_render_mail live at the
-    # functions-smartmail/ root (parent of this smart_mail/ package).
+    # Lazy imports keep dry-run cheap and avoid import-time Firestore work.
     if not dry_run:
         from smart_mail.mail_sender import MailSender              # noqa: PLC0415
     else:
         MailSender = None
     from smart_mail.outreach_mail_select import read_outreach, confirm_sent, prepare_mail_sequences  # noqa: PLC0415
-    from outreach_render_mail import render_mail, MailStep        # noqa: PLC0415
+    from smart_mail.outreach_render_mail import render_mail, MailStep  # noqa: PLC0415
 
     db = get_firestore()
 
