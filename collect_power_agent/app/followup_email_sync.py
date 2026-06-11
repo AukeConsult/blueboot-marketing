@@ -160,7 +160,7 @@ def _run_dry(db, args):
     import re
     from smart_mail.followup_email_sync_lib import (
         _imap_connect, _find_sent_folder, _fetch_headers,
-        _extract_email, _msg_key,
+        _extract_email, _history_email_ids, _msg_key,
         CAMPAIGNS_COLLECTION, CONTACTS_SUBCOLLECTION,
         SETTINGS_COLLECTION, MAIL_ACCOUNTS_DOC,
     )
@@ -217,6 +217,7 @@ def _run_dry(db, args):
         contact_index = {c[2].lower(): c for c in contacts if c[2]}
         if not contact_index:
             continue
+        contact_seen_ids: dict[str, set[str]] = {}
 
         print(f"[{acc_email}] connecting…")
         try:
@@ -235,6 +236,16 @@ def _run_dry(db, args):
                     match_e   = to_addrs[0] if is_sent else from_addr
                     if not match_e or match_e not in contact_index:
                         continue
+                    msg_key = _msg_key(msg["message_id"], folder, msg["uid"])
+                    if match_e not in contact_seen_ids:
+                        ref = contact_index[match_e][3]
+                        snap = ref.get()
+                        contact_seen_ids[match_e] = _history_email_ids(
+                            (snap.to_dict() or {}).get("comment_history") if snap.exists else []
+                        )
+                    if msg_key in contact_seen_ids[match_e]:
+                        continue
+                    contact_seen_ids[match_e].add(msg_key)
                     direction = "OUT" if is_sent else "IN "
                     print(f"  [{direction}] {msg['date'][:10]}  {match_e:<35}  {msg['subject'][:50]}")
                     total += 1

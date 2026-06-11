@@ -84,7 +84,7 @@ def _apply_reply(db, outreach: dict, message: dict, matched_via: str):
 
     reply_payload = {
         "status": "active",
-        "followup_status": "replied",
+        "followup_status": "received",
         "new_mail": True,
         "replied_at": received_at,
         "reply_snippet": snippet,

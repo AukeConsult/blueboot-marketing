@@ -4,6 +4,33 @@ Imported by both mailbox.py and mail_tags.py. No Blueprint here.
 """
 from __future__ import annotations
 
+_SMTP_PORTS = {25, 465, 587, 2525}
+
+
+def _imap_host(ma: dict) -> str:
+    imap_host = str(ma.get("imap_host") or "").strip()
+    host = str(ma.get("host") or "").strip()
+    smtp_host = str(ma.get("smtp_host") or "").strip()
+    if imap_host:
+        return imap_host
+    if host.startswith("smtp."):
+        return host.replace("smtp.", "imap.", 1)
+    if smtp_host and host and host == smtp_host and smtp_host.startswith("smtp."):
+        return smtp_host.replace("smtp.", "imap.", 1)
+    return host
+
+
+def _imap_port(ma: dict, use_ssl: bool) -> int:
+    raw_port = ma.get("imap_port")
+    if raw_port in (None, ""):
+        fallback_port = int(ma.get("port") or 0)
+        port = 993 if fallback_port in _SMTP_PORTS or fallback_port <= 0 else fallback_port
+    else:
+        port = int(raw_port)
+    if port in _SMTP_PORTS:
+        port = 993 if use_ssl else 143
+    return 143 if not use_ssl and port == 993 else port
+
 
 def _sanitize_imap_keyword(s: str) -> str:
     """Convert a string to a valid IMAP keyword atom (no spaces/special chars)."""
@@ -18,9 +45,9 @@ def _imap_connect(ma: dict, account_email: str):
     import imaplib as _il, ssl as _ssl
     account_type = ma.get("account_type", "imap")
     if account_type == "imap":
-        host    = (ma.get("imap_host") or ma.get("host") or "").strip()
-        port    = int(ma.get("imap_port") or ma.get("port") or 993)
+        host    = _imap_host(ma)
         use_ssl = ma.get("ssl", True)
+        port    = _imap_port(ma, use_ssl)
         if not host:
             raise ValueError("IMAP host is not configured")
         if use_ssl:

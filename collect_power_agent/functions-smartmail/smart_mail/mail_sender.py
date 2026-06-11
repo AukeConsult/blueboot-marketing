@@ -23,6 +23,21 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formatdate
 
+_SMTP_PORTS = {25, 465, 587, 2525}
+
+
+def _imap_host(ma: dict) -> str:
+    imap_host = str(ma.get("imap_host") or "").strip()
+    host = str(ma.get("host") or "").strip()
+    smtp_host = str(ma.get("smtp_host") or "").strip()
+    if imap_host:
+        return imap_host
+    if host.startswith("smtp."):
+        return host.replace("smtp.", "imap.", 1)
+    if smtp_host and host and host == smtp_host and smtp_host.startswith("smtp."):
+        return smtp_host.replace("smtp.", "imap.", 1)
+    return host
+
 
 class MailSender:
     def __init__(self, ma: dict):
@@ -257,6 +272,18 @@ class MailSender:
             return value
         return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
+    @staticmethod
+    def _imap_port(ma: dict, use_ssl: bool) -> int:
+        raw_port = ma.get("imap_port")
+        if raw_port in (None, ""):
+            fallback_port = int(ma.get("port") or 0)
+            port = 993 if fallback_port in _SMTP_PORTS or fallback_port <= 0 else fallback_port
+        else:
+            port = int(raw_port)
+        if port in _SMTP_PORTS:
+            port = 993 if use_ssl else 143
+        return 143 if not use_ssl and port == 993 else port
+
     def _smtp_connect(self):
         username, password, smtp_host, smtp_port, smtp_ssl = self._smtp_params()
         if smtp_ssl:
@@ -293,11 +320,11 @@ class MailSender:
     # ── IMAP helpers (connect, find Sent, append) ─────────────────────────
 
     def _imap_connect(self):
-        host     = (self.ma.get("imap_host") or self.ma.get("host") or "").strip()
-        port     = int(self.ma.get("imap_port") or self.ma.get("port") or 993)
+        host     = _imap_host(self.ma)
         username = self.ma.get("username", "").strip()
         password = self.ma.get("password", "")
         use_ssl  = self._as_bool(self.ma.get("ssl", True))
+        port     = self._imap_port(self.ma, use_ssl)
         if use_ssl:
             conn = imaplib.IMAP4_SSL(host, port,
                    ssl_context=ssl.create_default_context())
@@ -350,11 +377,11 @@ class MailSender:
             print(f"[mail_sender] append_to_sent failed (non-fatal): {e}", flush=True)
 
     def _ping_imap(self) -> dict:
-        host     = self.ma.get("host", "").strip()
-        port     = int(self.ma.get("port") or 993)
+        host     = _imap_host(self.ma)
         username = self.ma.get("username", "").strip()
         password = self.ma.get("password", "")
         use_ssl  = self._as_bool(self.ma.get("ssl", True))
+        port     = self._imap_port(self.ma, use_ssl)
         if not host or not username:
             return {"status": "error", "message": "IMAP host and username are required"}
         try:

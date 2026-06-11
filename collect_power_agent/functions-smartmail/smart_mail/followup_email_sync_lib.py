@@ -37,6 +37,20 @@ _SENT_CANDIDATES = [
     "Sent", "Sent Items", "Sent Messages",
     "[Gmail]/Sent Mail", "INBOX.Sent",
 ]
+_SMTP_PORTS = {25, 465, 587, 2525}
+
+
+def _imap_host(ma: dict) -> str:
+    imap_host = str(ma.get("imap_host") or "").strip()
+    host = str(ma.get("host") or "").strip()
+    smtp_host = str(ma.get("smtp_host") or "").strip()
+    if imap_host:
+        return imap_host
+    if host.startswith("smtp."):
+        return host.replace("smtp.", "imap.", 1)
+    if smtp_host and host and host == smtp_host and smtp_host.startswith("smtp."):
+        return smtp_host.replace("smtp.", "imap.", 1)
+    return host
 
 
 # ── IMAP / address helpers ────────────────────────────────────────────────────
@@ -67,6 +81,19 @@ def _msg_key(message_id: str, folder: str, uid: str) -> str:
     if message_id:
         return re.sub(r"[/]", "_", message_id.strip().lstrip("<").rstrip(">"))[:500]
     return re.sub(r"[/]", "_", f"{folder}__{uid}")
+
+
+def _history_email_ids(history) -> set[str]:
+    """Return email_id values already present in a contact comment_history list."""
+    if not isinstance(history, list):
+        return set()
+    ids: set[str] = set()
+    for item in history:
+        if isinstance(item, dict):
+            email_id = str(item.get("email_id") or "").strip()
+            if email_id:
+                ids.add(email_id)
+    return ids
 
 
 def _coerce_id_set(values) -> set[str]:
@@ -100,15 +127,30 @@ def _imap_connect(ma: dict, account_email: str) -> imaplib.IMAP4:
     account_type = ma.get("account_type", "imap")
 
     if account_type == "imap":
-        host    = (ma.get("imap_host") or ma.get("host") or "").strip()
-        port    = int(ma.get("imap_port") or ma.get("port") or 993)
+        host    = _imap_host(ma)
         use_ssl = ma.get("ssl", True)
+        raw_port = ma.get("imap_port")
+        if raw_port in (None, ""):
+            fallback_port = int(ma.get("port") or 0)
+            port = 993 if fallback_port in _SMTP_PORTS or fallback_port <= 0 else fallback_port
+        else:
+            port = int(raw_port)
+        if port in _SMTP_PORTS:
+            port = 993 if use_ssl else 143
+        if not use_ssl and port == 993:
+            port = 143
         if not host:
             raise ValueError(f"IMAP host not configured for {account_email}")
         ctx  = ssl.create_default_context()
-        conn = imaplib.IMAP4_SSL(host, port, ssl_context=ctx) if use_ssl else imaplib.IMAP4(host, port)
-        conn.login(ma.get("username", ""), ma.get("password", ""))
-        return conn
+        try:
+            conn = imaplib.IMAP4_SSL(host, port, ssl_context=ctx) if use_ssl else imaplib.IMAP4(host, port)
+            conn.login(ma.get("username", ""), ma.get("password", ""))
+            return conn
+        except Exception as exc:
+            raise ValueError(
+                f"IMAP connect failed for {account_email} using {host}:{port} "
+                f"ssl={bool(use_ssl)}: {exc}"
+            ) from exc
 
     if account_type == "gmail":
         import json, urllib.parse, urllib.request
@@ -344,17 +386,30 @@ def run_followup_email_sync(
         for match_e, entries in contact_entries.items():
             ref = contact_index[match_e]
             try:
-                update_doc: dict = {"comment_history": firestore.ArrayUnion(entries)}
+                snap = ref.get()
+                existing_ids = _history_email_ids(
+                    (snap.to_dict() or {}).get("comment_history") if snap.exists else []
+                )
+                new_entries = [
+                    e for e in entries
+                    if str(e.get("email_id") or "").strip()
+                    and str(e.get("email_id") or "").strip() not in existing_ids
+                ]
+                if not new_entries:
+                    print(f"  {match_e}: already synced", flush=True)
+                    continue
+
+                update_doc: dict = {"comment_history": firestore.ArrayUnion(new_entries)}
                 # Set new_mail flag if any incoming email was added
-                has_incoming = any(e.get("type") == "EMAIL_IN" for e in entries)
+                has_incoming = any(e.get("type") == "EMAIL_IN" for e in new_entries)
                 if has_incoming:
                     update_doc["new_mail"] = True
-                    update_doc["followup_status"] = "replied"
+                    update_doc["followup_status"] = "received"
                 ref.update(update_doc)
-                total_entries  += len(entries)
+                total_entries  += len(new_entries)
                 total_contacts += 1
                 updated_contacts += 1
-                print(f"  {match_e}: +{len(entries)} entries", flush=True)
+                print(f"  {match_e}: +{len(new_entries)} entries", flush=True)
             except Exception as exc:
                 errors.append(f"{match_e}: write failed — {exc}")
 

@@ -44,7 +44,7 @@ CONTACT_COLUMNS = [
 ]
 
 # Dropdown values for the follow-up columns.
-FOLLOWUP_STATUS_VALUES     = ["", "in_work", "contacted", "replied", "meeting", "offer", "not_interested"]
+FOLLOWUP_STATUS_VALUES     = ["", "in_work", "contacted", "received", "replied", "meeting", "offer", "not_interested"]
 FOLLOWUP_IMPORTANCE_VALUES = ["low", "medium", "high"]
 CONTACT_STATUSES = {"pending", "active", "excluded"}
 

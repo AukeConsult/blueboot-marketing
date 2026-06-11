@@ -10,7 +10,7 @@ bp = Blueprint("contacts", __name__)
 
 _FOLLOWUP_FIELDS = {"followup_date", "followup_status", "followup_comment", "followup_importance", "followup_owner"}
 _CONTACT_STATUSES = {"pending", "active", "excluded"}
-_FOLLOWUP_STATUSES = {"", "in_work", "contacted", "replied", "meeting", "offer", "not_interested"}
+_FOLLOWUP_STATUSES = {"", "in_work", "contacted", "received", "replied", "meeting", "offer", "not_interested"}
 
 _FOLLOWUP_HISTORY_TYPE = {
     "followup_status":     "STATUS",
@@ -39,7 +39,7 @@ def _followup_status(value, *, strict: bool = False) -> str:
     status = str(value or "").strip().lower()
     if status not in _FOLLOWUP_STATUSES:
         if strict:
-            raise ValueError("Invalid follow-up status. Must be one of: in_work, contacted, replied, meeting, offer, not_interested.")
+            raise ValueError("Invalid follow-up status. Must be one of: in_work, contacted, received, replied, meeting, offer, not_interested.")
         return ""
     return status
 

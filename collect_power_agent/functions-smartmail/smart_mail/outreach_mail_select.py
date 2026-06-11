@@ -201,7 +201,7 @@ def _load_account(db, sender_email: str) -> MailAccountSettings | None:
         password     = d.get("password", ""),
         from_name    = str(d.get("display_name") or d.get("from_name") or "").strip(),
         imap_host    = imap_host,
-        imap_port    = int(d.get("port") or d.get("imap_port") or 993),
+        imap_port    = int(d.get("imap_port") or d.get("port") or 993),
         use_ssl      = _as_bool(d.get("smtp_ssl", False)) or smtp_port == 465,
         client_id    = str(d.get("client_id") or "").strip(),
         client_secret = str(d.get("client_secret") or "").strip(),

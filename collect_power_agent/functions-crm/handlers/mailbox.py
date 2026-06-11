@@ -5,6 +5,33 @@ from handlers.shared import _get_db, _ma_col, _get_mail_account, _err
 
 bp = Blueprint("mailbox", __name__)
 
+_SMTP_PORTS = {25, 465, 587, 2525}
+
+
+def _imap_host(ma: dict) -> str:
+    imap_host = str(ma.get("imap_host") or "").strip()
+    host = str(ma.get("host") or "").strip()
+    smtp_host = str(ma.get("smtp_host") or "").strip()
+    if imap_host:
+        return imap_host
+    if host.startswith("smtp."):
+        return host.replace("smtp.", "imap.", 1)
+    if smtp_host and host and host == smtp_host and smtp_host.startswith("smtp."):
+        return smtp_host.replace("smtp.", "imap.", 1)
+    return host
+
+
+def _imap_port(ma: dict, use_ssl: bool) -> int:
+    raw_port = ma.get("imap_port")
+    if raw_port in (None, ""):
+        fallback_port = int(ma.get("port") or 0)
+        port = 993 if fallback_port in _SMTP_PORTS or fallback_port <= 0 else fallback_port
+    else:
+        port = int(raw_port)
+    if port in _SMTP_PORTS:
+        port = 993 if use_ssl else 143
+    return 143 if not use_ssl and port == 993 else port
+
 
 @bp.route("/api/crm/settings/mail-accounts/<email>/mailbox", methods=["GET"])
 def read_mailbox(email):
@@ -232,11 +259,11 @@ def read_mailbox(email):
         messages     = []
 
         if account_type == "imap":
-            host     = (ma.get("imap_host") or ma.get("host") or "").strip()
-            port     = int(ma.get("imap_port") or ma.get("port") or 993)
+            host     = _imap_host(ma)
             username = ma.get("username", "").strip()
             password = ma.get("password", "")
             use_ssl  = ma.get("ssl", True)
+            port     = _imap_port(ma, use_ssl)
             if not host or not username:
                 return _err("IMAP host and username are required", 400)
             if use_ssl:
@@ -412,9 +439,9 @@ def read_message_body(email):
 
         account_type = ma.get("account_type", "imap")
         if account_type == "imap":
-            host    = (ma.get("imap_host") or ma.get("host") or "").strip()
-            port    = int(ma.get("imap_port") or ma.get("port") or 993)
+            host    = _imap_host(ma)
             use_ssl = ma.get("ssl", True)
+            port    = _imap_port(ma, use_ssl)
             if not host:
                 return _err("IMAP host not configured", 400)
             if use_ssl:
