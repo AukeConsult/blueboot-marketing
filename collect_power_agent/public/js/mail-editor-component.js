@@ -27,6 +27,9 @@
       this.currentTab = 'wysiwyg';
       this.uid = 'me_' + Math.random().toString(36).slice(2, 9);
       this.showMainButton = opts.showMainButton !== false;
+      this.showSaveButton = opts.showSaveButton !== false;
+      this.showTestButton = opts.showTestButton !== false;
+      this.showAccountField = opts.showAccountField !== false;
       if (!this.root) throw new Error('MailEditorComponent root not found');
       this.renderShell();
     }
@@ -48,10 +51,10 @@
               <button class="btn btn-sm btn-outline-secondary py-0" data-me="mainBtn" type="button" title="Edit campaign mail" style="${this.showMainButton ? '' : 'display:none'}">
                 <i class="ti ti-mail"></i>
               </button>
-              <button class="btn btn-sm btn-outline-success py-0" data-me="saveBtn" type="button" title="Save">
+              <button class="btn btn-sm btn-outline-success py-0" data-me="saveBtn" type="button" title="Save" style="${this.showSaveButton ? '' : 'display:none'}">
                 <i class="ti ti-device-floppy"></i>
               </button>
-              <button class="btn btn-sm btn-outline-primary py-0" data-me="testBtn" type="button" title="Send test">
+              <button class="btn btn-sm btn-outline-primary py-0" data-me="testBtn" type="button" title="Send test" style="${this.showTestButton ? '' : 'display:none'}">
                 <i class="ti ti-send"></i>
               </button>
             </div>
@@ -71,11 +74,11 @@
           </div>
 
           <div class="row g-2 mb-2">
-            <div class="col-md-5" data-me="accountWrap">
+            <div class="col-md-5" data-me="accountWrap" style="${this.showAccountField ? '' : 'display:none'}">
               <label class="form-label small fw-500 mb-1">Outreach account</label>
               <input data-me="account" class="form-control form-control-sm" placeholder="sender@example.com">
             </div>
-            <div class="col-md-7">
+            <div class="${this.showAccountField ? 'col-md-7' : 'col-12'}">
               <label class="form-label small fw-500 mb-1">Subject</label>
               <input data-me="subject" class="form-control form-control-sm" placeholder="Email subject">
             </div>
@@ -160,7 +163,7 @@
         this.$('title').textContent = 'Mail editor';
         this.$('subtitle').textContent = this.campaignId;
         this.$('stepBar').style.display = 'none';
-        this.$('accountWrap').style.display = '';
+        this.$('accountWrap').style.display = this.showAccountField ? '' : 'none';
         this.applyMail(c.mail || { type: 'plain', css: DEFAULT_CSS });
       }
     }
@@ -168,6 +171,20 @@
     editCampaignMail() {
       if (!this.campaignId) return;
       this.load({ campaignId: this.campaignId }).catch(err => this.feedback(err.message, true));
+    }
+
+    loadDraft({ account = '', title = 'Mail editor', subtitle = '', mail = {}, accountReadOnly = false } = {}) {
+      this.campaignId = '';
+      this.campaign = null;
+      this.stepId = '';
+      this.stepNew = false;
+      this.$('title').textContent = title;
+      this.$('subtitle').textContent = subtitle;
+      this.$('stepBar').style.display = 'none';
+      this.$('accountWrap').style.display = this.showAccountField ? '' : 'none';
+      this.$('account').value = account || '';
+      this.$('account').readOnly = !!accountReadOnly;
+      this.applyMail({ type: 'plain', css: DEFAULT_CSS, ...mail });
     }
 
     applyMail(mail) {

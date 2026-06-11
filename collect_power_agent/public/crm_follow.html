@@ -6,6 +6,7 @@
 <title>Blueboot — CRM Follow-up</title>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css">
 <link rel="stylesheet" href="css/styles.css">
 <style>
 
@@ -140,6 +141,8 @@ tr.row-sp-active + .follow-comment-row > td { background: #eef0ff !important; }
   border-radius: 4px; white-space: nowrap; flex-shrink: 0; }
 .hist-type-in  { background: #dcfce7; color: #15803d; }
 .hist-type-out { background: #dbeafe; color: #1d4ed8; }
+.follow-mail-editor .mail-editor-component .ql-toolbar { background:#f9fafb;border-radius:8px 8px 0 0; }
+.follow-mail-editor .mail-editor-component .ql-container { border-radius:0 0 8px 8px; }
 /* hist-expand-btn removed — accordion per entry */
 
 /* Overdue / due-soon date highlighting */
@@ -936,11 +939,46 @@ body { display: flex; flex-direction: column; }
 
 </div>
 
+<!-- Send one-off contact mail modal -->
+<div class="modal fade" id="followSendMailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-send text-primary me-2"></i>Send mail</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3 small">
+          <div class="col-md-6">
+            <span class="text-muted">From:</span>
+            <strong id="follow-mail-from">-</strong>
+          </div>
+          <div class="col-md-6">
+            <span class="text-muted">To:</span>
+            <strong id="follow-mail-to">-</strong>
+          </div>
+        </div>
+        <div id="follow-mail-editor" class="follow-mail-editor"></div>
+        <div id="follow-mail-feedback" class="alert py-2 small mb-0 mt-2" style="display:none"></div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary btn-sm" id="follow-mail-send-btn" onclick="doSendFollowMail()">
+          <i class="ti ti-send me-1"></i>Send
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/crm-common.js"></script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+<script src="js/mail-editor-component.js"></script>
 <script>
 'use strict';
 
@@ -980,6 +1018,8 @@ let _spSectionsOpen = {
 };
 let _prefsReady       = false;  // true only after first load() completes with prefs applied
 let _loadedPrefs      = null;   // prefs fetched by loadUserPrefs(); applied inside load()
+let _followMailEditor = null;
+let _followMailGidx   = -1;
 
 // ── Load contacts via API (no direct Firestore reads) ─────────────────────────
 
@@ -1131,6 +1171,7 @@ async function load() {
       doc_path:           c.doc_path,
       owner:              c.owner              || '',
       outreach_email:     c.outreach_email     || '',
+      outreach_display_name: c.outreach_display_name || '',
       new_mail:           !!c.new_mail,
     }));
 
@@ -1494,6 +1535,9 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
           </div>
           <div class="crm-contact-actions">
             ${statusBadge(r.status)}
+            <button class="sync-btn" onclick="openFollowMailModal(${gidx}, event)" title="Send mail to this contact">
+              <i class="ti ti-send"></i>
+            </button>
             <button class="detail-btn" onclick="openSidePanelFromButton(${gidx}, event)" title="Open contact details">
               <i class="ti ti-layout-sidebar-right"></i>
             </button>
@@ -1524,6 +1568,123 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
           </select></div>
         </div>
       </td>`;
+}
+
+function ensureFollowMailEditor() {
+  if (!_followMailEditor) {
+    _followMailEditor = new MailEditorComponent(document.getElementById('follow-mail-editor'), {
+      base: BASE,
+      showMainButton: false,
+      showSaveButton: false,
+      showTestButton: false,
+      showAccountField: false
+    });
+  }
+  return _followMailEditor;
+}
+
+function contactFirstName(row) {
+  return (row.name || '').trim().split(/\s+/)[0] || '';
+}
+
+function renderMailTemplateVars(text, row) {
+  const website = row.website || '';
+  const domain = website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+  const values = {
+    name: row.name || '',
+    first_name: contactFirstName(row),
+    title: row.title || '',
+    email: row.email || '',
+    company: row.company || domain || '',
+    website,
+    domain,
+    location: row.location || '',
+    ai_summary: row.ai_summary || ''
+  };
+  return String(text || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => values[key] ?? '');
+}
+
+function openFollowMailModal(gidx, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const row = allRows[gidx];
+  if (!row || !row.email) return;
+  _followMailGidx = gidx;
+  const from = row.outreach_email || '';
+  const fromLabel = row.outreach_display_name && from
+    ? `${row.outreach_display_name} <${from}>`
+    : from;
+  document.getElementById('follow-mail-from').textContent = fromLabel || '- no campaign mail account -';
+  document.getElementById('follow-mail-to').textContent = row.name ? `${row.name} <${row.email}>` : row.email;
+  document.getElementById('follow-mail-feedback').style.display = 'none';
+  const btn = document.getElementById('follow-mail-send-btn');
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-send me-1"></i>Send';
+  ensureFollowMailEditor().loadDraft({
+    account: from,
+    accountReadOnly: true,
+    title: 'Mail to contact',
+    subtitle: row.campaign_id || '',
+    mail: {
+      subject: row.company ? `Follow-up - ${row.company}` : 'Follow-up',
+      body: `Hi ${contactFirstName(row) || row.name || ''},\n\n`,
+      type: 'plain'
+    }
+  });
+  new bootstrap.Modal(document.getElementById('followSendMailModal')).show();
+}
+
+async function doSendFollowMail() {
+  const row = allRows[_followMailGidx];
+  const fb  = document.getElementById('follow-mail-feedback');
+  const btn = document.getElementById('follow-mail-send-btn');
+  if (!row) return;
+  const mail = ensureFollowMailEditor().buildPayload().mail;
+  const subject = renderMailTemplateVars(mail.subject || 'Follow-up', row);
+  const body = renderMailTemplateVars(mail.body || '', row);
+  if (!body.trim()) {
+    fb.className = 'alert alert-warning py-2 small mb-0 mt-2';
+    fb.textContent = 'Mail body is required.';
+    fb.style.display = '';
+    return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Sending...';
+  fb.style.display = 'none';
+  try {
+    const isHtml = mail.type === 'html';
+    const css = mail.css || '';
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(row.campaign_id)}/contacts/${encodeURIComponent(row.doc_id)}/send-mail`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        to: row.email,
+        subject,
+        body,
+        body_plain: isHtml ? '' : body,
+        body_html: isHtml ? `<style>${css}</style><div class="mail-wrap">${body}</div>` : '',
+        _user: (window._authUser && (window._authUser.email || window._authUser.uid)) || ''
+      })
+    });
+    const d = await r.json();
+    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Send failed');
+    fb.className = 'alert alert-success py-2 small mb-0 mt-2';
+    fb.innerHTML = '<i class="ti ti-circle-check me-1"></i>' + escapeHtml(d.message || 'Mail sent.');
+    fb.style.display = '';
+    await refreshContactHistory(_followMailGidx);
+    row.followup_status = 'contacted';
+    row.new_mail = false;
+    render();
+    if (_sidePanelGidx === _followMailGidx) openSidePanel(_followMailGidx);
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
+    fb.textContent = e.message;
+    fb.style.display = '';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-send me-1"></i>Send';
 }
 
 function render(list) {
@@ -1925,6 +2086,9 @@ function _renderSidePanel(r) {
       ${_spSectionHeader('next', 'Next action', 'ti-list-check')}
       <div id="sp-next-body" class="sp-section-body" style="display:${_isSpSectionOpen('next') ? 'block' : 'none'}">
         <div class="sp-quick-actions">
+          <button class="btn btn-sm btn-outline-primary" onclick="openFollowMailModal(${gidx}, event)">
+            <i class="ti ti-send me-1"></i>Send mail
+          </button>
           <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'tomorrow')">
             <i class="ti ti-calendar-plus me-1"></i>+1 day
           </button>

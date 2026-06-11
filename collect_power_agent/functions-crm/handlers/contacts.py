@@ -157,6 +157,75 @@ def update_campaign_contact(campaign_id, doc_id):
         return _err(str(exc), 500)
 
 
+@bp.route("/api/crm/campaigns/<campaign_id>/contacts/<doc_id>/send-mail", methods=["POST"])
+def send_mail_to_campaign_contact(campaign_id, doc_id):
+    """Send a one-off mail to a campaign contact and log it in comment_history."""
+    try:
+        from google.cloud import firestore as _gfs
+        from flask import g as _g
+        db = _get_db()
+        body = request.get_json(silent=True) or {}
+
+        camp_ref = db.collection("campaigns").document(campaign_id)
+        camp_doc = camp_ref.get()
+        if not camp_doc.exists:
+            return _err(f"Campaign '{campaign_id}' not found", 404)
+        camp = camp_doc.to_dict() or {}
+
+        contact_ref = camp_ref.collection("campaign_contacts").document(doc_id)
+        contact_doc = contact_ref.get()
+        if not contact_doc.exists:
+            return _err(f"Contact '{doc_id}' not found in campaign '{campaign_id}'", 404)
+        contact = contact_doc.to_dict() or {}
+
+        to_addr = (body.get("to") or contact.get("email") or "").strip()
+        subject = (body.get("subject") or "Follow-up").strip()
+        body_html = (body.get("body_html") or "").strip()
+        body_plain = (body.get("body_plain") or body.get("body") or "").strip()
+        if not to_addr:
+            return _err("Contact has no email address.", 400)
+        if not body_html and not body_plain:
+            return _err("Mail body is required.", 400)
+
+        outreach_email = (camp.get("outreach_email_account") or "").strip().lower()
+        if not outreach_email:
+            return _err("Campaign has no outreach email account configured.", 400)
+        from handlers.shared import _get_mail_account
+        ma = _get_mail_account(db, outreach_email)
+        if not ma:
+            return _err(f"No mail account found for '{outreach_email}'.", 400)
+
+        from crm.mail_sender import MailSender
+        result = MailSender(ma).send(
+            to=to_addr,
+            subject=subject,
+            body_plain=body_plain,
+            body_html=body_html,
+        )
+        if result.get("status") != "ok":
+            return jsonify(result)
+
+        now = datetime.now(timezone.utc).isoformat()
+        user = getattr(_g, "user_email", None) or (body.get("_user") or outreach_email or "api").strip()
+        contact_ref.update({
+            "followup_status": "contacted",
+            "new_mail": False,
+            "comment_history": _gfs.ArrayUnion([{
+                "date": now,
+                "user": user,
+                "type": "EMAIL_OUT",
+                "text": f"Mail sent: {subject}",
+                "from": outreach_email,
+                "to": to_addr,
+                "subject": subject,
+            }]),
+        })
+        result.update({"logged": True, "from": outreach_email, "to": to_addr})
+        return jsonify(result)
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @bp.route("/api/crm/campaigns/<campaign_id>/contacts/remove", methods=["POST"])
 def remove_campaign_contacts(campaign_id):
     """Remove contacts from a campaign by email list."""
@@ -247,9 +316,16 @@ def followup_contacts():
         camp_map: dict = {}
         for doc in db.collection("campaigns").stream():
             d = doc.to_dict() or {}
+            outreach_email = d.get("outreach_email_account", "")
+            outreach_display_name = ""
+            if outreach_email:
+                from handlers.shared import _get_mail_account
+                ma = _get_mail_account(db, outreach_email)
+                outreach_display_name = (ma or {}).get("display_name", "")
             camp_map[doc.id] = {
-                "owner":          d.get("owner", ""),
-                "outreach_email": d.get("outreach_email_account", ""),
+                "owner":                 d.get("owner", ""),
+                "outreach_email":        outreach_email,
+                "outreach_display_name": outreach_display_name,
             }
 
         if campaign_id:
@@ -317,8 +393,9 @@ def followup_contacts():
                 "googlechat":          d.get("googlechat", "") or "",
                 "messenger":           d.get("messenger", "") or "",
                 "new_mail":            bool(d.get("new_mail", False)),
-                "owner":               info.get("owner", ""),
-                "outreach_email":      info.get("outreach_email", ""),
+                "owner":                 info.get("owner", ""),
+                "outreach_email":        info.get("outreach_email", ""),
+                "outreach_display_name": info.get("outreach_display_name", ""),
             })
 
         return jsonify({"contacts": contacts, "count": len(contacts)})

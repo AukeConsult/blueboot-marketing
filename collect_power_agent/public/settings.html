@@ -6,7 +6,12 @@
 <title>Settings — Blueboot CRM</title>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css">
 <link rel="stylesheet" href="css/styles.css">
+<style>
+.settings-test-editor .mail-editor-component .ql-toolbar { background:#f9fafb;border-radius:8px 8px 0 0; }
+.settings-test-editor .mail-editor-component .ql-container { border-radius:0 0 8px 8px; }
+</style>
 </head>
 <body class="bg-alt">
 
@@ -91,7 +96,7 @@
 
 <!-- Send test mail modal -->
 <div class="modal fade" id="sendTestModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
       <div class="modal-header border-0 pb-0">
         <h6 class="modal-title"><i class="ti ti-send text-primary me-2"></i>Send test email</h6>
@@ -103,14 +108,7 @@
           <label class="form-label small fw-500">To</label>
           <input id="send-test-to" class="form-control form-control-sm" type="email" placeholder="recipient@example.com">
         </div>
-        <div class="mb-3">
-          <label class="form-label small fw-500">Subject</label>
-          <input id="send-test-subject" class="form-control form-control-sm" value="Test email">
-        </div>
-        <div class="mb-2">
-          <label class="form-label small fw-500">Body</label>
-          <textarea id="send-test-body" class="form-control form-control-sm" rows="3">This is a test email.</textarea>
-        </div>
+        <div id="settings-test-mail-editor" class="settings-test-editor"></div>
         <div id="send-test-feedback" class="alert py-2 small mb-0 mt-2" style="display:none"></div>
       </div>
       <div class="modal-footer border-0 pt-0">
@@ -240,6 +238,8 @@
 <script src="firebase-config.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/crm-common.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+<script src="js/mail-editor-component.js"></script>
 <script>
 const setStatus = setStatusEl;
 const esc = escapeHtml;
@@ -445,28 +445,59 @@ async function maTestConnection() {
 }
 
 let _sendTestEmail = '';
+let _sendTestEditor = null;
+
+function ensureSendTestEditor() {
+  if (!_sendTestEditor) {
+    _sendTestEditor = new MailEditorComponent(document.getElementById('settings-test-mail-editor'), {
+      base: BASE,
+      showMainButton: false,
+      showSaveButton: false,
+      showTestButton: false,
+      showAccountField: false
+    });
+  }
+  return _sendTestEditor;
+}
+
 function openSendTestModal(email) {
   _sendTestEmail = email;
   document.getElementById('send-test-from').textContent = email;
   document.getElementById('send-test-feedback').style.display = 'none';
   document.getElementById('send-test-btn').disabled = false;
   document.getElementById('send-test-btn').innerHTML = '<i class="ti ti-send me-1"></i>Send';
+  ensureSendTestEditor().loadDraft({
+    account: email,
+    accountReadOnly: true,
+    title: 'Test email',
+    subtitle: 'Send a one-off test from this account',
+    mail: { subject: 'Test email', body: 'This is a test email.', type: 'plain' }
+  });
   new bootstrap.Modal(document.getElementById('sendTestModal')).show();
 }
 
 async function doSendTest() {
   const btn = document.getElementById('send-test-btn');
   const fb  = document.getElementById('send-test-feedback');
-  const to      = document.getElementById('send-test-to').value.trim();
-  const subject = document.getElementById('send-test-subject').value.trim();
-  const body    = document.getElementById('send-test-body').value.trim();
+  const to  = document.getElementById('send-test-to').value.trim();
+  const mail = ensureSendTestEditor().buildPayload().mail;
+  const subject = mail.subject || 'Test email';
+  const body = mail.body || '';
   if (!to) { fb.className='alert alert-warning py-2 small mb-0 mt-2'; fb.textContent='Recipient is required.'; fb.style.display=''; return; }
-  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Sending…';
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Sending...';
   fb.style.display = 'none';
   try {
+    const isHtml = mail.type === 'html';
+    const bodyHtml = isHtml ? `<style>${mail.css || ''}</style><div class="mail-wrap">${body}</div>` : '';
     const r = await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(_sendTestEmail)}/send-test`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ to, subject, body })
+      body: JSON.stringify({
+        to,
+        subject,
+        body,
+        body_plain: isHtml ? '' : body,
+        body_html: bodyHtml
+      })
     });
     const d = await r.json();
     fb.className = d.status === 'ok' ? 'alert alert-success py-2 small mb-0 mt-2' : 'alert alert-danger py-2 small mb-0 mt-2';
