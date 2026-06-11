@@ -1,4 +1,0 @@
-firebase-functions>=0.1.0
-firebase-admin>=6.0.0
-flask>=3.0.0
-flask-cors>=4.0.0

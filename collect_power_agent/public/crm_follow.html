@@ -1676,8 +1676,11 @@ async function doSendFollowMail() {
     await refreshContactHistory(_followMailGidx);
     row.followup_status = 'contacted';
     row.new_mail = false;
-    render();
-    if (_sidePanelGidx === _followMailGidx) openSidePanel(_followMailGidx);
+    applyFilter();
+    if (_sidePanelGidx === _followMailGidx) {
+      const refreshedIdx = allRows.indexOf(row);
+      if (refreshedIdx >= 0) openSidePanel(refreshedIdx);
+    }
   } catch(e) {
     fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
     fb.textContent = e.message;
@@ -2816,7 +2819,7 @@ async function syncContactEmails(gidx, btn) {
   btn.classList.add('spinning'); btn.disabled = true;
   try {
     const days     = parseInt(document.getElementById('sync-period')?.value || '7', 10);
-    const res  = await fetchJSON(`${BASE}/api/crm/followup-email-sync`, {
+    const res  = await fetchJSON(`${BASE}/api/crm/inbound-mail-read`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ campaign_ids: [row.campaign_id], contact_doc_id: row.doc_id, days }),
@@ -2858,7 +2861,7 @@ async function syncAllEmails() {
   try {
     const days     = parseInt(document.getElementById('sync-period')?.value || '7', 10);
     const camp     = document.getElementById('campaign-filter')?.value || '';
-    const res  = await fetchJSON(`${BASE}/api/crm/followup-email-sync`, {
+    const res  = await fetchJSON(`${BASE}/api/crm/inbound-mail-read`, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({

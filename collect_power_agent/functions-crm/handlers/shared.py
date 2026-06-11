@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -14,6 +15,12 @@ from datetime import datetime, timezone
 import firebase_admin
 from firebase_admin import credentials, firestore as fs
 from flask import jsonify
+
+_HANDLERS_DIR = os.path.dirname(__file__)
+_CRM_DIR = os.path.abspath(os.path.join(_HANDLERS_DIR, ".."))
+for _path in (_CRM_DIR,):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 

@@ -1,4 +1,4 @@
-"""functions-smartmail/smart_mail/outreach_render_mail.py — Mail rendering for outreach.
+"""functions-crm/smart_mail/outreach_render_mail.py - mail rendering for outreach.
 
 Single public function:
 
@@ -9,9 +9,9 @@ subject, plain-text body, and optional HTML body.
 
 Rules enforced here so the send loop never has to think about them:
   - Template vars ({{name}}, {{company}}, ...) are filled via render_template()
-    from smart_template_engine.py
+    from template_engine.py
   - When a step has HTML: plain text is auto-derived via html_to_text() from
-    smart_campaign_sender.py; html_body is set
+    outreach_sender.py; html_body is set
   - When a step has plain text only: html_body is None
   - RFC 2045 multipart/alternative order: plain FIRST, HTML SECOND
     (mail clients render the last part they understand, so HTML goes last
@@ -34,16 +34,16 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 def _render_template(template: str, contact: dict[str, Any]) -> str:
-    """Delegate to smart_template_engine.render_template."""
+    """Delegate to template_engine.render_template."""
     try:
-        from smart_mail.smart_template_engine import render_template
+        from smart_mail.template_engine import render_template
     except ImportError:
-        from smart_template_engine import render_template  # type: ignore[no-redef]
+        from template_engine import render_template  # type: ignore[no-redef]
     return render_template(template, contact)
 
 
 # ---------------------------------------------------------------------------
-# html_to_text — inlined from smart_campaign_sender so this module has no
+# html_to_text - inlined from outreach_sender so this module has no
 # circular dependency on the sender, but the logic is byte-identical.
 # ---------------------------------------------------------------------------
 
@@ -56,7 +56,7 @@ _SPACE_RUN_RE   = re.compile(r"[ \t]+")
 
 
 def _html_to_text(html: str) -> str:
-    """Best-effort HTML -> plain-text (mirrors smart_campaign_sender.html_to_text)."""
+    """Best-effort HTML -> plain-text (mirrors outreach_sender.html_to_text)."""
     if not html:
         return ""
     text = _SCRIPT_STYLE_RE.sub("", html)

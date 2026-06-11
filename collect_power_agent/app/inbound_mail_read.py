@@ -1,5 +1,5 @@
-# app/followup_email_sync.py
-"""Command-line runner for the follow-up email sync.
+# app/inbound_mail_read.py
+"""Command-line runner for inbound mail read.
 
 Fetches inbox + sent messages for each outreach mail account, matches them
 against campaign_contacts by email address, and appends EMAIL_IN / EMAIL_OUT
@@ -11,35 +11,28 @@ the sync multiple times against the same mailbox never creates duplicates.
 Usage examples
 --------------
   # Sync all contacts, last 7 days (default)
-  python app/followup_email_sync.py
+  python app/inbound_mail_read.py
 
   # Sync last 30 days for all contacts
-  python app/followup_email_sync.py --days 30
+  python app/inbound_mail_read.py --days 30
 
   # Sync all time for one or more campaigns
-  python app/followup_email_sync.py --campaigns NO_jun SE_jun --days 0
-  python app/followup_email_sync.py --campaigns NO_jun,SE_jun --days 0
+  python app/inbound_mail_read.py --campaigns NO_jun SE_jun --days 0
+  python app/inbound_mail_read.py --campaigns NO_jun,SE_jun --days 0
 
   # Sync one specific contact
-  python app/followup_email_sync.py --campaigns NO_jun --contact john_doe_example_com
+  python app/inbound_mail_read.py --campaigns NO_jun --contact john_doe_example_com
 
   # Preview what would be synced without writing to Firestore
-  python app/followup_email_sync.py --dry-run
+  python app/inbound_mail_read.py --dry-run
 """
 from __future__ import annotations
 
-import os
 import re
-import sys
 
 import _pathsetup  # noqa: F401 — sets up Windows event loop policy + path
 
-# Make the smart-mail package importable so we can reuse the shared mail sync lib.
-_FUNCTIONS_SMARTMAIL = os.path.join(os.path.dirname(__file__), "..", "functions-smartmail")
-if _FUNCTIONS_SMARTMAIL not in sys.path:
-    sys.path.insert(0, os.path.abspath(_FUNCTIONS_SMARTMAIL))
-
-from smart_mail.followup_email_sync_lib import run_followup_email_sync
+from smart_mail.inbound_mail_read_lib import run_inbound_mail_read
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -74,7 +67,7 @@ def main(argv=None) -> None:
 
     import argparse
     p = argparse.ArgumentParser(
-        description="Sync email history (inbox + sent) into campaign contact follow-up logs.",
+        description="Read inbound/sent mail into campaign contact logs.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__.split("Usage examples")[1] if "Usage examples" in __doc__ else "",
     )
@@ -130,7 +123,7 @@ def main(argv=None) -> None:
     # ── Print run config ──────────────────────────────────────────────────────
     print()
     print("=" * 60)
-    print("  FOLLOW-UP EMAIL SYNC")
+    print("  INBOUND MAIL READ")
     print("=" * 60)
     scope = ", ".join(campaign_ids) if campaign_ids else "ALL campaigns"
     if args.contact:
@@ -146,7 +139,7 @@ def main(argv=None) -> None:
         # Dry run: run the lib with a fake db that intercepts ArrayUnion writes
         _run_dry(db, args)
     else:
-        result = run_followup_email_sync(
+        result = run_inbound_mail_read(
             db             = db,
             campaign_ids   = campaign_ids,
             contact_doc_id = args.contact  or None,
@@ -158,7 +151,7 @@ def main(argv=None) -> None:
 def _run_dry(db, args):
     """Dry run: import the matching logic, skip the Firestore writes."""
     import re
-    from smart_mail.followup_email_sync_lib import (
+    from smart_mail.inbound_mail_read_lib import (
         _imap_connect, _find_sent_folder, _fetch_headers,
         _extract_email, _history_email_ids, _msg_key,
         CAMPAIGNS_COLLECTION, CONTACTS_SUBCOLLECTION,

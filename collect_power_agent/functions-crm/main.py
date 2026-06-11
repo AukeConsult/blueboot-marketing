@@ -14,8 +14,7 @@ from __future__ import annotations
 import sys
 import os
 _HERE = os.path.dirname(__file__)
-_SMARTMAIL_DIR = os.path.abspath(os.path.join(_HERE, "..", "functions-smartmail"))
-for _path in (_HERE, _SMARTMAIL_DIR):
+for _path in (_HERE,):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
@@ -36,7 +35,7 @@ from handlers.jobs          import bp as jobs_bp
 from handlers.mailbox       import bp as mailbox_bp
 from handlers.mail_tags     import bp as mail_tags_bp
 from handlers.mail_accounts import bp as mail_accounts_bp
-from handlers.followup_email import bp as followup_email_bp
+from handlers.inbound_mail_read import bp as inbound_mail_read_bp
 from handlers.gdisk         import bp as gdisk_bp
 from handlers.filter_facets import bp as filter_facets_bp
 from handlers.leads         import bp as leads_bp
@@ -47,7 +46,7 @@ from handlers.batch         import bp as batch_bp
 
 for bp in (
     campaigns_bp, contacts_bp, jobs_bp, mailbox_bp,
-    mail_tags_bp, mail_accounts_bp, followup_email_bp,
+    mail_tags_bp, mail_accounts_bp, inbound_mail_read_bp,
     gdisk_bp, filter_facets_bp, leads_bp, statistics_bp, auth_bp,
     user_prefs_bp, batch_bp,
 ):
@@ -83,12 +82,14 @@ _JOB_ENDPOINTS = frozenset({
     "jobs.crm_sync_trigger",
     "jobs.campaign_sync",
     "jobs.campaign_export",
+    "jobs.outreach_send",
+    "jobs.reply_match",
     "jobs.job_status",
     "jobs.list_jobs",
     # campaign-level job triggers (campaigns blueprint)
     "campaigns.discover_campaigns",
-    # follow-up email sync trigger (followup_email blueprint)
-    "followup_email.followup_email_sync",
+    # inbound mail read trigger (inbound_mail_read blueprint)
+    "inbound_mail_read.inbound_mail_read",
     # statistics collection (statistics blueprint)
     "statistics.collect_statistics",
     # move contacts job trigger (contacts blueprint)
@@ -119,7 +120,7 @@ _ADMIN_ENDPOINTS = frozenset({
 
 _BLUEPRINT_MIN_ROLES: dict[str, str] = {
     "contacts":       "campaign-user",
-    "followup_email": "campaign-user",
+    "inbound_mail_read": "campaign-user",
     "mailbox":        "campaign-user",
     "mail_tags":      "campaign-user",
     "gdisk":          "campaign-user",
@@ -247,7 +248,9 @@ def index():
         "endpoints": [
             "GET  /api/crm/campaigns",
             "GET  /api/crm/followup-contacts",
-            "POST /api/crm/followup-email-sync",
+            "POST /api/crm/inbound-mail-read",
+            "GET  /api/crm/outreach-send",
+            "GET  /api/crm/reply-match",
             "GET  /api/crm/status/<job_id>",
             "GET  /api/crm/jobs",
         ],

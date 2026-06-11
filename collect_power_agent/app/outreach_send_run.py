@@ -1,7 +1,7 @@
 # app/outreach_send_run.py
 """Run the outreach sender from the command line.
 
-By default this is a dry run: it uses the same smart sender selection and
+By default this is a dry run: it uses the same outreach sender selection and
 rendering path as a real send, but does not open a mail account, send mail, or
 call confirm_sent(). Use --dry-run explicitly for preview, or --send to dispatch
 real mail and write confirmations.
@@ -32,18 +32,9 @@ Usage examples
 """
 from __future__ import annotations
 
-import os
 import re
-import sys
 
 import _pathsetup  # noqa: F401 -- sets up Windows event loop policy + path
-
-
-_FUNCTIONS_SMARTMAIL = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "functions-smartmail")
-)
-if _FUNCTIONS_SMARTMAIL not in sys.path:
-    sys.path.insert(0, _FUNCTIONS_SMARTMAIL)
 
 
 def _get_db():
@@ -65,7 +56,7 @@ def _split_list_arg(values) -> list[str]:
 
 
 def _run(args) -> None:
-    from smart_mail.smart_campaign_sender import send_outreach
+    from smart_mail.outreach_sender import send_outreach
 
     dry_run = not args.send
     modes = ["intro", "followup"] if args.mode == "both" else [args.mode]

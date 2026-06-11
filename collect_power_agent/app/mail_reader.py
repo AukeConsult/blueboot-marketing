@@ -110,7 +110,7 @@ def read_unread_emails(account: str | None = None):
                 "references": references,
                 "imap_uid": email_id.decode(),
                 "processed_at": datetime.now(timezone.utc).isoformat(),
-                # Reply-matching pipeline (smart_reply_matcher.py) queries on
+                # Reply-matching pipeline (reply_matcher.py) queries on
                 # this flag to find work; it flips to True once a match attempt
                 # has been made (whether or not it succeeded) so messages are
                 # never reprocessed forever.

@@ -1,6 +1,5 @@
-# functions-smartmail/smart_mail/smart_campaign_stats.py
-# Adapted copy of app/smart-mail-not-in-use/smart_campaign_stats.py -- only the
-# Firestore import is relative.
+# functions-crm/smart_mail/outreach_stats.py
+# Campaign outreach statistics helpers.
 from .firestore_client import get_firestore
 
 

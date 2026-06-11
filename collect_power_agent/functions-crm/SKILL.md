@@ -1,14 +1,14 @@
----
+﻿---
 name: outreach-mail-select
 description: >
-  Use this skill when working with functions-smartmail/smart_mail/outreach_mail_select.py — the
+  Use this skill when working with functions-crm/smart_mail/outreach_mail_select.py — the
   library that reads outreach candidates from Firestore and records sent status.
   Triggers include: calling read_outreach() in mode "intro" or "followup", using
   AccountBatch / CampaignWithContacts / ContactRow dataclasses, the mail_sequence
   array on campaigns, the mail_sent history array on contacts, calling confirm_sent()
   to append a MailSentEntry and stamp contact status, enforcing campaign mail order
   via next_mail_index, threading followup replies via in_reply_to, or wiring this
-  library into a send loop in smart_campaign_sender.py. Also use when the user asks
+  library into a send loop in outreach_sender.py. Also use when the user asks
   how outreach candidates are selected by mode, how the next mail step in a sequence
   is resolved per contact, how sent history is written back with ArrayUnion, or how
   confirm_sent records sent mail while the contact remains pending for automation.
@@ -16,10 +16,10 @@ description: >
 
 # outreach-mail-select
 
-**File:** `functions-smartmail/smart_mail/outreach_mail_select.py`
+**File:** `functions-crm/smart_mail/outreach_mail_select.py`
 
 Follow-up mailbox sync also belongs in this package:
-`functions-smartmail/smart_mail/followup_email_sync_lib.py`. CRM may trigger it
+`functions-crm/smart_mail/inbound_mail_read_lib.py`. CRM may trigger it
 through jobs or HTTP routes, but IMAP/Gmail mailbox reading, sent-folder matching,
 message-id deduplication, and mail-account protocol handling stay in smart-mail.
 Use `campaign_ids` for campaign filters in this flow. CLI flags use
@@ -177,7 +177,7 @@ Resolved from `settings/mail_accounts/accounts/{email}`.
 | `client_id`, `client_secret`, `refresh_token`, `access_token` | str | Gmail OAuth settings from the DB mail-account document |
 | `raw` | dict | original Firestore mail-account document passed to `smart_mail.mail_sender.MailSender` |
 
-Automatic outreach must use this Firestore mail-account document. Do not derive SMTP passwords from environment variable names in the smart sender.
+Automatic outreach must use this Firestore mail-account document. Do not derive SMTP passwords from environment variable names in the outreach sender.
 
 ### Sender session rule
 
@@ -185,10 +185,10 @@ Automatic outreach must use this Firestore mail-account document. Do not derive 
 
 - Selection and sent writeback stay in `outreach_mail_select.py`: `read_outreach()`, `prepare_mail_sequences()`, and `confirm_sent()`.
 - SMTP/Gmail sending stays in `smart_mail.mail_sender.MailSender`.
-- `smart_campaign_sender.py` owns the shared live/dry-run loop. Live mode opens `MailSender(batch.account.raw)` once per account batch, calls `send_open()` for each selected contact, calls `confirm_sent()` only after a successful send, then closes the sender in `finally`.
+- `outreach_sender.py` owns the shared live/dry-run loop. Live mode opens `MailSender(batch.account.raw)` once per account batch, calls `send_open()` for each selected contact, calls `confirm_sent()` only after a successful send, then closes the sender in `finally`.
 - Dry-run mode must call the same `send_outreach(..., dry_run=True)` loop. It selects the same contacts and renders the same mail, but does not open `MailSender`, send mail, call `confirm_sent()`, sleep between contacts, or refresh campaign stats.
 - `app/outreach_send_run.py` is the command-line entrypoint for both preview and live send. It defaults to dry-run; `--send` is required for real mail.
-- The smart sender must not contain separate SMTP/Gmail message creation logic; use `MailSender` so CSS inlining, inline image handling, display names, threading headers, and account settings are consistent with other mail paths.
+- The outreach sender must not contain separate SMTP/Gmail message creation logic; use `MailSender` so CSS inlining, inline image handling, display names, threading headers, and account settings are consistent with other mail paths.
 
 ### `CampaignMail` (level 2)
 Resolved from `campaigns/{campaign_id}`.
@@ -279,57 +279,6 @@ outreach_sent/{auto_id}                             ← confirm_sent log target
 
 ---
 
-## CLI dry-run: `app/outreach_select_run.py`
-
-Prints the resolved `read_outreach()` batches without sending anything or writing to Firestore.
-Use it to verify account resolution, campaign grouping, and contact counts before a live run.
-
-```bash
-# Intro mode — all pending contacts (default)
-python app/outreach_select_run.py
-
-# Followup mode
-python app/outreach_select_run.py --mode followup
-
-# Filter to one or more campaigns
-python app/outreach_select_run.py --campaigns NO_jun SE_jun
-python app/outreach_select_run.py --campaigns NO_jun,SE_jun
-
-# Cap contacts fetched
-python app/outreach_select_run.py --limit 50
-
-# Also print subject template per campaign
-python app/outreach_select_run.py --verbose
-
-# List all campaign IDs and exit
-python app/outreach_select_run.py --list-campaigns
-```
-
-**Flags:**
-
-| flag | short | default | notes |
-|------|-------|---------|-------|
-| `--mode` | `-m` | `intro` | `intro` or `followup` |
-| `--campaigns` | `-c` | all | filter to one or more campaign IDs; accepts space, comma, semicolon, or pipe separated values |
-| `--limit` | `-n` | `500` | max total contacts to fetch |
-| `--verbose` | `-v` | off | print subject template per campaign |
-| `--list-campaigns` | | | list campaign IDs and exit |
-
-**Output format** (nothing written to Firestore):
-```
-[dry-run] read_outreach  mode=intro  limit=500
-
-Account : sender@example.com  (Sender Name)  host=smtp.example.com:587  STARTTLS  campaigns=2  contacts=47
-
-  Campaign : NO_jun  (Norway June)  status=active  contacts=31
-    contact@company.no  Company AS         NO    sent=0  next_idx=0
-    ...
-
-[dry-run] total  accounts=1  campaigns=2  contacts=47  (nothing written)
-```
-
----
-
 ## Error handling
 
 - Campaign not found → skipped with warning, never raises
@@ -337,3 +286,4 @@ Account : sender@example.com  (Sender Name)  host=smtp.example.com:587  STARTTLS
 - `next_mail_index` out of bounds → contact skipped silently
 - `confirm_sent` deduplicates on `message_id` — safe to retry
 - Firestore import chain: `smart_mail.firestore_client` → `app.firestore_client` → `firestore_client`
+

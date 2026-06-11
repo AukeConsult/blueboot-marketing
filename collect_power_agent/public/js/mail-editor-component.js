@@ -5,7 +5,15 @@
 .mail-wrap a { color: #0066cc; text-decoration: none; }
 .mail-wrap h1, .mail-wrap h2, .mail-wrap h3 { font-weight: bold; margin-bottom: 8px; }
 .mail-wrap ul, .mail-wrap ol { margin: 0 0 8px 20px; padding: 0; }
-.mail-wrap li { margin-bottom: 4px; }`;
+.mail-wrap li { margin-bottom: 4px; }
+.mail-wrap .ql-font-serif { font-family: Georgia, Times New Roman, serif; }
+.mail-wrap .ql-font-monospace { font-family: Monaco, Consolas, Courier New, monospace; }
+.mail-wrap .ql-size-small { font-size: 12px; }
+.mail-wrap .ql-size-large { font-size: 18px; }
+.mail-wrap .ql-size-huge { font-size: 24px; }
+.mail-wrap .ql-align-center { text-align: center; }
+.mail-wrap .ql-align-right { text-align: right; }
+.mail-wrap .ql-align-justify { text-align: justify; }`;
 
   function esc(v) {
     return (window.escapeHtml || (s => String(s).replace(/[&<>"']/g, c => ({
@@ -31,11 +39,42 @@
       this.showTestButton = opts.showTestButton !== false;
       this.showAccountField = opts.showAccountField !== false;
       if (!this.root) throw new Error('MailEditorComponent root not found');
+      MailEditorComponent.ensureStyles();
       this.renderShell();
     }
 
     $(name) {
       return this.root.querySelector(`[data-me="${name}"]`);
+    }
+
+    static ensureStyles() {
+      if (document.getElementById('mail-editor-component-styles')) return;
+      const style = document.createElement('style');
+      style.id = 'mail-editor-component-styles';
+      style.textContent = `
+        .mail-editor-component .ql-toolbar {
+          position: relative;
+          z-index: 2;
+          background: #f9fafb;
+          border-radius: 8px 8px 0 0;
+        }
+        .mail-editor-component .ql-container {
+          border-radius: 0 0 8px 8px;
+        }
+        .mail-editor-component .ql-picker-options {
+          z-index: 1400;
+        }
+        .mail-editor-component .ql-editor {
+          min-height: 230px;
+          font-size: 14px;
+        }
+        .mail-editor-component .ql-editor img,
+        .mail-editor-component [data-me="previewPane"] img {
+          max-width: 100%;
+          height: auto;
+        }
+      `;
+      document.head.appendChild(style);
     }
 
     renderShell() {
@@ -88,9 +127,6 @@
             <strong>Body:</strong>
             <label class="form-check form-check-inline mb-0"><input data-me="typePlain" class="form-check-input" type="radio" name="${this.uid}_type" value="plain" checked> Plain</label>
             <label class="form-check form-check-inline mb-0"><input data-me="typeHtml" class="form-check-input" type="radio" name="${this.uid}_type" value="html"> HTML</label>
-            <button class="btn btn-sm btn-outline-secondary py-0 px-2 ms-auto" data-me="previewBtn" type="button" style="font-size:12px">
-              <i class="ti ti-eye me-1"></i>Preview
-            </button>
           </div>
 
           <div data-me="plainPane">
@@ -101,7 +137,7 @@
             <ul class="nav nav-tabs mb-0" style="border-bottom:none">
               <li class="nav-item"><button class="nav-link active" data-me-tab="wysiwyg" type="button"><i class="ti ti-pencil me-1"></i>Editor</button></li>
               <li class="nav-item"><button class="nav-link" data-me-tab="source" type="button"><i class="ti ti-code me-1"></i>HTML</button></li>
-              <li class="nav-item"><button class="nav-link" data-me-tab="css" type="button"><i class="ti ti-palette me-1"></i>CSS</button></li>
+              <li class="nav-item"><button class="nav-link" data-me-tab="preview" type="button"><i class="ti ti-eye me-1"></i>Preview</button></li>
             </ul>
             <div data-me="wysiwygPane" class="border border-top-0 rounded-bottom mb-2">
               <div data-me="quill" style="min-height:230px;font-size:14px"></div>
@@ -109,12 +145,9 @@
             <div data-me="sourcePane" style="display:none" class="mb-2">
               <textarea data-me="bodyHtml" class="form-control" rows="10" style="font-family:monospace;font-size:12px;border-radius:8px"></textarea>
             </div>
-            <div data-me="cssPane" style="display:none" class="mb-2">
-              <textarea data-me="css" class="form-control" rows="8" style="font-family:monospace;font-size:12px;border-radius:8px"></textarea>
-            </div>
+            <div data-me="previewPane" class="border border-top-0 rounded-bottom p-3 mb-2" style="display:none;background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;min-height:230px"></div>
           </div>
-
-          <div data-me="previewPane" class="border rounded p-3 mt-2" style="display:none;background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;min-height:70px"></div>
+          <textarea data-me="css" style="display:none"></textarea>
         </div>`;
 
       this.bind();
@@ -127,7 +160,6 @@
       });
       this.$('typePlain').addEventListener('change', () => { this.switchMode(); this.autoSave(); });
       this.$('typeHtml').addEventListener('change', () => { this.switchMode(); this.autoSave(); });
-      this.$('previewBtn').addEventListener('click', () => this.togglePreview());
       this.$('mainBtn').addEventListener('click', () => this.editCampaignMail());
       this.$('saveBtn').addEventListener('click', () => this.save(false));
       this.$('testBtn').addEventListener('click', () => this.openTest());
@@ -206,9 +238,69 @@
       if (this.quill || !window.Quill) return;
       this.quill = new Quill(this.$('quill'), {
         theme: 'snow',
-        modules: { toolbar: [['bold', 'italic', 'underline'], [{ header: [1, 2, 3, false] }], [{ list: 'ordered' }, { list: 'bullet' }], ['link', 'clean']] }
+        modules: {
+          toolbar: {
+            container: [
+              [{ font: [] }, { size: ['small', false, 'large', 'huge'] }],
+              [{ header: [1, 2, 3, false] }],
+              ['bold', 'italic', 'underline'],
+              [{ color: [] }, { background: [] }],
+              [{ align: [] }],
+              [{ list: 'ordered' }, { list: 'bullet' }],
+              ['link', 'image', 'clean']
+            ],
+            handlers: {
+              link: value => this.handleLink(value),
+              image: () => this.handleImage()
+            }
+          }
+        }
       });
-      this.quill.on('text-change', () => this.autoSave());
+      this.quill.on('text-change', () => {
+        this.$('bodyHtml').value = this.quill.root.innerHTML;
+        this.autoSave();
+      });
+    }
+
+    handleLink(value) {
+      if (!this.quill) return;
+      if (!value) {
+        this.quill.format('link', false);
+        return;
+      }
+      const range = this.quill.getSelection(true);
+      const current = range ? this.quill.getFormat(range).link : '';
+      let url = window.prompt('Link URL', current || 'https://');
+      if (!url) return;
+      url = url.trim();
+      if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url;
+      if (range && range.length > 0) {
+        this.quill.format('link', url);
+      } else {
+        this.quill.insertText(range ? range.index : this.quill.getLength(), url, 'link', url);
+      }
+      this.$('bodyHtml').value = this.quill.root.innerHTML;
+      this.autoSave();
+    }
+
+    handleImage() {
+      if (!this.quill) return;
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.addEventListener('change', () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const range = this.quill.getSelection(true);
+          this.quill.insertEmbed(range ? range.index : this.quill.getLength(), 'image', reader.result);
+          this.$('bodyHtml').value = this.quill.root.innerHTML;
+          this.autoSave();
+        };
+        reader.readAsDataURL(file);
+      });
+      input.click();
     }
 
     switchMode() {
@@ -221,6 +313,7 @@
           this.$('bodyHtml').value = this.$('bodyPlain').value;
           this.quill.root.innerHTML = this.$('bodyPlain').value;
         }
+        this.showTab(this.currentTab === 'preview' || this.currentTab === 'source' ? this.currentTab : 'wysiwyg');
       }
     }
 
@@ -230,8 +323,9 @@
       this.currentTab = tab;
       this.$('wysiwygPane').style.display = tab === 'wysiwyg' ? '' : 'none';
       this.$('sourcePane').style.display = tab === 'source' ? '' : 'none';
-      this.$('cssPane').style.display = tab === 'css' ? '' : 'none';
+      this.$('previewPane').style.display = tab === 'preview' ? '' : 'none';
       this.root.querySelectorAll('[data-me-tab]').forEach(b => b.classList.toggle('active', b.dataset.meTab === tab));
+      if (tab === 'preview') this.updatePreview();
     }
 
     getType() {
@@ -241,6 +335,7 @@
     getBody() {
       if (this.getType() !== 'html') return this.$('bodyPlain').value;
       if (this.currentTab === 'wysiwyg' && this.quill) return this.quill.root.innerHTML;
+      if (this.currentTab === 'preview' && this.quill) return this.quill.root.innerHTML;
       return this.$('bodyHtml').value;
     }
 
@@ -310,12 +405,6 @@
       pane.innerHTML = this.getType() === 'html'
         ? `<style>${this.$('css').value || ''}</style><div class="mail-wrap">${rendered}</div>`
         : `<pre style="white-space:pre-wrap;margin:0;font-family:Arial,sans-serif">${esc(rendered)}</pre>`;
-    }
-
-    togglePreview() {
-      const pane = this.$('previewPane');
-      pane.style.display = pane.style.display === 'none' ? '' : 'none';
-      this.updatePreview();
     }
 
     openTest() {

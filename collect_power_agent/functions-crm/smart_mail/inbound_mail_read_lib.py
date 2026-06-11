@@ -1,12 +1,12 @@
-"""followup_email_sync_lib.py -- Sync email history into campaign contact follow-up logs.
+"""inbound_mail_read_lib.py - read inbound/sent mail into campaign contact logs.
 
 For each outreach mail account, fetches recent emails (inbox + sent) and matches
 them against campaign_contacts by email address. Matched emails are appended to
 the contact's comment_history array using Firestore ArrayUnion — idempotent because
 each entry carries a unique email_id; identical maps are never inserted twice.
 
-Used by the crmWorker 'followup-email-sync' job and the local
-app/followup_email_sync.py runner.
+Used by the crmWorker 'inbound-mail-read' job and the local
+app/inbound_mail_read.py runner.
 
 Parameters (all optional):
   campaign_ids    list  Only sync contacts belonging to these campaigns
@@ -233,13 +233,13 @@ def _fetch_headers(conn: imaplib.IMAP4, folder: str, cutoff: datetime | None, li
             })
         return msgs
     except Exception as exc:
-        print(f"[followup-email-sync] folder '{folder}' error: {exc}", flush=True)
+        print(f"[inbound-mail-read] folder '{folder}' error: {exc}", flush=True)
         return []
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def run_followup_email_sync(
+def run_inbound_mail_read(
     db,
     campaign_ids:     list[str] | str | None = None,
     contact_doc_id:   str | None = None,
@@ -344,7 +344,7 @@ def run_followup_email_sync(
         if not contact_index:
             continue
 
-        print(f"[followup-email-sync] {acc_email} — {len(contact_index)} contacts", flush=True)
+        print(f"[inbound-mail-read] {acc_email} — {len(contact_index)} contacts", flush=True)
 
         try:
             conn = _imap_connect(ma, acc_email)
@@ -413,7 +413,7 @@ def run_followup_email_sync(
             except Exception as exc:
                 errors.append(f"{match_e}: write failed — {exc}")
 
-    print(f"[followup-email-sync] done — {total_entries} entries / {updated_contacts} updated contacts", flush=True)
+    print(f"[inbound-mail-read] done — {total_entries} entries / {updated_contacts} updated contacts", flush=True)
     return {
         "synced_entries":  total_entries,
         "synced_contacts": total_contacts,

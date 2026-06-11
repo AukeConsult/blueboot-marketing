@@ -132,7 +132,7 @@ Request arrives
 | Blueprint | Min role | Routes |
 |---|---|---|
 | `contacts` | `campaign-user` | Follow-up field updates |
-| `followup_email` | `campaign-user` | Email sync trigger |
+| `inbound_mail_read` | `campaign-user` | Inbound mail read trigger |
 | `mailbox` | `campaign-user` | Message box write operations |
 | `mail_tags` | `campaign-user` | Tag CRUD |
 | `gdisk` | `campaign-user` | Drive file operations |
@@ -256,7 +256,7 @@ in `main.py` and are blocked for guests regardless of HTTP method:
 | `GET /api/crm/status/<id>` | `jobs` | Monitors a job guests cannot start |
 | `GET /api/crm/jobs` | `jobs` | Shows job history (internal) |
 | `GET /api/crm/discover-campaigns` | `campaigns` | Starts CRM sync jobs |
-| `POST /api/crm/followup-email-sync` | `followup_email` | Starts email sync job |
+| `POST /api/crm/inbound-mail-read` | `inbound_mail_read` | Starts inbound mail read job |
 | `POST /api/crm/statistics/collect` | `statistics` | Starts statistics job |
 
 ---

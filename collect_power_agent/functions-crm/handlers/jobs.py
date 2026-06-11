@@ -103,6 +103,80 @@ def campaign_export():
         return _err(str(exc), 500)
 
 
+def _split_list_param(value) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, list):
+        items = value
+    else:
+        items = [value]
+    out: list[str] = []
+    import re
+    for item in items:
+        out.extend(v.strip() for v in re.split(r"[,;|\s]+", str(item)) if v.strip())
+    return out
+
+
+def _request_data() -> dict:
+    body = request.get_json(silent=True) or {}
+    return {**request.args.to_dict(flat=False), **body}
+
+
+def _first_param(data: dict, name: str, default=None):
+    value = data.get(name, default)
+    if isinstance(value, list):
+        return value[0] if value else default
+    return value
+
+
+@bp.route("/api/crm/outreach-send", methods=["GET", "POST"])
+def outreach_send():
+    """Trigger automatic outreach sending through the CRM worker.
+
+    Params:
+      mode= intro | followup | both
+      limit= number of contacts per pass
+      campaigns= optional comma/space/semicolon/pipe separated campaign ids
+      dry_run= true to select/render without sending or confirming
+      preview= true to include rendered snippets in worker logs
+    """
+    data = _request_data()
+    mode = str(_first_param(data, "mode", "both") or "both").strip().lower()
+    if mode not in {"intro", "followup", "both"}:
+        return _err("mode must be one of: intro, followup, both", 400)
+    campaigns_raw = (
+        data.get("campaigns")
+        or data.get("campaign_ids")
+        or data.get("campaign_id")
+    )
+    params = {
+        "mode": mode,
+        "limit": int(_first_param(data, "limit", 500) or 500),
+        "campaign_ids": _split_list_param(campaigns_raw),
+        "dry_run": str(_first_param(data, "dry_run", "") or "").lower() in ("1", "true", "yes"),
+        "preview": str(_first_param(data, "preview", "") or "").lower() in ("1", "true", "yes"),
+    }
+    try:
+        job_id = _new_job("outreach-send", params)
+        _enqueue_task("outreach-send", job_id, params)
+        return _accepted(job_id, "outreach-send")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/reply-match", methods=["GET", "POST"])
+def reply_match():
+    """Trigger one reply matching pass through the CRM worker."""
+    data = _request_data()
+    params = {"limit": int(_first_param(data, "limit", 200) or 200)}
+    try:
+        job_id = _new_job("reply-match", params)
+        _enqueue_task("reply-match", job_id, params)
+        return _accepted(job_id, "reply-match")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @bp.route("/api/crm/worker/<name>/<job_id>", methods=["POST"])
 def worker(name, job_id):
     try:
@@ -248,9 +322,9 @@ def worker(name, job_id):
                     emails, db=db, dry_run=dry_run, skip_ai=skip_ai,
                 )
 
-        elif name == "followup-email-sync":
-            from smart_mail.followup_email_sync_lib import run_followup_email_sync
-            result = run_followup_email_sync(
+        elif name == "inbound-mail-read":
+            from smart_mail.inbound_mail_read_lib import run_inbound_mail_read
+            result = run_inbound_mail_read(
                 db               = db,
                 campaign_ids     = (
                     body.get("campaign_ids")
@@ -262,6 +336,32 @@ def worker(name, job_id):
                 outreach_account = body.get("outreach_account") or None,
                 days             = int(body.get("days") or 7),
             )
+
+        elif name == "outreach-send":
+            from smart_mail.outreach_sender import send_outreach
+            mode = str(body.get("mode") or "both").strip().lower()
+            modes = ["intro", "followup"] if mode == "both" else [mode]
+            passes = []
+            for pass_mode in modes:
+                passes.append(send_outreach(
+                    mode         = pass_mode,
+                    limit        = int(body.get("limit") or 500),
+                    campaign_ids = body.get("campaign_ids") or None,
+                    dry_run      = bool(body.get("dry_run", False)),
+                    preview      = bool(body.get("preview", False)),
+                ))
+            result = {
+                "mode": mode,
+                "passes": passes,
+                "sent": sum(int(p.get("sent", 0)) for p in passes),
+                "failed": sum(int(p.get("failed", 0)) for p in passes),
+                "skipped": sum(int(p.get("skipped", 0)) for p in passes),
+                "would_send": sum(int(p.get("would_send", 0)) for p in passes),
+            }
+
+        elif name == "reply-match":
+            from smart_mail.reply_matcher import match_new_replies
+            result = match_new_replies(limit=int(body.get("limit") or 200))
 
         elif name == "campaign-move":
             from crm.campaign_move_lib import run_campaign_move

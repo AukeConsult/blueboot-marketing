@@ -6,6 +6,7 @@ from app/collect-functions/:
 
     <root>/                      -> allows `from app.functions.X import`
     <root>/app/                  -> allows `from functions.X import` (fallback)
+    <root>/functions-crm/        -> allows `from smart_mail import` (CRM mail jobs)
     <root>/app/functions/        -> allows `from utils import` (used by models.py)
     <root>/app/collect-functions/-> allows `from catalog_scrapers/search_runner import`
 """
@@ -18,6 +19,7 @@ _root = _here.parent                             # project root
 for _p in [
     str(_root),                                  # for `from app.functions.X`
     str(_here),                                  # for `from functions.X`
+    str(_root / "functions-crm"),                # for `from smart_mail import`
     str(_here / "functions"),                    # for `from utils import` (models.py)
     str(_here / "collect-functions"),            # for `from catalog_scrapers import`
 ]:

@@ -1,12 +1,12 @@
-# functions-smartmail/smart_mail/smart_campaign_sender.py
-"""Outreach send loop — reads candidates via read_outreach(), renders via
+# functions-crm/smart_mail/outreach_sender.py
+"""Outreach send loop - reads candidates via read_outreach(), renders via
 render_mail(), sends via MailSender, and writes back via confirm_sent().
 
 Public entry point:
     send_outreach(mode="intro", dry_run=False) -> dict
-        mode "intro"     — contacts with status="pending"
-        mode "followup"  — pending contacts with a due sequence step
-        dry_run=True     — select and render, but do not send or confirm
+        mode "intro"     - contacts with status="pending"
+        mode "followup"  - pending contacts with a due sequence step
+        dry_run=True     - select and render, but do not send or confirm
 
 Rate limiting and the bounce-rate circuit-breaker are applied per sending account.
 Use send_outreach() for campaign outreach.
@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from .firestore_client import get_firestore
-from .smart_campaign_stats import refresh_campaign_stats
+from .outreach_stats import refresh_campaign_stats
 from .config import (
     CAMPAIGN_SEND_DELAY_SECONDS as _CFG_SEND_DELAY,
     MAX_SENDS_PER_HOUR,

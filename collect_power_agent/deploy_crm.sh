@@ -18,8 +18,8 @@ _read_env() {
 } > functions-crm/.env
 echo "  Written functions-crm/.env (BATCH_RUNNER_URL, BATCH_SECRET, BATCH_SA)"
 
-echo "[2/5] Setting up venvs..."
-for FDIR in functions-crm functions-smartmail; do
+echo "[2/5] Setting up venv..."
+for FDIR in functions-crm; do
   if [ ! -f "$FDIR/venv/Scripts/activate" ] && [ ! -f "$FDIR/venv/bin/activate" ]; then
     echo "  creating $FDIR/venv..."
     python -m venv "$FDIR/venv"
@@ -29,7 +29,7 @@ for FDIR in functions-crm functions-smartmail; do
 done
 
 echo "[3/5] Installing/updating requirements..."
-for FDIR in functions-crm functions-smartmail; do
+for FDIR in functions-crm; do
   echo "  $FDIR..."
   "$FDIR/venv/Scripts/pip.exe" install -r "$FDIR/requirements.txt" -q 2>/dev/null || \
   "$FDIR/venv/bin/pip"         install -r "$FDIR/requirements.txt" -q

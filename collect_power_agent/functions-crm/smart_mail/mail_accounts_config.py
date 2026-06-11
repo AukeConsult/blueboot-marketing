@@ -1,4 +1,4 @@
-# functions-smartmail/smart_mail/mail_accounts_config.py
+# functions-crm/smart_mail/mail_accounts_config.py
 """
 Resolves named outreach-mailbox accounts (SMTP + IMAP) from the environment.
 
@@ -12,7 +12,7 @@ runtime. Calling load_dotenv() here would be a no-op at best (no .env to
 find at the deployed path) and a foot-gun at worst, so it's omitted.
 
 Non-secret values (hosts, ports, usernames, tuning knobs) live in
-functions-smartmail/.env.<project-id>; SALES_SMTP_PASSWORD is a Secret
+functions-crm/.env.<project-id>; SALES_SMTP_PASSWORD is a Secret
 Manager secret declared on the function (see main.py).
 
 Exposes the same surface as the local module:

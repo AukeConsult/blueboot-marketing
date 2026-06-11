@@ -1,4 +1,4 @@
-# app/smart_mail/smart_template_engine.py
+# functions-crm/smart_mail/template_engine.py
 
 from typing import Any
 

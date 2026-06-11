@@ -4,8 +4,8 @@ cd /d "%~dp0"
 call .venv\Scripts\activate.bat
 
 REM ============================================================
-REM  FOLLOW-UP EMAIL SYNC
-REM  Syncs inbox + sent emails into contact comment_history.
+REM  INBOUND MAIL READ
+REM  Reads inbox + sent emails into contact comment_history.
 REM
 REM  Options (pass as arguments or edit defaults below):
 REM    --campaign NO_jun     Only sync one campaign
@@ -19,10 +19,10 @@ set DAYS=7
 
 echo.
 echo ============================================================
-echo  FOLLOW-UP EMAIL SYNC  ^|  Last %DAYS% days
+echo  INBOUND MAIL READ  ^|  Last %DAYS% days
 echo ============================================================
 
-python app\followup_email_sync.py --days %DAYS% %*
-if %errorlevel% neq 0 ( echo ERROR in followup_email_sync.py & pause & exit /b 1 )
+python app\inbound_mail_read.py --days %DAYS% %*
+if %errorlevel% neq 0 ( echo ERROR in inbound_mail_read.py & pause & exit /b 1 )
 
 pause

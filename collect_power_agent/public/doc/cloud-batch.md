@@ -302,7 +302,7 @@ These scripts are ready to be used as steps in new or extended pipelines:
 | `campaign_exporter` | `app/campaign_exporter.py` | Export campaign contacts to Excel |
 | `campaign_name_enrich` | `app/campaign_name_enrich.py` | Enrich missing campaign names via AI |
 | `filter_site_leads` | `app/filter_site_leads.py` | Filter site_leads by criteria into a campaign |
-| `followup_email_sync` | `app/followup_email_sync.py` | Sync IMAP replies back to CRM follow-up status |
+| `inbound_mail_read` | `app/inbound_mail_read.py` | Sync IMAP replies back to CRM follow-up status |
 | `wp_plugin_leads` | `app/wp_plugin_leads.py` | Discover WordPress plugin leads via Bing |
 | `build_filter_facets` | `app/build_filter_facets.py` | Build facet index for lead filter UI |
 | `facet_campaign` | `app/facet_campaign.py` | Apply facet-based filter to create a campaign |
@@ -330,7 +330,6 @@ One-off data repair and export scripts — suitable for scheduled maintenance jo
 |---|---|
 | `batch_test` | Smoke test only — used by test_job to verify Cloud Run setup |
 | `seed_batch_jobs` | Bootstrapping tool — seeding runs via `deploy_batch.sh` |
-| `outreach_select_run` | Dry-run preview only, no Firestore writes |
 | `test_sitemap` | Dev diagnostic — not a pipeline step |
 
 > **Rule:** Whenever a new `app/` script with a `main()` entry point is added to the project, add it to the appropriate table above. See [CLAUDE.md](../../CLAUDE.md) — "Cloud Batch script registry" rule.

@@ -252,17 +252,17 @@ POST /api/crm/name-enrich
 ```
 Returns immediately with `job_id` — poll `GET /api/crm/status/<job_id>`.
 
-### `followup_email_sync.py` — Sync message history into follow-up contact logs 🌐 Frontend triggered
+### `inbound_mail_read.py` — Read inbound/sent mail into contact logs 🌐 Frontend triggered
 
 Connects to each configured outreach account via IMAP, fetches message headers (inbox + sent) within a configurable lookback window, matches messages to campaign contacts by email address, and appends `EMAIL_IN` / `EMAIL_OUT` entries to each matched contact's `comment_history` in Firestore. The operation is idempotent — each entry carries a unique `email_id` so re-running never creates duplicates.
 
 ```bash
-python app/followup_email_sync.py                        # all campaigns, last 7 days
-python app/followup_email_sync.py --days 30              # 30-day lookback
-python app/followup_email_sync.py --campaign NO_jun      # one campaign only
-python app/followup_email_sync.py --contact doc_id --campaign NO_jun  # one contact
-python app/followup_email_sync.py --dry-run              # preview without writing
-python app/followup_email_sync.py --list-campaigns       # list available campaign IDs
+python app/inbound_mail_read.py                        # all campaigns, last 7 days
+python app/inbound_mail_read.py --days 30              # 30-day lookback
+python app/inbound_mail_read.py --campaign NO_jun      # one campaign only
+python app/inbound_mail_read.py --contact doc_id --campaign NO_jun  # one contact
+python app/inbound_mail_read.py --dry-run              # preview without writing
+python app/inbound_mail_read.py --list-campaigns       # list available campaign IDs
 ```
 
 | Flag | Default | Description |
@@ -275,11 +275,11 @@ python app/followup_email_sync.py --list-campaigns       # list available campai
 
 **Writes to:** `campaigns/{id}/campaign_contacts/{doc_id}` — appends to `comment_history` array via Firestore `ArrayUnion`
 
-**Launcher scripts:** `run_followup_email_sync.bat` (Windows) / `run_followup_email_sync.sh` (macOS/Linux)
+**Launcher scripts:** `run_inbound_mail_read.bat` (Windows) / `run_inbound_mail_read.sh` (macOS/Linux)
 
 **Frontend trigger:** CRM Follow-up page → **Sync all messages** button or per-contact mail icon
-→ API: `POST /api/crm/followup-email-sync`
-→ Cloud Tasks job: `followup-email-sync`
+→ API: `POST /api/crm/inbound-mail-read`
+→ Cloud Tasks job: `inbound-mail-read`
 
 ---
 
@@ -337,7 +337,7 @@ These operations have no standalone CLI — they run as Cloud Tasks jobs trigger
 | Collect statistics | Statistics page → Collect statistics | `POST /api/crm/statistics/collect` | `statistics` |
 | Load all follow-up contacts | CRM Follow-up page load | `GET /api/crm/followup-contacts` | — (direct read) |
 | Update follow-up field | CRM Follow-up inline edit | `PATCH /api/crm/campaigns/<id>/contacts/<doc>` | — (direct write) |
-| Sync message history | CRM Follow-up → Sync messages | `POST /api/crm/followup-email-sync` | `followup-email-sync` |
+| Read inbound/sent mail | CRM Follow-up → Sync messages | `POST /api/crm/inbound-mail-read` | `inbound-mail-read` |
 | Enrich contact names | Campaign page → Enrich names | `POST /api/crm/campaigns/<id>/name-enrich` | `name-enrich` |
 
 ---

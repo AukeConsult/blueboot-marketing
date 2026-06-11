@@ -25,7 +25,7 @@ functions-crm/
 │   ├── mailbox.py        ← IMAP mailbox reading (read_mailbox, read_message_body)
 │   ├── mail_tags.py      ← mailbox tag CRUD + IMAP keyword sync
 │   ├── mail_accounts.py  ← mail account settings (CRUD, ping, test-send)
-│   ├── followup_email.py ← follow-up email sync job trigger
+│   ├── inbound_mail_read.py ← inbound mail read job trigger
 │   ├── gdisk.py          ← Google Drive folder endpoints
 │   ├── filter_facets.py  ← filter facets + facet-to-campaign
 │   ├── leads.py          ← lead lookup, exclusion, name-enrich
@@ -41,7 +41,7 @@ functions-crm/
     ├── crm_template_sync_lib.py
     ├── facet_campaign_lib.py
     ├── filter_count_lib.py
-    ├── followup_email_sync_lib.py
+    ├── inbound_mail_read_lib.py
     ├── gdisk_interface.py
     ├── mail_sender.py
     ├── name_enrich_lib.py
@@ -96,7 +96,7 @@ branch lazy-imports the relevant `crm/` lib and calls its `run_*` function.
 
 **To add a new job type:**
 1. Add the lib function to `crm/<job_name>_lib.py`
-2. Add a trigger endpoint in the appropriate handler file (or `followup_email.py` as a template)
+2. Add a trigger endpoint in the appropriate handler file (or `inbound_mail_read.py` as a template)
 3. Add an `elif name == "<job-name>":` branch in `handlers/jobs.py`
 4. Add a CLI script `app/<job_name>.py` and launchers `run_<job_name>.bat` / `.sh`
 5. Document in `README.md` and the relevant user guide
@@ -113,7 +113,7 @@ branch lazy-imports the relevant `crm/` lib and calls its `run_*` function.
 | `mailbox.py` | 2 | `/api/crm/settings/mail-accounts/<email>/mailbox` and `/message` |
 | `mail_tags.py` | 5 | `/api/crm/mailbox-tags`, `/api/crm/settings/mail-tag-statuses` |
 | `mail_accounts.py` | 5 | `/api/crm/settings/mail-accounts` |
-| `followup_email.py` | 1 | `/api/crm/followup-email-sync` |
+| `inbound_mail_read.py` | 1 | `/api/crm/inbound-mail-read` |
 | `gdisk.py` | 7 | `/api/crm/gdisk` |
 | `filter_facets.py` | 4 | `/api/crm/filter-facets` |
 | `leads.py` | 4 | `/api/crm/leads`, `/api/crm/name-enrich` |

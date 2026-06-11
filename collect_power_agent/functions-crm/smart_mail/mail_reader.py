@@ -1,4 +1,4 @@
-# functions-smartmail/smart_mail/mail_reader.py
+# functions-crm/smart_mail/mail_reader.py
 """
 Adapted copy of app/mail_reader.py. IMAP credentials are loaded from
 Firestore (settings/mail_accounts/accounts/{email}) — same source as the

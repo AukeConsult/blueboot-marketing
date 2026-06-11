@@ -1352,7 +1352,7 @@ This script only needs to be run once on existing data. All new contacts written
 
 ---
 
-## `followup_email_sync.py` — sync email history into follow-up contact logs
+## `inbound_mail_read.py` — read inbound/sent mail into contact logs
 
 Fetches inbox and sent messages for every configured outreach account, matches
 emails by address against campaign contacts, and appends `EMAIL_IN` / `EMAIL_OUT`
@@ -1365,29 +1365,29 @@ CRM Follow-up web page (`crm_follow.html`).
 
 ```bat
 :: Sync all contacts, last 7 days (default)
-run_followup_email_sync.bat
+run_inbound_mail_read.bat
 
 :: Sync last 30 days for all contacts
-run_followup_email_sync.bat --days 30
+run_inbound_mail_read.bat --days 30
 
 :: Sync one campaign only
-run_followup_email_sync.bat --campaign NO_jun
+run_inbound_mail_read.bat --campaign NO_jun
 
 :: Sync one specific contact
-run_followup_email_sync.bat --campaign NO_jun --contact john_doe_example_com
+run_inbound_mail_read.bat --campaign NO_jun --contact john_doe_example_com
 
 :: Preview matches without writing to Firestore
-run_followup_email_sync.bat --dry-run
+run_inbound_mail_read.bat --dry-run
 
 :: List all campaign IDs
-run_followup_email_sync.bat --list-campaigns
+run_inbound_mail_read.bat --list-campaigns
 ```
 
 ```bash
 # macOS / Linux
-./run_followup_email_sync.sh --days 30
-./run_followup_email_sync.sh --dry-run
-python app/followup_email_sync.py --campaign NO_jun --dry-run
+./run_inbound_mail_read.sh --days 30
+./run_inbound_mail_read.sh --dry-run
+python app/inbound_mail_read.py --campaign NO_jun --dry-run
 ```
 
 ### Parameters

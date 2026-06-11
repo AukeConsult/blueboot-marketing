@@ -1,5 +1,5 @@
 """
-smart_mail/mail_sender.py -- Isolated mail sending class.
+functions-crm/smart_mail/mail_sender.py -- Isolated mail sending class.
 
 All outbound email goes through MailSender so fixes (display name, CSS
 inlining, headers, SSL/STARTTLS, Sent folder append) apply everywhere.

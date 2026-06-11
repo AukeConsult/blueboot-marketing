@@ -694,11 +694,11 @@ in the project root, following the style of the other launcher pairs:
 - Example invocations
 - What is written to Firestore and how dedup works
 
-**Reference implementation:** `followup-email-sync`
-- Lib: `functions-crm/crm/followup_email_sync_lib.py`
-- API trigger: `POST /api/crm/followup-email-sync` in `functions-crm/main.py`
-- CLI: `app/followup_email_sync.py`
-- Launchers: `run_followup_email_sync.bat` and `run_followup_email_sync.sh`
+**Reference implementation:** `inbound-mail-read`
+- Lib: `functions-crm/smart_mail/inbound_mail_read_lib.py`
+- API trigger: `POST /api/crm/inbound-mail-read` in `functions-crm/main.py`
+- CLI: `app/inbound_mail_read.py`
+- Launchers: `run_inbound_mail_read.bat` and `run_inbound_mail_read.sh`
 
 ---
 

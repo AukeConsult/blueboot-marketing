@@ -244,6 +244,24 @@
 const setStatus = setStatusEl;
 const esc = escapeHtml;
 
+window.addEventListener('error', event => {
+  const fb = document.getElementById('send-test-feedback');
+  const modalOpen = document.getElementById('sendTestModal')?.classList.contains('show');
+  if (!fb || !modalOpen) return;
+  fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
+  fb.textContent = event.message || 'Unexpected page error.';
+  fb.style.display = '';
+});
+window.addEventListener('unhandledrejection', event => {
+  const fb = document.getElementById('send-test-feedback');
+  const modalOpen = document.getElementById('sendTestModal')?.classList.contains('show');
+  if (!fb || !modalOpen) return;
+  const reason = event.reason || {};
+  fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
+  fb.textContent = reason.message || String(reason || 'Unexpected async error.');
+  fb.style.display = '';
+});
+
 async function loadSetting(){
   try{
     const d = await fetchJSON(BASE + '/api/crm/gdisk/settings');
@@ -303,7 +321,7 @@ async function loadMailAccounts() {
   const el = document.getElementById('mail-accounts-list');
   try {
     const d = await fetchJSON(BASE + '/api/crm/settings/mail-accounts');
-    const list = d.accounts || [];
+    const list = Array.isArray(d.accounts) ? d.accounts : [];
     _mailAccounts = {};
     list.forEach(a => _mailAccounts[a.email] = a);
     if (!list.length) {
@@ -434,8 +452,10 @@ async function maTestConnection() {
       method: 'POST'
     });
     const d = await r.json();
-    fb.className = d.status === 'ok' ? 'alert alert-success py-2 small mb-0 mt-2' : 'alert alert-danger py-2 small mb-0 mt-2';
-    fb.innerHTML = (d.status === 'ok' ? '<i class="ti ti-circle-check me-1"></i>' : '<i class="ti ti-circle-x me-1"></i>') + esc(d.message);
+    const ok = r.ok && d.status === 'ok';
+    const msg = d.message || (ok ? 'Connection OK.' : 'Connection failed.');
+    fb.className = ok ? 'alert alert-success py-2 small mb-0 mt-2' : 'alert alert-danger py-2 small mb-0 mt-2';
+    fb.innerHTML = (ok ? '<i class="ti ti-circle-check me-1"></i>' : '<i class="ti ti-circle-x me-1"></i>') + esc(msg);
     fb.style.display = '';
   } catch(e) {
     fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
@@ -500,8 +520,10 @@ async function doSendTest() {
       })
     });
     const d = await r.json();
-    fb.className = d.status === 'ok' ? 'alert alert-success py-2 small mb-0 mt-2' : 'alert alert-danger py-2 small mb-0 mt-2';
-    fb.innerHTML = (d.status === 'ok' ? '<i class="ti ti-circle-check me-1"></i>' : '<i class="ti ti-circle-x me-1"></i>') + esc(d.message);
+    const ok = r.ok && d.status === 'ok';
+    const msg = d.message || (ok ? 'Test mail sent.' : 'Send failed.');
+    fb.className = ok ? 'alert alert-success py-2 small mb-0 mt-2' : 'alert alert-danger py-2 small mb-0 mt-2';
+    fb.innerHTML = (ok ? '<i class="ti ti-circle-check me-1"></i>' : '<i class="ti ti-circle-x me-1"></i>') + esc(msg);
     fb.style.display = '';
   } catch(e) {
     fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
@@ -535,6 +557,7 @@ async function loadTagStatuses() {
 }
 
 function renderStatusList(statuses) {
+  statuses = Array.isArray(statuses) ? statuses : [];
   const el = document.getElementById('status-list');
   if (!statuses.length) {
     el.innerHTML = '<div class="small text-muted">No statuses yet — add one above.</div>';
@@ -595,7 +618,7 @@ async function saveStatuses() {
     });
     const d = await r.json();
     if (d.status === 'ok') {
-      renderStatusList(d.statuses);
+      renderStatusList(d.statuses || []);
       const msg = document.getElementById('status-save-msg');
       msg.textContent = 'Saved!';
       msg.style.color = 'var(--bb-success, #10b981)';

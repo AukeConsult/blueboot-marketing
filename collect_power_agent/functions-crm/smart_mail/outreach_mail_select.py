@@ -1,8 +1,8 @@
-"""functions-smartmail/smart_mail/outreach_mail_select.py — Outreach mail select library.
+"""functions-crm/smart_mail/outreach_mail_select.py — Outreach mail select library.
 
 Two public functions:
 
-    read_outreach(status, limit)
+    read_outreach(mode, limit)
         Query the campaign_contacts collectionGroup for all pending contacts
         and return an account-first three-level structure:
 
