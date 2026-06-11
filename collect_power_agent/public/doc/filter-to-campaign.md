@@ -74,7 +74,7 @@ Once the campaign exists, open it from the campaign workspace sidebar. Expand th
 
 **Owner** — select the team member responsible for this campaign. This is the person who will manage replies and follow-up. Choosing an owner also auto-fills the outreach email if that person has a default mailbox configured in their user profile.
 
-**Email account** — select which configured mail account sends and receives for this campaign. Every outreach email goes out from this address, and incoming replies are synced back to the campaign. The contact's status in the contact list updates as mail is tracked — so you can see at a glance who has replied, who has not been contacted yet, and who has bounced. The email account must be set up in **Settings → Mail accounts** before it appears in the dropdown.
+**Email account** — select which configured mail account sends and receives for this campaign. Every outreach email goes out from this address, and incoming replies are synced back to the campaign. The contact's follow-up status updates as mail is tracked, so you can see who has replied and who still needs work. The email account must be set up in **Settings → Mail accounts** before it appears in the dropdown.
 
 Changing the email account at any point saves immediately. You can verify it is working by clicking the eye icon next to the dropdown to inspect the account settings, or use **Send test** on the mail template to confirm delivery.
 
@@ -104,6 +104,10 @@ This is the right time to clean the list — once the campaign is activated, con
 
 Each campaign has a mail schedule with steps such as Intro, Reminder 1, and Reminder 2. Click **Add step** to create a new step, or the edit icon on an existing step to open the mail editor in the right-hand work column. While the editor is open, the contact list is hidden; click **Contacts** in the editor header to return to the list.
 
+The schedule belongs to the campaign, but the send timing is calculated separately for each contact. When a mail is sent, the contact gets an entry in its own `mail_sent` history. Automatic follow-ups use that contact history to choose the next step and decide when it is due.
+
+Delays are counted from the contact's first sent mail, normally the Intro. For example, if Follow-up 1 is set to Day 7, a contact whose Intro was sent on June 1 is due on June 8, while a contact added later with Intro sent on June 5 is due on June 12.
+
 The editor lets you write the subject and body in either plain text or HTML, edit CSS for HTML mails, preview the rendered body, and save or autosave changes. You can use personalisation placeholders — for example the contact's first name — so each email feels individual rather than mass-sent.
 
 Once you have written the template, use **Send test** to send a preview to your own address and confirm it looks right. The preview renders the full email exactly as recipients will see it, including CSS styling for HTML templates.
@@ -126,7 +130,7 @@ The campaign's Google Drive spreadsheet is always kept in sync with the database
 
 You can run the same preset → campaign flow again at any time. This is safe and expected — it keeps the campaign in sync as new contacts appear in the pool.
 
-On a rerun, the system is careful with contacts that are already in the campaign. If a contact has been emailed or replied, their history is never touched. Only contacts that are still in "pending" status (not yet contacted) can be removed if they no longer match the current filter. New contacts that now match are added. The result summary tells you how many were added, refreshed, removed, or left untouched.
+On a rerun, the system is careful with contacts that are already in the campaign. Existing mail history is never touched. Only contacts that are still in `pending` status can be removed if they no longer match the current filter. New contacts that now match are added. The result summary tells you how many were added, refreshed, removed, or left untouched.
 
 ---
 

@@ -29,11 +29,7 @@ BATCH_SIZE = 400
 
 def _campaign_status(value) -> str:
     status = str(value or "draft").strip().lower()
-    return {
-        "dosend": "ready",
-        "sent": "active",
-        "cancelled": "canceled",
-    }.get(status, status)
+    return status
 
 
 def run_campaign_delete(db, campaign_id: str) -> dict:

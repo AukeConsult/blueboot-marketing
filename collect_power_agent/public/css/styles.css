@@ -137,9 +137,6 @@ body.bg-alt { background: var(--bb-bg-alt); }
 .bb-badge-draft     { background: #f1f1f1; color: #555; }
 .bb-badge-ready     { background: #dbeafe; color: #1d4ed8; }
 .bb-badge-canceled  { background: #fee2e2; color: #b91c1c; }
-.bb-badge-dosend    { background: #dbeafe; color: #1d4ed8; }
-.bb-badge-sent      { background: #dcfce7; color: #15803d; }
-.bb-badge-cancelled { background: #fee2e2; color: #b91c1c; }
 .bb-badge-pending   { background: #fef9c3; color: #854d0e; }
 .bb-badge-active    { background: #dcfce7; color: #15803d; }
 .bb-badge-error     { background: #fee2e2; color: #b91c1c; }

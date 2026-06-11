@@ -4,6 +4,7 @@ import time
 import os
 
 from app.firestore_client import get_firestore
+from smart_campaign_sender import send_campaign
 
 
 POLL_SECONDS = int(os.getenv("CAMPAIGN_WORKER_POLL_SECONDS", "15"))

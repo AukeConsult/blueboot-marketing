@@ -2,7 +2,7 @@
 
 ## Overview
 
-Blueboot CRM is an outreach pipeline system for discovering, qualifying, and contacting leads from the web. It has two parallel pipelines — a **legacy leads pipeline** and a **site leads pipeline** — that converge into a unified outreach contact list and campaign system.
+Blueboot CRM is an outreach pipeline system for discovering, qualifying, and contacting leads from the web. It uses lead discovery and site analysis pipelines that converge into a unified outreach contact list and campaign system.
 
 ---
 
@@ -129,6 +129,10 @@ A compact one-line summary: **N contacts · N sites · N countries · N active �
 ### Mail schedule and editor
 
 The **Mail schedule** section lists the outreach steps for the campaign, such as Intro, Reminder 1, and Reminder 2. Each step shows its day offset, subject, sent state, and quick action buttons.
+
+The campaign schedule is shared by all contacts, but each contact moves through it on its own clock. Every automatic send appends to that contact's `mail_sent` history. The next step is chosen from how many mails that specific contact has already received, and the day offset is counted from that contact's first sent mail.
+
+Example: if Follow-up 1 is Day 7, contacts that received Intro on different days will also receive Follow-up 1 on different days.
 
 - **Add step** — creates a new schedule step and opens the mail editor in the right-hand work column.
 - **Edit step** — opens the selected step in the right-hand mail editor. The contact list is hidden while you edit.

@@ -214,7 +214,7 @@ Both pipelines converge here. Each document represents one contactable person.
 | `website` | Company website |
 | `country` | Country |
 | `campaign` | Campaign tag (e.g. `NO_jun`) |
-| `status` | `pending` / `approved` / `rejected` / `sent` / `replied` / `bounced` / `unsubscribed` / `converted` |
+| `status` | `pending` / `active` / `excluded` |
 | `email_type` | `personal` / `role` / `department` / `admin` |
 | `outreach_priority` | 1 – 4 |
 | `mark_site_leads` | `true` if from site pipeline |
@@ -224,8 +224,7 @@ Both pipelines converge here. Each document represents one contactable person.
 **Contact status lifecycle:**
 
 ```
-pending → approved → sent → replied / bounced / unsubscribed / converted
-       ↘ rejected
+pending → active / excluded
 ```
 
 ---
@@ -295,6 +294,22 @@ Campaign documents can also be created directly via the API (`POST /api/crm/camp
 ### 4.4 Activation
 
 Campaigns move `draft` -> `ready` -> `active` -> `canceled`. The campaign is marked `ready` by the workspace, then becomes `active` when the first real outreach mail is sent and `sent_at` is timestamped. Active/canceled campaigns cannot be synced.
+
+### Campaign mail sequence timing
+
+The campaign document owns the reusable mail plan:
+
+- `mail_schedule` is edited by the campaign workspace.
+- `mail_sequence` is prepared for automatic sending from that schedule.
+- Each step includes a step identity, subject/body, and `delay_days`.
+
+Each campaign contact owns its own send history:
+
+- `campaigns/{campaign_id}/campaign_contacts/{doc_id}.mail_sent` is append-only.
+- A sent entry contains `mail_type`, `sent_at`, and `message_id`.
+- Automatic selection uses `len(mail_sent)` to pick the next `mail_sequence` step.
+
+Follow-up timing is per contact. `delay_days` is counted from that contact's first sent mail date, normally the Intro send, so contacts that enter the same campaign on different days advance through the same sequence independently.
 
 ---
 

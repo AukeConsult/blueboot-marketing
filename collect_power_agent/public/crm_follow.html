@@ -1157,7 +1157,7 @@ async function load() {
       messenger:          c.messenger          || '',
       status:             c.status             || 'pending',
       followup_date:      c.followup_date      || '',
-      followup_status:    normalizeFollowupStatus(c.followup_status),
+      followup_status:    currentFollowupStatus(c.followup_status),
       followup_comment:   c.followup_comment   || '',
       followup_importance: c.followup_importance || '',
       followup_owner:     c.followup_owner     || '',
@@ -1408,7 +1408,7 @@ function applyFilter() {
 
   if (_focusQueue) {
     list = _focusQueueSort(list.filter(r => {
-      const status = normalizeFollowupStatus(r.followup_status || '');
+      const status = currentFollowupStatus(r.followup_status || '');
       return r.followup_date
         && r.followup_date <= weekEnd
         && !['not_interested'].includes(status);
@@ -1457,17 +1457,9 @@ const FU_STATUSES = [
   { value: 'not_interested', label: 'Not-interested' }
 ];
 
-function normalizeFollowupStatus(value) {
+function currentFollowupStatus(value) {
   const st = String(value || '').trim().toLowerCase();
-  return ({
-    open: 'in_work',
-    send_mail: 'in_work',
-    waiting: 'in_work',
-    offer_sent: 'offer',
-    accepted: 'offer',
-    closed: 'not_interested',
-    'not-interested': 'not_interested'
-  }[st]) || st;
+  return FU_STATUSES.some(s => s.value === st) ? st : '';
 }
 
 const GROUP_FIELDS = {

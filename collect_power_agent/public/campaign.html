@@ -639,7 +639,7 @@ function contactStatus(s) {
 
 function campaignStatus(s) {
   const st = String(s || 'draft').toLowerCase();
-  return ({ dosend: 'ready', sent: 'active', cancelled: 'canceled' }[st]) || st;
+  return ['draft', 'ready', 'active', 'canceled'].includes(st) ? st : 'draft';
 }
 
 function campaignStatusLabel(s) {

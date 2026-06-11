@@ -5,10 +5,10 @@ render_mail(), sends via SMTP, and writes back via confirm_sent().
 Public entry point:
     send_outreach(mode="intro") -> dict
         mode "intro"    — contacts with status="pending"
-        mode "followup" — contacts with followup_status="Send mail"
+        mode "followup" — pending contacts with a due sequence step
 
 Rate limiting and the bounce-rate circuit-breaker are applied per sending account.
-The old send_campaign(campaign_id) is removed — use send_outreach() instead.
+Use send_outreach() for campaign outreach.
 """
 from __future__ import annotations
 
@@ -182,81 +182,6 @@ def _send_smtp(
 
 
 # ---------------------------------------------------------------------------
-# Backward-compatibility: auto-migrate old mail.subject / mail.body campaigns
-# ---------------------------------------------------------------------------
-
-def _backfill_mail_sequence(db) -> int:
-    """One-pass migration: build mail_sequence from whatever format the campaign uses.
-
-    Checks three sources in order of preference:
-      1. mail_schedule (current frontend format) -- array of step dicts, each with
-         a nested mail.subject / mail.body / mail.type and a step name
-      2. mail.subject + mail.body (legacy flat format)
-      3. Neither found: skip (campaign has no email content at all)
-
-    Idempotent -- campaigns that already have mail_sequence are never touched.
-    Returns the number of campaigns updated.
-    """
-    updated = 0
-    for doc in db.collection("campaigns").stream():
-        d = doc.to_dict() or {}
-        if d.get("mail_sequence"):
-            continue  # already migrated, skip
-
-        # ── Source 1: mail_schedule (current frontend format) ────────────────
-        # Structure: [{name, step_id, delay_days, mail: {subject, body, type}}, ...]
-        mail_schedule = d.get("mail_schedule") or []
-        if mail_schedule and isinstance(mail_schedule, list):
-            mail_sequence = []
-            for i, step in enumerate(mail_schedule):
-                step_mail = step.get("mail") or {}
-                subject   = step_mail.get("subject", "").strip()
-                body      = step_mail.get("body",    "").strip()
-                # Step name e.g. "Intro" -> "intro", "Follow-up 1" -> "followup_1"
-                step_name = (step.get("name") or "").strip().lower()
-                if i == 0 or "intro" in step_name:
-                    mail_type = "intro"
-                else:
-                    mail_type = f"followup_{i}"
-                # type=="plain" means plain text; anything else is HTML
-                is_plain = step_mail.get("type", "html") == "plain"
-                mail_sequence.append({
-                    "index":     i,
-                    "mail_type": mail_type,
-                    "subject":   subject,
-                    "body_html": "" if is_plain else body,
-                    "body_text": body if is_plain else "",
-                })
-            if mail_sequence:
-                doc.reference.update({"mail_sequence": mail_sequence})
-                print(f"[backfill] {doc.id!r}: built {len(mail_sequence)} step(s) "
-                      f"from mail_schedule")
-                updated += 1
-            continue  # done with this campaign regardless
-
-        # ── Source 2: legacy flat mail.subject / mail.body ───────────────────
-        mail_cfg = d.get("mail") or {}
-        subject  = mail_cfg.get("subject", "").strip()
-        body     = mail_cfg.get("body",    "").strip()
-        if subject or body:
-            doc.reference.update({
-                "mail_sequence": [{
-                    "index":     0,
-                    "mail_type": "intro",
-                    "subject":   subject,
-                    "body_html": body,
-                    "body_text": "",
-                }]
-            })
-            print(f"[backfill] {doc.id!r}: built 1 step from legacy mail.subject/body")
-            updated += 1
-
-    if updated:
-        print(f"[backfill] migrated {updated} campaign(s) to mail_sequence")
-    return updated
-
-
-# ---------------------------------------------------------------------------
 # Main send loop
 # ---------------------------------------------------------------------------
 
@@ -266,21 +191,20 @@ def send_outreach(mode: str = "intro") -> dict:
     Reads candidates from Firestore via read_outreach(mode), renders each mail
     via render_mail(), sends via SMTP, and records each success via confirm_sent().
 
-    mode "intro"    -- contacts with status="pending"; always uses mail_sequence[0]
-    mode "followup" -- contacts with followup_status="Send mail";
-                       uses mail_sequence[len(contact.mail_sent)]
+    mode "intro"    -- pending contacts with no sent mail; uses Intro step.
+    mode "followup" -- pending contacts with sent mail; uses next due sequence step.
 
     Returns a summary dict: {"mode", "sent", "failed", "skipped"}.
     """
     # Lazy imports -- outreach_mail_select and outreach_render_mail live at the
     # functions-smartmail/ root (parent of this smart_mail/ package).
-    from outreach_mail_select import read_outreach, confirm_sent  # noqa: PLC0415
+    from outreach_mail_select import read_outreach, confirm_sent, prepare_mail_sequences  # noqa: PLC0415
     from outreach_render_mail import render_mail, MailStep        # noqa: PLC0415
 
     db = get_firestore()
 
-    # Auto-migrate old campaigns that predate mail_sequence
-    _backfill_mail_sequence(db)
+    # Prepare current campaigns that have mail_schedule but no mail_sequence.
+    prepare_mail_sequences(db)
 
     summary: dict = {"mode": mode, "sent": 0, "failed": 0, "skipped": 0}
 
@@ -318,33 +242,12 @@ def send_outreach(mode: str = "intro") -> dict:
                     print(f"[sender] budget reached for {account.email}")
                     break
 
-                # Determine which step in the mail sequence to send.
-                # mail_sent lives in contact.extra (not a direct ContactRow attr)
-                # because _CONTACT_KNOWN in outreach_mail_select.py doesn't list it.
-                mail_sent   = (contact.extra or {}).get("mail_sent") or []
-                next_idx    = len(mail_sent)
-                in_reply_to = mail_sent[-1].get("message_id") if mail_sent else None
-
-                if next_idx >= len(campaign.mail_sequence):
-                    print(
-                        f"[sender] skip {contact.email} -- "
-                        f"sequence exhausted (idx={next_idx}, "
-                        f"seq_len={len(campaign.mail_sequence)})"
-                    )
-                    summary["skipped"] += 1
-                    continue
-
-                # Build a MailStep from the Firestore dict stored in mail_sequence
-                step_dict = campaign.mail_sequence[next_idx]
+                step_dict = contact.selected_step or {}
                 step = MailStep(
-                    index     = step_dict.get("index",     next_idx),
+                    index     = step_dict.get("index",     contact.next_mail_index),
                     mail_type = step_dict.get("mail_type", mode),
                     subject   = step_dict.get("subject",   ""),
-                    # "body_html" is the modern key; "body" is the legacy key
-                    body_html = (
-                        step_dict.get("body_html", "")
-                        or step_dict.get("body", "")
-                    ),
+                    body_html = step_dict.get("body_html", ""),
                     body_text = step_dict.get("body_text", ""),
                 )
 
@@ -358,7 +261,7 @@ def send_outreach(mode: str = "intro") -> dict:
                         subject        = rendered.subject,
                         text_body      = rendered.text_body,
                         html_body      = rendered.html_body,
-                        in_reply_to    = in_reply_to,
+                        in_reply_to    = contact.in_reply_to,
                         contact_doc_id = contact.contact_doc_id,
                     )
 

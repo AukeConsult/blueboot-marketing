@@ -10,17 +10,7 @@ bp = Blueprint("contacts", __name__)
 
 _FOLLOWUP_FIELDS = {"followup_date", "followup_status", "followup_comment", "followup_importance", "followup_owner"}
 _CONTACT_STATUSES = {"pending", "active", "excluded"}
-_LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
 _FOLLOWUP_STATUSES = {"", "in_work", "contacted", "replied", "meeting", "offer", "not_interested"}
-_LEGACY_FOLLOWUP_STATUSES = {
-    "open": "in_work",
-    "send_mail": "in_work",
-    "waiting": "in_work",
-    "offer_sent": "offer",
-    "accepted": "offer",
-    "closed": "not_interested",
-    "not-interested": "not_interested",
-}
 
 _FOLLOWUP_HISTORY_TYPE = {
     "followup_status":     "STATUS",
@@ -47,7 +37,6 @@ def _followup_history_text(field: str, value: str) -> str:
 
 def _followup_status(value, *, strict: bool = False) -> str:
     status = str(value or "").strip().lower()
-    status = _LEGACY_FOLLOWUP_STATUSES.get(status, status)
     if status not in _FOLLOWUP_STATUSES:
         if strict:
             raise ValueError("Invalid follow-up status. Must be one of: in_work, contacted, replied, meeting, offer, not_interested.")
@@ -71,8 +60,6 @@ def _contact_status(value) -> str:
     status = str(value or "pending").strip().lower()
     if status in _CONTACT_STATUSES:
         return status
-    if status in _LEGACY_ACTIVE_STATUSES:
-        return "active"
     return "pending"
 
 
@@ -221,11 +208,6 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
             return _err(f"No mail account found for '{outreach_email}'.", 400)
 
         campaign_status = str(camp.get("status") or "draft").strip().lower()
-        campaign_status = {
-            "dosend": "ready",
-            "sent": "active",
-            "cancelled": "canceled",
-        }.get(campaign_status, campaign_status)
         if campaign_status not in {"ready", "active"}:
             return _err(
                 f"Campaign status is '{campaign_status}' — mark it ready before sending mail.",

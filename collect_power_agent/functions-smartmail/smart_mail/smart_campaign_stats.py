@@ -10,33 +10,41 @@ def refresh_campaign_stats(campaign_id: str):
     contacts = list(db.collection("campaigns").document(campaign_id).collection("campaign_contacts").stream())
     total = len(contacts)
 
-    sent = 0
-    failed = 0
+    active = 0
     pending = 0
-    sending = 0
+    excluded = 0
+    contacted = 0
     replied = 0
 
     for doc in contacts:
-        status = (doc.to_dict().get("status"))
+        data = doc.to_dict() or {}
+        status = data.get("status") or "pending"
+        followup_status = data.get("followup_status") or ""
 
-        if status == "sent":
-            sent += 1
-        elif status == "failed":
-            failed += 1
-        elif status == "sending":
-            sending += 1
-        elif status == "replied":
-            replied += 1
+        if status == "active":
+            active += 1
+        elif status == "excluded":
+            excluded += 1
         else:
             pending += 1
+
+        if followup_status == "contacted":
+            contacted += 1
+        elif followup_status == "replied":
+            replied += 1
 
     db.collection("campaigns").document(campaign_id).update(
         {
             "contact_count": total,
-            "sent_count": sent,
-            "failed_count": failed,
+            "active_count": active,
             "pending_count": pending,
-            "sending_count": sending,
+            "excluded_count": excluded,
+            "contacted_count": contacted,
             "reply_count": replied,
+            "status_breakdown": {
+                "pending": pending,
+                "active": active,
+                "excluded": excluded,
+            },
         }
     )

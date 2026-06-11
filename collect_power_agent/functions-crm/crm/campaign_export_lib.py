@@ -43,19 +43,16 @@ CONTACT_COLUMNS = [
     ("Comment",              "followup_comment"),
 ]
 
-# Dropdown values for the new follow-up columns.
-FOLLOWUP_STATUS_VALUES     = ["open", "contacted", "replied", "meeting", "closed", "not_interested"]
+# Dropdown values for the follow-up columns.
+FOLLOWUP_STATUS_VALUES     = ["", "in_work", "contacted", "replied", "meeting", "offer", "not_interested"]
 FOLLOWUP_IMPORTANCE_VALUES = ["low", "medium", "high"]
 CONTACT_STATUSES = {"pending", "active", "excluded"}
-LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
 
 
 def _contact_status(value) -> str:
     status = str(value or "pending").strip().lower()
     if status in CONTACT_STATUSES:
         return status
-    if status in LEGACY_ACTIVE_STATUSES:
-        return "active"
     return "pending"
 
 
@@ -220,4 +217,3 @@ def run_campaign_export(db, svc, gd, campaign_id: str) -> dict:
         "by_status":    dict(status_counts),
         "url":          f"https://docs.google.com/spreadsheets/d/{sheet_id}",
     }
-

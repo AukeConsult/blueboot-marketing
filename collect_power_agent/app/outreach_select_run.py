@@ -62,11 +62,11 @@ def _print_batch(batch, campaign_filter, verbose) -> int:
         if verbose:
             print("    subject : %r" % cwc.campaign.subject_template)
         for c in contacts:
-            mail_sent_count = len(getattr(c, "mail_sent", []))
-            next_idx = getattr(c, "next_mail_index", mail_sent_count)
-            in_reply_to = getattr(c, "in_reply_to", None)
+            mail_sent_count = len(c.mail_sent or [])
+            selected_idx = c.next_mail_index
+            in_reply_to = c.in_reply_to
             line = "    %-35s  %-25s  %-4s  sent=%d  next_idx=%d" % (
-                c.email, c.company, c.country, mail_sent_count, next_idx,
+                c.email, c.company, c.country, mail_sent_count, selected_idx,
             )
             if in_reply_to:
                 line += "  reply_to=<...%s>" % in_reply_to[-12:]
@@ -96,7 +96,7 @@ def main(argv=None) -> None:
         "--mode", "-m",
         choices=["intro", "followup"],
         default="intro",
-        help="intro = pending contacts (default); followup = followup_status=='Send mail'",
+        help="intro = pending contacts with no sent mail; followup = pending contacts with a due sequence step",
     )
     p.add_argument(
         "--campaign", "-c",

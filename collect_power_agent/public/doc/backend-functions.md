@@ -101,7 +101,7 @@ python app/site_smart_export.py --countries NO --write-contacts --campaign NO_ju
 
 ### `lead_agent.py` — Agency/reseller discovery
 
-Discovers web agencies and digital resellers via **two channels**: Bing search queries AND paginated scraping of agency catalog services (Sortlist, DesignRush, Proff, DAN, TopDevelopers, and country-specific directories). Catalog sources are configured per country in `config/catalogs.json`. The primary intake for the legacy lead pipeline.
+Discovers web agencies and digital resellers via **two channels**: Bing search queries AND paginated scraping of agency catalog services (Sortlist, DesignRush, Proff, DAN, TopDevelopers, and country-specific directories). Catalog sources are configured per country in `config/catalogs.json`. The primary intake for the lead pipeline.
 
 ```bash
 python app/lead_agent.py --countries NO

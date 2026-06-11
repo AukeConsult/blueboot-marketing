@@ -49,25 +49,18 @@ _FIELD_TO_HEADER: dict[str, str] = {v: k for k, v in _HEADER_TO_FIELD.items()}
 # Fields that are always DB-controlled — sheet values are never written back.
 DB_CONTROLLED = {"status", "sent_at"}
 CONTACT_STATUSES = {"pending", "active", "excluded"}
-LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
 
 
 def _contact_status(value) -> str:
     status = str(value or "pending").strip().lower()
     if status in CONTACT_STATUSES:
         return status
-    if status in LEGACY_ACTIVE_STATUSES:
-        return "active"
     return "pending"
 
 
 def _campaign_status(value) -> str:
     status = str(value or "draft").strip().lower()
-    return {
-        "dosend": "ready",
-        "sent": "active",
-        "cancelled": "canceled",
-    }.get(status, status)
+    return status
 
 
 def _header_to_field(label: str) -> str:

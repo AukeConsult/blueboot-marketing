@@ -12,7 +12,6 @@ from email.mime.text import MIMEText
 from email.utils import make_msgid
 from datetime import datetime, timezone
 
-from .firestore_client import get_firestore
 from .mail_accounts_config import get_account, smtp_uses_ssl
 
 
@@ -78,7 +77,7 @@ def send_email(
     campaign_id: str | None = None,
     contact_doc_id: str | None = None,
 ):
-    """Send an email via SMTP and record it in outreach_sent. See app/mail_sender.py for full notes."""
+    """Send an email via SMTP. Outreach writeback is handled by confirm_sent()."""
     acc = get_account(account)
 
     username = acc["user"]
@@ -113,22 +112,7 @@ def send_email(
         except Exception:
             pass
 
-    db = get_firestore()
     sent_at = datetime.now(timezone.utc).isoformat()
-
-    db.collection("outreach_sent").add({
-        "to_email": to_email,
-        "subject": subject,
-        "text_body": text_body,
-        "html_body": html_body,
-        "campaign_id": campaign_id,
-        "sender_account": acc["alias"],
-        "contact_doc_id": contact_doc_id,
-        "list_unsubscribe": list_unsubscribe,
-        "sent_at": sent_at,
-        "message_id": message_id,
-        "status": "sent",
-    })
 
     print(f"Email sent to {to_email} via {acc['alias']} ({acc['host']}:{acc['port']})")
 

@@ -17,8 +17,8 @@ Use this skill for the campaign workspace frontend and its docs.
 | File | Purpose |
 |---|---|
 | `public/campaign.html` | Main full-viewport campaign workspace |
-| `public/campaigns.html` | Compatibility redirect to `campaign.html` |
-| `public/campaign-edit.html` | Legacy direct mail editor route |
+| `public/campaigns.html` | Campaign list entry that opens `campaign.html` |
+| `public/campaign-edit.html` | Direct mail editor route |
 | `public/js/mail-editor-component.js` | Reusable mail editor component |
 | `public/doc/user-guide.md` | Main user documentation |
 | `public/doc/filter-to-campaign.md` | Step-by-step campaign creation guide |
@@ -48,6 +48,16 @@ Use this skill for the campaign workspace frontend and its docs.
   - schedule step: `{ mail_schedule_step: { step_id, name, delay_days, mail } }`
 - For the campaign workspace right-column editor, instantiate with `showMainButton: false`.
 - Keep test mail routed through the existing campaign test modal by listening for the `mail-editor:test` event.
+
+## Mail schedule rules
+
+- The campaign owns the reusable schedule/template sequence in `mail_schedule`.
+- Each schedule step has `step_id`, `name`, `delay_days`, and `mail`.
+- Automatic sending converts campaign `mail_schedule` to `mail_sequence` in `functions-smartmail/outreach_mail_select.py`.
+- Contacts do not store their own copy of the schedule. They store `mail_sent`.
+- The next automatic mail for a contact is selected by `len(contact.mail_sent)`.
+- Follow-up delays are counted from that contact's first sent mail date, normally Intro, not from the campaign creation date and not from the previous follow-up.
+- Example: if Follow-up 1 has `delay_days = 7`, a contact whose Intro was sent June 1 is due June 8; a contact whose Intro was sent June 5 is due June 12.
 
 ## Contact status rules
 

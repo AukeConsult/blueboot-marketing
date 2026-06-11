@@ -17,15 +17,12 @@ from crm.sheets_config import CONTACT_SHEET_ID, CONTACT_TAB, CRM_COLLECTION, CRM
 
 CAMPAIGNS_COLLECTION = "campaigns"
 CONTACT_STATUSES = {"pending", "active", "excluded"}
-LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
 
 
 def _contact_status(value) -> str:
     status = str(value or "pending").strip().lower()
     if status in CONTACT_STATUSES:
         return status
-    if status in LEGACY_ACTIVE_STATUSES:
-        return "active"
     return "pending"
 
 

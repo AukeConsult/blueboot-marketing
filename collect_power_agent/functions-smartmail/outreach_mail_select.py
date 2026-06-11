@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +94,10 @@ class ContactRow:
     domain:         str
     country:        str
     status:         str
+    mail_sent:      list  = field(default_factory=list)
+    next_mail_index: int  = 0
+    in_reply_to:    str | None = None
+    selected_step:  dict | None = None
     extra:          dict = field(default_factory=dict)
 
 
@@ -103,7 +107,7 @@ class ContactRow:
 
 @dataclass
 class CampaignWithContacts:
-    """One campaign and all its pending contacts, ready to send."""
+    """One campaign and all contacts selected for the next send."""
     campaign: CampaignMail
     contacts: list[ContactRow]
 
@@ -141,7 +145,7 @@ class SentConfirmation:
 
 _CONTACT_KNOWN = {
     "email", "contact_name", "company", "domain", "country",
-    "status", "created_at", "sent_at", "message_id", "sender_account",
+    "status", "followup_status", "mail_sent", "created_at", "sent_at", "message_id", "sender_account",
 }
 
 _CAMPAIGN_KNOWN = {
@@ -213,6 +217,120 @@ def _load_campaign(db, campaign_id: str) -> CampaignMail | None:
     )
 
 
+def _campaign_status(value) -> str:
+    status = str(value or "draft").strip().lower()
+    return status
+
+
+def _parse_dt(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _next_step_due(contact: ContactRow, campaign: CampaignMail, now: datetime) -> bool:
+    mail_sent = contact.mail_sent or []
+    next_idx = len(mail_sent)
+    if next_idx >= len(campaign.mail_sequence):
+        return False
+
+    step = campaign.mail_sequence[next_idx] or {}
+    if "delay_days" not in step:
+        return False
+    delay_days = int(step.get("delay_days") or 0)
+    first_sent_at = _parse_dt((mail_sent[0] or {}).get("sent_at"))
+    if not first_sent_at:
+        return True
+    if first_sent_at.tzinfo is None:
+        first_sent_at = first_sent_at.replace(tzinfo=timezone.utc)
+    return now >= first_sent_at + timedelta(days=delay_days)
+
+
+def _attach_selected_step(contact: ContactRow, campaign: CampaignMail) -> bool:
+    mail_sent = contact.mail_sent or []
+    next_idx = len(mail_sent)
+    if next_idx >= len(campaign.mail_sequence):
+        return False
+    contact.next_mail_index = next_idx
+    contact.in_reply_to = mail_sent[-1].get("message_id") if mail_sent else None
+    contact.selected_step = campaign.mail_sequence[next_idx] or {}
+    return True
+
+
+def _is_intro_step(step: dict) -> bool:
+    marker = " ".join(
+        str(step.get(k) or "")
+        for k in ("mail_type", "name", "step_name", "step_id")
+    ).strip().lower()
+    return "intro" in marker
+
+
+def _prepare_mail_sequence(seq: list) -> list:
+    if not isinstance(seq, list):
+        return []
+    intro_idx = next((i for i, step in enumerate(seq) if _is_intro_step(step or {})), None)
+    if intro_idx is None:
+        return []
+    intro = seq[intro_idx]
+    rest = [step for i, step in enumerate(seq) if i != intro_idx]
+    return [intro] + rest
+
+
+def _log_campaign_skip(db, campaign_id: str, text: str) -> None:
+    try:
+        from google.cloud.firestore_v1 import ArrayUnion
+        now = datetime.now(timezone.utc).isoformat()
+        db.collection("campaigns").document(campaign_id).update({
+            "outreach_log": ArrayUnion([{
+                "date": now,
+                "type": "OUTREACH_SKIP",
+                "text": text,
+            }]),
+            "updated_at": now,
+        })
+    except Exception as exc:
+        print(f"[outreach_mail_select] skip-log failed for {campaign_id}: {exc}")
+
+
+def prepare_mail_sequences(db=None) -> int:
+    """Build mail_sequence from the current mail_schedule format when needed."""
+    db = db or _get_db()
+    updated = 0
+    for doc in db.collection("campaigns").stream():
+        d = doc.to_dict() or {}
+        if d.get("mail_sequence"):
+            continue
+
+        mail_schedule = d.get("mail_schedule") or []
+        if mail_schedule and isinstance(mail_schedule, list):
+            mail_sequence = []
+            for i, step in enumerate(mail_schedule):
+                step_mail = step.get("mail") or {}
+                subject   = step_mail.get("subject", "").strip()
+                body      = step_mail.get("body",    "").strip()
+                step_name = (step.get("name") or "").strip().lower()
+                mail_type = "intro" if i == 0 or "intro" in step_name else f"followup_{i}"
+                is_plain = step_mail.get("type", "html") == "plain"
+                mail_sequence.append({
+                    "index":      i,
+                    "mail_type":  mail_type,
+                    "delay_days": int(step.get("delay_days") or 0),
+                    "subject":    subject,
+                    "body_html":  "" if is_plain else body,
+                    "body_text":  body if is_plain else "",
+                })
+            if mail_sequence:
+                doc.reference.update({"mail_sequence": mail_sequence})
+                print(f"[prepare-mail-sequence] {doc.id!r}: built {len(mail_sequence)} step(s) from mail_schedule")
+                updated += 1
+    return updated
+
+
 # ---------------------------------------------------------------------------
 # read_outreach
 # ---------------------------------------------------------------------------
@@ -227,8 +345,8 @@ def read_outreach(
 
       "intro"    — contacts where status == "pending"
                    (first-ever mail, always mail_sequence[0])
-      "followup" — contacts where followup_status == "Send mail"
-                   (next step = mail_sequence[len(contact.mail_sent)])
+      "followup" — pending contacts that already received at least one mail
+                   (next due step = mail_sequence[len(contact.mail_sent)])
 
     Queries the campaign_contacts collectionGroup in one round-trip, groups
     contacts by campaign, resolves each campaign's mail template and sending
@@ -267,10 +385,7 @@ def read_outreach(
     # Step 1: collectionGroup query — filter depends on mode
     from google.cloud.firestore_v1.base_query import FieldFilter
     col_group = db.collection_group("campaign_contacts")
-    if mode == "followup":
-        query = col_group.where(filter=FieldFilter("followup_status", "==", "Send mail"))
-    else:
-        query = col_group.where(filter=FieldFilter("status", "==", "pending"))
+    query = col_group.where(filter=FieldFilter("status", "==", "pending"))
 
     # Group contacts by campaign_id (extracted from the Firestore path:
     # campaigns/{campaign_id}/campaign_contacts/{doc_id})
@@ -280,6 +395,16 @@ def read_outreach(
         if total >= limit:
             break
         d           = doc.to_dict() or {}
+        contact_status = str(d.get("status", "")).strip().lower()
+        mail_sent = d.get("mail_sent") or []
+        if not isinstance(mail_sent, list):
+            mail_sent = []
+        if contact_status != "pending":
+            continue
+        if mode == "followup" and not mail_sent:
+            continue
+        if mode != "followup" and mail_sent:
+            continue
         campaign_id = doc.reference.parent.parent.id
         by_campaign[campaign_id].append(ContactRow(
             contact_doc_id = doc.id,
@@ -289,7 +414,8 @@ def read_outreach(
             company        = d.get("company", ""),
             domain         = d.get("domain", ""),
             country        = d.get("country", ""),
-            status         = d.get("status", ""),
+            status         = contact_status,
+            mail_sent      = mail_sent,
             extra          = {k: v for k, v in d.items() if k not in _CONTACT_KNOWN},
         ))
         total += 1
@@ -308,11 +434,33 @@ def read_outreach(
             print(f"[outreach_mail_select] campaign '{campaign_id}' not found -- skipping")
             continue
 
-        if not campaign.mail_sequence:
+        campaign.status = _campaign_status(campaign.status)
+        required_status = "active" if mode == "followup" else "ready"
+        if campaign.status != required_status:
             print(
-                f"[outreach_mail_select] campaign '{campaign_id}' has no mail_sequence defined"
-                f" -- skipping (add mail_sequence array to the campaign doc)"
+                f"[outreach_mail_select] {mode} send requires campaign status "
+                f"{required_status!r}; campaign '{campaign_id}' is "
+                f"{campaign.status!r} -- skipping"
             )
+            continue
+
+        campaign.mail_sequence = _prepare_mail_sequence(campaign.mail_sequence)
+        if not campaign.mail_sequence:
+            _log_campaign_skip(db, campaign_id, "Automatic outreach skipped: campaign has no Intro mail step.")
+            print(
+                f"[outreach_mail_select] campaign '{campaign_id}' has no Intro "
+                f"mail step -- skipping"
+            )
+            continue
+
+        if mode == "followup":
+            now = datetime.now(timezone.utc)
+            contacts = [c for c in contacts if _next_step_due(c, campaign, now)]
+            if not contacts:
+                continue
+
+        contacts = [c for c in contacts if _attach_selected_step(c, campaign)]
+        if not contacts:
             continue
 
         sender_email = campaign.sender_email
@@ -359,8 +507,8 @@ def confirm_sent(
     Writes atomically to campaign_contacts in one .update() call:
       1. mail_sent        → ArrayUnion({mail_type, sent_at, message_id})
       2. comment_history  → ArrayUnion({date, user, text, type="MAIL_SENT"})
-      3. status stamp     → mode "intro"    sets status="contacted"
-                            mode "followup" sets followup_status="contacted"
+      3. status stamp     → keeps status="pending" and sets
+                            followup_status="contacted"
 
     Also appends a log doc to outreach_sent (deduplicated by message_id).
 
@@ -374,6 +522,14 @@ def confirm_sent(
     if not message_id:
         message_id = make_msgid()
     db = _get_db()
+    contact_ref = (
+        db.collection("campaigns")
+        .document(campaign_id)
+        .collection("campaign_contacts")
+        .document(contact_doc_id)
+    )
+    contact_doc = contact_ref.get()
+    contact_data = contact_doc.to_dict() if contact_doc.exists else {}
 
     # --- build the single update dict ---
     update: dict = {
@@ -393,19 +549,23 @@ def confirm_sent(
     }
 
     # status stamp — which field depends on mode
-    if mode == "followup":
-        update["followup_status"] = "contacted"
-    else:
-        update["status"] = "contacted"
+    update["status"] = "pending"
+    update["followup_status"] = "contacted"
+    update["new_mail"] = False
 
     # 1 - write contact row
-    (
-        db.collection("campaigns")
-        .document(campaign_id)
-        .collection("campaign_contacts")
-        .document(contact_doc_id)
-        .update(update)
-    )
+    contact_ref.update(update)
+
+    camp_ref = db.collection("campaigns").document(campaign_id)
+    camp_doc = camp_ref.get()
+    if camp_doc.exists:
+        camp = camp_doc.to_dict() or {}
+        if _campaign_status(camp.get("status")) == "ready":
+            camp_ref.update({
+                "status": "active",
+                "sent_at": camp.get("sent_at") or confirmed_at,
+                "updated_at": confirmed_at,
+            })
 
     # 2 - append to outreach_sent (skip if duplicate message_id)
     existing = (
@@ -418,6 +578,7 @@ def confirm_sent(
         db.collection("outreach_sent").add({
             "campaign_id":    campaign_id,
             "contact_doc_id": contact_doc_id,
+            "to_email":       (contact_data or {}).get("email", ""),
             "sender_account": sender_account,
             "message_id":     message_id,
             "mail_type":      mail_type,
@@ -446,4 +607,5 @@ __all__ = [
     "SentConfirmation",
     "read_outreach",
     "confirm_sent",
+    "prepare_mail_sequences",
 ]

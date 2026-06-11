@@ -613,7 +613,7 @@ async def _enrich(
     ai_resolved   = 0
     ec_resolved   = 0   # names copied from email_contacts
     skipped       = 0
-    ambiguous_batch: list[dict] = []
+    enrichment_batch: list[dict] = []
 
     # Build writes list from rule-based pass
     writes: list[tuple] = []  # (doc_ref, name)
@@ -674,17 +674,17 @@ async def _enrich(
             c["rule_name"] = name   # store as hint for AI, not written directly
         ai_batch.append(c)
 
-    ambiguous_batch = ai_batch   # keep variable name for Bing step compatibility
+    enrichment_batch = ai_batch
 
     # Bing search pass — enrich ALL contacts with web snippets before AI
-    if ambiguous_batch and not skip_ai:
+    if enrichment_batch and not skip_ai:
         import aiohttp
-        print(f"  [name-enrich] Bing-searching {len(ambiguous_batch)} ambiguous emails…", flush=True)
+        print(f"  [name-enrich] Bing-searching {len(enrichment_batch)} ambiguous emails…", flush=True)
         bing_found = 0
-        total_bing = len(ambiguous_batch)
+        total_bing = len(enrichment_batch)
         connector = aiohttp.TCPConnector(limit=3, ssl=False)
         async with aiohttp.ClientSession(connector=connector) as session:
-            for idx, c in enumerate(ambiguous_batch, 1):
+            for idx, c in enumerate(enrichment_batch, 1):
                 print(f"  [bing] [{idx:>4}/{total_bing}] {c['email']}", flush=True)
                 await asyncio.sleep(0.8)   # gentle rate limit
                 found = await _bing_search_name(session, c["email"], c.get("domain", ""))
@@ -704,8 +704,8 @@ async def _enrich(
         print(f"  [name-enrich] Bing found snippets for {bing_found}/{total_bing}", flush=True)
 
     # AI pass for ambiguous contacts
-    if ambiguous_batch and not skip_ai:
-        print(f"  [name-enrich] Sending {len(ambiguous_batch)} ambiguous emails to AI in batches of {batch_size}…",
+    if enrichment_batch and not skip_ai:
+        print(f"  [name-enrich] Sending {len(enrichment_batch)} ambiguous emails to AI in batches of {batch_size}…",
               flush=True)
         # Load key from config (which reads .env)
         import os as _os
@@ -726,8 +726,8 @@ async def _enrich(
                 print("  [name-enrich] openai package not installed", flush=True)
 
             if client:
-                for i in range(0, len(ambiguous_batch), batch_size):
-                    chunk = ambiguous_batch[i:i + batch_size]
+                for i in range(0, len(enrichment_batch), batch_size):
+                    chunk = enrichment_batch[i:i + batch_size]
                     results = await _ai_resolve_batch(client, _model, chunk, _debug=debug)
                     for c in chunk:
                         if c["doc_id"] in results:
@@ -750,9 +750,9 @@ async def _enrich(
                             # worse than no name.
                             skipped += 1
             else:
-                skipped += len(ambiguous_batch)
+                skipped += len(enrichment_batch)
     else:
-        for c in ambiguous_batch:
+        for c in enrichment_batch:
             if c.get("rule_name"):
                 writes.append((c, c["rule_name"], "rule"))
                 rule_resolved += 1
@@ -913,5 +913,4 @@ def enrich_email_list(
         skip_ec_lookup=False,
         propagate_to_campaigns=True,   # sync campaign_contacts across all campaigns
     ))
-
 

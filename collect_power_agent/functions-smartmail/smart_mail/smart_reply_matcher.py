@@ -83,7 +83,9 @@ def _apply_reply(db, outreach: dict, message: dict, matched_via: str):
     snippet = (message.get("body_text") or "")[:2000]
 
     reply_payload = {
-        "status": "replied",
+        "status": "active",
+        "followup_status": "replied",
+        "new_mail": True,
         "replied_at": received_at,
         "reply_snippet": snippet,
         "reply_subject": message.get("subject"),

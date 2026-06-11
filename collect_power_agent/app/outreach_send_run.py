@@ -1,9 +1,8 @@
 # app/outreach_send_run.py
 """Dry-run the outreach SEND loop -- renders each mail without sending anything.
 
-One step beyond outreach_select_run.py: resolves the exact mail-sequence step
-each contact would receive (based on their mail_sent history), renders subject
-and body via render_mail(), checks SMTP password availability, and shows the
+One step beyond outreach_select_run.py: renders the exact mail-sequence step
+selected by read_outreach(), checks SMTP password availability, and shows the
 send budget per account -- without sending a single email or writing to Firestore.
 
 Usage examples
@@ -96,14 +95,13 @@ def _render_contact(step, contact, show_preview: bool) -> None:
 # ---------------------------------------------------------------------------
 
 def _run(args) -> None:
-    from outreach_mail_select import read_outreach
+    from outreach_mail_select import read_outreach, prepare_mail_sequences
     from outreach_render_mail import MailStep
-    from smart_mail.smart_campaign_sender import compute_send_budget, _backfill_mail_sequence
+    from smart_mail.smart_campaign_sender import compute_send_budget
 
     db = _get_db()
 
-    # Migrate old mail.subject/body campaigns so they appear in read_outreach()
-    _backfill_mail_sequence(db)
+    prepare_mail_sequences(db)
 
     print("[dry-run] read_outreach  mode=%s  limit=%d" % (args.mode, args.limit))
     if args.campaign:
@@ -162,26 +160,12 @@ def _run(args) -> None:
             )
 
             for contact in cwc.contacts:
-                mail_sent = (contact.extra or {}).get("mail_sent") or []
-                next_idx  = len(mail_sent)
-
-                if next_idx >= len(campaign.mail_sequence):
-                    print(
-                        "    %-35s  [SKIP -- sequence exhausted idx=%d]"
-                        % (contact.email, next_idx)
-                    )
-                    total_would_skip += 1
-                    continue
-
-                step_dict = campaign.mail_sequence[next_idx]
+                step_dict = contact.selected_step or {}
                 step = MailStep(
-                    index     = step_dict.get("index",     next_idx),
+                    index     = step_dict.get("index",     contact.next_mail_index),
                     mail_type = step_dict.get("mail_type", args.mode),
                     subject   = step_dict.get("subject",   ""),
-                    body_html = (
-                        step_dict.get("body_html", "")
-                        or step_dict.get("body", "")
-                    ),
+                    body_html = step_dict.get("body_html", ""),
                     body_text = step_dict.get("body_text", ""),
                 )
 
@@ -222,7 +206,7 @@ def main(argv=None) -> None:
         "--mode", "-m",
         choices=["intro", "followup"],
         default="intro",
-        help="intro = pending contacts (default); followup = followup_status=='Send mail'",
+        help="intro = pending contacts with no sent mail; followup = pending contacts with a due sequence step",
     )
     p.add_argument(
         "--campaign", "-c",

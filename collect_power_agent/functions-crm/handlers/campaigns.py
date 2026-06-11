@@ -11,27 +11,18 @@ from handlers.shared import (
 bp = Blueprint("campaigns", __name__)
 
 _CONTACT_STATUSES = {"pending", "active", "excluded"}
-_LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
 _CAMPAIGN_STATUSES = {"draft", "ready", "active", "canceled"}
-_LEGACY_CAMPAIGN_STATUSES = {
-    "dosend": "ready",
-    "sent": "active",
-    "cancelled": "canceled",
-}
 
 
 def _contact_status(value) -> str:
     status = str(value or "pending").strip().lower()
     if status in _CONTACT_STATUSES:
         return status
-    if status in _LEGACY_ACTIVE_STATUSES:
-        return "active"
     return "pending"
 
 
 def _campaign_status(value) -> str:
     status = str(value or "draft").strip().lower()
-    status = _LEGACY_CAMPAIGN_STATUSES.get(status, status)
     return status if status in _CAMPAIGN_STATUSES else "draft"
 
 
@@ -135,10 +126,9 @@ def update_campaign(campaign_id):
 
         if "status" in body:
             raw_status = str(body["status"] or "").strip().lower()
-            if raw_status not in _CAMPAIGN_STATUSES and raw_status not in _LEGACY_CAMPAIGN_STATUSES:
+            if raw_status not in _CAMPAIGN_STATUSES:
                 return _err(f"Invalid status. Must be one of: {', '.join(sorted(_CAMPAIGN_STATUSES))}", 400)
             requested_status = _campaign_status(body["status"])
-            valid = _CAMPAIGN_STATUSES
             current_status = _campaign_status((doc.to_dict() or {}).get("status", "draft"))
             allowed_next = {
                 "draft":    {"ready", "canceled"},

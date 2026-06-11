@@ -11,7 +11,7 @@ description: >
   library into a send loop in smart_campaign_sender.py. Also use when the user asks
   how outreach candidates are selected by mode, how the next mail step in a sequence
   is resolved per contact, how sent history is written back with ArrayUnion, or how
-  confirm_sent clears the "Send mail" followup trigger.
+  confirm_sent records sent mail while the contact remains pending for automation.
 ---
 
 # outreach-mail-select
@@ -33,8 +33,8 @@ account, and returns a three-level account-first structure.
 
 | mode | filter | mail template |
 |------|--------|---------------|
-| `"intro"` | `status == "pending"` | `mail_sequence[0]` (always the intro step) |
-| `"followup"` | `followup_status == "Send mail"` | `mail_sequence[next_mail_index]` where `next_mail_index = len(contact.mail_sent)` |
+| `"intro"` | `status == "pending"` and no sent mail | Intro step |
+| `"followup"` | `status == "pending"`, sent mail exists, campaign is active, and the next step is due | `mail_sequence[next_mail_index]` where `next_mail_index = len(contact.mail_sent)` |
 
 **Return shape:**
 
@@ -95,8 +95,9 @@ Deduplicated by `message_id` — safe to call on retry.
 **Writes to `campaign_contacts/{contact_doc_id}`** (single `.update()` call):
 - `mail_sent` → `ArrayUnion({mail_type, sent_at, message_id})`
 - `comment_history` → `ArrayUnion({date, user=sender_account, text="Mail sent: <mail_type> <message_id>", type="MAIL_SENT"})` — visible in CRM dashboard
-- Mode `"intro"`: also sets `status = "contacted"`
-- Mode `"followup"`: also sets `followup_status = "contacted"` (clears "Send mail" trigger)
+- Keeps `status = "pending"` so automatic outreach can continue through the sequence.
+- Sets `followup_status = "contacted"` and clears `new_mail`.
+- If the campaign is `ready`, marks it `active` after the first sent mail.
 
 **Appends to `outreach_sent`** (skipped if `message_id` already present):
 - `campaign_id`, `contact_doc_id`, `sender_account`, `message_id`, `mail_type`, `sent_at`, `status="sent"`
@@ -181,7 +182,7 @@ From `campaign_contacts` collectionGroup.
 | `domain` | str | |
 | `country` | str | |
 | `status` | str | |
-| `followup_status` | str | `"Send mail"` triggers followup mode selection |
+| `followup_status` | str | current follow-up state, such as `contacted` or `replied` |
 | `mail_sent` | list[MailSentEntry] | sent history, append-only |
 | `next_mail_index` | int | `= len(mail_sent)`; index into `campaign.mail_sequence` |
 | `in_reply_to` | str \| None | `mail_sent[-1].message_id` or None; set as SMTP In-Reply-To |
@@ -200,11 +201,46 @@ The next mail step is always `campaign.mail_sequence[contact.next_mail_index]`.
 
 ---
 
+## Schedule ownership rule
+
+The campaign owns the reusable mail plan. The contact owns its own send clock.
+
+Campaign document:
+
+- `mail_schedule` is edited in the campaign workspace.
+- `prepare_mail_sequences()` converts `mail_schedule` into `mail_sequence` for automatic sending.
+- Each step carries `delay_days`, subject/body, and a step identity such as `intro` or `followup_1`.
+
+Campaign contact document:
+
+- `mail_sent` is the append-only history of what this contact has already received.
+- `confirm_sent()` appends `{mail_type, sent_at, message_id}` to `mail_sent`.
+- `read_outreach()` uses `len(contact.mail_sent)` to choose the next campaign sequence step.
+
+Delay rule:
+
+- Follow-up due dates are calculated per contact from the first sent mail date, normally the Intro send.
+- `_next_step_due()` reads `mail_sent[0].sent_at` and checks `first_sent_at + step.delay_days`.
+- This lets contacts enter the same campaign on different days and still follow the same campaign schedule independently.
+
+Example:
+
+```
+Campaign step: Follow-up 1, delay_days = 7
+
+Contact A Intro sent June 1 -> Follow-up 1 due June 8
+Contact B Intro sent June 5 -> Follow-up 1 due June 12
+```
+
+Do not store per-contact copies of the whole campaign schedule unless there is a future explicit need to fork a contact into a different sequence. The current contract is: campaign sequence plus contact `mail_sent` history.
+
+---
+
 ## Firestore paths
 
 ```
 campaigns/{campaign_id}                             ← CampaignMail + mail_sequence source
-campaigns/{campaign_id}/campaign_contacts/{doc_id}  ← ContactRow source + confirm_sent target
+campaigns/{campaign_id}/campaign_contacts/{doc_id}  ← ContactRow source + mail_sent + confirm_sent target
 settings/mail_accounts/accounts/{email}             ← MailAccountSettings source
 outreach_sent/{auto_id}                             ← confirm_sent log target
 ```
