@@ -1,11 +1,12 @@
 # functions-smartmail/smart_mail/smart_campaign_sender.py
 """Outreach send loop — reads candidates via read_outreach(), renders via
-render_mail(), sends via SMTP, and writes back via confirm_sent().
+render_mail(), sends via MailSender, and writes back via confirm_sent().
 
 Public entry point:
-    send_outreach(mode="intro") -> dict
-        mode "intro"    — contacts with status="pending"
-        mode "followup" — pending contacts with a due sequence step
+    send_outreach(mode="intro", dry_run=False) -> dict
+        mode "intro"     — contacts with status="pending"
+        mode "followup"  — pending contacts with a due sequence step
+        dry_run=True     — select and render, but do not send or confirm
 
 Rate limiting and the bounce-rate circuit-breaker are applied per sending account.
 Use send_outreach() for campaign outreach.
@@ -13,10 +14,8 @@ Use send_outreach() for campaign outreach.
 from __future__ import annotations
 
 import os
-import sys
 import time
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 from .firestore_client import get_firestore
 from .smart_campaign_stats import refresh_campaign_stats
@@ -29,10 +28,6 @@ from .config import (
     UNSUBSCRIBE_MAILTO,
 )
 
-
-_CRM_DIR = Path(__file__).resolve().parents[2] / "functions-crm"
-if str(_CRM_DIR) not in sys.path:
-    sys.path.insert(0, str(_CRM_DIR))
 
 SEND_DELAY_SECONDS = int(os.getenv("CAMPAIGN_SEND_DELAY_SECONDS", str(_CFG_SEND_DELAY)))
 
@@ -178,10 +173,10 @@ def send_outreach(
     # Lazy imports -- outreach_mail_select and outreach_render_mail live at the
     # functions-smartmail/ root (parent of this smart_mail/ package).
     if not dry_run:
-        from crm.mail_sender import MailSender                     # noqa: PLC0415
+        from smart_mail.mail_sender import MailSender              # noqa: PLC0415
     else:
         MailSender = None
-    from outreach_mail_select import read_outreach, confirm_sent, prepare_mail_sequences  # noqa: PLC0415
+    from smart_mail.outreach_mail_select import read_outreach, confirm_sent, prepare_mail_sequences  # noqa: PLC0415
     from outreach_render_mail import render_mail, MailStep        # noqa: PLC0415
 
     db = get_firestore()

@@ -1,4 +1,4 @@
-"""functions-smartmail/outreach_mail_select.py — Outreach mail select library.
+"""functions-smartmail/smart_mail/outreach_mail_select.py — Outreach mail select library.
 
 Two public functions:
 
@@ -55,11 +55,17 @@ class MailAccountSettings:
     host:         str       # SMTP host
     port:         int       # SMTP port
     username:     str
+    password:     str
     from_name:    str
     imap_host:    str
     imap_port:    int
     use_ssl:      bool
+    client_id:    str = ""
+    client_secret: str = ""
+    refresh_token: str = ""
+    access_token: str = ""
     extra:        dict = field(default_factory=dict)
+    raw:          dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +162,9 @@ _CAMPAIGN_KNOWN = {
 
 _ACCOUNT_KNOWN = {
     "email", "account_type", "host", "port", "username",
-    "from_name", "imap_host", "imap_port", "ssl",
+    "password", "display_name", "from_name", "imap_host", "imap_port", "ssl",
+    "smtp_host", "smtp_port", "smtp_ssl", "client_id", "client_secret",
+    "refresh_token", "access_token",
     "updated_at", "_type",
 }
 
@@ -176,17 +184,30 @@ def _load_account(db, sender_email: str) -> MailAccountSettings | None:
     if not doc.exists:
         return None
     d = doc.to_dict() or {}
+    account_type = str(d.get("account_type") or "imap").strip().lower()
+    imap_host = str(d.get("host") or "").strip()
+    smtp_host = str(d.get("smtp_host") or "").strip()
+    if not smtp_host and imap_host.startswith("imap."):
+        smtp_host = imap_host.replace("imap.", "smtp.", 1)
+    smtp_host = smtp_host or imap_host
+    smtp_port = int(d.get("smtp_port") or 587)
     return MailAccountSettings(
-        email        = d.get("email", key),
-        account_type = d.get("account_type", "imap"),
-        host         = d.get("host", ""),
-        port         = int(d.get("port") or 587),
-        username     = d.get("username", ""),
-        from_name    = d.get("from_name", ""),
-        imap_host    = d.get("imap_host", ""),
-        imap_port    = int(d.get("imap_port") or 993),
-        use_ssl      = bool(d.get("ssl", False)),
+        email        = str(d.get("email") or key).strip().lower(),
+        account_type = account_type,
+        host         = smtp_host,
+        port         = smtp_port,
+        username     = str(d.get("username") or d.get("email") or key).strip(),
+        password     = d.get("password", ""),
+        from_name    = str(d.get("display_name") or d.get("from_name") or "").strip(),
+        imap_host    = imap_host,
+        imap_port    = int(d.get("port") or d.get("imap_port") or 993),
+        use_ssl      = _as_bool(d.get("smtp_ssl", False)) or smtp_port == 465,
+        client_id    = str(d.get("client_id") or "").strip(),
+        client_secret = str(d.get("client_secret") or "").strip(),
+        refresh_token = str(d.get("refresh_token") or "").strip(),
+        access_token = str(d.get("access_token") or "").strip(),
         extra        = {k: v for k, v in d.items() if k not in _ACCOUNT_KNOWN},
+        raw          = dict(d),
     )
 
 
@@ -220,6 +241,12 @@ def _load_campaign(db, campaign_id: str) -> CampaignMail | None:
 def _campaign_status(value) -> str:
     status = str(value or "draft").strip().lower()
     return status
+
+
+def _as_bool(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _parse_dt(value):

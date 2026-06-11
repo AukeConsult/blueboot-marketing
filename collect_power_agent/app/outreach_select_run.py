@@ -1,7 +1,7 @@
 # app/outreach_select_run.py
 """Dry-run the outreach mail select -- shows who would be sent to and what.
 
-Calls read_outreach() from functions-smartmail/outreach_mail_select.py and
+Calls read_outreach() from functions-smartmail/smart_mail/outreach_mail_select.py and
 prints the resolved batches without sending or writing anything to Firestore.
 
 Usage examples
@@ -136,7 +136,7 @@ def main(argv=None) -> None:
             print("No campaigns found.")
         return
 
-    from outreach_mail_select import read_outreach
+    from smart_mail.outreach_mail_select import read_outreach
 
     print("[dry-run] read_outreach  mode=%s  limit=%d" % (args.mode, args.limit))
     if args.campaign:

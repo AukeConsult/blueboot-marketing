@@ -1,7 +1,7 @@
 ---
 name: outreach-mail-select
 description: >
-  Use this skill when working with functions-smartmail/outreach_mail_select.py — the
+  Use this skill when working with functions-smartmail/smart_mail/outreach_mail_select.py — the
   library that reads outreach candidates from Firestore and records sent status.
   Triggers include: calling read_outreach() in mode "intro" or "followup", using
   AccountBatch / CampaignWithContacts / ContactRow dataclasses, the mail_sequence
@@ -16,7 +16,7 @@ description: >
 
 # outreach-mail-select
 
-**File:** `functions-smartmail/outreach_mail_select.py`
+**File:** `functions-smartmail/smart_mail/outreach_mail_select.py`
 
 Read-only selection library — no SMTP, no sending. Two public functions.
 
@@ -50,28 +50,36 @@ list[AccountBatch]
 **Typical send loop:**
 
 ```python
-from outreach_mail_select import read_outreach, confirm_sent
+from smart_mail.outreach_mail_select import read_outreach, confirm_sent
+from smart_mail.mail_sender import MailSender
 
-for batch in read_outreach(mode="intro"):        # or mode="followup"
-    # open one SMTP connection for batch.account
-    for cwc in batch.campaigns:
-        step = cwc.campaign.mail_sequence[0]     # intro always index 0
-        for contact in cwc.contacts:
-            msg_id = smtp_send(
-                account    = batch.account,
-                to         = contact.email,
-                subject    = render(step.subject, contact),
-                body       = render(step.body_html, contact),
-                in_reply_to = contact.in_reply_to,   # None for intro
-            )
-            confirm_sent(
-                campaign_id    = contact.campaign_id,
-                contact_doc_id = contact.contact_doc_id,
-                message_id     = msg_id,
-                mail_type      = step.mail_type,
-                mode           = "intro",
-                sender_account = batch.account.email,
-            )
+for batch in read_outreach(mode="intro"):  # or mode="followup"
+    sender = MailSender(batch.account.raw)
+    opened = sender.open()
+    if opened["status"] != "ok":
+        continue
+    try:
+        for cwc in batch.campaigns:
+            step = cwc.campaign.mail_sequence[0]  # intro always index 0
+            for contact in cwc.contacts:
+                result = sender.send_open(
+                    to=contact.email,
+                    subject=render(step.subject, contact),
+                    body_html=render(step.body_html, contact),
+                    in_reply_to=contact.in_reply_to,  # None for intro
+                )
+                if result["status"] != "ok":
+                    continue
+                confirm_sent(
+                    campaign_id=contact.campaign_id,
+                    contact_doc_id=contact.contact_doc_id,
+                    message_id=result["message_id"],
+                    mail_type=step.mail_type,
+                    mode="intro",
+                    sender_account=batch.account.email,
+                )
+    finally:
+        sender.close()
 ```
 
 #### Parameters
@@ -150,13 +158,29 @@ Resolved from `settings/mail_accounts/accounts/{email}`.
 |-------|------|-------|
 | `email` | str | doc key |
 | `account_type` | str | `"imap"` \| `"gmail"` |
-| `host` | str | SMTP host |
-| `port` | int | SMTP port (default 587) |
-| `username` | str | |
-| `from_name` | str | display name |
-| `imap_host` | str | |
-| `imap_port` | int | default 993 |
-| `use_ssl` | bool | from `ssl` field |
+| `host` | str | SMTP host from `smtp_host`, falling back to `host` with `imap.` -> `smtp.` |
+| `port` | int | SMTP port from `smtp_port` (default 587) |
+| `username` | str | SMTP username from the DB mail-account document |
+| `password` | str | SMTP password from the DB mail-account document |
+| `from_name` | str | display name from `display_name` |
+| `imap_host` | str | IMAP host from `host` |
+| `imap_port` | int | IMAP port from `port` (default 993) |
+| `use_ssl` | bool | SMTP SSL from `smtp_ssl` or port 465 |
+| `client_id`, `client_secret`, `refresh_token`, `access_token` | str | Gmail OAuth settings from the DB mail-account document |
+| `raw` | dict | original Firestore mail-account document passed to `smart_mail.mail_sender.MailSender` |
+
+Automatic outreach must use this Firestore mail-account document. Do not derive SMTP passwords from environment variable names in the smart sender.
+
+### Sender session rule
+
+`read_outreach()` returns one `AccountBatch` per sending account so the sender can log in once and send all messages for that account through the same authenticated connection.
+
+- Selection and sent writeback stay in `outreach_mail_select.py`: `read_outreach()`, `prepare_mail_sequences()`, and `confirm_sent()`.
+- SMTP/Gmail sending stays in `smart_mail.mail_sender.MailSender`.
+- `smart_campaign_sender.py` owns the shared live/dry-run loop. Live mode opens `MailSender(batch.account.raw)` once per account batch, calls `send_open()` for each selected contact, calls `confirm_sent()` only after a successful send, then closes the sender in `finally`.
+- Dry-run mode must call the same `send_outreach(..., dry_run=True)` loop. It selects the same contacts and renders the same mail, but does not open `MailSender`, send mail, call `confirm_sent()`, sleep between contacts, or refresh campaign stats.
+- `app/outreach_send_run.py` is the command-line entrypoint for both preview and live send. It defaults to dry-run; `--send` is required for real mail.
+- The smart sender must not contain separate SMTP/Gmail message creation logic; use `MailSender` so CSS inlining, inline image handling, display names, threading headers, and account settings are consistent with other mail paths.
 
 ### `CampaignMail` (level 2)
 Resolved from `campaigns/{campaign_id}`.

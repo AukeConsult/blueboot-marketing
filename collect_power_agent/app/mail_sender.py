@@ -35,7 +35,7 @@ def _unsubscribe_settings():
     Resolve UNSUBSCRIBE_BASE_URL / UNSUBSCRIBE_MAILTO straight from the
     environment. mail_accounts_config (imported above) already calls
     load_dotenv() against the project .env on import, so these are available
-    here without re-reading any secret files. "smart-mail" has a hyphen and
+    here without re-reading any secret files. "smart-mail-not-in-use" has a hyphen and
     therefore isn't an importable package name -- this module purposefully
     does not depend on it. Lazy + catch-all -- never raises, never runs at
     import time, and a missing/blank value just disables the headers.

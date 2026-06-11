@@ -13,7 +13,11 @@ from __future__ import annotations
 
 import sys
 import os
-sys.path.insert(0, os.path.dirname(__file__))
+_HERE = os.path.dirname(__file__)
+_SMARTMAIL_DIR = os.path.abspath(os.path.join(_HERE, "..", "functions-smartmail"))
+for _path in (_HERE, _SMARTMAIL_DIR):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
 
 from firebase_functions import https_fn, options as fn_options
 from flask import Flask, jsonify

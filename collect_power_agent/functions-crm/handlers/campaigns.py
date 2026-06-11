@@ -285,7 +285,7 @@ def ping_mail_account(campaign_id):
         ma = _get_mail_account(db, outreach_email)
         if not ma:
             return _err(f"No mail account found for '{outreach_email}'.", 400)
-        from crm.mail_sender import MailSender
+        from smart_mail.mail_sender import MailSender
         result = MailSender(ma).ping()
         return jsonify(result)
     except Exception as exc:
@@ -312,7 +312,7 @@ def send_test_mail(campaign_id):
         body_plain = body.get("body_plain", body.get("body", "")).strip()
         if not to_addr:
             return _err("'to' is required", 400)
-        from crm.mail_sender import MailSender
+        from smart_mail.mail_sender import MailSender
         result = MailSender(ma).send(to=to_addr, subject=subject,
                                      body_plain=body_plain, body_html=body_html)
         return jsonify(result)

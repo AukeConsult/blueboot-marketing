@@ -15,9 +15,9 @@ pause/resume, fits this project's existing serverless pattern):
                               (poll mailboxes, match new replies)
   GET      /healthz        -- trivial liveness check
 
-The SMTP password is injected as the Secret Manager secret
-SALES_SMTP_PASSWORD (declared below); all other mail/tuning config comes
-from .env.<project-id>, loaded natively by the Cloud Functions runtime.
+Mail account login settings are loaded from Firestore by the shared
+MailSender path; the smart sender does not use SMTP password environment
+secrets.
 """
 import os
 
@@ -116,7 +116,6 @@ def healthz():
     timeout_sec=540,
     memory=options.MemoryOption.MB_512,
     max_instances=1,
-    secrets=["SALES_SMTP_PASSWORD"],
 )
 def smartMail(req: https_fn.Request) -> https_fn.Response:
     with app.request_context(req.environ):

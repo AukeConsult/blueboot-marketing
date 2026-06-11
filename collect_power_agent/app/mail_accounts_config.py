@@ -4,7 +4,7 @@ Resolves named outreach-mailbox accounts (SMTP + IMAP) from .env.
 
 This is the single source of truth for "which mailbox sends/reads mail for
 alias X" -- used by app/mail_sender.py, app/mail_reader.py, and the
-app/smart-mail/* campaign pipeline (via app/smart-mail/config_mail.py).
+app/smart-mail-not-in-use/* campaign pipeline (via app/smart-mail-not-in-use/config_mail.py).
 
 Per-account credentials live as ALIAS_*-prefixed vars in .env (gitignored
 via the project's `*secrets.py`/`.env` patterns -- no values are hardcoded

@@ -1,6 +1,6 @@
 # functions-smartmail/smart_mail/firestore_client.py
 """
-Firestore client for the deployed smart-mail Cloud Function.
+Firestore client for the deployed smart-mail-not-in-use Cloud Function.
 
 Mirrors functions-crm/main.py's `_get_db()` bootstrap: inside the Cloud
 Functions runtime there is no service-account JSON file to load -- the

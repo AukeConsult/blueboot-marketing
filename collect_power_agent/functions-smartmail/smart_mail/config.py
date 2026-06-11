@@ -1,7 +1,7 @@
 # functions-smartmail/smart_mail/config.py
 """
 Campaign-pipeline tuning config -- deploy-time counterpart of
-app/smart-mail/config.py. Same constants, same env var names; the only
+app/smart-mail-not-in-use/config.py. Same constants, same env var names; the only
 difference is no load_dotenv() (see mail_accounts_config.py for why).
 """
 from __future__ import annotations

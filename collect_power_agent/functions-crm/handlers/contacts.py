@@ -214,7 +214,7 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
                 409,
             )
 
-        from crm.mail_sender import MailSender
+        from smart_mail.mail_sender import MailSender
         result = MailSender(ma).send(
             to=to_addr,
             subject=subject,
