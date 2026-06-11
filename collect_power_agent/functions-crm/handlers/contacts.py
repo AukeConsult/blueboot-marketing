@@ -223,6 +223,7 @@ def followup_contacts():
         db          = _get_db()
         campaign_id = request.args.get("campaign_id", "").strip()
         owner_filter = request.args.get("owner", "").strip()
+        include_pending = request.args.get("include_pending", "").strip().lower() in {"1", "true", "yes", "on"}
         limit       = min(int(request.args.get("limit", 2000)), 5000)
 
         camp_map: dict = {}
@@ -250,6 +251,9 @@ def followup_contacts():
         contacts = []
         for doc in contacts_iter:
             d     = doc.to_dict() or {}
+            status = d.get("status", "pending") or "pending"
+            if not include_pending and status == "pending":
+                continue
             parts = doc.reference.path.split("/")
             cid   = parts[1] if len(parts) >= 4 else campaign_id
             info  = camp_map.get(cid, {})
@@ -277,7 +281,7 @@ def followup_contacts():
                 "email":               d.get("email", ""),
                 "title":               d.get("title", ""),
                 "website":             d.get("website", ""),
-                "status":              d.get("status", "pending"),
+                "status":              status,
                 "followup_date":       d.get("followup_date", "") or "",
                 "followup_status":     d.get("followup_status", "") or "",
                 "followup_comment":    d.get("followup_comment", "") or "",

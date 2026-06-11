@@ -409,6 +409,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "outreach_sent",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sender_account",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "sent_at",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [

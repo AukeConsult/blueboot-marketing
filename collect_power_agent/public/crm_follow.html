@@ -235,6 +235,12 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
   font-size: .68rem; color: var(--bb-muted); text-transform: uppercase;
   letter-spacing: .05em; margin-bottom: 8px; font-weight: 600;
 }
+.sp-collapsible {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; cursor: pointer; user-select: none;
+}
+.sp-collapsible-title { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.sp-section-body { display: block; }
 .sp-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 5px; font-size: .8rem; }
 .sp-row i { font-size: 14px; color: var(--bb-muted); flex-shrink: 0; margin-top: 1px; }
 .sp-muted { color: var(--bb-muted); }
@@ -379,6 +385,12 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 }
 .bb-header-select:hover { border-color: var(--bb-accent); box-shadow: 0 0 0 3px rgba(79,110,247,.1); }
 .bb-header-select:focus { border-color: var(--bb-accent); outline: none; box-shadow: 0 0 0 3px rgba(79,110,247,.15); }
+.bb-header-check {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin: 0; color: var(--bb-muted); font-size: .76rem; font-weight: 600;
+  white-space: nowrap; cursor: pointer;
+}
+.bb-header-check .form-check-input { margin: 0; cursor: pointer; }
 
 /* Discreet action buttons (collapse-all, sync, refresh) */
 .collapse-all-btn, .header-action-btn {
@@ -683,6 +695,10 @@ body { display: flex; flex-direction: column; }
         <select id="campaign-filter" class="group-select bb-header-select" title="Filter by campaign" onchange="load()" style="max-width:180px">
           <option value="">All campaigns</option>
         </select>
+        <label class="bb-header-check" title="Include pending contacts">
+          <input id="include-pending" class="form-check-input" type="checkbox" onchange="load()">
+          Pending
+        </label>
       </div>
 
       <!-- Actions group: sync period / sync / refresh / help -->
@@ -732,7 +748,7 @@ body { display: flex; flex-direction: column; }
       <option value="__none__">Not set</option>
     </select>
 
-    <select id="contact-status-filter" class="form-select form-select-sm" style="max-width:155px" onchange="applyFilter()">
+    <select id="contact-status-filter" class="form-select form-select-sm" style="max-width:155px" onchange="load()">
       <option value="open">Open contacts</option>
       <option value="">All contacts</option>
       <option value="pending">Pending only</option>
@@ -844,7 +860,8 @@ body { display: flex; flex-direction: column; }
         <span id="focus-active-note" class="focus-active-note"><i class="ti ti-target"></i>Focus queue</span>
         <div id="group-selectors" class="d-flex align-items-center gap-1" style="display:none">
           <select id="group-primary" class="group-select" title="Group by" onchange="applyFilter()">
-            <option value="followup_status">Status</option>
+            <option value="followup_status">Follow-up status</option>
+            <option value="status">Contact status</option>
             <option value="followup_importance">Importance</option>
             <option value="followup_date">Date</option>
             <option value="owner">Owner</option>
@@ -853,7 +870,8 @@ body { display: flex; flex-direction: column; }
           <i class="ti ti-chevron-right" style="color:var(--bb-muted);font-size:.7rem"></i>
           <select id="group-secondary" class="group-select" title="Then by" onchange="applyFilter()">
             <option value="">then by…</option>
-            <option value="followup_status">Status</option>
+            <option value="followup_status">Follow-up status</option>
+            <option value="status">Contact status</option>
             <option value="followup_importance">Importance</option>
             <option value="followup_date">Date</option>
             <option value="owner">Owner</option>
@@ -938,6 +956,7 @@ let _currentGroupKeys = [];
 let _allCampaigns = [];   // loaded from /followup-meta
 let _allUsers     = [];   // loaded from /followup-meta (for followup_owner dropdown)
 const selected = new Set();   // doc_path strings
+let _selectAllActive = false;
 let _groupDocPaths = {};              // groupKey -> [doc_path, ...] built by renderGrouped
 const _CHANNEL_HREF = {
   linkedin:   v => v.startsWith('http') ? v : 'https://linkedin.com/in/' + v,
@@ -954,6 +973,12 @@ let _sideOpen      = false;           // side panel visible
 let _sidePanelGidx = -1;
 let _spChannelsOpen = false;          // channels section collapsed by default             // which contact is shown in side panel
 let _spCompanyOpen  = false;          // company info section collapsed by default
+let _spSectionsOpen = {
+  next: true,
+  note: true,
+  history: true,
+  contact: true,
+};
 let _prefsReady       = false;  // true only after first load() completes with prefs applied
 let _loadedPrefs      = null;   // prefs fetched by loadUserPrefs(); applied inside load()
 
@@ -1049,6 +1074,12 @@ async function load() {
       if ([...campSel.options].some(o => o.value === _loadedPrefs.campaign))
         campSel.value = _loadedPrefs.campaign;
     }
+    const contactStatusSel = document.getElementById('contact-status-filter');
+    if (contactStatusSel && _loadedPrefs.filter_contact_status !== undefined)
+      contactStatusSel.value = _loadedPrefs.filter_contact_status;
+    const includePendingEl = document.getElementById('include-pending');
+    if (includePendingEl && _loadedPrefs.include_pending !== undefined)
+      includePendingEl.checked = !!_loadedPrefs.include_pending;
   }
 
   setTbody('<tr><td colspan="3" class="text-center py-5" style="color:var(--bb-muted)">'
@@ -1060,9 +1091,12 @@ async function load() {
   try {
     const _camp  = document.getElementById('campaign-filter')?.value || '';
     const _owner = document.getElementById('owner-header')?.value || '';
+    const _cst = document.getElementById('contact-status-filter')?.value || '';
+    const _includePending = !!document.getElementById('include-pending')?.checked || _cst === 'pending';
     const params = new URLSearchParams();
     if (_camp)  params.set('campaign_id', _camp);
     if (_owner && !_camp) params.set('owner', _owner);
+    if (_includePending) params.set('include_pending', 'true');
     const _url  = BASE + '/api/crm/followup-contacts' + (params.toString() ? '?' + params.toString() : '');
     const data  = await fetchJSON(_url);
     const contacts = data.contacts || [];
@@ -1117,13 +1151,17 @@ async function load() {
       sv('search',                _loadedPrefs.search);
       sv('followup-filter',       _loadedPrefs.filter_followup_status);
       sv('importance-filter',     _loadedPrefs.filter_importance);
-      sv('contact-status-filter', _loadedPrefs.filter_contact_status);
       sv('due-filter',            _loadedPrefs.filter_due);
       if (_loadedPrefs.sort_col !== undefined) _sortCol = _loadedPrefs.sort_col || 'followup_date';
       if (_loadedPrefs.sort_asc !== undefined) _sortAsc  = _loadedPrefs.sort_asc;
       if (_loadedPrefs.side_open) { _sideOpen = true; _updateSidePanelBtn(); _updateSidePanelVisibility(); }
       if (_loadedPrefs.sp_channels_open !== undefined) _spChannelsOpen = !!_loadedPrefs.sp_channels_open;
       if (_loadedPrefs.sp_company_open  !== undefined) _spCompanyOpen  = !!_loadedPrefs.sp_company_open;
+      if (_loadedPrefs.sp_sections_open && typeof _loadedPrefs.sp_sections_open === 'object') {
+        _spSectionsOpen = { ..._spSectionsOpen, ..._loadedPrefs.sp_sections_open };
+        if (_loadedPrefs.sp_sections_open.channels !== undefined) _spChannelsOpen = !!_loadedPrefs.sp_sections_open.channels;
+        if (_loadedPrefs.sp_sections_open.company  !== undefined) _spCompanyOpen  = !!_loadedPrefs.sp_sections_open.company;
+      }
       _updateSortIndicators();
     }
     _prefsReady = true;
@@ -1305,6 +1343,7 @@ function applyFilter() {
   const imp = document.getElementById('importance-filter').value;
   const cst = document.getElementById('contact-status-filter').value;
   const due = document.getElementById('due-filter').value;
+  const includePending = !!document.getElementById('include-pending')?.checked;
 
   const today   = _today();
   const weekEnd = _weekEnd();
@@ -1314,6 +1353,7 @@ function applyFilter() {
     else if (fu && r.followup_status !== fu) return false;
     if (imp === '__none__') { if (r.followup_importance) return false; }
     else if (imp && r.followup_importance !== imp) return false;
+    if (!includePending && cst !== 'pending' && r.status === 'pending') return false;
     if (cst === 'open' && r.status === 'sent') return false;
     else if (cst && cst !== 'open' && r.status !== cst) return false;
     if (due === 'none'    && r.followup_date) return false;
@@ -1386,6 +1426,11 @@ const GROUP_FIELDS = {
     label:   'Follow-up status',
     order:   FU_STATUSES.map(s => s.value),
     labelFn: v => (FU_STATUSES.find(s => s.value === v) || { label: 'No status' }).label,
+  },
+  status: {
+    label:   'Contact status',
+    order:   ['pending', 'dosend', 'sent', 'excluded', 'error', ''],
+    labelFn: v => v || 'No contact status',
   },
   followup_importance: {
     label:   'Importance',
@@ -1463,7 +1508,7 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
       </td>
       <td class="crm-followup-cell">
         <div class="crm-followup-grid">
-          <div><span class="crm-mobile-label">Status</span><select class="follow-select"
+          <div><span class="crm-mobile-label">Follow-up status</span><select class="follow-select"
             data-gidx="${gidx}" data-field="followup_status"
             onchange="saveField(this)">${fuOpts}</select></div>
           <div><span class="crm-mobile-label">Date</span><input type="date" class="follow-input ${dateCls}"
@@ -1490,9 +1535,7 @@ function render(list) {
       const row = allRows[parseInt(c.dataset.gidx, 10)];
       if (row && selected.has(row.doc_path)) c.checked = true;
     });
-    const sa = document.getElementById('select-all');
-    const all = document.querySelectorAll('.row-chk');
-    if (sa && all.length) sa.checked = all.length > 0 && [...all].every(c => c.checked);
+    _syncSelectAllCheckbox({ allowChecked: _selectAllActive });
   };
 
   setTbody(list.map(r => {
@@ -1656,9 +1699,7 @@ function renderGrouped(list) {
     const row = allRows[parseInt(c.dataset.gidx, 10)];
     if (row && selected.has(row.doc_path)) c.checked = true;
   });
-  const sa = document.getElementById('select-all');
-  const all = document.querySelectorAll('.row-chk');
-  if (sa && all.length) sa.checked = all.length > 0 && [...all].every(c => c.checked);
+  _syncSelectAllCheckbox({ allowChecked: _selectAllActive });
   _syncGroupCheckboxes();
   requestAnimationFrame(_relayoutTable);
 }
@@ -1705,12 +1746,7 @@ function closeSidePanel() {
 }
 
 function toggleSpChannels() {
-  _spChannelsOpen = !_spChannelsOpen;
-  if (_prefsReady) saveUserPrefs();
-  const body = document.querySelector('.sp-channels-body');
-  const icon = document.querySelector('.sp-channels-section .sp-collapsible .ti');
-  if (body) body.style.display = _spChannelsOpen ? 'block' : 'none';
-  if (icon) { icon.classList.toggle('ti-chevron-up', _spChannelsOpen); icon.classList.toggle('ti-chevron-down', !_spChannelsOpen); }
+  toggleSpSection('channels');
 }
 
 async function logChatOpened(gidx, url) {
@@ -1770,6 +1806,50 @@ function _updateSidePanelVisibility() {
   else panel.classList.remove('sp-open');
   const backdrop = document.getElementById('sp-backdrop');
   if (backdrop) backdrop.style.display = (_sideOpen && window.innerWidth < 768) ? 'block' : 'none';
+}
+
+function _isSpSectionOpen(key) {
+  if (key === 'channels') return _spChannelsOpen;
+  if (key === 'company') return _spCompanyOpen;
+  return _spSectionsOpen[key] !== false;
+}
+
+function _setSpSectionOpen(key, open) {
+  if (key === 'channels') _spChannelsOpen = open;
+  else if (key === 'company') _spCompanyOpen = open;
+  else _spSectionsOpen[key] = open;
+}
+
+function _getSpSectionsOpenPrefs() {
+  return {
+    next:     _isSpSectionOpen('next'),
+    note:     _isSpSectionOpen('note'),
+    history:  _isSpSectionOpen('history'),
+    channels: _isSpSectionOpen('channels'),
+    contact:  _isSpSectionOpen('contact'),
+    company:  _isSpSectionOpen('company'),
+  };
+}
+
+function _spSectionHeader(key, label, iconCls = '') {
+  const open = _isSpSectionOpen(key);
+  return `<div class="sp-section-label sp-collapsible" onclick="toggleSpSection('${key}')">
+    <span class="sp-collapsible-title">${iconCls ? `<i class="ti ${iconCls}" style="font-size:13px"></i>` : ''}${escapeHtml(label)}</span>
+    <i data-sp-chevron="${key}" class="ti ${open ? 'ti-chevron-up' : 'ti-chevron-down'}" style="font-size:12px"></i>
+  </div>`;
+}
+
+function toggleSpSection(key) {
+  const open = !_isSpSectionOpen(key);
+  _setSpSectionOpen(key, open);
+  if (_prefsReady) saveUserPrefs();
+  const body = document.getElementById(`sp-${key}-body`);
+  if (body) body.style.display = open ? 'block' : 'none';
+  const icon = document.querySelector(`[data-sp-chevron="${key}"]`);
+  if (icon) {
+    icon.classList.toggle('ti-chevron-up', open);
+    icon.classList.toggle('ti-chevron-down', !open);
+  }
 }
 
 function openSidePanel(gidx) {
@@ -1840,70 +1920,71 @@ function _renderSidePanel(r) {
       </div>
     </div>
     <div class="sp-section sp-primary">
-      <div class="sp-section-label">Next action</div>
-      <div class="sp-quick-actions">
-        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'tomorrow')">
-          <i class="ti ti-calendar-plus me-1"></i>+1 day
-        </button>
-        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'next_week')">
-          <i class="ti ti-calendar-plus me-1"></i>+1 week
-        </button>
-        <button class="btn btn-sm btn-outline-primary" onclick="quickFollowupAction(${gidx},'contacted')">
-          <i class="ti ti-check me-1"></i>Contacted
-        </button>
-        <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'waiting')">
-          <i class="ti ti-clock me-1"></i>Waiting
-        </button>
-        <button class="btn btn-sm btn-outline-danger" onclick="quickFollowupAction(${gidx},'not_interested')">
-          <i class="ti ti-circle-x me-1"></i>Not relevant
-        </button>
-      </div>
-      <div class="sp-workbench-grid">
-        <div class="sp-row">
-          <i class="ti ti-flag" style="margin-top:5px"></i>
-          <select class="follow-select small" data-gidx="${gidx}" data-field="followup_status" onchange="saveField(this)">
-            ${fuOpts}
-          </select>
+      ${_spSectionHeader('next', 'Next action', 'ti-list-check')}
+      <div id="sp-next-body" class="sp-section-body" style="display:${_isSpSectionOpen('next') ? 'block' : 'none'}">
+        <div class="sp-quick-actions">
+          <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'tomorrow')">
+            <i class="ti ti-calendar-plus me-1"></i>+1 day
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'next_week')">
+            <i class="ti ti-calendar-plus me-1"></i>+1 week
+          </button>
+          <button class="btn btn-sm btn-outline-primary" onclick="quickFollowupAction(${gidx},'contacted')">
+            <i class="ti ti-check me-1"></i>Contacted
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'waiting')">
+            <i class="ti ti-clock me-1"></i>Waiting
+          </button>
+          <button class="btn btn-sm btn-outline-danger" onclick="quickFollowupAction(${gidx},'not_interested')">
+            <i class="ti ti-circle-x me-1"></i>Not relevant
+          </button>
         </div>
-        <div class="sp-row">
-          <i class="ti ti-calendar" style="margin-top:5px"></i>
-          <input type="date" class="follow-input small ${dateCls}" value="${escapeHtml(r.followup_date || '')}"
-            data-gidx="${gidx}" data-field="followup_date" onchange="saveField(this)">
-        </div>
-        <div class="sp-row">
-          <i class="ti ti-star" style="margin-top:5px"></i>
-          <select class="imp-select ${impCls} small" data-gidx="${gidx}" data-field="followup_importance"
-            onchange="saveField(this);this.className='imp-select small '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
-            ${impOpts}
-          </select>
-        </div>
-        <div class="sp-row">
-          <i class="ti ti-user-check" style="margin-top:5px"></i>
-          <select class="follow-select small" data-gidx="${gidx}" data-field="followup_owner" onchange="saveField(this)">
-            <option value="">— unassigned —</option>
-            ${_allUsers.map(u=>`<option value="${escapeHtml(u.email)}"${r.followup_owner===u.email?' selected':''}>${escapeHtml(u.displayName ? u.displayName+' ('+u.email+')' : u.email)}</option>`).join('')}
-          </select>
+        <div class="sp-workbench-grid">
+          <div class="sp-row">
+            <i class="ti ti-flag" style="margin-top:5px"></i>
+            <select class="follow-select small" data-gidx="${gidx}" data-field="followup_status" onchange="saveField(this)">
+              ${fuOpts}
+            </select>
+          </div>
+          <div class="sp-row">
+            <i class="ti ti-calendar" style="margin-top:5px"></i>
+            <input type="date" class="follow-input small ${dateCls}" value="${escapeHtml(r.followup_date || '')}"
+              data-gidx="${gidx}" data-field="followup_date" onchange="saveField(this)">
+          </div>
+          <div class="sp-row">
+            <i class="ti ti-star" style="margin-top:5px"></i>
+            <select class="imp-select ${impCls} small" data-gidx="${gidx}" data-field="followup_importance"
+              onchange="saveField(this);this.className='imp-select small '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">
+              ${impOpts}
+            </select>
+          </div>
+          <div class="sp-row">
+            <i class="ti ti-user-check" style="margin-top:5px"></i>
+            <select class="follow-select small" data-gidx="${gidx}" data-field="followup_owner" onchange="saveField(this)">
+              <option value="">— unassigned —</option>
+              ${_allUsers.map(u=>`<option value="${escapeHtml(u.email)}"${r.followup_owner===u.email?' selected':''}>${escapeHtml(u.displayName ? u.displayName+' ('+u.email+')' : u.email)}</option>`).join('')}
+            </select>
+          </div>
         </div>
       </div>
     </div>
     <div class="sp-section">
-      <div class="sp-section-label">Note</div>
-      <textarea class="follow-input small w-100 sp-comment-input sp-note-input"
-        placeholder="Add comment…" data-gidx="${gidx}" data-field="followup_comment"
-        onchange="saveField(this)"
-        onfocus="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
-        oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
-        rows="3">${escapeHtml(r.followup_comment || '')}</textarea>
+      ${_spSectionHeader('note', 'Note', 'ti-message-circle')}
+      <div id="sp-note-body" class="sp-section-body" style="display:${_isSpSectionOpen('note') ? 'block' : 'none'}">
+        <textarea class="follow-input small w-100 sp-comment-input sp-note-input"
+          placeholder="Add comment…" data-gidx="${gidx}" data-field="followup_comment"
+          onchange="saveField(this)"
+          onfocus="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+          oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
+          rows="3">${escapeHtml(r.followup_comment || '')}</textarea>
+      </div>
     </div>
     <div class="sp-section" id="sp-history-section">
       ${_spHistoryHtml(r)}
     </div>
     <div class="sp-section sp-channels-section">
-      <div class="sp-section-label sp-collapsible" onclick="toggleSpChannels()" style="cursor:pointer;user-select:none">
-        Channels
-        <i class="ti ${_spChannelsOpen ? 'ti-chevron-up' : 'ti-chevron-down'} ms-1" style="font-size:12px;vertical-align:middle"></i>
-      </div>
-      <div class="sp-channels-body" style="display:${_spChannelsOpen ? 'block' : 'none'}">
+      ${_spSectionHeader('channels', 'Channels', 'ti-plug-connected')}
+      <div id="sp-channels-body" class="sp-section-body sp-channels-body" style="display:${_isSpSectionOpen('channels') ? 'block' : 'none'}">
       ${[
         {field:'linkedin',   icon:'ti-brand-linkedin',   ph:'LinkedIn URL or username'},
         {field:'twitter',    icon:'ti-brand-twitter',    ph:'Twitter / X handle or URL'},
@@ -1937,25 +2018,24 @@ function _renderSidePanel(r) {
       </div>
     </div>
     <div class="sp-section">
-      <div class="sp-section-label">Contact</div>
-      ${r.email ? `<div class="sp-row"><i class="ti ti-mail"></i><a href="mailto:${escapeHtml(r.email)}" class="small">${escapeHtml(r.email)}</a></div>` : ''}
-      <div class="sp-row">
-        <i class="ti ti-phone" style="margin-top:5px"></i>
-        <input type="tel" class="follow-input small flex-grow-1"
-          value="${escapeHtml(r.phone || '')}" placeholder="Phone"
-          data-gidx="${gidx}" data-field="phone"
-          onchange="saveField(this)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+      ${_spSectionHeader('contact', 'Contact methods', 'ti-address-book')}
+      <div id="sp-contact-body" class="sp-section-body" style="display:${_isSpSectionOpen('contact') ? 'block' : 'none'}">
+        ${r.email ? `<div class="sp-row"><i class="ti ti-mail"></i><a href="mailto:${escapeHtml(r.email)}" class="small">${escapeHtml(r.email)}</a></div>` : ''}
+        <div class="sp-row">
+          <i class="ti ti-phone" style="margin-top:5px"></i>
+          <input type="tel" class="follow-input small flex-grow-1"
+            value="${escapeHtml(r.phone || '')}" placeholder="Phone"
+            data-gidx="${gidx}" data-field="phone"
+            onchange="saveField(this)"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+        </div>
+        ${siteShort ? `<div class="sp-row"><i class="ti ti-world"></i><a href="${escapeHtml(r.website)}" target="_blank" class="small sp-muted">${escapeHtml(siteShort)}</a></div>` : ''}
+        ${!r.email && !r.phone && !siteShort ? '<div class="small sp-muted">No contact info.</div>' : ''}
       </div>
-      ${siteShort ? `<div class="sp-row"><i class="ti ti-world"></i><a href="${escapeHtml(r.website)}" target="_blank" class="small sp-muted">${escapeHtml(siteShort)}</a></div>` : ''}
-      ${!r.email && !r.phone && !siteShort ? '<div class="small sp-muted">No contact info.</div>' : ''}
     </div>
     <div class="sp-section" id="sp-company-section">
-      <div class="sp-section-label sp-collapsible" onclick="toggleSpCompany()" style="cursor:pointer;user-select:none">
-        <i class="ti ti-building me-1" style="font-size:13px"></i>Company
-        <i class="ti ${_spCompanyOpen ? 'ti-chevron-up' : 'ti-chevron-down'} ms-1" style="font-size:12px;vertical-align:middle"></i>
-      </div>
-      <div class="sp-company-body" style="display:${_spCompanyOpen ? 'block' : 'none'}">
+      ${_spSectionHeader('company', 'Company', 'ti-building')}
+      <div id="sp-company-body" class="sp-section-body sp-company-body" style="display:${_isSpSectionOpen('company') ? 'block' : 'none'}">
         <div class="small sp-muted py-1">Loading…</div>
       </div>
     </div>
@@ -1964,12 +2044,7 @@ function _renderSidePanel(r) {
 }
 
 function toggleSpCompany() {
-  _spCompanyOpen = !_spCompanyOpen;
-  if (_prefsReady) saveUserPrefs();
-  const body = document.querySelector('#sp-company-section .sp-company-body');
-  const icon = document.querySelector('#sp-company-section .sp-collapsible .ti-chevron-up, #sp-company-section .sp-collapsible .ti-chevron-down');
-  if (body) body.style.display = _spCompanyOpen ? 'block' : 'none';
-  if (icon) { icon.classList.toggle('ti-chevron-up', _spCompanyOpen); icon.classList.toggle('ti-chevron-down', !_spCompanyOpen); }
+  toggleSpSection('company');
 }
 
 async function _loadSpCompany(r) {
@@ -2030,8 +2105,8 @@ async function _loadSpCompany(r) {
         ? '<span class="bb-pill" style="background:#dbeafe;color:#1d4ed8;margin-bottom:6px;display:inline-block">site pipeline</span>'
         : '';
     if (d.company) {
-      const companyEl = section.querySelector('.sp-section-label');
-      if (companyEl) companyEl.innerHTML = `<i class="ti ti-building me-1" style="font-size:13px"></i>${escapeHtml(d.company)} <i class="ti ${_spCompanyOpen ? 'ti-chevron-up' : 'ti-chevron-down'} ms-1" style="font-size:12px;vertical-align:middle"></i>`;
+      const companyEl = section.querySelector('.sp-collapsible-title');
+      if (companyEl) companyEl.innerHTML = `<i class="ti ti-building" style="font-size:13px"></i>${escapeHtml(d.company)}`;
     }
     if (!rows) {
       body.innerHTML = pipeBadge + '<div class="small sp-muted py-1">No detailed company data.</div>';
@@ -2044,18 +2119,26 @@ async function _loadSpCompany(r) {
 }
 
 function _spHistoryHtml(r) {
-  if (!r.comment_history || !r.comment_history.length) return '<div class="small sp-muted">No history yet.</div>';
+  if (!r.comment_history || !r.comment_history.length) {
+    return `${_spSectionHeader('history', 'Recent history', 'ti-history')}
+      <div id="sp-history-body" class="sp-section-body" style="display:${_isSpSectionOpen('history') ? 'block' : 'none'}">
+        <div class="small sp-muted">No history yet.</div>
+      </div>`;
+  }
   const shown = r.comment_history.slice(-3).reverse();
-  const suffix = r.comment_history.length > shown.length ? ` <span class="sp-muted" style="font-weight:400">latest ${shown.length}</span>` : '';
-  return `<div class="sp-section-label">Recent history (${r.comment_history.length})${suffix}</div>` +
-    shown.map(h => `
+  const suffix = r.comment_history.length > shown.length ? `<div class="small sp-muted mb-1">latest ${shown.length}</div>` : '';
+  return `${_spSectionHeader('history', `Recent history (${r.comment_history.length})`, 'ti-history')}
+    <div id="sp-history-body" class="sp-section-body" style="display:${_isSpSectionOpen('history') ? 'block' : 'none'}">
+      ${suffix}
+      ${shown.map(h => `
       <div class="sp-row">
         <i class="ti ti-clock-hour-4"></i>
         <div class="small">
           <span class="sp-muted">${escapeHtml((h.date||'').slice(0,10))} · ${escapeHtml(h.user||'')}</span><br>
           ${escapeHtml(h.text||'')}
         </div>
-      </div>`).join('');
+      </div>`).join('')}
+    </div>`;
 }
 
 function _refreshSidePanelHistory() {
@@ -2461,14 +2544,18 @@ async function applyMove() {
 // ── Selection ─────────────────────────────────────────────────────────────────
 
 function onRowCheck(chk) {
+  _selectAllActive = false;
   const row = allRows[parseInt(chk.dataset.gidx, 10)];
   if (!row) return;
   if (chk.checked) selected.add(row.doc_path); else selected.delete(row.doc_path);
   _syncGroupCheckboxes();
+  _syncSelectAllCheckbox({ allowChecked: false });
   updateSelectionUI();
 }
 
 function toggleSelectAll(chk) {
+  _selectAllActive = chk.checked;
+  chk.indeterminate = false;
   document.querySelectorAll('.row-chk').forEach(c => {
     c.checked = chk.checked;
     const row = allRows[parseInt(c.dataset.gidx, 10)];
@@ -2477,44 +2564,62 @@ function toggleSelectAll(chk) {
       else selected.delete(row.doc_path);
     }
   });
+  _syncGroupCheckboxes();
+  _syncSelectAllCheckbox({ allowChecked: true });
   updateSelectionUI();
 }
 
 function toggleGroupSelect(event, groupKey) {
   event.stopPropagation();
+  _selectAllActive = false;
   const chk = event.currentTarget;
-  const paths = _groupDocPaths[groupKey] || [];
+  const paths = new Set(_groupDocPaths[groupKey] || []);
   paths.forEach(path => {
     if (chk.checked) selected.add(path);
     else selected.delete(path);
   });
-  // Sync individual row checkboxes
   document.querySelectorAll('.row-chk').forEach(c => {
     const row = allRows[parseInt(c.dataset.gidx, 10)];
-    if (row && paths.includes(row.doc_path)) c.checked = chk.checked;
+    if (row && paths.has(row.doc_path)) c.checked = chk.checked;
   });
-  // Sync the global select-all checkbox
-  const sa = document.getElementById('select-all');
-  const allChk = document.querySelectorAll('.row-chk');
-  if (sa && allChk.length) sa.checked = [...allChk].every(c => c.checked);
   _syncGroupCheckboxes();
+  _syncSelectAllCheckbox({ allowChecked: false });
   updateSelectionUI();
 }
 
 function _syncGroupCheckboxes() {
   document.querySelectorAll('.group-chk').forEach(gc => {
     const paths = _groupDocPaths[gc.dataset.gkey] || [];
-    gc.checked = paths.length > 0 && paths.every(p => selected.has(p));
+    const checkedCount = paths.filter(p => selected.has(p)).length;
+    gc.checked = paths.length > 0 && checkedCount === paths.length;
+    gc.indeterminate = checkedCount > 0 && checkedCount < paths.length;
   });
 }
 
+function _syncSelectAllCheckbox(opts = {}) {
+  const allowChecked = opts.allowChecked !== false;
+  const sa = document.getElementById('select-all');
+  if (!sa) return;
+  const rowChecks = [...document.querySelectorAll('.row-chk')];
+  const checkedCount = rowChecks.filter(c => c.checked).length;
+  if (!rowChecks.length || checkedCount === 0) {
+    sa.checked = false;
+    sa.indeterminate = false;
+    return;
+  }
+  const allVisibleChecked = checkedCount === rowChecks.length;
+  sa.checked = allowChecked && allVisibleChecked;
+  sa.indeterminate = !sa.checked && checkedCount > 0;
+}
+
 function clearSelection() {
+  _selectAllActive = false;
   selected.clear();
   _ACTION_PANELS.forEach(p => { document.getElementById(p).style.display = 'none'; });
   document.querySelectorAll('.row-chk').forEach(c => { c.checked = false; });
-  document.querySelectorAll('.group-chk').forEach(c => { c.checked = false; });
+  document.querySelectorAll('.group-chk').forEach(c => { c.checked = false; c.indeterminate = false; });
   const sa = document.getElementById('select-all');
-  if (sa) sa.checked = false;
+  if (sa) { sa.checked = false; sa.indeterminate = false; }
   updateSelectionUI();
 }
 
@@ -2765,6 +2870,7 @@ async function saveUserPrefs() {
     filter_followup_status: document.getElementById('followup-filter')?.value   || '',
     filter_importance:     document.getElementById('importance-filter')?.value  || '',
     filter_contact_status: document.getElementById('contact-status-filter')?.value || '',
+    include_pending:       !!document.getElementById('include-pending')?.checked,
     filter_due:            document.getElementById('due-filter')?.value         || '',
     search:                document.getElementById('search')?.value             || '',
     group_primary:         document.getElementById('group-primary')?.value      || '',
@@ -2777,6 +2883,7 @@ async function saveUserPrefs() {
     sync_period:           document.getElementById('sync-period')?.value        || '',
     sp_channels_open:      _spChannelsOpen,
     sp_company_open:       _spCompanyOpen,
+    sp_sections_open:      _getSpSectionsOpenPrefs(),
   };
   try {
     await fetchJSON(`${BASE}/api/crm/user-prefs?page=followup`, {
