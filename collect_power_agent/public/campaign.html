@@ -195,9 +195,9 @@ body { overflow: hidden; }
         <select id="campaign-status-filter" class="form-select form-select-sm" onchange="filterCampaignList()">
           <option value="">All</option>
           <option value="draft">Draft</option>
-          <option value="dosend">Do send</option>
-          <option value="sent">Sent</option>
-          <option value="cancelled">Cancelled</option>
+          <option value="ready">Ready</option>
+          <option value="active">Active</option>
+          <option value="canceled">Canceled</option>
         </select>
       </div>
       <select id="campaign-owner-filter" class="form-select form-select-sm mt-2" onchange="filterCampaignList()">
@@ -249,7 +249,10 @@ body { overflow: hidden; }
         </button>
       </div>
 <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none">
-        <i class="ti ti-rocket me-1"></i>Activate campaign
+        <i class="ti ti-circle-check me-1"></i>Mark ready
+      </button>
+      <button class="btn btn-sm btn-outline-danger" onclick="confirmCancel()" id="cancel-btn" style="display:none">
+        <i class="ti ti-ban me-1"></i>Cancel
       </button>
       <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete()" id="delete-btn" style="display:none">
         <i class="ti ti-trash me-1"></i>Delete
@@ -311,7 +314,7 @@ body { overflow: hidden; }
             </select>
           </div>
           <div class="col-6" id="c-sent-at-row" style="display:none">
-            <label class="mb-1" style="color:var(--bb-muted)">Activated at</label>
+            <label class="mb-1" style="color:var(--bb-muted)">Active since</label>
             <div class="pt-1"><i class="ti ti-rocket me-1"></i><span id="c-sent-at">—</span></div>
           </div>
           <div class="col-12" id="c-facet-row" style="display:none">
@@ -540,20 +543,20 @@ body { overflow: hidden; }
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
       <div class="modal-header border-0 pb-0">
-        <h6 class="modal-title"><i class="ti ti-rocket text-success me-2"></i>Activate campaign</h6>
+        <h6 class="modal-title"><i class="ti ti-circle-check text-success me-2"></i>Mark campaign ready</h6>
       </div>
       <div class="modal-body">
-        <p class="mb-2">You are about to activate campaign <strong id="modal-campaign-id"></strong>.</p>
+        <p class="mb-2">You are about to mark campaign <strong id="modal-campaign-id"></strong> as ready.</p>
         <div class="alert alert-info py-2 small mb-2">
-          <i class="ti ti-info-circle me-1"></i>Activating marks this campaign as <strong>dosend</strong> — queued for outreach delivery. The outreach sender picks up campaigns in this status.
+          <i class="ti ti-info-circle me-1"></i>Ready campaigns can send outreach. The campaign becomes active after the first real mail is sent.
         </div>
         <div class="alert alert-warning py-2 small mb-0">
-          <i class="ti ti-lock me-1"></i>Once activated, the campaign cannot be changed or synced. This cannot be undone.
+          <i class="ti ti-lock me-1"></i>Review the campaign before making it ready.
         </div>
       </div>
       <div class="modal-footer border-0 pt-0">
         <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn btn-success btn-sm" onclick="doSend()"><i class="ti ti-rocket me-1"></i>Yes, activate</button>
+        <button class="btn btn-success btn-sm" onclick="doSend()"><i class="ti ti-circle-check me-1"></i>Yes, mark ready</button>
       </div>
     </div>
   </div>
@@ -600,7 +603,7 @@ body { overflow: hidden; }
         <div class="alert alert-danger py-2 small mb-0">
           <i class="ti ti-alert-triangle me-1"></i>
           This will delete <strong><span id="del-contact-count">0</span> contacts</strong>
-          and cannot be undone. Only draft campaigns can be deleted.
+          and cannot be undone. Only draft or canceled campaigns can be deleted.
         </div>
       </div>
       <div class="modal-footer border-0 pt-0">
@@ -634,8 +637,19 @@ function contactStatus(s) {
   return ['pending', 'active', 'excluded'].includes(s) ? s : 'pending';
 }
 
+function campaignStatus(s) {
+  const st = String(s || 'draft').toLowerCase();
+  return ({ dosend: 'ready', sent: 'active', cancelled: 'canceled' }[st]) || st;
+}
+
+function campaignStatusLabel(s) {
+  const st = campaignStatus(s);
+  return ({ draft: 'draft', ready: 'ready', active: 'active', canceled: 'canceled' }[st]) || 'draft';
+}
+
 function statusBadge(s) {
-  return `<span class="bb-badge bb-badge-${s||'draft'}">${s||'draft'}</span>`;
+  const st = campaignStatus(s);
+  return `<span class="bb-badge bb-badge-${st}">${campaignStatusLabel(st)}</span>`;
 }
 
 function contactStatusBadge(s) {
@@ -648,8 +662,8 @@ function contactDocId(c) {
 }
 
 function campaignListBadge(s) {
-  const st = s || 'draft';
-  return `<span class="bb-badge bb-badge-${st}">${escapeHtml(st)}</span>`;
+  const st = campaignStatus(s);
+  return `<span class="bb-badge bb-badge-${st}">${escapeHtml(campaignStatusLabel(st))}</span>`;
 }
 
 function populateCampaignOwnerFilter() {
@@ -699,7 +713,7 @@ function filterCampaignList() {
     const owner = (c.owner || '').toLowerCase();
     const subject = (c.mail?.subject || '').toLowerCase();
     return (!q || id.includes(q) || owner.includes(q) || subject.includes(q))
-      && (!st || c.status === st)
+      && (!st || campaignStatus(c.status) === st)
       && (!ow || (c.owner || '') === ow);
   }));
 }
@@ -1183,9 +1197,10 @@ async function loadCampaign() {
       sheetLink.style.pointerEvents = 'none';
       sheetLink.style.color = 'var(--bb-muted)';
     }
-    const st = c.status || 'draft';
+    const st = campaignStatus(c.status || 'draft');
+    c.status = st;
     const badge = document.getElementById('c-status-badge');
-    badge.className = `bb-badge bb-badge-${st}`; badge.textContent = st;
+    badge.className = `bb-badge bb-badge-${st}`; badge.textContent = campaignStatusLabel(st);
     document.getElementById('c-contacts').textContent = c.contact_count || 0;
     document.getElementById('c-sites').textContent    = c.sites_count || 0;
     document.getElementById('c-countries').textContent = (c.countries||[]).length || '—';
@@ -1202,7 +1217,7 @@ async function loadCampaign() {
     if (viewBtn) viewBtn.style.display = hasMailAccount ? '' : 'none';
     document.getElementById('c-updated').textContent  = fmt(c.updated_at);
     const sentAtRow = document.getElementById('c-sent-at-row');
-    if (st === 'sent' && c.sent_at) { sentAtRow.style.display = ''; document.getElementById('c-sent-at').textContent = fmt(c.sent_at); }
+    if (st === 'active' && c.sent_at) { sentAtRow.style.display = ''; document.getElementById('c-sent-at').textContent = fmt(c.sent_at); }
     else sentAtRow.style.display = 'none';
     window._campaignData = c;
     window._campaignMail = { ...(c.mail || {}), outreach_email: c.outreach_email_account || '',
@@ -1243,12 +1258,13 @@ async function loadCampaign() {
       facetRow.style.display = 'none';
     }
 
-    const isSent = st === 'sent' || st === 'cancelled';
+    const isLocked = st === 'active' || st === 'canceled';
     const sendBtn = document.getElementById('send-btn');
-    sendBtn.style.display = (st === 'draft' || st === 'dosend') ? '' : 'none';
-    document.getElementById('delete-btn').style.display = st === 'draft' ? '' : 'none';
+    sendBtn.style.display = st === 'draft' ? '' : 'none';
+    document.getElementById('cancel-btn').style.display = (st === 'ready' || st === 'active') ? '' : 'none';
+    document.getElementById('delete-btn').style.display = (st === 'draft' || st === 'canceled') ? '' : 'none';
     const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
-    if (syncBtn) syncBtn.disabled = isSent;
+    if (syncBtn) syncBtn.disabled = isLocked;
     allContacts = c.campaign_contacts || [];
     document.getElementById('c-contact-count').textContent = `(${allContacts.length})`;
     renderContacts(allContacts);
@@ -1586,20 +1602,20 @@ async function doSend() {
   try {
     const r = await fetch(`${BASE}/api/crm/campaigns/${id}`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({status: 'dosend'})
+      body: JSON.stringify({status: 'ready'})
     });
     const d = await r.json();
     if (d.status === 'ok') {
       const badge = document.getElementById('c-status-badge');
-      badge.className = 'bb-badge bb-badge-dosend'; badge.textContent = 'dosend';
+      badge.className = 'bb-badge bb-badge-ready'; badge.textContent = 'ready';
       if (d.campaign && d.campaign.sent_at) {
         document.getElementById('c-sent-at-row').style.display = '';
         document.getElementById('c-sent-at').textContent = fmt(d.campaign.sent_at);
       }
       document.getElementById('send-btn').style.display = 'none';
-      document.querySelector('[onclick="syncCampaign()"]').disabled = true;
+      document.getElementById('cancel-btn').style.display = '';
       fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
-      fb.textContent = 'Campaign marked as dosend — queued for outreach delivery.'; fb.style.display = '';
+      fb.textContent = 'Campaign marked as ready. It will become active after the first real mail is sent.'; fb.style.display = '';
     } else {
       fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
       fb.textContent = d.message; fb.style.display = '';
@@ -1607,6 +1623,38 @@ async function doSend() {
   } catch(e) {
     fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
     fb.textContent = e.message; fb.style.display = '';
+  }
+}
+
+async function confirmCancel() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  if (!confirm(`Cancel campaign "${id}"? Active campaigns stay locked until canceled, and canceled campaigns can be deleted.`)) return;
+  const fb = document.getElementById('sync-feedback');
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({status: 'canceled'})
+    });
+    const d = await r.json();
+    if (d.status !== 'ok') throw new Error(d.message || 'Cancel failed');
+    const badge = document.getElementById('c-status-badge');
+    badge.className = 'bb-badge bb-badge-canceled';
+    badge.textContent = 'canceled';
+    document.getElementById('send-btn').style.display = 'none';
+    document.getElementById('cancel-btn').style.display = 'none';
+    document.getElementById('delete-btn').style.display = '';
+    const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
+    if (syncBtn) syncBtn.disabled = true;
+    fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
+    fb.textContent = 'Campaign canceled.';
+    fb.style.display = '';
+    await loadCampaignList();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = e.message;
+    fb.style.display = '';
   }
 }
 

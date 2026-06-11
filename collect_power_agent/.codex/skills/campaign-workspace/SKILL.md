@@ -52,7 +52,9 @@ Use this skill for the campaign workspace frontend and its docs.
 ## Contact status rules
 
 - Contact lifecycle statuses are only `pending`, `active`, and `excluded`.
-- Campaign statuses are separate: `draft`, `dosend`, `sent`, `cancelled`.
+- Campaign statuses are separate: `draft`, `ready`, `active`, `canceled`.
+- Status flow is `draft` -> `ready` -> `active` -> `canceled`, then the campaign can be deleted.
+- A campaign becomes `active` after the first real outreach mail is sent.
 - Contact row actions are toggles:
   - Active toggles `active` <-> `pending`
   - Exclude toggles `excluded` <-> `pending`

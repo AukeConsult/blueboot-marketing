@@ -39,16 +39,14 @@ The follow-up status is the single most important field for tracking where a con
 | Status | Meaning |
 |---|---|
 | *(none)* | Not yet reviewed or actioned |
-| **Open** | On your list; you intend to follow up but have not done so yet |
-| **Contacted** | You have sent a follow-up message beyond the initial outreach |
+| **In-work** | General work state; the contact needs attention or is being worked |
+| **Contacted** | A mail has been sent, either from the follow-up popup or set manually |
 | **Replied** | The contact has replied — positive, neutral, or asking for more information |
-| **Meeting booked** | A call or meeting is scheduled |
-| **Offer sent** | A proposal or offer has been sent |
-| **Accepted offer** | The contact has agreed to proceed |
-| **Closed** | Fully resolved — won, lost, or no longer relevant |
-| **Not interested** | The contact has declined or explicitly opted out |
+| **Meeting** | A call or meeting is scheduled |
+| **Offer** | A proposal or offer has been sent or is being handled |
+| **Not-interested** | The contact has declined or explicitly opted out |
 
-Work the statuses honestly. A contact sitting at "Open" for weeks is a signal that it needs a decision: follow up, skip, or close.
+Work the statuses honestly. A contact sitting at "In-work" for weeks is a signal that it needs a decision: follow up, move forward, or mark not interested.
 
 ---
 

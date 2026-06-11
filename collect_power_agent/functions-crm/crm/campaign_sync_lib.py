@@ -61,6 +61,15 @@ def _contact_status(value) -> str:
     return "pending"
 
 
+def _campaign_status(value) -> str:
+    status = str(value or "draft").strip().lower()
+    return {
+        "dosend": "ready",
+        "sent": "active",
+        "cancelled": "canceled",
+    }.get(status, status)
+
+
 def _header_to_field(label: str) -> str:
     """Map a sheet column header to a Firestore field name."""
     if label in _HEADER_TO_FIELD:
@@ -115,11 +124,11 @@ def run_campaign_sync(db, svc, gd, campaign_id: str, **_kwargs) -> dict:
     # ── 0. Guard: only sync editable campaigns ─────────────────────────────
     camp_doc = db.collection(CAMPAIGNS_COLLECTION).document(campaign_id).get()
     if camp_doc.exists:
-        camp_status = (camp_doc.to_dict() or {}).get("status", "draft")
-        if camp_status in ("sent", "cancelled"):
+        camp_status = _campaign_status((camp_doc.to_dict() or {}).get("status", "draft"))
+        if camp_status in ("active", "canceled"):
             return {
                 "blocked": True,
-                "reason": f"Campaign status is '{camp_status}' — sync only allowed for non-sent campaigns.",
+                "reason": f"Campaign status is '{camp_status}' — sync only allowed for draft/ready campaigns.",
             }
 
     # ── 1. Does the sheet exist? ────────────────────────────────────────────

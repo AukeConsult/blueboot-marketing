@@ -110,7 +110,7 @@ Once you have written the template, use **Send test** to send a preview to your 
 
 #### Activating the campaign
 
-When the owner, email account, contact list, and mail template are all ready, click **Activate campaign**. This sets the campaign to **dosend** status and queues it for outreach delivery. Once activated, the campaign is locked: contacts cannot be added or removed, and the mail template cannot be changed.
+When the owner, email account, contact list, and mail template are all ready, click **Mark ready**. This sets the campaign to **ready** status. After the first real outreach mail is sent, the campaign becomes **active** and stays active until it is canceled.
 
 ---
 

@@ -27,6 +27,15 @@ CAMPAIGN_CONTACTS_SUB = "campaign_contacts"
 BATCH_SIZE = 400
 
 
+def _campaign_status(value) -> str:
+    status = str(value or "draft").strip().lower()
+    return {
+        "dosend": "ready",
+        "sent": "active",
+        "cancelled": "canceled",
+    }.get(status, status)
+
+
 def run_campaign_delete(db, campaign_id: str) -> dict:
     """Delete a campaign that is in 'draft' or 'deleting' status.
 
@@ -52,13 +61,13 @@ def run_campaign_delete(db, campaign_id: str) -> dict:
         snap = ref.get(transaction=tx)
         if not snap.exists:
             raise ValueError(f"Campaign '{campaign_id}' not found")
-        status = (snap.to_dict() or {}).get("status", "")
-        if status not in ("draft", "deleting"):
+        status = _campaign_status((snap.to_dict() or {}).get("status", ""))
+        if status not in ("draft", "canceled", "deleting"):
             raise ValueError(
                 f"Campaign '{campaign_id}' has status '{status}' — "
                 "only draft campaigns can be deleted"
             )
-        if status == "draft":
+        if status in ("draft", "canceled"):
             tx.update(ref, {"status": "deleting"})
 
     _claim(db.transaction(), camp_ref)

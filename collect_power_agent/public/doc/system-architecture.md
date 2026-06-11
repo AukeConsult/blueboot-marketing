@@ -250,7 +250,7 @@ Campaign documents can also be created directly via the API (`POST /api/crm/camp
 | Field | Description |
 |---|---|
 | `campaign_id` | Unique string (e.g. `NO_jun`) |
-| `status` | `draft` / `dosend` / `sent` / `cancelled` |
+| `status` | `draft` / `ready` / `active` / `canceled` |
 | `source` | `master-sheet` or `manual` |
 | `outreach_email_account` | Email address of sending account |
 | `owner` | Responsible person name |
@@ -294,7 +294,7 @@ Campaign documents can also be created directly via the API (`POST /api/crm/camp
 
 ### 4.4 Activation
 
-When a campaign is set to `dosend` the **Activate** button appears. Activating marks it `sent` and timestamps `sent_at`. Sent/cancelled campaigns cannot be modified or synced.
+Campaigns move `draft` -> `ready` -> `active` -> `canceled`. The campaign is marked `ready` by the workspace, then becomes `active` when the first real outreach mail is sent and `sent_at` is timestamped. Active/canceled campaigns cannot be synced.
 
 ---
 

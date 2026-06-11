@@ -12,6 +12,12 @@ bp = Blueprint("campaigns", __name__)
 
 _CONTACT_STATUSES = {"pending", "active", "excluded"}
 _LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
+_CAMPAIGN_STATUSES = {"draft", "ready", "active", "canceled"}
+_LEGACY_CAMPAIGN_STATUSES = {
+    "dosend": "ready",
+    "sent": "active",
+    "cancelled": "canceled",
+}
 
 
 def _contact_status(value) -> str:
@@ -23,19 +29,28 @@ def _contact_status(value) -> str:
     return "pending"
 
 
+def _campaign_status(value) -> str:
+    status = str(value or "draft").strip().lower()
+    status = _LEGACY_CAMPAIGN_STATUSES.get(status, status)
+    return status if status in _CAMPAIGN_STATUSES else "draft"
+
+
 @bp.route("/api/crm/campaigns", methods=["GET"])
 def list_campaigns():
     """List all campaigns, ordered by updated_at descending."""
     try:
         db     = _get_db()
-        status = request.args.get("status", "").strip()
+        status = _campaign_status(request.args.get("status", "").strip()) if request.args.get("status") else ""
         col    = db.collection("campaigns")
         query  = col.order_by("updated_at", direction="DESCENDING")
-        if status:
-            from google.cloud.firestore_v1.base_query import FieldFilter
-            query = col.where(filter=FieldFilter("status", "==", status))
         docs = list(query.stream())
-        campaigns = [d.to_dict() for d in docs]
+        campaigns = []
+        for d in docs:
+            data = d.to_dict() or {}
+            data["status"] = _campaign_status(data.get("status"))
+            if status and data["status"] != status:
+                continue
+            campaigns.append(data)
         return jsonify({"campaigns": campaigns, "count": len(campaigns)})
     except Exception as exc:
         return _err(str(exc), 500)
@@ -50,6 +65,7 @@ def get_campaign(campaign_id):
         if not doc.exists:
             return _err(f"Campaign '{campaign_id}' not found", 404)
         data = doc.to_dict()
+        data["status"] = _campaign_status(data.get("status"))
         outreach_email = data.get("outreach_email_account", "")
         data["mail_account"] = _get_mail_account(db, outreach_email) or {}
         contacts_docs = db.collection("campaigns").document(campaign_id).collection("campaign_contacts").stream()
@@ -118,14 +134,29 @@ def update_campaign(campaign_id):
         update = {}
 
         if "status" in body:
-            valid = {"draft", "dosend", "sent", "cancelled"}
-            if body["status"] not in valid:
-                return _err(f"Invalid status. Must be one of: {', '.join(sorted(valid))}", 400)
-            current_status = (doc.to_dict() or {}).get("status", "draft")
-            if current_status == "draft":
-                update["status"] = body["status"]
-                if body["status"] == "sent" and not body.get("sent_at"):
+            raw_status = str(body["status"] or "").strip().lower()
+            if raw_status not in _CAMPAIGN_STATUSES and raw_status not in _LEGACY_CAMPAIGN_STATUSES:
+                return _err(f"Invalid status. Must be one of: {', '.join(sorted(_CAMPAIGN_STATUSES))}", 400)
+            requested_status = _campaign_status(body["status"])
+            valid = _CAMPAIGN_STATUSES
+            current_status = _campaign_status((doc.to_dict() or {}).get("status", "draft"))
+            allowed_next = {
+                "draft":    {"ready", "canceled"},
+                "ready":    {"active", "canceled"},
+                "active":   {"canceled"},
+                "canceled": set(),
+            }
+            if requested_status == current_status:
+                update["status"] = requested_status
+            elif requested_status in allowed_next.get(current_status, set()):
+                update["status"] = requested_status
+                if requested_status == "active" and not body.get("sent_at"):
                     update["sent_at"] = datetime.now(timezone.utc).isoformat()
+            else:
+                return _err(
+                    f"Invalid campaign status transition: {current_status} -> {requested_status}.",
+                    409,
+                )
 
         if "sent_at"                in body: update["sent_at"]                = body["sent_at"]
         if "outreach_email_account" in body: update["outreach_email_account"] = body["outreach_email_account"]
@@ -226,9 +257,9 @@ def delete_campaign(campaign_id):
         doc = db.collection("campaigns").document(campaign_id).get()
         if not doc.exists:
             return _err(f"Campaign '{campaign_id}' not found", 404)
-        status = (doc.to_dict() or {}).get("status", "")
-        if status not in ("draft",):
-            return _err(f"Campaign '{campaign_id}' has status '{status}' — only draft campaigns can be deleted.", 409)
+        status = _campaign_status((doc.to_dict() or {}).get("status", ""))
+        if status not in ("draft", "canceled"):
+            return _err(f"Campaign '{campaign_id}' has status '{status}' — only draft or canceled campaigns can be deleted.", 409)
 
         from google.cloud import firestore as _fs
         camp_ref = db.collection("campaigns").document(campaign_id)
@@ -236,7 +267,7 @@ def delete_campaign(campaign_id):
         @_fs.transactional
         def _claim(tx, ref):
             snap = ref.get(transaction=tx)
-            if (snap.to_dict() or {}).get("status") != "draft":
+            if _campaign_status((snap.to_dict() or {}).get("status")) not in ("draft", "canceled"):
                 raise ValueError("Status changed — delete aborted")
             tx.update(ref, {"status": "deleting"})
 

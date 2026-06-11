@@ -43,9 +43,9 @@
     <select id="status-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
       <option value="">All statuses</option>
       <option value="draft">Draft</option>
-      <option value="dosend">Do send</option>
-      <option value="sent">Sent</option>
-      <option value="cancelled">Cancelled</option>
+      <option value="ready">Ready</option>
+      <option value="active">Active</option>
+      <option value="canceled">Canceled</option>
     </select>
     <select id="owner-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
       <option value="">All owners</option>
@@ -74,7 +74,13 @@ let allCampaigns = [];
 const fmt = fmtDateMedium;      // shared
 
 function statusBadge(s) {
-  return `<span class="bb-badge bb-badge-${s||'draft'}">${s||'draft'}</span>`;
+  const st = campaignStatus(s);
+  return `<span class="bb-badge bb-badge-${st}">${st}</span>`;
+}
+
+function campaignStatus(s) {
+  const st = String(s || 'draft').toLowerCase();
+  return ({ dosend: 'ready', sent: 'active', cancelled: 'canceled' }[st]) || st;
 }
 
 function render(list) {
@@ -117,7 +123,7 @@ function filter() {
   const ow = document.getElementById('owner-filter').value;
   render(allCampaigns.filter(c => {
     const matchQ  = !q  || c.campaign_id.toLowerCase().includes(q) || (c.owner||'').toLowerCase().includes(q) || (c.mail?.subject||'').toLowerCase().includes(q);
-    const matchSt = !st || c.status === st;
+    const matchSt = !st || campaignStatus(c.status) === st;
     const matchOw = !ow || (c.owner || '') === ow;
     return matchQ && matchSt && matchOw;
   }));

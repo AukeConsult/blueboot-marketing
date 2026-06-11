@@ -135,6 +135,8 @@ body.bg-alt { background: var(--bb-bg-alt); }
 /* Status badges (superset of all variants used across pages) */
 .bb-badge { display: inline-flex; align-items: center; font-size: .72rem; font-weight: 600; padding: .2rem .55rem; border-radius: 20px; }
 .bb-badge-draft     { background: #f1f1f1; color: #555; }
+.bb-badge-ready     { background: #dbeafe; color: #1d4ed8; }
+.bb-badge-canceled  { background: #fee2e2; color: #b91c1c; }
 .bb-badge-dosend    { background: #dbeafe; color: #1d4ed8; }
 .bb-badge-sent      { background: #dcfce7; color: #15803d; }
 .bb-badge-cancelled { background: #fee2e2; color: #b91c1c; }

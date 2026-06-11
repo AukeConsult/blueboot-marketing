@@ -49,7 +49,7 @@
 const fmt = fmtTime;            // shared; elapsed() also from the library
 
 function jobPill(status){
-  return `<span class="bb-badge bb-badge-${({queued:'dosend',running:'pending',done:'sent',error:'error'})[status]||'dosend'}">${status}</span>`;
+  return `<span class="bb-badge bb-badge-${({queued:'ready',running:'pending',done:'active',error:'error'})[status]||'ready'}">${status}</span>`;
 }
 
 const JOB_NAMES = {'contact-sync':'Import contacts','push-and-sync':'Push selected to CRM','template-sync':'Sync CRM to Leads Database','campaign-sync':'Campaign sync'};

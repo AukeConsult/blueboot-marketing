@@ -69,7 +69,7 @@ The campaign workspace uses a full-page split layout. The left sidebar lists cam
 
 ### Actions
 
-- **Campaign sidebar** — search by name, filter by status (Draft / Do send / Sent / Cancelled) and owner, then select a campaign to edit it on the right.
+- **Campaign sidebar** — search by name, filter by status (Draft / Ready / Active / Canceled) and owner, then select a campaign to edit it on the right.
 - **Refresh** — reloads the sidebar list.
 - **Discover campaigns** — scans the master CRM contact sheet for any campaign IDs that do not yet exist in the system, creates them, and immediately kicks off a contact sync for each one. Before using this route, make sure you have updated and selected the contacts you want in **CRM Discover**.
 
@@ -99,9 +99,9 @@ When a campaign is created — whether from a filter preset, via Discover campai
 | Status | Meaning |
 |---|---|
 | `draft` | Being prepared, not ready to send |
-| `dosend` | Ready — the Activate button becomes visible |
-| `sent` | Activated and delivered |
-| `cancelled` | Cancelled |
+| `ready` | Reviewed and ready to send |
+| `active` | First real mail has been sent; campaign remains active until canceled |
+| `canceled` | Stopped; can be deleted |
 
 ---
 
@@ -123,7 +123,7 @@ A compact one-line summary: **N contacts · N sites · N countries · N active �
 
 - **Email account** — dropdown of configured mail accounts. Changing this saves immediately and updates which account the campaign uses for outreach. An eye icon opens a read-only popup showing the account's IMAP/Gmail settings.
 - **Owner** — auto-saves 1.2 s after typing.
-- **Activated at** — shown once the campaign has been activated.
+- **Active since** — shown once the campaign has sent its first real mail.
 - **Built from facet filter** — shown when the campaign was created from a filter-facets preset. Displays the preset name (linked to `filter-facets.html`), the timestamp it was last built, and each active filter field as a pill badge (e.g. `ai_company_type: b2b`, `email_type: personal`). Updated every time the facet-campaign job runs.
 
 ### Mail schedule and editor
@@ -155,13 +155,13 @@ Reads the campaign's Google Drive spreadsheet → updates Firestore for existing
 
 Overwrites the campaign spreadsheet completely from the database. A confirmation popup warns that manual edits (except Last action and Last action status) will be lost.
 
-### Activate button
+### Mark ready button
 
-Only visible when campaign status is `dosend`. Marks the campaign as sent and queues it for outreach delivery. Requires confirmation.
+Only visible when campaign status is `draft`. Marks the campaign as `ready`. The campaign becomes `active` automatically after the first real outreach mail is sent.
 
 ### Delete button
 
-Only visible when campaign status is `draft`. Opens a confirmation popup showing the contact count. On confirm, atomically marks the campaign as `deleting` (Firestore transaction) and enqueues a background `campaign-delete` job that batch-deletes all `campaign_contacts` then the campaign document. The workspace reloads the sidebar and selects the next campaign on completion. Campaigns with any other status cannot be deleted.
+Only visible when campaign status is `draft` or `canceled`. Opens a confirmation popup showing the contact count. On confirm, atomically marks the campaign as `deleting` (Firestore transaction) and enqueues a background `campaign-delete` job that batch-deletes all `campaign_contacts` then the campaign document. The workspace reloads the sidebar and selects the next campaign on completion.
 
 ### Contacts table
 

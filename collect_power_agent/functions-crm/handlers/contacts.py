@@ -11,6 +11,16 @@ bp = Blueprint("contacts", __name__)
 _FOLLOWUP_FIELDS = {"followup_date", "followup_status", "followup_comment", "followup_importance", "followup_owner"}
 _CONTACT_STATUSES = {"pending", "active", "excluded"}
 _LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
+_FOLLOWUP_STATUSES = {"", "in_work", "contacted", "replied", "meeting", "offer", "not_interested"}
+_LEGACY_FOLLOWUP_STATUSES = {
+    "open": "in_work",
+    "send_mail": "in_work",
+    "waiting": "in_work",
+    "offer_sent": "offer",
+    "accepted": "offer",
+    "closed": "not_interested",
+    "not-interested": "not_interested",
+}
 
 _FOLLOWUP_HISTORY_TYPE = {
     "followup_status":     "STATUS",
@@ -33,6 +43,16 @@ def _followup_history_text(field: str, value: str) -> str:
     if field == "followup_owner":
         return f"Owner → {value}" if value else "Owner cleared"
     return value
+
+
+def _followup_status(value, *, strict: bool = False) -> str:
+    status = str(value or "").strip().lower()
+    status = _LEGACY_FOLLOWUP_STATUSES.get(status, status)
+    if status not in _FOLLOWUP_STATUSES:
+        if strict:
+            raise ValueError("Invalid follow-up status. Must be one of: in_work, contacted, replied, meeting, offer, not_interested.")
+        return ""
+    return status
 
 
 def _safe_history(h_list) -> list:
@@ -78,7 +98,7 @@ def get_campaign_contact(campaign_id, doc_id):
             "website":             d.get("website", ""),
             "status":              _contact_status(d.get("status")),
             "followup_date":       d.get("followup_date", "") or "",
-            "followup_status":     d.get("followup_status", "") or "",
+            "followup_status":     _followup_status(d.get("followup_status", "")),
             "followup_comment":    d.get("followup_comment", "") or "",
             "followup_importance": d.get("followup_importance", "") or "",
             "followup_owner":      d.get("followup_owner", "") or "",
@@ -111,6 +131,11 @@ def update_campaign_contact(campaign_id, doc_id):
                     "Invalid contact status. Must be one of: active, excluded, pending.",
                     400,
                 )
+        if "followup_status" in update:
+            try:
+                update["followup_status"] = _followup_status(update["followup_status"], strict=True)
+            except ValueError as exc:
+                return _err(str(exc), 400)
         # Boolean fields — handled separately (must not be coerced to str)
         if "new_mail" in body:
             update["new_mail"] = bool(body["new_mail"])
@@ -195,6 +220,18 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
         if not ma:
             return _err(f"No mail account found for '{outreach_email}'.", 400)
 
+        campaign_status = str(camp.get("status") or "draft").strip().lower()
+        campaign_status = {
+            "dosend": "ready",
+            "sent": "active",
+            "cancelled": "canceled",
+        }.get(campaign_status, campaign_status)
+        if campaign_status not in {"ready", "active"}:
+            return _err(
+                f"Campaign status is '{campaign_status}' — mark it ready before sending mail.",
+                409,
+            )
+
         from crm.mail_sender import MailSender
         result = MailSender(ma).send(
             to=to_addr,
@@ -220,6 +257,12 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
                 "subject": subject,
             }]),
         })
+        if campaign_status == "ready":
+            camp_ref.update({
+                "status": "active",
+                "sent_at": camp.get("sent_at") or now,
+                "updated_at": now,
+            })
         result.update({"logged": True, "from": outreach_email, "to": to_addr})
         return jsonify(result)
     except Exception as exc:
@@ -377,7 +420,7 @@ def followup_contacts():
                 "website":             d.get("website", ""),
                 "status":              status,
                 "followup_date":       d.get("followup_date", "") or "",
-                "followup_status":     d.get("followup_status", "") or "",
+                "followup_status":     _followup_status(d.get("followup_status", "")),
                 "followup_comment":    d.get("followup_comment", "") or "",
                 "followup_importance": d.get("followup_importance", "") or "",
                 "followup_owner":      d.get("followup_owner", "") or "",

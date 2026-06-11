@@ -314,6 +314,7 @@ def run_followup_email_sync(
                 has_incoming = any(e.get("type") == "EMAIL_IN" for e in entries)
                 if has_incoming:
                     update_doc["new_mail"] = True
+                    update_doc["followup_status"] = "replied"
                 ref.update(update_doc)
                 total_entries  += len(entries)
                 total_contacts += 1

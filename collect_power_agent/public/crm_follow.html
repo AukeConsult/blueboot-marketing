@@ -731,16 +731,12 @@ body { display: flex; flex-direction: column; }
     <select id="followup-filter" class="form-select form-select-sm" style="max-width:170px" onchange="applyFilter()">
       <option value="">All follow-up statuses</option>
       <option value="__none__">No status set</option>
-      <option value="open">Open</option>
+      <option value="in_work">In-work</option>
       <option value="contacted">Contacted</option>
-      <option value="send_mail">Send mail</option>
-      <option value="waiting">Waiting</option>
       <option value="replied">Replied</option>
-      <option value="meeting">Meeting booked</option>
-      <option value="offer_sent">Offer sent</option>
-      <option value="accepted">Accepted offer</option>
-      <option value="closed">Closed</option>
-      <option value="not_interested">Not interested</option>
+      <option value="meeting">Meeting</option>
+      <option value="offer">Offer</option>
+      <option value="not_interested">Not-interested</option>
     </select>
 
     <select id="importance-filter" class="form-select form-select-sm" style="max-width:145px" onchange="applyFilter()">
@@ -1161,7 +1157,7 @@ async function load() {
       messenger:          c.messenger          || '',
       status:             c.status             || 'pending',
       followup_date:      c.followup_date      || '',
-      followup_status:    c.followup_status    || '',
+      followup_status:    normalizeFollowupStatus(c.followup_status),
       followup_comment:   c.followup_comment   || '',
       followup_importance: c.followup_importance || '',
       followup_owner:     c.followup_owner     || '',
@@ -1412,10 +1408,10 @@ function applyFilter() {
 
   if (_focusQueue) {
     list = _focusQueueSort(list.filter(r => {
-      const status = r.followup_status || '';
+      const status = normalizeFollowupStatus(r.followup_status || '');
       return r.followup_date
         && r.followup_date <= weekEnd
-        && !['accepted', 'closed', 'not_interested'].includes(status);
+        && !['not_interested'].includes(status);
     }));
   } else {
     list = applySort(list);
@@ -1453,17 +1449,27 @@ const IMPORTANCE_LEVELS = [
 
 const FU_STATUSES = [
   { value: '',               label: '— none —' },
-  { value: 'open',           label: 'Open' },
+  { value: 'in_work',        label: 'In-work' },
   { value: 'contacted',      label: 'Contacted' },
-  { value: 'send_mail',      label: 'Send mail' },
-  { value: 'waiting',        label: 'Waiting' },
   { value: 'replied',        label: 'Replied' },
-  { value: 'meeting',        label: 'Meeting booked' },
-  { value: 'offer_sent',     label: 'Offer sent' },
-  { value: 'accepted',       label: 'Accepted offer' },
-  { value: 'closed',         label: 'Closed' },
-  { value: 'not_interested', label: 'Not interested' }
+  { value: 'meeting',        label: 'Meeting' },
+  { value: 'offer',          label: 'Offer' },
+  { value: 'not_interested', label: 'Not-interested' }
 ];
+
+function normalizeFollowupStatus(value) {
+  const st = String(value || '').trim().toLowerCase();
+  return ({
+    open: 'in_work',
+    send_mail: 'in_work',
+    waiting: 'in_work',
+    offer_sent: 'offer',
+    accepted: 'offer',
+    closed: 'not_interested',
+    'not-interested': 'not_interested'
+  }[st]) || st;
+}
+
 const GROUP_FIELDS = {
   followup_status: {
     label:   'Follow-up status',
@@ -2098,8 +2104,8 @@ function _renderSidePanel(r) {
           <button class="btn btn-sm btn-outline-primary" onclick="quickFollowupAction(${gidx},'contacted')">
             <i class="ti ti-check me-1"></i>Contacted
           </button>
-          <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'waiting')">
-            <i class="ti ti-clock me-1"></i>Waiting
+          <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'in_work')">
+            <i class="ti ti-clock me-1"></i>In-work
           </button>
           <button class="btn btn-sm btn-outline-danger" onclick="quickFollowupAction(${gidx},'not_interested')">
             <i class="ti ti-circle-x me-1"></i>Not relevant
@@ -2352,7 +2358,7 @@ async function quickFollowupAction(gidx, action) {
     tomorrow:       { fields: { followup_date: _datePlus(1) }, label: 'Snoozed to tomorrow' },
     next_week:      { fields: { followup_date: _datePlus(7) }, label: 'Snoozed one week' },
     contacted:      { fields: { followup_status: 'contacted', followup_date: _datePlus(7) }, label: 'Marked contacted; next follow-up in one week' },
-    waiting:        { fields: { followup_status: 'waiting', followup_date: _datePlus(7) }, label: 'Marked waiting; next follow-up in one week' },
+    in_work:        { fields: { followup_status: 'in_work', followup_date: _datePlus(7) }, label: 'Marked in-work; next follow-up in one week' },
     not_interested: { fields: { followup_status: 'not_interested', followup_date: '' }, label: 'Marked not relevant' },
   };
   const cfg = actionMap[action];
