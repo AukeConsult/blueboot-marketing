@@ -14,31 +14,38 @@
 
 <div id="nav"></div>
 
-<div style="max-width:1140px;margin:0 auto;padding:1.5rem 1.5rem">
-  <div class="row">
-
-    <!-- TOC sidebar -->
-    <div class="col-lg-2 d-none d-lg-block">
-      <div class="toc" id="toc"></div>
+<div class="doc-shell">
+  <aside class="doc-sidebar" id="doc-sidebar">
+    <div class="doc-sidebar-head">
+      <span class="fw-600 small"><i class="ti ti-list-tree text-primary me-1"></i>Contents</span>
+      <button class="btn btn-sm btn-outline-secondary py-0 px-2 doc-sidebar-close" onclick="closeDocMenu()" title="Close menu">
+        <i class="ti ti-x"></i>
+      </button>
     </div>
+    <div class="toc" id="toc"></div>
+  </aside>
 
-    <!-- Document body -->
-    <div class="col-lg-10">
-      <div class="d-flex align-items-center gap-2 mb-3">
+  <div class="doc-drawer-backdrop" id="doc-drawer-backdrop" onclick="closeDocMenu()"></div>
+
+  <main class="doc-main">
+    <div class="doc-topbar">
+      <div class="d-flex align-items-center gap-2 min-w-0">
         <a href="#" onclick="event.preventDefault(); history.length > 1 ? history.back() : window.close()" class="btn btn-sm btn-outline-secondary" title="Go back">
           <i class="ti ti-arrow-left"></i>
         </a>
-        <h6 class="page-title" id="doc-title">Loading…</h6>
-      </div>
-      <div id="doc-feedback" class="alert alert-danger py-2 small mb-3" style="display:none"></div>
-      <div class="doc-body bb-card p-4" id="doc-content">
-        <div class="text-center py-5 text-muted">
-          <div class="spinner-border spinner-border-sm me-2"></div>Loading document…
-        </div>
+        <button class="btn btn-sm btn-outline-secondary doc-menu-toggle" onclick="openDocMenu()" title="Open contents">
+          <i class="ti ti-menu-2"></i>
+        </button>
+        <h6 class="page-title text-truncate" id="doc-title">Loading...</h6>
       </div>
     </div>
-
-  </div>
+    <div id="doc-feedback" class="alert alert-danger py-2 small mb-3" style="display:none"></div>
+    <div class="doc-body bb-card p-4" id="doc-content">
+      <div class="text-center py-5 text-muted">
+        <div class="spinner-border spinner-border-sm me-2"></div>Loading document...
+      </div>
+    </div>
+  </main>
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
@@ -85,9 +92,12 @@ async function loadDoc() {
 function buildToc() {
   const toc      = document.getElementById('toc');
   const headings = document.querySelectorAll('#doc-content h1, #doc-content h2, #doc-content h3, #doc-content h4');
-  if (headings.length < 3) return;
+  if (headings.length < 3) {
+    toc.innerHTML = '<div class="toc-empty small">No contents for this document.</div>';
+    return;
+  }
 
-  let html = '<div class="toc-label">Contents</div>';
+  let html = '';
   headings.forEach((h, i) => {
     const id  = 'h-' + i;
     h.id      = id;
@@ -102,9 +112,22 @@ function buildToc() {
       e.preventDefault();
       document.getElementById(a.getAttribute('href').slice(1))
         ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      closeDocMenu();
     });
   });
 }
+
+function openDocMenu() {
+  document.body.classList.add('doc-menu-open');
+}
+
+function closeDocMenu() {
+  document.body.classList.remove('doc-menu-open');
+}
+
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeDocMenu();
+});
 
 loadDoc();
 </script>

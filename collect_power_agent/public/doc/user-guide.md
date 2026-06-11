@@ -63,15 +63,15 @@ This route gives you full human control over exactly which contacts enter a camp
 
 ## Campaigns
 
-**URL:** `campaigns.html`
+**URL:** `campaign.html`
 
-Lists all outreach campaigns. Each campaign card shows status, contact count, site count, countries, and whether it was created from the master CRM sheet (shown as a green `master-sheet` badge).
+The campaign workspace uses a full-page split layout. The left sidebar lists campaigns and scrolls independently. The main work area shows the selected campaign: campaign details and mail schedule on the left, and a right-hand work column that switches between the contact list and the mail editor.
 
 ### Actions
 
-- **Discover campaigns** — scans the master CRM contact sheet for any campaign IDs that do not yet exist in the system, creates them, and immediately kicks off a contact sync for each one. Before clicking this, make sure you have updated and selected the contacts you want in **CRM Discover**.
-- **Refresh** — reloads the list.
-- **Filters** — search by name, filter by status (Draft / Do send / Sent / Cancelled) and owner.
+- **Campaign sidebar** — search by name, filter by status (Draft / Do send / Sent / Cancelled) and owner, then select a campaign to edit it on the right.
+- **Refresh** — reloads the sidebar list.
+- **Discover campaigns** — scans the master CRM contact sheet for any campaign IDs that do not yet exist in the system, creates them, and immediately kicks off a contact sync for each one. Before using this route, make sure you have updated and selected the contacts you want in **CRM Discover**.
 
 ### How Discover campaigns works
 
@@ -109,13 +109,15 @@ When a campaign is created — whether from a filter preset, via Discover campai
 
 **URL:** `campaign.html?campaign_id=X`
 
+The same campaign workspace opens with campaign `X` preselected in the left sidebar.
+
 ### Page header
 
 Shows the campaign name. If the campaign has an associated Google Drive spreadsheet, a **Spreadsheet** link appears next to the name. On the right: status badge, source badge (if from master sheet), Sync, Full override, and Activate buttons.
 
 ### Status line
 
-A compact one-line summary: **N contacts · N sites · N countries · N sent · updated DATE**
+A compact one-line summary: **N contacts · N sites · N countries · N active · updated DATE**
 
 ### Campaign details (expandable)
 
@@ -124,12 +126,16 @@ A compact one-line summary: **N contacts · N sites · N countries · N sent · 
 - **Activated at** — shown once the campaign has been activated.
 - **Built from facet filter** — shown when the campaign was created from a filter-facets preset. Displays the preset name (linked to `filter-facets.html`), the timestamp it was last built, and each active filter field as a pill badge (e.g. `ai_company_type: b2b`, `email_type: personal`). Updated every time the facet-campaign job runs.
 
-### Mail template (expandable)
+### Mail schedule and editor
 
-Shows the From address, Subject, and a rendered preview of the email body. Supports both plain text and HTML templates.
+The **Mail schedule** section lists the outreach steps for the campaign, such as Intro, Reminder 1, and Reminder 2. Each step shows its day offset, subject, sent state, and quick action buttons.
 
-- **Edit** — opens the campaign editor.
-- **Send test** — opens a popup pre-filled with the campaign subject and body. Sends a test email via the configured mail account. HTML emails are CSS-inlined before sending to ensure compatibility with spam filters.
+- **Add step** — creates a new schedule step and opens the mail editor in the right-hand work column.
+- **Edit step** — opens the selected step in the right-hand mail editor. The contact list is hidden while you edit.
+- **Contacts** — in the editor header, switches the right-hand work column back to the contact list.
+- **Send test** — opens a popup pre-filled with that step's subject and body. Sends a test email via the configured mail account. HTML emails include the stored CSS.
+
+The mail editor supports plain text and HTML, autosaves changes, has an explicit save button, and can preview the rendered body with sample placeholder values.
 
 ### Campaign ↔ Sheet synchronisation
 
@@ -139,7 +145,7 @@ The campaign contact list and the Google Drive spreadsheet are kept in sync auto
 
 **Sheet wins for editable fields.** When you sync from the sheet, the values in the sheet overwrite the DB for user-editable fields (name, title, last action, last action status, etc.). The DB always controls `status` and `sent_at`. Any new column you add to the sheet is automatically written to the DB as a new field on the contact doc.
 
-**Deletes are propagated both ways.** When contacts are removed from the campaign (via the Exclude + Delete excluded flow, or bulk delete), a `campaign-export` job is automatically enqueued, which regenerates the sheet from the current DB state — deleted contacts disappear from the sheet. Conversely, when you sync from the sheet and a sheet row's Doc ID is no longer in the DB, the sync detects the discrepancy and re-exports the sheet to remove the orphaned row.
+**Campaign removals are propagated to the sheet.** When contacts are removed from the campaign via the Exclude + Remove excluded flow, a `campaign-export` job is automatically enqueued, which regenerates the sheet from the current DB state. The contacts disappear from this campaign's sheet, but the underlying contact records remain in the database and can be picked up by another campaign later. Conversely, when you sync from the sheet and a sheet row's Doc ID is no longer in the campaign, the sync detects the discrepancy and re-exports the sheet to remove the orphaned row.
 
 ### Sync button
 
@@ -155,14 +161,15 @@ Only visible when campaign status is `dosend`. Marks the campaign as sent and qu
 
 ### Delete button
 
-Only visible when campaign status is `draft`. Opens a confirmation popup showing the contact count. On confirm, atomically marks the campaign as `deleting` (Firestore transaction) and enqueues a background `campaign-delete` job that batch-deletes all `campaign_contacts` then the campaign document. Redirects to the campaigns list on completion. Campaigns with any other status cannot be deleted.
+Only visible when campaign status is `draft`. Opens a confirmation popup showing the contact count. On confirm, atomically marks the campaign as `deleting` (Firestore transaction) and enqueues a background `campaign-delete` job that batch-deletes all `campaign_contacts` then the campaign document. The workspace reloads the sidebar and selects the next campaign on completion. Campaigns with any other status cannot be deleted.
 
 ### Contacts table
 
-Lists all campaign contacts with status, name, email, title, website, and sent date.
+Lists all campaign contacts with contact status, name, email, title, and website.
 
-- **Exclude selector** — per-row dropdown. Selecting "Exclude" changes the contact's status badge locally.
-- **Remove excluded** button — appears when any contacts are set to Exclude. Opens a confirmation popup, then permanently removes those contacts from the campaign in Firestore.
+- **Active button** — sets a contact's lifecycle status directly to `active` in Firestore.
+- **Exclude button** — toggles a contact between `excluded` and `pending` directly in Firestore.
+- **Remove excluded** button — appears when any contacts are set to Exclude. Opens a confirmation popup explaining that the action removes the contacts only from this campaign, not from the database. Removing them frees those email addresses so other campaigns can pick them up later. Keeping them excluded in this campaign keeps the email reserved here, so it will not appear in other campaigns.
 - **Search** — filters the list client-side.
 
 ---

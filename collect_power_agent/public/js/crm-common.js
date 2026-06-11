@@ -177,7 +177,7 @@ const PAGE_ROLES = {
 };
 
 const NAV_LINKS = [
-  { href: 'campaigns.html',     icon: 'ti-speakerphone',      label: 'Campaigns',
+  { href: 'campaign.html',      icon: 'ti-speakerphone',      label: 'Campaigns',
     match: ['campaigns.html', 'campaign.html', 'campaign-edit.html'],
     roles: ['admin', 'campaign-user', 'user'] },
   { href: 'crm_follow.html',   icon: 'ti-phone-check',       label: 'Follow-up',

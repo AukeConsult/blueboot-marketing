@@ -2,7 +2,7 @@
 
 This guide explains how to go from a raw pool of discovered contacts to a focused outreach campaign using the Filter Facets page. No technical knowledge is required.
 
-> **Note:** this is one of two ways to create a campaign. The other is the **master sheet route** — manually curating contacts in the CRM contact sheet and then using Discover campaigns on the Campaigns page. The filter route is faster and fully automated; the master sheet route gives you individual control over every contact. Both are described in the [User guide](../doc-viewer.html?doc=user-guide).
+> **Note:** this is one of two ways to create a campaign. The other is the **master sheet route** — manually curating contacts in the CRM contact sheet and then using Discover campaigns from the campaign workspace. The filter route is faster and fully automated; the master sheet route gives you individual control over every contact. Both are described in the [User guide](../doc-viewer.html?doc=user-guide).
 
 ---
 
@@ -70,7 +70,7 @@ When the job finishes, a success message shows the result: how many contacts wer
 
 ### Step 5 — Allocate owner and outreach email
 
-Once the campaign exists, open it from the Campaigns list. Expand the **Campaign details** section and fill in two fields before doing anything else.
+Once the campaign exists, open it from the campaign workspace sidebar. Expand the **Campaign details** section and fill in two fields before doing anything else.
 
 **Owner** — select the team member responsible for this campaign. This is the person who will manage replies and follow-up. Choosing an owner also auto-fills the outreach email if that person has a default mailbox configured in their user profile.
 
@@ -88,21 +88,23 @@ Before activating the campaign, take two more steps: review the contact list and
 
 The contact list shows every person who will receive an email. Three tools help you clean it up:
 
-**Filter by status** — use the status dropdown (All / Pending / Emailed / Excluded / …) to focus on a specific group. For example, selecting Pending lets you quickly scan contacts that have not been reached yet.
+**Filter by status** — use the status dropdown (All / Pending / Active / Excluded) to focus on a specific group. For example, selecting Pending lets you quickly scan contacts that have not been approved for outreach yet.
 
 **Search** — filter by name, email, title, or website to find a specific person or company.
 
-**Bulk selection** — tick the checkbox on any row to select it. The master checkbox in the header selects or deselects all visible rows (respecting the current filter and search). When one or more rows are checked, a bulk action bar appears with two options:
-- **Mark excluded** — flags the selected contacts as excluded without deleting them. Useful if you want to review the list further before committing.
-- **Delete selected** — permanently removes the selected contacts from the campaign after a confirmation.
+**Per-contact status buttons** — each contact row has two compact action buttons:
+- **Active** toggles the contact between `active` and `pending`.
+- **Exclude** toggles the contact between `excluded` and `pending`.
 
-**Remove excluded** — if you prefer the two-step approach (mark first, delete later), set contacts to Exclude one by one using the per-row dropdown, then click **Remove excluded** to purge them all at once.
+**Remove excluded** — after reviewing the list, click **Remove excluded** to remove all currently excluded contacts from this campaign. The confirmation popup explains the important rule: this does not delete the contact from the database. It only removes the contact from this campaign, so the same email address can be picked up by another campaign later. If you keep a contact excluded in this campaign, that email address remains reserved here and will not appear in other campaigns.
 
 This is the right time to clean the list — once the campaign is activated, contacts cannot be removed.
 
-#### Writing and editing the mail template
+#### Writing and editing the mail schedule
 
-Each campaign has its own subject line and email body. Click **Edit** in the Mail template section to open the campaign editor, where you can write the subject and body in either plain text or HTML. You can use personalisation placeholders — for example the contact's first name — so each email feels individual rather than mass-sent.
+Each campaign has a mail schedule with steps such as Intro, Reminder 1, and Reminder 2. Click **Add step** to create a new step, or the edit icon on an existing step to open the mail editor in the right-hand work column. While the editor is open, the contact list is hidden; click **Contacts** in the editor header to return to the list.
+
+The editor lets you write the subject and body in either plain text or HTML, edit CSS for HTML mails, preview the rendered body, and save or autosave changes. You can use personalisation placeholders — for example the contact's first name — so each email feels individual rather than mass-sent.
 
 Once you have written the template, use **Send test** to send a preview to your own address and confirm it looks right. The preview renders the full email exactly as recipients will see it, including CSS styling for HTML templates.
 
@@ -116,7 +118,7 @@ When the owner, email account, contact list, and mail template are all ready, cl
 
 The campaign's Google Drive spreadsheet is always kept in sync with the database automatically:
 
-- **Deleting contacts** (via Exclude + Delete excluded) triggers an immediate sheet regeneration — deleted contacts disappear from the sheet in the background without any manual action.
+- **Removing contacts from the campaign** (via Exclude + Remove excluded) triggers an immediate sheet regeneration. Removed contacts disappear from this campaign's sheet in the background without any manual action, but the underlying contact records remain in the database.
 - **Syncing from the sheet** updates editable fields (name, title, last action notes) in the DB. The sheet can never *add* new contacts — only update existing ones. If the sheet has orphaned rows (contacts already removed from the DB), they are cleaned up on the next sync.
 - **Any new column** you add to the sheet is automatically written to the DB as a new field on the contact doc, so you can extend the schema without touching any code.
 

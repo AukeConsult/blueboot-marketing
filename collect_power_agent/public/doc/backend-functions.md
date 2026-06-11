@@ -327,13 +327,13 @@ Reads the master CRM contact sheet and syncs contacts into the correct campaign 
 
 ## Campaign management (frontend only) 🌐 Frontend triggered
 
-These operations have no standalone CLI — they run as Cloud Tasks jobs triggered from the Campaigns or single Campaign page.
+These operations have no standalone CLI — they run as Cloud Tasks jobs triggered from the campaign workspace.
 
 | Operation | Frontend | API endpoint | Job name |
 |---|---|---|---|
 | Campaign sync (Drive sheet → DB) | Campaign page → Sync | `GET /api/crm/campaign-sync` | `campaign-sync` |
 | Full override (DB → Drive sheet) | Campaign page → Full override | `GET /api/crm/campaign-export` | `campaign-export` |
-| Discover campaigns campaigns | Campaigns list → Discover campaigns | `GET /api/crm/discover-campaigns` | — (sync jobs spawned) |
+| Discover campaigns | Campaign workspace → Discover campaigns | `GET /api/crm/discover-campaigns` | — (sync jobs spawned) |
 | Collect statistics | Statistics page → Collect statistics | `POST /api/crm/statistics/collect` | `statistics` |
 | Load all follow-up contacts | CRM Follow-up page load | `GET /api/crm/followup-contacts` | — (direct read) |
 | Update follow-up field | CRM Follow-up inline edit | `PATCH /api/crm/campaigns/<id>/contacts/<doc>` | — (direct write) |
