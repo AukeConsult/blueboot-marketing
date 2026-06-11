@@ -48,6 +48,17 @@ _FIELD_TO_HEADER: dict[str, str] = {v: k for k, v in _HEADER_TO_FIELD.items()}
 
 # Fields that are always DB-controlled — sheet values are never written back.
 DB_CONTROLLED = {"status", "sent_at"}
+CONTACT_STATUSES = {"pending", "active", "excluded"}
+LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
+
+
+def _contact_status(value) -> str:
+    status = str(value or "pending").strip().lower()
+    if status in CONTACT_STATUSES:
+        return status
+    if status in LEGACY_ACTIVE_STATUSES:
+        return "active"
+    return "pending"
 
 
 def _header_to_field(label: str) -> str:
@@ -192,9 +203,7 @@ def run_campaign_sync(db, svc, gd, campaign_id: str, **_kwargs) -> dict:
         print(f"[campaign-sync] Sheet regenerated after removing stale rows", flush=True)
 
     # ── 7. Update campaign-level stats in DB ────────────────────────────────
-    all_statuses = Counter(
-        row.get("Status", "pending") or "pending" for row in sheet_rows
-    )
+    all_statuses = Counter(_contact_status(c.get("status")) for c in db_contacts.values())
     db.collection(CAMPAIGNS_COLLECTION).document(campaign_id).update({
         "contact_count":    len(db_contacts),
         "status_breakdown": dict(all_statuses),

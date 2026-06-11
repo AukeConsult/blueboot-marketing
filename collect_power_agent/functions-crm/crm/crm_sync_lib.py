@@ -16,6 +16,17 @@ from collections import Counter, defaultdict
 from crm.sheets_config import CONTACT_SHEET_ID, CONTACT_TAB, CRM_COLLECTION, CRM_CONTACT_DOC
 
 CAMPAIGNS_COLLECTION = "campaigns"
+CONTACT_STATUSES = {"pending", "active", "excluded"}
+LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
+
+
+def _contact_status(value) -> str:
+    status = str(value or "pending").strip().lower()
+    if status in CONTACT_STATUSES:
+        return status
+    if status in LEGACY_ACTIVE_STATUSES:
+        return "active"
+    return "pending"
 
 
 def _read_sheet_contacts(svc, tab: str) -> list[dict]:
@@ -92,7 +103,7 @@ def _build_campaign_stats(records: list[dict]) -> dict[str, dict]:
     for campaign_id, rows in by_campaign.items():
         domains   = {r.get("domain", "") or r.get("website", "") for r in rows}
         countries = Counter(r.get("country", "").upper() for r in rows if r.get("country"))
-        statuses  = Counter(r.get("status", "pending") or "pending" for r in rows)
+        statuses  = Counter(_contact_status(r.get("status")) for r in rows)
         selects   = Counter("marked" if r.get("select", "").strip() else "blank" for r in rows)
         tiers     = Counter(r.get("tier", "") or "unknown" for r in rows)
         outreach  = Counter(r.get("outreach", "") or "unknown" for r in rows)

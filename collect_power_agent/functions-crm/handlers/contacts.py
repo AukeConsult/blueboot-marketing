@@ -9,6 +9,8 @@ bp = Blueprint("contacts", __name__)
 # ── Follow-up field helpers ───────────────────────────────────────────────────
 
 _FOLLOWUP_FIELDS = {"followup_date", "followup_status", "followup_comment", "followup_importance", "followup_owner"}
+_CONTACT_STATUSES = {"pending", "active", "excluded"}
+_LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
 
 _FOLLOWUP_HISTORY_TYPE = {
     "followup_status":     "STATUS",
@@ -45,6 +47,15 @@ def _safe_history(h_list) -> list:
     return out
 
 
+def _contact_status(value) -> str:
+    status = str(value or "pending").strip().lower()
+    if status in _CONTACT_STATUSES:
+        return status
+    if status in _LEGACY_ACTIVE_STATUSES:
+        return "active"
+    return "pending"
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @bp.route("/api/crm/campaigns/<campaign_id>/contacts/<doc_id>", methods=["GET"])
@@ -65,7 +76,7 @@ def get_campaign_contact(campaign_id, doc_id):
             "email":               d.get("email", ""),
             "title":               d.get("title", ""),
             "website":             d.get("website", ""),
-            "status":              d.get("status", "pending"),
+            "status":              _contact_status(d.get("status")),
             "followup_date":       d.get("followup_date", "") or "",
             "followup_status":     d.get("followup_status", "") or "",
             "followup_comment":    d.get("followup_comment", "") or "",
@@ -93,6 +104,13 @@ def update_campaign_contact(campaign_id, doc_id):
 
         allowed = {"name", "title", "status", "phone", "linkedin", "twitter", "facebook", "instagram", "whatsapp", "teams", "telegram", "googlechat", "messenger"} | _FOLLOWUP_FIELDS
         update  = {k: str(v).strip() for k, v in body.items() if k in allowed}
+        if "status" in update:
+            update["status"] = update["status"].lower()
+            if update["status"] not in _CONTACT_STATUSES:
+                return _err(
+                    "Invalid contact status. Must be one of: active, excluded, pending.",
+                    400,
+                )
         # Boolean fields — handled separately (must not be coerced to str)
         if "new_mail" in body:
             update["new_mail"] = bool(body["new_mail"])
@@ -251,7 +269,7 @@ def followup_contacts():
         contacts = []
         for doc in contacts_iter:
             d     = doc.to_dict() or {}
-            status = d.get("status", "pending") or "pending"
+            status = _contact_status(d.get("status"))
             if not include_pending and status == "pending":
                 continue
             parts = doc.reference.path.split("/")

@@ -74,7 +74,7 @@
       <span>·</span>
       <span><strong id="c-countries" style="color:#111">—</strong> countries</span>
       <span>·</span>
-      <span><strong id="c-sent" style="color:#111">—</strong> sent</span>
+      <span><strong id="c-sent" style="color:#111">—</strong> active</span>
       <span>·</span>
       <span>updated <strong id="c-updated" style="color:#111">—</strong></span>
       <span id="c-pipeline-badge" style="display:none"></span>
@@ -168,10 +168,8 @@
           <select id="status-filter" class="form-select form-select-sm" style="max-width:130px;font-size:.78rem" onchange="filterContacts()">
             <option value="">All statuses</option>
             <option value="pending">Pending</option>
-            <option value="emailed">Emailed</option>
-            <option value="replied">Replied</option>
+            <option value="active">Active</option>
             <option value="excluded">Excluded</option>
-            <option value="bounced">Bounced</option>
           </select>
           <button id="delete-excluded-btn" class="btn btn-sm btn-outline-danger" style="display:none" onclick="deleteExcluded()">
             <i class="ti ti-trash me-1"></i>Delete excluded
@@ -400,8 +398,17 @@ let allContacts = [];
 
 const fmt = fmtDateTimeShort;   // shared
 
+function contactStatus(s) {
+  return ['pending', 'active', 'excluded'].includes(s) ? s : 'pending';
+}
+
 function statusBadge(s) {
   return `<span class="bb-badge bb-badge-${s||'draft'}">${s||'draft'}</span>`;
+}
+
+function contactStatusBadge(s) {
+  const st = contactStatus(s);
+  return `<span class="bb-badge bb-badge-${st}">${st}</span>`;
 }
 
 function toggleDetails() {
@@ -529,12 +536,13 @@ function renderContacts(list) {
   empty.style.display = 'none';
   const campaignId = document.getElementById('campaign-select').value;
   tbody.innerHTML = list.map(c => {
-    const isExcluded = c.status === 'excluded';
+    const cStatus = contactStatus(c.status);
+    const isExcluded = cStatus === 'excluded';
     return `<tr data-email="${c.email}">
     <td>
-      ${statusBadge(c.status)}
+      ${contactStatusBadge(cStatus)}
 
-      ${c.status !== 'pending' && c.sent_at ? `<br><span style="font-size:.72rem;color:var(--bb-muted)">${fmt(c.sent_at)}</span>` : ''}
+      ${cStatus !== 'pending' && c.sent_at ? `<br><span style="font-size:.72rem;color:var(--bb-muted)">${fmt(c.sent_at)}</span>` : ''}
     </td>
     <td class="small"><span class="editable-cell" data-field="name" data-doc="${c.doc_id||(c.email||"").replace(/[^a-zA-Z0-9_-]/g,"_").toLowerCase()}" data-email="${c.email}">${escapeHtml(c.name||'')}<span class="edit-placeholder" style="color:var(--bb-muted)">${c.name?'':'—'}</span></span></td>
     <td class="small"><a href="mailto:${c.email}">${c.email||'—'}</a></td>
@@ -545,7 +553,7 @@ function renderContacts(list) {
       </span>
       <a href="${c.website}" target="_blank" class="bb-lead-ext" title="Open site"><i class="ti ti-external-link"></i></a>` : '—'}
     </td>
-    <td class="text-center">${c.status === 'pending' ? `<input type="checkbox" class="form-check-input excl-chk" data-email="${c.email}" ${isExcluded?'checked':''} title="Exclude" onchange="handleExcludeChk(this)">` : ''}</td>
+    <td class="text-center">${cStatus === 'pending' || cStatus === 'excluded' ? `<input type="checkbox" class="form-check-input excl-chk" data-email="${c.email}" ${isExcluded?'checked':''} title="Exclude" onchange="handleExcludeChk(this)">` : ''}</td>
   </tr>`;
   }).join('');
   updateRemoveExcludedBtn();
@@ -575,12 +583,12 @@ function updateRemoveExcludedBtn() {
   // Show "Delete excluded" button when any contact is excluded
   const btn = document.getElementById('delete-excluded-btn');
   if (!btn) return;
-  const hasExcluded = allContacts.some(c => c.status === 'excluded');
+  const hasExcluded = allContacts.some(c => contactStatus(c.status) === 'excluded');
   btn.style.display = hasExcluded ? '' : 'none';
 }
 
 async function deleteExcluded() {
-  const excluded = allContacts.filter(c => c.status === 'excluded').map(c => c.email);
+  const excluded = allContacts.filter(c => contactStatus(c.status) === 'excluded').map(c => c.email);
   if (!excluded.length) return;
   if (!window.confirm(`Permanently delete ${excluded.length} excluded contact(s) from this campaign?`)) return;
   const campaignId = document.getElementById('campaign-select').value;
@@ -649,7 +657,7 @@ function filterContacts() {
   const q  = document.getElementById('contact-search').value.toLowerCase();
   const st = document.getElementById('status-filter').value;
   let list = allContacts;
-  if (st)  list = list.filter(c => (c.status || 'pending') === st);
+  if (st)  list = list.filter(c => contactStatus(c.status) === st);
   if (q)   list = list.filter(c =>
     [(c.name||''),(c.email||''),(c.website||''),(c.title||'')].some(v => v.toLowerCase().includes(q)));
   renderContacts(_applySort(list));
@@ -690,7 +698,7 @@ async function loadCampaign() {
     document.getElementById('c-contacts').textContent = c.contact_count || 0;
     document.getElementById('c-sites').textContent    = c.sites_count || 0;
     document.getElementById('c-countries').textContent = (c.countries||[]).length || '—';
-    document.getElementById('c-sent').textContent     = (c.status_breakdown||{}).sent || 0;
+    document.getElementById('c-sent').textContent     = (c.status_breakdown||{}).active || 0;
     const ma = c.mail_account || {};
     const displayName = ma.display_name || '';
     const fromAddr    = c.outreach_email_account || '';

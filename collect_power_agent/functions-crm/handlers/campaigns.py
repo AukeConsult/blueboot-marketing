@@ -1,5 +1,6 @@
 """handlers/campaigns.py — Campaign CRUD endpoints."""
 from __future__ import annotations
+from collections import Counter
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
 from handlers.shared import (
@@ -8,6 +9,18 @@ from handlers.shared import (
 )
 
 bp = Blueprint("campaigns", __name__)
+
+_CONTACT_STATUSES = {"pending", "active", "excluded"}
+_LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
+
+
+def _contact_status(value) -> str:
+    status = str(value or "pending").strip().lower()
+    if status in _CONTACT_STATUSES:
+        return status
+    if status in _LEGACY_ACTIVE_STATUSES:
+        return "active"
+    return "pending"
 
 
 @bp.route("/api/crm/campaigns", methods=["GET"])
@@ -40,7 +53,13 @@ def get_campaign(campaign_id):
         outreach_email = data.get("outreach_email_account", "")
         data["mail_account"] = _get_mail_account(db, outreach_email) or {}
         contacts_docs = db.collection("campaigns").document(campaign_id).collection("campaign_contacts").stream()
-        data["campaign_contacts"] = [c.to_dict() for c in contacts_docs]
+        contacts = []
+        for c in contacts_docs:
+            contact = c.to_dict() or {}
+            contact["status"] = _contact_status(contact.get("status"))
+            contacts.append(contact)
+        data["campaign_contacts"] = contacts
+        data["status_breakdown"] = dict(Counter(c.get("status", "pending") for c in contacts))
         return jsonify(data)
     except Exception as exc:
         return _err(str(exc), 500)

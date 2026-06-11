@@ -749,10 +749,9 @@ body { display: flex; flex-direction: column; }
     </select>
 
     <select id="contact-status-filter" class="form-select form-select-sm" style="max-width:155px" onchange="load()">
-      <option value="open">Open contacts</option>
+      <option value="active">Active only</option>
       <option value="">All contacts</option>
       <option value="pending">Pending only</option>
-      <option value="sent">Sent only</option>
       <option value="excluded">Excluded only</option>
     </select>
 
@@ -1075,8 +1074,12 @@ async function load() {
         campSel.value = _loadedPrefs.campaign;
     }
     const contactStatusSel = document.getElementById('contact-status-filter');
-    if (contactStatusSel && _loadedPrefs.filter_contact_status !== undefined)
-      contactStatusSel.value = _loadedPrefs.filter_contact_status;
+    if (contactStatusSel && _loadedPrefs.filter_contact_status !== undefined) {
+      const savedStatus = ['active', 'pending', 'excluded', ''].includes(_loadedPrefs.filter_contact_status)
+        ? _loadedPrefs.filter_contact_status
+        : 'active';
+      contactStatusSel.value = savedStatus;
+    }
     const includePendingEl = document.getElementById('include-pending');
     if (includePendingEl && _loadedPrefs.include_pending !== undefined)
       includePendingEl.checked = !!_loadedPrefs.include_pending;
@@ -1354,8 +1357,7 @@ function applyFilter() {
     if (imp === '__none__') { if (r.followup_importance) return false; }
     else if (imp && r.followup_importance !== imp) return false;
     if (!includePending && cst !== 'pending' && r.status === 'pending') return false;
-    if (cst === 'open' && r.status === 'sent') return false;
-    else if (cst && cst !== 'open' && r.status !== cst) return false;
+    if (cst && r.status !== cst) return false;
     if (due === 'none'    && r.followup_date) return false;
     if (due === 'overdue' && !(r.followup_date && r.followup_date < today)) return false;
     if (due === 'today'   && r.followup_date !== today) return false;
@@ -1429,7 +1431,7 @@ const GROUP_FIELDS = {
   },
   status: {
     label:   'Contact status',
-    order:   ['pending', 'dosend', 'sent', 'excluded', 'error', ''],
+    order:   ['active', 'pending', 'excluded', ''],
     labelFn: v => v || 'No contact status',
   },
   followup_importance: {
@@ -1460,9 +1462,9 @@ const GROUP_FIELDS = {
 
 
 function statusBadge(s) {
-  const map = { pending: 'bb-badge-pending', sent: 'bb-badge-sent',
-                excluded: 'bb-badge-excluded', dosend: 'bb-badge-dosend', error: 'bb-badge-error' };
-  return `<span class="bb-badge ${map[s] || 'bb-badge-muted'}">${escapeHtml(s || 'pending')}</span>`;
+  const status = ['pending', 'active', 'excluded'].includes(s) ? s : 'pending';
+  const map = { pending: 'bb-badge-pending', active: 'bb-badge-active', excluded: 'bb-badge-excluded' };
+  return `<span class="bb-badge ${map[status]}">${escapeHtml(status)}</span>`;
 }
 
 

@@ -46,6 +46,17 @@ CONTACT_COLUMNS = [
 # Dropdown values for the new follow-up columns.
 FOLLOWUP_STATUS_VALUES     = ["open", "contacted", "replied", "meeting", "closed", "not_interested"]
 FOLLOWUP_IMPORTANCE_VALUES = ["low", "medium", "high"]
+CONTACT_STATUSES = {"pending", "active", "excluded"}
+LEGACY_ACTIVE_STATUSES = {"sent", "dosend", "emailed", "replied", "bounced", "error"}
+
+
+def _contact_status(value) -> str:
+    status = str(value or "pending").strip().lower()
+    if status in CONTACT_STATUSES:
+        return status
+    if status in LEGACY_ACTIVE_STATUSES:
+        return "active"
+    return "pending"
 
 
 def _cell(v) -> str:
@@ -161,13 +172,15 @@ def run_campaign_export(db, svc, gd, campaign_id: str) -> dict:
 
     contacts = [c.to_dict() or {} for c in db.collection(CAMPAIGNS_COLLECTION)
                 .document(campaign_id).collection(CONTACTS_SUBCOLLECTION).stream()]
+    for c in contacts:
+        c["status"] = _contact_status(c.get("status"))
     contacts.sort(key=lambda c: (str(c.get("status") or ""), str(c.get("name") or "")))
 
     sheet_id = gd.ensure_sheet(campaign_id)
     _ensure_tabs(svc, sheet_id, [TAB_FOLLOWUP, TAB_SUMMARY])
 
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    status_counts = Counter(str(c.get("status") or "unknown") for c in contacts)
+    status_counts = Counter(c.get("status", "pending") for c in contacts)
 
     followup_rows = [[label for label, _f in CONTACT_COLUMNS]]
     for c in contacts:
@@ -207,5 +220,4 @@ def run_campaign_export(db, svc, gd, campaign_id: str) -> dict:
         "by_status":    dict(status_counts),
         "url":          f"https://docs.google.com/spreadsheets/d/{sheet_id}",
     }
-
 

@@ -93,6 +93,7 @@ body.bg-alt { background: var(--bb-bg-alt); }
 .bb-badge-sent      { background: #dcfce7; color: #15803d; }
 .bb-badge-cancelled { background: #fee2e2; color: #b91c1c; }
 .bb-badge-pending   { background: #fef9c3; color: #854d0e; }
+.bb-badge-active    { background: #dcfce7; color: #15803d; }
 .bb-badge-error     { background: #fee2e2; color: #b91c1c; }
 .bb-badge-muted     { background: #f4f5f7; color: var(--bb-muted); }
 .bb-badge-excluded  { background: #fef3c7; color: #92400e; }
