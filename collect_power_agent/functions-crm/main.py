@@ -60,6 +60,8 @@ for bp in (
 # Any blueprint not listed here allows any authenticated user (including guest) to read.
 # Rule: add a blueprint here whenever its GET responses contain sensitive internal data
 # (contact details, credentials, campaign data, user docs, system settings).
+# API authentication rules are being moved to auth_settings.py. Until check_auth()
+# is explicitly switched over, the existing runtime enforcement tables stay here.
 _BLUEPRINT_MIN_READ_ROLES: dict[str, str] = {
     "campaigns":     "campaign-user",  # embeds full campaign_contacts subcollection
     "contacts":      "campaign-user",  # direct campaign_contacts reads
@@ -67,15 +69,11 @@ _BLUEPRINT_MIN_READ_ROLES: dict[str, str] = {
     "mail_accounts": "campaign-user",  # mail account credentials (settings/mail_accounts)
     "auth":          "campaign-user",  # user role docs (settings/users)
     "mail_tags":     "campaign-user",  # settings/mail_tag_statuses
-    "mailbox":       "campaign-user",  # IMAP mailbox contents — no read for user/guest
+    "mailbox":       "campaign-user",  # IMAP mailbox contents - no read for user/guest
     "batch":         "campaign-user",  # cloud_batch job definitions and run history
 }
 
-# Endpoints that trigger background jobs or monitor job state.
-# These are checked for role even on GET requests — guests cannot
-# start jobs or see the job log regardless of HTTP method.
 _JOB_ENDPOINTS = frozenset({
-    # job triggers (jobs blueprint)
     "jobs.contact_sync",
     "jobs.push_and_sync",
     "jobs.template_sync",
@@ -86,33 +84,16 @@ _JOB_ENDPOINTS = frozenset({
     "jobs.reply_match",
     "jobs.job_status",
     "jobs.list_jobs",
-    # campaign-level job triggers (campaigns blueprint)
     "campaigns.discover_campaigns",
-    # inbound mail read trigger (inbound_read blueprint)
     "inbound_read.inbound_read",
-    # statistics collection (statistics blueprint)
     "statistics.collect_statistics",
-    # move contacts job trigger (contacts blueprint)
     "contacts.move_campaign_contacts",
-    # cloud_batch job triggers and run status
     "batch.trigger_run",
     "batch.list_jobs",
     "batch.list_runs",
     "batch.get_run",
 })
 
-# Minimum role required for mutating requests (POST / PATCH / PUT / DELETE).
-#
-# Role model:
-#   guest         → no access to internal data, no writes
-#   user          → read-only access to all internal data, NO writes
-#   campaign-user → full read + write access
-#   admin         → everything including settings and user management
-#
-# Rule: 'user' must NEVER appear as a min role here — all writes require
-# at least 'campaign-user'. See CLAUDE.md — "user role is read-only".
-# Endpoints that write to the Firestore 'settings' collection require admin
-# regardless of their blueprint's default minimum role.
 _ADMIN_ENDPOINTS = frozenset({
     "gdisk.gdisk_set_settings",          # POST/PATCH /api/crm/gdisk/settings
     "mail_tags.put_mail_tag_statuses",   # PUT /api/crm/settings/mail-tag-statuses
@@ -120,7 +101,7 @@ _ADMIN_ENDPOINTS = frozenset({
 
 _BLUEPRINT_MIN_ROLES: dict[str, str] = {
     "contacts":       "campaign-user",
-    "inbound_read": "campaign-user",
+    "inbound_read":   "campaign-user",
     "mailbox":        "campaign-user",
     "mail_tags":      "campaign-user",
     "gdisk":          "campaign-user",
@@ -134,7 +115,6 @@ _BLUEPRINT_MIN_ROLES: dict[str, str] = {
     "user_prefs":     "campaign-user",
     "batch":          "campaign-user",
 }
-
 
 @app.before_request
 def check_auth():
@@ -300,7 +280,7 @@ def smartMail(req: https_fn.Request) -> https_fn.Response:
             path = flask_request.path.rstrip("/") or "/"
             if path not in _SMART_MAIL_PATHS:
                 return _err(
-                    "smartMail only serves /outreach-send, /inbound_read, and /reply_match",
+                    "smartMail only serves /outreach-send, /inbound-read, and /reply-match",
                     404,
                 )
             return app.full_dispatch_request()

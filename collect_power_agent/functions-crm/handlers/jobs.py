@@ -165,7 +165,9 @@ def outreach_send():
         return _err(str(exc), 500)
 
 
-@bp.route("/reply_match", methods=["GET", "POST"])
+@bp.route("/api/crm/reply_match", methods=["GET", "POST"])
+@bp.route("/api/crm/reply-match", methods=["GET", "POST"])
+@bp.route("/reply-match", methods=["GET", "POST"])
 def reply_match():
     """Trigger one reply matching pass through the CRM worker."""
     data = _request_data()
@@ -447,4 +449,3 @@ def list_jobs():
     if cutoff:
         jobs = [j for j in jobs if (j.get("queued_at") or "") >= cutoff]
     return jsonify({"jobs": jobs, "count": len(jobs)})
-

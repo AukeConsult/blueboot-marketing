@@ -18,6 +18,32 @@ description: >
 
 **File:** `functions-crm/smart_mail/outreach_mail_select.py`
 
+## CRM API auth policy
+
+Backend API access rules belong in `functions-crm/auth_settings.py`.
+
+Whenever any Flask API route is added, deleted, renamed, or has its allowed HTTP
+methods changed, update `auth_settings.py` in the same change. The route policy
+must show:
+
+- HTTP method or methods
+- API path
+- auth kind (`PUBLIC`, `WORKER`, `SERVICE`, `SIGNED_IN`, or `ROLE`)
+- minimum role when `ROLE` is used
+
+Use the stored role names exactly: `guest`, `user`, `campaign-user`, and `admin`.
+Organize rules by intent:
+
+- `guest_read`: low-risk general GET routes only
+- `user_read`: normal campaign read views
+- `campaign_work`: campaign writes, campaign jobs, Smart Mail, and operational tools
+- `service_call`: direct Smart Mail route aliases such as `/outreach-send`
+- `admin_only`: all settings and user administration routes
+
+Do not add new scattered auth lists in `main.py`. The intended source of truth for
+API call, auth kind, and role requirement is the `API_RULES` table in
+`auth_settings.py`.
+
 Follow-up mailbox sync also belongs in this package:
 `functions-crm/smart_mail/inbound_read_lib.py`. CRM may trigger it
 through jobs or HTTP routes, but IMAP/Gmail mailbox reading, sent-folder matching,

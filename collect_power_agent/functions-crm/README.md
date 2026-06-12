@@ -136,20 +136,26 @@ This deploys the CRM codebase entrypoints exported from `main.py`: `crmApi`,
 `smartMail` only serves these trigger paths:
 
 ```text
-/outreach-send
-/inbound_read
-/reply_match
+POST /outreach-send
+POST /inbound-read
+POST /reply-match
 ```
+
+These direct `smartMail` trigger paths are service-authenticated.
 
 The existing CRM API paths are also accepted for compatibility:
 
 ```text
-/api/crm/outreach-send
-/api/crm/inbound_read
-/api/crm/reply_match
-/api/crm/inbound-read
-/api/crm/reply-match
+POST /api/crm/outreach-send
+POST /api/crm/inbound_read
+POST /api/crm/reply_match
+POST /api/crm/inbound-read
+POST /api/crm/reply-match
 ```
+
+The `/api/crm/...` compatibility trigger paths require `campaign-user` or `admin`.
+
+Scheduled Smart Mail triggers should use `POST`; do not use `GET` for `outreach-send`.
 
 Or the full deploy (functions + hosting):
 

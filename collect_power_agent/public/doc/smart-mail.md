@@ -13,21 +13,18 @@ Quick reference:
 | Defined in | `functions-crm/main.py` |
 | Decorator | `@https_fn.on_request(region="us-central1", timeout_sec=540, memory=MB_512, max_instances=1)` |
 | Deploy command | `firebase deploy --only functions:crm` |
+| Scheduler method | `POST` |
 
 Direct deployed Smart Mail URLs:
 
 ```text
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound_read
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply_match
+POST https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
+POST https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound-read
+POST https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-match
 ```
 
-Allowed aliases:
-
-```text
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound-read
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-match
-```
+The direct `smartMail` trigger URLs are service-authenticated. The `/api/crm/...`
+compatibility trigger URLs require `campaign-user` or `admin`.
 
 The important rule is that the mail logic is centralized: selection and sent confirmation are in `outreach_mail_select.py`, real sending is in `outreach_sender.py`, inbound mailbox reading is in `inbound_read_lib.py`, and reply matching is in `reply_matcher.py`.
 
@@ -66,12 +63,12 @@ crmWorker
 Deployed Smart Mail trigger URLs:
 
 ```text
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound_read
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply_match
+POST https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
+POST https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound-read
+POST https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-match
 ```
 
-`smartMail` only accepts the Smart Mail trigger paths. Long-running work is still queued and executed by `crmWorker`.
+`smartMail` only accepts the Smart Mail trigger paths. Use `POST` for scheduled or manual job triggers. Long-running work is still queued and executed by `crmWorker`.
 
 ---
 
@@ -136,17 +133,11 @@ Flags:
 
 ### API
 
-Trigger automatic outreach through the CRM job API:
+Trigger automatic outreach with `POST`. This endpoint can queue real mail sends, so it should not be treated as a read-only URL.
 
 ```text
-GET  /api/crm/outreach-send?mode=intro&limit=20&campaigns=NO_jun,SE_jun&dry_run=true&preview=true
 POST /api/crm/outreach-send
-```
-
-The same trigger can be served through the dedicated Smart Mail function:
-
-```text
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
+POST https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
 ```
 
 POST body example:
@@ -170,6 +161,30 @@ Accepted parameters:
 | `campaigns` | Optional campaign list. `campaign_ids` and `campaign_id` are also accepted by the handler. |
 | `dry_run` | `true` selects/renders only. `false` sends and confirms. |
 | `preview` | Adds rendered snippets to worker logs when dry-running. |
+
+### Cloud Scheduler
+
+Cloud Scheduler should call outreach send with `POST`, not `GET`.
+
+Target URL:
+
+```text
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
+```
+
+Body:
+
+```json
+{
+  "mode": "both",
+  "limit": 50,
+  "campaigns": "",
+  "dry_run": false,
+  "preview": false
+}
+```
+
+Do not expose this as an unauthenticated public GET URL. Use Cloud Scheduler OIDC or another explicit scheduler-only protection mechanism.
 
 The API queues a CRM worker job named:
 
@@ -347,7 +362,7 @@ POST /api/crm/inbound_read
 The dedicated Smart Mail function accepts:
 
 ```text
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound_read
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound-read
 ```
 
 POST body example:
@@ -448,7 +463,7 @@ POST /api/crm/reply_match
 The dedicated Smart Mail function accepts:
 
 ```text
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply_match
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-match
 ```
 
 POST body:

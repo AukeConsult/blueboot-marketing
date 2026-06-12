@@ -26,7 +26,8 @@ def _split_list_value(value) -> list[str]:
 
 
 @bp.route("/api/crm/inbound_read", methods=["POST"])
-@bp.route("/inbound_read", methods=["POST"])
+@bp.route("/api/crm/inbound-read", methods=["POST"])
+@bp.route("/inbound-read", methods=["POST"])
 def inbound_read():
     """Trigger a background job that reads inbound/sent mail into contact logs."""
     try:
@@ -47,4 +48,3 @@ def inbound_read():
         return _accepted(job_id, "inbound-read")
     except Exception as exc:
         return _err(str(exc), 500)
-

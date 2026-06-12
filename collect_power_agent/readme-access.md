@@ -96,54 +96,46 @@ const PAGE_ROLES = {
 
 A Flask `before_request` hook runs before every route handler in `functions-crm/main.py`:
 
+Note: the clean policy is defined in `functions-crm/auth_settings.py`. `main.py`
+still uses the legacy runtime tables until the guarded `check_auth()` switch is approved.
+
 ```
 Request arrives
-  ├─ OPTIONS?                      → skip (CORS preflight)
-  ├─ /api/crm/worker/?             → skip (Cloud Tasks OIDC)
+  ├─ OPTIONS?                      -> skip (CORS preflight)
+  ├─ /api/crm/worker/?             -> skip (Cloud Tasks OIDC)
   └─ Everything else:
-       1. Verify Firebase ID token from Authorization header
-          └─ Missing / invalid → 401
-       2. Fetch role from Firestore (settings/users/users/{email})
-          └─ Missing / unrecognised → 'guest'
-       3. Attach to flask.g (user_email, user_role)
-       4. GET request (not a job endpoint)?
-          ├─ Blueprint in _BLUEPRINT_MIN_READ_ROLES?
-          │    └─ Role < minimum → 403 (blocks guest + user on sensitive blueprints)
-          └─ Otherwise → allowed (any authenticated role)
-       5. Job-triggering GET OR any non-GET:
-          ├─ guest → 403 "not assigned a role yet"
-          ├─ Check Blueprint minimum write role → 403 if insufficient
-          └─ Endpoint in _ADMIN_ENDPOINTS? → require admin
+     1. Verify Firebase ID token from Authorization header
+        └─ Missing / invalid -> 401
+     2. Fetch role from Firestore (settings/users/users/{email})
+        └─ Missing / unrecognised -> 'guest'
+     3. Attach to flask.g (user_email, user_role)
+     4. Match method + path to an auth rule
+     5. Role below rule minimum?
+        └─ yes -> 403
 ```
 
 ### Role model summary
 
 | Role | GET reads | POST / PATCH / PUT / DELETE |
 |---|---|---|
-| `guest` | blocked for sensitive blueprints | blocked everywhere |
-| `user` | all internal data | **none — read-only** |
-| `campaign-user` | everything | everything except admin endpoints |
-| `admin` | everything | everything |
+| `guest` | Low-risk general routes only | none |
+| `user` | Normal campaign views | own page state only |
+| `campaign-user` | Campaign views, campaign work, jobs, Smart Mail, operational tools | campaign work, jobs, Smart Mail, operational tools |
+| `admin` | everything, including settings and users | everything, including settings and users |
 
-### Per-Blueprint minimum roles (POST / PATCH / PUT / DELETE)
+### Central API policy
 
-`user` never appears here — all writes require at least `campaign-user`.
+Backend API rules are organized in `functions-crm/auth_settings.py` by business intent,
+not by Flask blueprint internals:
 
-| Blueprint | Min role | Routes |
+| Group | Min role | Routes |
 |---|---|---|
-| `contacts` | `campaign-user` | Follow-up field updates |
-| `inbound_read` | `campaign-user` | Inbound mail read trigger |
-| `mailbox` | `campaign-user` | Message box write operations |
-| `mail_tags` | `campaign-user` | Tag CRUD |
-| `gdisk` | `campaign-user` | Drive file operations |
-| `leads` | `campaign-user` | Lead exclusion |
-| `statistics` | `campaign-user` | Stats collection trigger |
-| `campaigns` | `campaign-user` | Campaign CRUD, discover |
-| `jobs` | `campaign-user` | Job triggers |
-| `filter_facets` | `campaign-user` | Facet save, create-campaign |
-| `mail_accounts` | `admin` | Account CRUD, ping, test-send |
-| `auth` | `admin` | User doc management |
-| `user_prefs` | `campaign-user` | Save per-page frontend state |
+| Guest-readable general routes | `guest` | `/`, `/api/crm/whoami`, statistics, filter metadata, lead lookup |
+| Campaign read views | `user` | campaign list/detail/contact reads, follow-up reads |
+| Personal page state | `user` | `GET/PUT /api/crm/user-prefs` |
+| Campaign work | `campaign-user` | campaign writes, contact writes, campaign jobs, Smart Mail, batch, Drive files |
+| Smart Mail direct aliases | service account | `/outreach-send`, `/inbound-read`, `/reply-match` |
+| Settings and users | `admin` | all `/api/crm/settings/...`, `/api/crm/gdisk/settings`, `/api/crm/auth/users...` |
 
 ### Frontend state persistence (`frontend-status` collection)
 
@@ -160,22 +152,19 @@ Each page gets its own document. Currently registered pages:
 |---|---|---|
 | `followup` | `crm_follow.html` | Owner/campaign/outreach filters, view mode, group fields, search, filter bar, sort |
 
-Reads are not listed in `_BLUEPRINT_MIN_READ_ROLES` — any authenticated user can read
-their own prefs. Writes require `campaign-user` (CLAUDE.md write rule).
+`GET` and `PUT` require at least `user`. This is intentionally treated as personal
+page state, not campaign data mutation.
 
-### Settings collection — admin only (all write operations)
+### Settings and users — admin only
 
-Any endpoint that writes to the Firestore `settings` collection requires `admin`
-regardless of its blueprint's default minimum. These are listed in `_ADMIN_ENDPOINTS`
-in `main.py` and checked after the blueprint minimum:
+Any endpoint that reads or writes settings, mail-account configuration, gdisk
+settings, mail-tag status settings, or user role documents requires `admin`.
 
-| Endpoint | Blueprint | Writes to |
+| Endpoint family | Min role | Notes |
 |---|---|---|
-| `PUT /api/crm/settings/mail-tag-statuses` | `mail_tags` | `settings/mail_tag_statuses` |
-| `POST/PATCH /api/crm/gdisk/settings` | `gdisk` | `settings/gdisk` |
-
-`mail_accounts` and `auth` blueprints already require `admin` at the blueprint level
-and do not need to appear in `_ADMIN_ENDPOINTS`.
+| `/api/crm/settings/...` | `admin` | mail accounts, mailbox-by-account reads, messages, mail-tag statuses |
+| `/api/crm/gdisk/settings` | `admin` | Drive folder/system configuration |
+| `/api/crm/auth/users...` | `admin` | user role management |
 
 ### Server-side user identity
 
@@ -185,7 +174,8 @@ Once the token is verified, `flask.g.user_email` holds the real authenticated id
 
 | File | Role |
 |---|---|
-| `functions-crm/main.py` | `before_request` hook, `_BLUEPRINT_MIN_ROLES` |
+| `functions-crm/auth_settings.py` | Editable API route/auth/role policy table |
+| `functions-crm/main.py` | `before_request` hook and current runtime enforcement |
 | `functions-crm/handlers/shared.py` | `_get_user_role()`, `ROLE_LEVELS` |
 
 ---
@@ -194,8 +184,9 @@ Once the token is verified, `flask.g.user_email` holds the real authenticated id
 
 **Backend:**
 1. Add the route to the correct handler Blueprint (or a new one).
-2. Add the Blueprint name to `_BLUEPRINT_MIN_ROLES` in `main.py` with the minimum role.
-3. If it is a write endpoint, use `flask.g.user_email` for any audit trail.
+2. Add or update the matching `ApiRule` in `functions-crm/auth_settings.py`.
+3. If runtime enforcement still depends on the legacy tables in `main.py`, keep those aligned until `check_auth()` is switched fully to `auth_settings.py`.
+4. If it is a write endpoint, use `flask.g.user_email` for any audit trail.
 
 **Frontend:**
 1. If it is a new page, add it to `PAGE_ROLES` in `crm-common.js`.
@@ -213,28 +204,23 @@ Once the token is verified, `flask.g.user_email` holds the real authenticated id
 
 ### Blueprint minimum read roles
 
-GET (read) requests are controlled per-blueprint via `_BLUEPRINT_MIN_READ_ROLES`
-in `main.py`. Any blueprint not listed allows any authenticated user to read.
+GET (read) requests are controlled by `ApiRule` entries in
+`functions-crm/auth_settings.py`.
 
-**Rule:** add a blueprint whenever its GET responses contain sensitive internal data
-(contact details, credentials, campaign data, user docs, or system settings).
-When in doubt, add it and set minimum to `campaign-user`.
+**Rule:** when a route returns campaign data, use at least `user`. When it returns
+settings, credentials, mail-account configuration, or user role documents, use `admin`.
 
-| Blueprint | Min read role | What it protects |
+| Route family | Min read role | What it protects |
 |---|---|---|
-| `campaigns` | `campaign-user` | Campaign docs embed full `campaign_contacts` subcollection |
-| `contacts` | `campaign-user` | Direct `campaign_contacts` reads + followup-contacts |
-| `gdisk` | `campaign-user` | Drive folder contents + `settings/gdisk` config |
-| `mail_accounts` | `campaign-user` | Mail account credentials (`settings/mail_accounts`) |
-| `auth` | `campaign-user` | User role docs (`settings/users`) |
-| `mail_tags` | `campaign-user` | `settings/mail_tag_statuses` |
-| `mailbox` | `campaign-user` | IMAP mailbox contents — no read access for user/guest |
+| Campaign reads | `user` | Campaign docs and follow-up/contact views |
+| General metadata/statistics | `guest` | Low-risk general dashboard support data |
+| Operational tools | `campaign-user` | Jobs, batch, Drive files, mailbox tags |
+| Settings and user docs | `admin` | Credentials, system config, role management |
 
-Neither `guest` nor `user` roles can read from any of these blueprints.
-Only `campaign-user` and `admin` can.
+The policy is role-level based, so higher roles inherit lower-role access.
 
 **How to add a new blueprint:**
-1. Add it to `_BLUEPRINT_MIN_READ_ROLES` in `main.py`
+1. Add or update the matching `ApiRule` in `functions-crm/auth_settings.py`
 2. Add a row to this table in `readme-access.md`
 3. Add a rule note to `CLAUDE.md` if it introduces a new category of protected data
 
@@ -242,8 +228,8 @@ Only `campaign-user` and `admin` can.
 
 ### Job-trigger endpoints — blocked for guests on GET too
 
-GET endpoints that trigger or monitor background jobs are listed in `_JOB_ENDPOINTS`
-in `main.py` and are blocked for guests regardless of HTTP method:
+GET endpoints that trigger or monitor background jobs are `campaign_work(...)` rules
+in `functions-crm/auth_settings.py` and require `campaign-user`:
 
 | Endpoint | Blueprint | Why blocked for guests |
 |---|---|---|
@@ -265,10 +251,9 @@ in `main.py` and are blocked for guests regardless of HTTP method:
 
 **Backend:**
 1. Add the route to the correct handler Blueprint (or a new one).
-2. Add the Blueprint name to `_BLUEPRINT_MIN_ROLES` in `main.py` with the minimum role.
-3. If its GET response contains sensitive data, also add it to `_BLUEPRINTS_BLOCKED_FOR_GUESTS`.
-4. If it triggers a job, add the endpoint name to `_JOB_ENDPOINTS`.
-5. If it writes, use `flask.g.user_email` for any audit trail.
+2. Add or update the matching `ApiRule` in `functions-crm/auth_settings.py`.
+3. If runtime enforcement still depends on the legacy tables in `main.py`, keep `_BLUEPRINT_MIN_ROLES`, `_BLUEPRINT_MIN_READ_ROLES`, `_JOB_ENDPOINTS`, and `_ADMIN_ENDPOINTS` aligned until `check_auth()` is switched fully to `auth_settings.py`.
+4. If it writes, use `flask.g.user_email` for any audit trail.
 
 *
 

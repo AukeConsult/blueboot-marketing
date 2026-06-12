@@ -59,6 +59,181 @@ SITE PIPELINE                  LEAD PIPELINE
 
 ---
 
+## CRM API Authentication Matrix
+
+All CRM API routes are served by `functions-crm/main.py`. Except where noted, requests must include a valid Firebase bearer token:
+
+```text
+Authorization: Bearer <firebase-id-token>
+```
+
+This matrix is defined in `functions-crm/auth_settings.py`. `main.py` still uses
+the legacy runtime auth tables until the guarded `check_auth()` switch is approved.
+
+Role levels:
+
+| Role | Access |
+|---|---|
+| `guest` | Signed in with no assigned role. Can read only low-risk general routes. |
+| `user` | Can read normal campaign views. No campaign writes or job triggers. |
+| `campaign-user` | Can read and change campaign work, trigger campaign jobs, and use Smart Mail. |
+| `admin` | Everything, including all settings and user management. |
+
+### No Firebase user auth
+
+These routes bypass Firebase user-token auth:
+
+```text
+OPTIONS <any route>
+POST /api/crm/worker/<name>/<job_id>
+```
+
+`/api/crm/worker/...` is intended for Cloud Tasks calling `crmWorker`, not browser users.
+
+### `guest` or higher
+
+Requires a valid Firebase token. These low-risk read routes allow `guest`:
+
+```text
+GET /
+GET /api/crm/whoami
+
+GET /api/crm/filter-facets
+GET /api/crm/filter-facets/<name>
+
+GET /api/crm/leads/by-domain/<domain>
+
+GET /api/crm/statistics
+```
+
+### `user` or higher
+
+Normal campaign read views require `user`, `campaign-user`, or `admin`:
+
+```text
+GET /api/crm/campaigns
+GET /api/crm/campaigns/<campaign_id>
+GET /api/crm/campaigns/<campaign_id>/contacts/<doc_id>
+GET /api/crm/followup-contacts
+GET /api/crm/followup-meta
+GET /api/crm/user-prefs
+PUT /api/crm/user-prefs
+```
+
+### `campaign-user` or `admin`
+
+Campaign work, operational tools, and job endpoints require `campaign-user`:
+
+```text
+GET /api/crm/gdisk/check
+GET /api/crm/gdisk/files
+GET /api/crm/gdisk/files/<name>
+
+GET /api/crm/mailbox-tags/<account_email>
+
+GET /api/crm/batch/jobs
+GET /api/crm/batch/jobs/<job_name>/runs
+GET /api/crm/batch/jobs/<job_name>/runs/<run_id>
+GET /api/crm/batch/jobs/<job_name>/tasks
+
+GET /api/crm/contact-sync
+GET /api/crm/push-and-sync
+GET /api/crm/template-sync
+GET /api/crm/crm-sync
+GET /api/crm/campaign-sync
+GET /api/crm/campaign-export
+GET /api/crm/discover-campaigns
+GET /api/crm/status/<job_id>
+GET /api/crm/jobs
+
+POST /api/crm/campaigns/<campaign_id>/create
+POST/PATCH /api/crm/campaigns/<campaign_id>
+DELETE /api/crm/campaigns/<campaign_id>
+POST /api/crm/campaigns/<campaign_id>/ping-mail-account
+POST /api/crm/campaigns/<campaign_id>/send-test-mail
+
+POST/PATCH /api/crm/campaigns/<campaign_id>/contacts/<doc_id>
+POST /api/crm/campaigns/<campaign_id>/contacts/<doc_id>/send-mail
+POST /api/crm/campaigns/<campaign_id>/contacts/remove
+POST /api/crm/campaigns/<src_campaign_id>/contacts/move
+
+POST/PATCH /api/crm/filter-facets/<name>
+POST /api/crm/filter-facets/<name>/create-campaign
+
+POST /api/crm/gdisk/files
+DELETE /api/crm/gdisk/files/<name>
+
+POST /api/crm/leads/by-domain/<domain>/exclude
+POST /api/crm/name-enrich
+POST /api/crm/campaigns/<campaign_id>/name-enrich
+
+POST /api/crm/statistics/collect
+
+PATCH /api/crm/batch/jobs/<job_name>
+POST /api/crm/batch/jobs/<job_name>/run
+POST /api/crm/batch/jobs/<job_name>/tasks
+PATCH /api/crm/batch/jobs/<job_name>/tasks/<task_id>
+DELETE /api/crm/batch/jobs/<job_name>/tasks/<task_id>
+POST /api/crm/batch/jobs/<job_name>/tasks/<task_id>/run
+POST /api/crm/batch/sync-schedulers
+
+PUT /api/crm/mailbox-tags/<account_email>/<msg_key>
+DELETE /api/crm/mailbox-tags/<account_email>/<msg_key>
+```
+
+Direct Smart Mail trigger aliases are service-authenticated:
+
+```text
+POST /outreach-send
+POST /inbound-read
+POST /reply-match
+```
+
+CRM API Smart Mail trigger endpoints require `campaign-user` or `admin`:
+
+```text
+POST /api/crm/outreach-send
+POST /api/crm/inbound_read
+POST /api/crm/reply_match
+POST /api/crm/inbound-read
+POST /api/crm/reply-match
+```
+
+Smart Mail direct routes are exposed through the dedicated `smartMail` function:
+
+```text
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound-read
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-match
+```
+
+Scheduled Smart Mail triggers should use `POST`. Do not expose `outreach-send` as an unauthenticated public GET URL.
+
+### `admin` only
+
+Requires signed-in `admin`:
+
+```text
+GET /api/crm/settings/mail-accounts
+POST /api/crm/settings/mail-accounts
+GET /api/crm/settings/mail-accounts/<email>/mailbox
+GET /api/crm/settings/mail-accounts/<email>/message
+DELETE /api/crm/settings/mail-accounts/<email>
+POST /api/crm/settings/mail-accounts/<email>/ping
+POST /api/crm/settings/mail-accounts/<email>/send-test
+
+GET /api/crm/auth/users
+PATCH /api/crm/auth/users/<email_key>
+DELETE /api/crm/auth/users/<email_key>
+
+GET /api/crm/gdisk/settings
+POST/PATCH /api/crm/gdisk/settings
+GET /api/crm/settings/mail-tag-statuses
+PUT /api/crm/settings/mail-tag-statuses
+```
+
+---
+
 
 ---
 
