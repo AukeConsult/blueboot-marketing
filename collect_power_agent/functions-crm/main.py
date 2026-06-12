@@ -35,7 +35,7 @@ from handlers.jobs          import bp as jobs_bp
 from handlers.mailbox       import bp as mailbox_bp
 from handlers.mail_tags     import bp as mail_tags_bp
 from handlers.mail_accounts import bp as mail_accounts_bp
-from handlers.inbound_mail_read import bp as inbound_mail_read_bp
+from handlers.inbound_read import bp as inbound_read_bp
 from handlers.gdisk         import bp as gdisk_bp
 from handlers.filter_facets import bp as filter_facets_bp
 from handlers.leads         import bp as leads_bp
@@ -46,7 +46,7 @@ from handlers.batch         import bp as batch_bp
 
 for bp in (
     campaigns_bp, contacts_bp, jobs_bp, mailbox_bp,
-    mail_tags_bp, mail_accounts_bp, inbound_mail_read_bp,
+    mail_tags_bp, mail_accounts_bp, inbound_read_bp,
     gdisk_bp, filter_facets_bp, leads_bp, statistics_bp, auth_bp,
     user_prefs_bp, batch_bp,
 ):
@@ -88,8 +88,8 @@ _JOB_ENDPOINTS = frozenset({
     "jobs.list_jobs",
     # campaign-level job triggers (campaigns blueprint)
     "campaigns.discover_campaigns",
-    # inbound mail read trigger (inbound_mail_read blueprint)
-    "inbound_mail_read.inbound_mail_read",
+    # inbound mail read trigger (inbound_read blueprint)
+    "inbound_read.inbound_read",
     # statistics collection (statistics blueprint)
     "statistics.collect_statistics",
     # move contacts job trigger (contacts blueprint)
@@ -120,7 +120,7 @@ _ADMIN_ENDPOINTS = frozenset({
 
 _BLUEPRINT_MIN_ROLES: dict[str, str] = {
     "contacts":       "campaign-user",
-    "inbound_mail_read": "campaign-user",
+    "inbound_read": "campaign-user",
     "mailbox":        "campaign-user",
     "mail_tags":      "campaign-user",
     "gdisk":          "campaign-user",
@@ -248,7 +248,7 @@ def index():
         "endpoints": [
             "GET  /api/crm/campaigns",
             "GET  /api/crm/followup-contacts",
-            "POST /api/crm/inbound-mail-read",
+            "POST /api/crm/inbound-read",
             "GET  /api/crm/outreach-send",
             "GET  /api/crm/reply-match",
             "GET  /api/crm/status/<job_id>",
@@ -284,6 +284,37 @@ def crmApi(req: https_fn.Request) -> https_fn.Response:
             return _err(str(exc), 500)
 
 
+_SMART_MAIL_PATHS = {
+    "/api/crm/outreach-send",
+    "/api/crm/inbound-read",
+    "/api/crm/inbound_read",
+    "/api/crm/reply-match",
+    "/api/crm/reply_match",
+}
+
+
+@https_fn.on_request(region="us-central1", timeout_sec=540,
+                     memory=fn_options.MemoryOption.MB_512,
+                     max_instances=1)
+def smartMail(req: https_fn.Request) -> https_fn.Response:
+    """Smart Mail trigger endpoint: outreach send, inbound read, and reply match only."""
+    with app.request_context(req.environ):
+        try:
+            from flask import request as flask_request
+
+            path = flask_request.path.rstrip("/") or "/"
+            if path not in _SMART_MAIL_PATHS:
+                return _err(
+                    "smartMail only serves /api/crm/outreach-send, "
+                    "/api/crm/inbound_read (/api/crm/inbound-read), and "
+                    "/api/crm/reply_match (/api/crm/reply-match)",
+                    404,
+                )
+            return app.full_dispatch_request()
+        except Exception as exc:
+            return _err(str(exc), 500)
+
+
 @https_fn.on_request(region="us-central1", timeout_sec=900,
                      memory=fn_options.MemoryOption.GB_1,
                      max_instances=3)
@@ -294,3 +325,4 @@ def crmWorker(req: https_fn.Request) -> https_fn.Response:
             return app.full_dispatch_request()
         except Exception as exc:
             return https_fn.Response(f"Worker error: {exc}", status=500)
+

@@ -1,4 +1,4 @@
-# BlueBoot CRM
+﻿# BlueBoot CRM
 
 ## Pipeline Overview
 
@@ -1352,7 +1352,7 @@ This script only needs to be run once on existing data. All new contacts written
 
 ---
 
-## `inbound_mail_read.py` — read inbound/sent mail into contact logs
+## `inbound_read.py` — read inbound/sent mail into contact logs
 
 Fetches inbox and sent messages for every configured outreach account, matches
 emails by address against campaign contacts, and appends `EMAIL_IN` / `EMAIL_OUT`
@@ -1365,37 +1365,37 @@ CRM Follow-up web page (`crm_follow.html`).
 
 ```bat
 :: Sync all contacts, last 7 days (default)
-run_inbound_mail_read.bat
+run_inbound_read.bat
 
 :: Sync last 30 days for all contacts
-run_inbound_mail_read.bat --days 30
+run_inbound_read.bat --days 30
 
 :: Sync one campaign only
-run_inbound_mail_read.bat --campaign NO_jun
+run_inbound_read.bat --campaigns NO_jun
 
 :: Sync one specific contact
-run_inbound_mail_read.bat --campaign NO_jun --contact john_doe_example_com
+run_inbound_read.bat --campaigns NO_jun --contact john_doe_example_com
 
 :: Preview matches without writing to Firestore
-run_inbound_mail_read.bat --dry-run
+run_inbound_read.bat --dry-run
 
 :: List all campaign IDs
-run_inbound_mail_read.bat --list-campaigns
+run_inbound_read.bat --list-campaigns
 ```
 
 ```bash
 # macOS / Linux
-./run_inbound_mail_read.sh --days 30
-./run_inbound_mail_read.sh --dry-run
-python app/inbound_mail_read.py --campaign NO_jun --dry-run
+./run_inbound_read.sh --days 30
+./run_inbound_read.sh --dry-run
+python app/inbound_read.py --campaigns NO_jun --dry-run
 ```
 
 ### Parameters
 
 | Parameter | Default | Description |
 |---|---|---|
-| `--campaign` / `-c` | all campaigns | Only sync contacts in this campaign |
-| `--contact` / `-d` | all contacts | Only sync this contact doc ID (requires `--campaign`) |
+| `--campaigns` / `-c` | all campaigns | Only sync contacts in these campaign IDs; accepts space, comma, semicolon, or pipe separated values |
+| `--contact` / `-d` | all contacts | Only sync this contact doc ID (requires exactly one `--campaigns` value) |
 | `--days` / `-n` | `7` | Lookback window in days (`0` = all time) |
 | `--dry-run` | off | Fetch and match emails, print results, skip Firestore writes |
 | `--list-campaigns` | off | Print all campaign IDs and exit |
@@ -1914,3 +1914,4 @@ Drives `site_agent.py` — defines per-country search instructions for finding c
 | `name` | Full country name |
 | `language` | Browser `Accept-Language` language code used in Bing search headers |
 | `accept_language` | Full `Accep
+

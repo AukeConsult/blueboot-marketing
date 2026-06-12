@@ -1,4 +1,4 @@
-# app/inbound_mail_read.py
+﻿# app/inbound_read.py
 """Command-line runner for inbound mail read.
 
 Fetches inbox + sent messages for each outreach mail account, matches them
@@ -11,20 +11,20 @@ the sync multiple times against the same mailbox never creates duplicates.
 Usage examples
 --------------
   # Sync all contacts, last 7 days (default)
-  python app/inbound_mail_read.py
+  python app/inbound_read.py
 
   # Sync last 30 days for all contacts
-  python app/inbound_mail_read.py --days 30
+  python app/inbound_read.py --days 30
 
   # Sync all time for one or more campaigns
-  python app/inbound_mail_read.py --campaigns NO_jun SE_jun --days 0
-  python app/inbound_mail_read.py --campaigns NO_jun,SE_jun --days 0
+  python app/inbound_read.py --campaigns NO_jun SE_jun --days 0
+  python app/inbound_read.py --campaigns NO_jun,SE_jun --days 0
 
   # Sync one specific contact
-  python app/inbound_mail_read.py --campaigns NO_jun --contact john_doe_example_com
+  python app/inbound_read.py --campaigns NO_jun --contact john_doe_example_com
 
   # Preview what would be synced without writing to Firestore
-  python app/inbound_mail_read.py --dry-run
+  python app/inbound_read.py --dry-run
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ import re
 
 import _pathsetup  # noqa: F401 — sets up Windows event loop policy + path
 
-from smart_mail.inbound_mail_read_lib import run_inbound_mail_read
+from smart_mail.inbound_read_lib import run_inbound_read
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -139,7 +139,7 @@ def main(argv=None) -> None:
         # Dry run: run the lib with a fake db that intercepts ArrayUnion writes
         _run_dry(db, args)
     else:
-        result = run_inbound_mail_read(
+        result = run_inbound_read(
             db             = db,
             campaign_ids   = campaign_ids,
             contact_doc_id = args.contact  or None,
@@ -151,7 +151,7 @@ def main(argv=None) -> None:
 def _run_dry(db, args):
     """Dry run: import the matching logic, skip the Firestore writes."""
     import re
-    from smart_mail.inbound_mail_read_lib import (
+    from smart_mail.inbound_read_lib import (
         _imap_connect, _find_sent_folder, _fetch_headers,
         _extract_email, _history_email_ids, _msg_key,
         CAMPAIGNS_COLLECTION, CONTACTS_SUBCOLLECTION,
@@ -277,3 +277,4 @@ def _print_result(result: dict) -> None:
 
 if __name__ == "__main__":
     main()
+

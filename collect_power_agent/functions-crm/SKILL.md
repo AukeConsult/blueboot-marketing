@@ -19,7 +19,7 @@ description: >
 **File:** `functions-crm/smart_mail/outreach_mail_select.py`
 
 Follow-up mailbox sync also belongs in this package:
-`functions-crm/smart_mail/inbound_mail_read_lib.py`. CRM may trigger it
+`functions-crm/smart_mail/inbound_read_lib.py`. CRM may trigger it
 through jobs or HTTP routes, but IMAP/Gmail mailbox reading, sent-folder matching,
 message-id deduplication, and mail-account protocol handling stay in smart-mail.
 Use `campaign_ids` for campaign filters in this flow. CLI flags use
@@ -83,6 +83,7 @@ for batch in read_outreach(mode="intro"):  # or mode="followup"
                     contact_doc_id=contact.contact_doc_id,
                     message_id=result["message_id"],
                     mail_type=step.mail_type,
+                    subject=render(step.subject, contact),
                     mode="intro",
                     sender_account=batch.account.email,
                 )
@@ -103,15 +104,15 @@ for batch in read_outreach(mode="intro"):  # or mode="followup"
 
 ---
 
-### `confirm_sent(campaign_id, contact_doc_id, message_id, mail_type, mode, sender_account, sent_at) → SentConfirmation`
+### `confirm_sent(campaign_id, contact_doc_id, message_id, mail_type, subject, mode, sender_account, sent_at) → SentConfirmation`
 
 Appends a `MailSentEntry` to `contact.mail_sent` and stamps status fields.
 Deduplicated by `message_id` — safe to call on retry.
 
 **Writes to `campaign_contacts/{contact_doc_id}`** (single `.update()` call):
 - `mail_sent` → `ArrayUnion({mail_type, sent_at, message_id})`
-- `comment_history` → `ArrayUnion({date, user=sender_account, text="Mail sent: <mail_type> <message_id>", type="MAIL_SENT"})` — visible in CRM dashboard
-- Keeps `status = "pending"` so automatic outreach can continue through the sequence.
+- `comment_history` → `ArrayUnion({date, user=sender_account, text="Mail sent: <subject>", type="MAIL_SENT"})` — visible in CRM dashboard
+- Leaves the main contact `status` unchanged.
 - Sets `followup_status = "contacted"` and clears `new_mail`.
 - If the campaign is `ready`, marks it `active` after the first sent mail.
 
@@ -125,6 +126,7 @@ Deduplicated by `message_id` — safe to call on retry.
 | `contact_doc_id` | `str` | required | |
 | `message_id` | `str` | `""` | SMTP Message-ID; **auto-generated if not supplied** via `email.utils.make_msgid()` — always unique |
 | `mail_type` | `str` | `"intro"` | e.g. `"intro"`, `"followup_1"` — from `MailStep.mail_type` |
+| `subject` | `str` | `""` | Rendered mail subject shown in CRM-visible `comment_history`; falls back to `mail_type` if blank |
 | `mode` | `"intro" \| "followup"` | `"intro"` | controls which status field is cleared |
 | `sender_account` | `str` | `""` | account email logged to outreach_sent and comment_history |
 | `sent_at` | `str \| None` | now UTC ISO | override if needed |
@@ -187,7 +189,7 @@ Automatic outreach must use this Firestore mail-account document. Do not derive 
 - SMTP/Gmail sending stays in `smart_mail.mail_sender.MailSender`.
 - `outreach_sender.py` owns the shared live/dry-run loop. Live mode opens `MailSender(batch.account.raw)` once per account batch, calls `send_open()` for each selected contact, calls `confirm_sent()` only after a successful send, then closes the sender in `finally`.
 - Dry-run mode must call the same `send_outreach(..., dry_run=True)` loop. It selects the same contacts and renders the same mail, but does not open `MailSender`, send mail, call `confirm_sent()`, sleep between contacts, or refresh campaign stats.
-- `app/outreach_send_run.py` is the command-line entrypoint for both preview and live send. It defaults to dry-run; `--send` is required for real mail.
+- `app/outreach_send.py` is the command-line entrypoint for both preview and live send. It defaults to dry-run; `--send` is required for real mail.
 - The outreach sender must not contain separate SMTP/Gmail message creation logic; use `MailSender` so CSS inlining, inline image handling, display names, threading headers, and account settings are consistent with other mail paths.
 
 ### `CampaignMail` (level 2)
@@ -286,4 +288,5 @@ outreach_sent/{auto_id}                             ← confirm_sent log target
 - `next_mail_index` out of bounds → contact skipped silently
 - `confirm_sent` deduplicates on `message_id` — safe to retry
 - Firestore import chain: `smart_mail.firestore_client` → `app.firestore_client` → `firestore_client`
+
 

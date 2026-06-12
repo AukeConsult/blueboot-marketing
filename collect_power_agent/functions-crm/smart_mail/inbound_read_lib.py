@@ -1,12 +1,12 @@
-"""inbound_mail_read_lib.py - read inbound/sent mail into campaign contact logs.
+﻿"""inbound_read_lib.py - read inbound/sent mail into campaign contact logs.
 
 For each outreach mail account, fetches recent emails (inbox + sent) and matches
 them against campaign_contacts by email address. Matched emails are appended to
 the contact's comment_history array using Firestore ArrayUnion — idempotent because
 each entry carries a unique email_id; identical maps are never inserted twice.
 
-Used by the crmWorker 'inbound-mail-read' job and the local
-app/inbound_mail_read.py runner.
+Used by the crmWorker 'inbound-read' job and the local
+app/inbound_read.py runner.
 
 Parameters (all optional):
   campaign_ids    list  Only sync contacts belonging to these campaigns
@@ -233,13 +233,13 @@ def _fetch_headers(conn: imaplib.IMAP4, folder: str, cutoff: datetime | None, li
             })
         return msgs
     except Exception as exc:
-        print(f"[inbound-mail-read] folder '{folder}' error: {exc}", flush=True)
+        print(f"[inbound-read] folder '{folder}' error: {exc}", flush=True)
         return []
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def run_inbound_mail_read(
+def run_inbound_read(
     db,
     campaign_ids:     list[str] | str | None = None,
     contact_doc_id:   str | None = None,
@@ -344,7 +344,7 @@ def run_inbound_mail_read(
         if not contact_index:
             continue
 
-        print(f"[inbound-mail-read] {acc_email} — {len(contact_index)} contacts", flush=True)
+        print(f"[inbound-read] {acc_email} — {len(contact_index)} contacts", flush=True)
 
         try:
             conn = _imap_connect(ma, acc_email)
@@ -413,7 +413,7 @@ def run_inbound_mail_read(
             except Exception as exc:
                 errors.append(f"{match_e}: write failed — {exc}")
 
-    print(f"[inbound-mail-read] done — {total_entries} entries / {updated_contacts} updated contacts", flush=True)
+    print(f"[inbound-read] done — {total_entries} entries / {updated_contacts} updated contacts", flush=True)
     return {
         "synced_entries":  total_entries,
         "synced_contacts": total_contacts,
@@ -422,3 +422,4 @@ def run_inbound_mail_read(
         "campaign_ids":    sorted(campaign_filter),
         "errors":          errors,
     }
+

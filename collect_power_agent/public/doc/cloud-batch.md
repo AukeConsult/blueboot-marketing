@@ -1,4 +1,4 @@
-# Cloud Batch — Architecture & Setup Guide
+﻿# Cloud Batch — Architecture & Setup Guide
 
 ## Overview
 
@@ -302,7 +302,7 @@ These scripts are ready to be used as steps in new or extended pipelines:
 | `campaign_exporter` | `app/campaign_exporter.py` | Export campaign contacts to Excel |
 | `campaign_name_enrich` | `app/campaign_name_enrich.py` | Enrich missing campaign names via AI |
 | `filter_site_leads` | `app/filter_site_leads.py` | Filter site_leads by criteria into a campaign |
-| `inbound_mail_read` | `app/inbound_mail_read.py` | Sync IMAP replies back to CRM follow-up status |
+| `inbound_read` | `app/inbound_read.py` | Sync IMAP replies back to CRM follow-up status |
 | `wp_plugin_leads` | `app/wp_plugin_leads.py` | Discover WordPress plugin leads via Bing |
 | `build_filter_facets` | `app/build_filter_facets.py` | Build facet index for lead filter UI |
 | `facet_campaign` | `app/facet_campaign.py` | Apply facet-based filter to create a campaign |
@@ -409,3 +409,4 @@ Set in `deploy_batch.sh` and applied on every deploy:
 `--concurrency` is intentionally omitted. `/run` returns 202 immediately and jobs run in background threads, so Cloud Run never sees concurrent requests. Job concurrency is controlled by the `is_running()` dedup guard in `entrypoint.py` — the same job cannot run twice simultaneously, but two different jobs scheduled at the same time will both run, each in its own background thread sharing the instance CPU and memory.
 
 > **⚠ Instance scale-down warning.** Because `/run` returns 202 immediately, Cloud Run considers the request complete right away. Any extra instance spun up by autoscaling goes idle immediately after accepting the call and may be shut down by Cloud Run within minutes — while the background pipeline thread is still running. `--min-instances 1` only protects the primary instance. To guarantee a second concurrent job survives to completion, set `--min-instances` equal to the number of simultaneously running jobs (e.g. `BATCH_MIN_INSTANCES=2`). The trade-off is that all min-instances run 24/7 and incur cost. In practice, if jobs rarely overlap, keeping `--min-instances 1` is fine — overlapping jobs will both land on the single warm instance.
+

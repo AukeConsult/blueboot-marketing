@@ -15,7 +15,7 @@ Two public functions:
         The sender can open one SMTP connection per AccountBatch and work
         through all its campaigns and contacts before closing.
 
-    confirm_sent(campaign_id, contact_doc_id, message_id, sender_account, sent_at)
+    confirm_sent(campaign_id, contact_doc_id, message_id, mail_type, subject, sender_account, sent_at)
         After an external sender has dispatched an email, stamp the contact
         "contacted" and append a deduplicated log entry to outreach_sent.
 
@@ -570,6 +570,7 @@ def confirm_sent(
     contact_doc_id: str,
     message_id:     str        = "",
     mail_type:      str        = "intro",
+    subject:        str        = "",
     mode:           str        = "intro",
     sender_account: str        = "",
     sent_at:        str | None = None,
@@ -579,7 +580,7 @@ def confirm_sent(
     Writes atomically to campaign_contacts in one .update() call:
       1. mail_sent        → ArrayUnion({mail_type, sent_at, message_id})
       2. comment_history  → ArrayUnion({date, user, text, type="MAIL_SENT"})
-      3. status stamp     → keeps status="pending" and sets
+      3. follow-up stamp  → leaves status unchanged and sets
                             followup_status="contacted"
 
     Also appends a log doc to outreach_sent (deduplicated by message_id).
@@ -593,6 +594,8 @@ def confirm_sent(
     # Always guarantee a unique message_id — generate one if caller did not provide it
     if not message_id:
         message_id = make_msgid()
+    subject_text = (subject or "").strip()
+    history_text = "Mail sent: %s" % subject_text if subject_text else "Mail sent: %s" % mail_type
     db = _get_db()
     contact_ref = (
         db.collection("campaigns")
@@ -615,13 +618,12 @@ def confirm_sent(
         "comment_history": ArrayUnion([{
             "date": confirmed_at,
             "user": sender_account or "outreach",
-            "text": "Mail sent: %s  %s" % (mail_type, message_id),
+            "text": history_text,
             "type": "MAIL_SENT",
         }]),
     }
 
-    # status stamp — which field depends on mode
-    update["status"] = "pending"
+    # Follow-up stamp only; leave the main contact status unchanged.
     update["followup_status"] = "contacted"
     update["new_mail"] = False
 

@@ -338,6 +338,7 @@ def send_outreach(
                             contact_doc_id = contact.contact_doc_id,
                             message_id     = message_id,
                             mail_type      = step.mail_type,
+                            subject        = rendered.subject,
                             mode           = mode,
                             sender_account = account.email,
                         )

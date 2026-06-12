@@ -165,6 +165,7 @@ def outreach_send():
 
 
 @bp.route("/api/crm/reply-match", methods=["GET", "POST"])
+@bp.route("/api/crm/reply_match", methods=["GET", "POST"])
 def reply_match():
     """Trigger one reply matching pass through the CRM worker."""
     data = _request_data()
@@ -322,9 +323,9 @@ def worker(name, job_id):
                     emails, db=db, dry_run=dry_run, skip_ai=skip_ai,
                 )
 
-        elif name == "inbound-mail-read":
-            from smart_mail.inbound_mail_read_lib import run_inbound_mail_read
-            result = run_inbound_mail_read(
+        elif name == "inbound-read":
+            from smart_mail.inbound_read_lib import run_inbound_read
+            result = run_inbound_read(
                 db               = db,
                 campaign_ids     = (
                     body.get("campaign_ids")
@@ -446,3 +447,4 @@ def list_jobs():
     if cutoff:
         jobs = [j for j in jobs if (j.get("queued_at") or "") >= cutoff]
     return jsonify({"jobs": jobs, "count": len(jobs)})
+

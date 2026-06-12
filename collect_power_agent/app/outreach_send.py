@@ -1,4 +1,4 @@
-# app/outreach_send_run.py
+﻿# app/outreach_send.py
 """Run the outreach sender from the command line.
 
 By default this is a dry run: it uses the same outreach sender selection and
@@ -9,26 +9,26 @@ real mail and write confirmations.
 Usage examples
 --------------
   # Dry-run intro mode
-  python app/outreach_send_run.py --dry-run
+  python app/outreach_send.py --dry-run
 
   # Dry-run followup mode with rendered body snippet
-  python app/outreach_send_run.py --mode followup --preview
+  python app/outreach_send.py --mode followup --preview
 
   # Send real intro mails
-  python app/outreach_send_run.py --send --mode intro
+  python app/outreach_send.py --send --mode intro
 
   # Send both intro and followup passes
-  python app/outreach_send_run.py --send --mode both
+  python app/outreach_send.py --send --mode both
 
   # Filter to one or more campaigns
-  python app/outreach_send_run.py --campaigns ram-test1 ram-test2
-  python app/outreach_send_run.py --campaigns ram-test1,ram-test2
+  python app/outreach_send.py --campaigns ram-test1 ram-test2
+  python app/outreach_send.py --campaigns ram-test1,ram-test2
 
   # Cap contacts fetched
-  python app/outreach_send_run.py --limit 20
+  python app/outreach_send.py --limit 20
 
   # List all campaign IDs and exit
-  python app/outreach_send_run.py --list-campaigns
+  python app/outreach_send.py --list-campaigns
 """
 from __future__ import annotations
 
@@ -176,3 +176,4 @@ def main(argv=None) -> None:
 
 if __name__ == "__main__":
     main()
+

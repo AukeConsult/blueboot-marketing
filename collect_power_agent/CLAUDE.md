@@ -1,4 +1,4 @@
-# Coding Rules for this Project
+﻿# Coding Rules for this Project
 
 ## RULE: Check for SKILL.md in the same subdirectory before working on any file
 
@@ -140,10 +140,10 @@ pipe, and newline so pasted lists work consistently.
 
 Example:
 ```bash
-python app/outreach_send_run.py --campaigns NO_jun SE_jun
-python app/outreach_send_run.py --campaigns NO_jun,SE_jun
-python app/outreach_send_run.py --campaigns NO_jun;SE_jun
-python app/outreach_send_run.py --campaigns NO_jun|SE_jun
+python app/outreach_send.py --campaigns NO_jun SE_jun
+python app/outreach_send.py --campaigns NO_jun,SE_jun
+python app/outreach_send.py --campaigns NO_jun;SE_jun
+python app/outreach_send.py --campaigns NO_jun|SE_jun
 ```
 
 Use this same strategy for campaign lists and any other CLI parameter that represents
@@ -694,11 +694,11 @@ in the project root, following the style of the other launcher pairs:
 - Example invocations
 - What is written to Firestore and how dedup works
 
-**Reference implementation:** `inbound-mail-read`
-- Lib: `functions-crm/smart_mail/inbound_mail_read_lib.py`
-- API trigger: `POST /api/crm/inbound-mail-read` in `functions-crm/main.py`
-- CLI: `app/inbound_mail_read.py`
-- Launchers: `run_inbound_mail_read.bat` and `run_inbound_mail_read.sh`
+**Reference implementation:** `inbound-read`
+- Lib: `functions-crm/smart_mail/inbound_read_lib.py`
+- API trigger: `POST /api/crm/inbound-read` in `functions-crm/main.py`
+- CLI: `app/inbound_read.py`
+- Launchers: `run_inbound_read.bat` and `run_inbound_read.sh`
 
 ---
 
@@ -1084,3 +1084,4 @@ explicit pixel widths (never `width:auto` on either). Use at minimum:
 
 `width:auto` on Name causes it to collapse into the Email column when other
 columns are added or the viewport shrinks. Always set a concrete width.
+
