@@ -32,12 +32,17 @@ must show:
 - minimum role when `ROLE` is used
 
 Use the stored role names exactly: `guest`, `user`, `campaign-user`, and `admin`.
+Do not hardcode service account email addresses in route rules. Service-machine
+access is controlled by the top-level `SERVICE_ROLE_POLICIES` list in
+`auth_settings.py`, then attached to routes with `service_call(...)`.
+
 Organize rules by intent:
 
 - `guest_read`: low-risk general GET routes only
 - `user_read`: normal campaign read views
 - `campaign_work`: campaign writes, campaign jobs, Smart Mail, and operational tools
 - `service_call`: direct Smart Mail route aliases such as `/outreach-send`
+- `blocked_route`: route exists in Flask but is intentionally not callable through that path
 - `admin_only`: all settings and user administration routes
 
 Do not add new scattered auth lists in `main.py`. The intended source of truth for

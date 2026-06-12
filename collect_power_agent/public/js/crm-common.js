@@ -250,18 +250,27 @@ function renderNav(targetId){
     + '<span id="bb-nav-email" class="small text-muted me-2" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>'
     + '<button class="btn btn-sm btn-outline-secondary" style="font-size:.78rem;padding:.2rem .6rem" onclick="signOutUser()">'
     + '<i class="ti ti-logout me-1"></i>Sign out</button></div>';
+  // Guest area — visible until Firebase confirms a signed-in user
+  const guestArea = '<div class="bb-nav-guest" id="bb-nav-guest">'
+    + '<a href="login.html" class="btn btn-sm btn-outline-secondary" style="font-size:.78rem;padding:.2rem .6rem">'
+    + '<i class="ti ti-login me-1"></i>Sign in</a>'
+    + '<a href="register.html" class="btn btn-sm btn-primary" style="font-size:.78rem;padding:.2rem .6rem">'
+    + '<i class="ti ti-user-plus me-1"></i>Register</a>'
+    + '</div>';
   const hamburger = '<button class="bb-nav-toggle" onclick="_bbNavToggle()" title="Menu"><i class="ti ti-menu-2"></i></button>';
   el.outerHTML = '<nav id="nav" class="bb-nav">'
     + '<a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>'
     + '<div class="nav-links">' + links + '</div>'
-    + '<div class="bb-nav-right">' + userArea + hamburger + '</div>'
+    + '<div class="bb-nav-right">' + guestArea + userArea + hamburger + '</div>'
     + '</nav>';
-  // Show user area only when signed in; add role badge when available
+  // Toggle guest/user areas based on auth state
   if (typeof firebase !== 'undefined') {
     firebase.auth().onAuthStateChanged(u => {
       const area  = document.getElementById('bb-nav-user');
+      const guest = document.getElementById('bb-nav-guest');
       const label = document.getElementById('bb-nav-email');
-      if (area) area.style.display = u ? '' : 'none';
+      if (area)  area.style.display  = u ? '' : 'none';
+      if (guest) guest.style.display = u ? 'none' : '';
       if (label && u) label.textContent = u.displayName || u.email || '';
     });
   }

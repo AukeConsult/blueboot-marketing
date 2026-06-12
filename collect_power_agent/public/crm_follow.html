@@ -3097,7 +3097,7 @@ function _relayoutTable() {
 
 (async () => {
   await requireAuth();
-  requireRole(['campaign-user', 'admin']);
+  requireRole(['user', 'campaign-user', 'admin']);
   await loadUserPrefs();
   await load();
 })();

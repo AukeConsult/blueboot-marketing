@@ -116,15 +116,7 @@ GET /api/crm/campaigns/<campaign_id>
 GET /api/crm/campaigns/<campaign_id>/contacts/<doc_id>
 GET /api/crm/followup-contacts
 GET /api/crm/followup-meta
-GET /api/crm/user-prefs
-PUT /api/crm/user-prefs
-```
 
-### `campaign-user` or `admin`
-
-Campaign work, operational tools, and job endpoints require `campaign-user`:
-
-```text
 GET /api/crm/gdisk/check
 GET /api/crm/gdisk/files
 GET /api/crm/gdisk/files/<name>
@@ -136,6 +128,18 @@ GET /api/crm/batch/jobs/<job_name>/runs
 GET /api/crm/batch/jobs/<job_name>/runs/<run_id>
 GET /api/crm/batch/jobs/<job_name>/tasks
 
+GET /api/crm/status/<job_id>
+GET /api/crm/jobs
+
+GET /api/crm/user-prefs
+PUT /api/crm/user-prefs
+```
+
+### `campaign-user` or `admin`
+
+Campaign writes, operational mutations, and job-trigger endpoints require `campaign-user`:
+
+```text
 GET /api/crm/contact-sync
 GET /api/crm/push-and-sync
 GET /api/crm/template-sync
@@ -143,8 +147,6 @@ GET /api/crm/crm-sync
 GET /api/crm/campaign-sync
 GET /api/crm/campaign-export
 GET /api/crm/discover-campaigns
-GET /api/crm/status/<job_id>
-GET /api/crm/jobs
 
 POST /api/crm/campaigns/<campaign_id>/create
 POST/PATCH /api/crm/campaigns/<campaign_id>
@@ -188,6 +190,10 @@ POST /outreach-send
 POST /inbound-read
 POST /reply-match
 ```
+
+Service authentication is controlled by service roles in
+`functions-crm/auth_settings.py` (`SERVICE_ROLE_POLICIES`), not by hardcoded
+service account email addresses.
 
 CRM API Smart Mail trigger endpoints require `campaign-user` or `admin`:
 

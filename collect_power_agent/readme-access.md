@@ -131,11 +131,15 @@ not by Flask blueprint internals:
 | Group | Min role | Routes |
 |---|---|---|
 | Guest-readable general routes | `guest` | `/`, `/api/crm/whoami`, statistics, filter metadata, lead lookup |
-| Campaign read views | `user` | campaign list/detail/contact reads, follow-up reads |
+| Campaign read views | `user` | campaign/contact/follow-up reads, job status/history, batch reads, Drive file reads, mailbox tag reads |
 | Personal page state | `user` | `GET/PUT /api/crm/user-prefs` |
-| Campaign work | `campaign-user` | campaign writes, contact writes, campaign jobs, Smart Mail, batch, Drive files |
-| Smart Mail direct aliases | service account | `/outreach-send`, `/inbound-read`, `/reply-match` |
+| Campaign work | `campaign-user` | campaign writes, contact writes, job triggers, Smart Mail, batch mutations, Drive file writes |
+| Smart Mail direct aliases | service role | `/outreach-send`, `/inbound-read`, `/reply-match` |
 | Settings and users | `admin` | all `/api/crm/settings/...`, `/api/crm/gdisk/settings`, `/api/crm/auth/users...` |
+
+Service-role access is defined at the top of `functions-crm/auth_settings.py` in
+`SERVICE_ROLE_POLICIES`. The code should validate service identity by Google/IAM
+role membership, not by hardcoded service account email address.
 
 ### Frontend state persistence (`frontend-status` collection)
 
@@ -226,10 +230,11 @@ The policy is role-level based, so higher roles inherit lower-role access.
 
 ---
 
-### Job-trigger endpoints — blocked for guests on GET too
+### Job-trigger endpoints
 
-GET endpoints that trigger or monitor background jobs are `campaign_work(...)` rules
-in `functions-crm/auth_settings.py` and require `campaign-user`:
+GET endpoints that start background jobs are `campaign_work(...)` rules in
+`functions-crm/auth_settings.py` and require `campaign-user`. Read-only job
+status/history endpoints are `user_read(...)` rules.
 
 | Endpoint | Blueprint | Why blocked for guests |
 |---|---|---|
@@ -239,8 +244,6 @@ in `functions-crm/auth_settings.py` and require `campaign-user`:
 | `GET /api/crm/crm-sync` | `jobs` | Starts a CRM sync job |
 | `GET /api/crm/campaign-sync` | `jobs` | Starts a campaign-sync job |
 | `GET /api/crm/campaign-export` | `jobs` | Starts a campaign-export job |
-| `GET /api/crm/status/<id>` | `jobs` | Monitors a job guests cannot start |
-| `GET /api/crm/jobs` | `jobs` | Shows job history (internal) |
 | `GET /api/crm/discover-campaigns` | `campaigns` | Starts CRM sync jobs |
 | `POST /api/crm/inbound-read` | `inbound_read` | Starts inbound mail read job |
 | `POST /api/crm/statistics/collect` | `statistics` | Starts statistics job |
