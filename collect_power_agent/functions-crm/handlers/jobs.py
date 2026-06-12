@@ -130,6 +130,7 @@ def _first_param(data: dict, name: str, default=None):
 
 
 @bp.route("/api/crm/outreach-send", methods=["GET", "POST"])
+@bp.route("/outreach-send", methods=["GET", "POST"])
 def outreach_send():
     """Trigger automatic outreach sending through the CRM worker.
 
@@ -164,8 +165,7 @@ def outreach_send():
         return _err(str(exc), 500)
 
 
-@bp.route("/api/crm/reply-match", methods=["GET", "POST"])
-@bp.route("/api/crm/reply_match", methods=["GET", "POST"])
+@bp.route("/reply_match", methods=["GET", "POST"])
 def reply_match():
     """Trigger one reply matching pass through the CRM worker."""
     data = _request_data()

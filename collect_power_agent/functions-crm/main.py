@@ -249,8 +249,6 @@ def index():
             "GET  /api/crm/campaigns",
             "GET  /api/crm/followup-contacts",
             "POST /api/crm/inbound-read",
-            "GET  /api/crm/outreach-send",
-            "GET  /api/crm/reply-match",
             "GET  /api/crm/status/<job_id>",
             "GET  /api/crm/jobs",
         ],
@@ -285,13 +283,10 @@ def crmApi(req: https_fn.Request) -> https_fn.Response:
 
 
 _SMART_MAIL_PATHS = {
-    "/api/crm/outreach-send",
-    "/api/crm/inbound-read",
-    "/api/crm/inbound_read",
-    "/api/crm/reply-match",
-    "/api/crm/reply_match",
+    "/outreach-send",
+    "/inbound-read",
+    "/reply-match",
 }
-
 
 @https_fn.on_request(region="us-central1", timeout_sec=540,
                      memory=fn_options.MemoryOption.MB_512,
@@ -305,9 +300,7 @@ def smartMail(req: https_fn.Request) -> https_fn.Response:
             path = flask_request.path.rstrip("/") or "/"
             if path not in _SMART_MAIL_PATHS:
                 return _err(
-                    "smartMail only serves /api/crm/outreach-send, "
-                    "/api/crm/inbound_read (/api/crm/inbound-read), and "
-                    "/api/crm/reply_match (/api/crm/reply-match)",
+                    "smartMail only serves /outreach-send, /inbound_read, and /reply_match",
                     404,
                 )
             return app.full_dispatch_request()
@@ -325,4 +318,3 @@ def crmWorker(req: https_fn.Request) -> https_fn.Response:
             return app.full_dispatch_request()
         except Exception as exc:
             return https_fn.Response(f"Worker error: {exc}", status=500)
-

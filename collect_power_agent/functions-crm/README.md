@@ -136,14 +136,17 @@ This deploys the CRM codebase entrypoints exported from `main.py`: `crmApi`,
 `smartMail` only serves these trigger paths:
 
 ```text
+/outreach-send
+/inbound_read
+/reply_match
+```
+
+The existing CRM API paths are also accepted for compatibility:
+
+```text
 /api/crm/outreach-send
 /api/crm/inbound_read
 /api/crm/reply_match
-```
-
-The existing hyphenated paths are also accepted for compatibility:
-
-```text
 /api/crm/inbound-read
 /api/crm/reply-match
 ```

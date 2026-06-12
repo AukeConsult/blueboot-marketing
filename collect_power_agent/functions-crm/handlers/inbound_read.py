@@ -25,8 +25,8 @@ def _split_list_value(value) -> list[str]:
     return out
 
 
-@bp.route("/api/crm/inbound-read", methods=["POST"])
 @bp.route("/api/crm/inbound_read", methods=["POST"])
+@bp.route("/inbound_read", methods=["POST"])
 def inbound_read():
     """Trigger a background job that reads inbound/sent mail into contact logs."""
     try:

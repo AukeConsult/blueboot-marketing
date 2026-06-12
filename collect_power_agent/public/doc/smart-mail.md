@@ -2,7 +2,76 @@
 
 Smart Mail is the shared mail runtime for automatic campaign outreach, inbound mail reading, and reply matching. It lives under `functions-crm/smart_mail/` and is used by both API jobs and local command-line tools.
 
+Quick reference:
+
+| Item | Value |
+|---|---|
+| Firebase codebase | `crm` |
+| Source folder | `functions-crm` |
+| Runtime | `python312` |
+| Function entrypoint | `smartMail` |
+| Defined in | `functions-crm/main.py` |
+| Decorator | `@https_fn.on_request(region="us-central1", timeout_sec=540, memory=MB_512, max_instances=1)` |
+| Deploy command | `firebase deploy --only functions:crm` |
+
+Direct deployed Smart Mail URLs:
+
+```text
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound_read
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply_match
+```
+
+Allowed aliases:
+
+```text
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound-read
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-match
+```
+
 The important rule is that the mail logic is centralized: selection and sent confirmation are in `outreach_mail_select.py`, real sending is in `outreach_sender.py`, inbound mailbox reading is in `inbound_read_lib.py`, and reply matching is in `reply_matcher.py`.
+
+---
+
+## Deployment
+
+Smart Mail is deployed from the Firebase Functions codebase named `crm`.
+
+The codebase is defined in `firebase.json`:
+
+```json
+{
+  "codebase": "crm",
+  "source": "functions-crm",
+  "runtime": "python312"
+}
+```
+
+The exported function entrypoint is `smartMail` in `functions-crm/main.py`.
+
+Deploy it with the CRM functions codebase:
+
+```bash
+firebase deploy --only functions:crm
+```
+
+That deploys the `functions-crm` entrypoints together:
+
+```text
+crmApi
+smartMail
+crmWorker
+```
+
+Deployed Smart Mail trigger URLs:
+
+```text
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound_read
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply_match
+```
+
+`smartMail` only accepts the Smart Mail trigger paths. Long-running work is still queued and executed by `crmWorker`.
 
 ---
 
@@ -77,7 +146,7 @@ POST /api/crm/outreach-send
 The same trigger can be served through the dedicated Smart Mail function:
 
 ```text
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/api/crm/outreach-send
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
 ```
 
 POST body example:
@@ -278,7 +347,7 @@ POST /api/crm/inbound_read
 The dedicated Smart Mail function accepts:
 
 ```text
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/api/crm/inbound_read
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound_read
 ```
 
 POST body example:
@@ -379,7 +448,7 @@ POST /api/crm/reply_match
 The dedicated Smart Mail function accepts:
 
 ```text
-https://us-central1-blueboot-market.cloudfunctions.net/smartMail/api/crm/reply_match
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply_match
 ```
 
 POST body:
