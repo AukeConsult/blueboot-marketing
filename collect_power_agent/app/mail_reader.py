@@ -3,14 +3,9 @@ import email
 from email.header import decode_header
 from datetime import datetime, timezone
 
-from app.firestore_client import get_firestore
-from mail_setup_secrets import IMAP, get_account
+from firestore_client import get_firestore
+from mail_accounts_config import get_account
 
-_account      = get_account()          # uses DEFAULT_ACCOUNT ("sales")
-IMAP_HOST     = IMAP["host"]
-IMAP_PORT     = IMAP["port"]
-IMAP_USERNAME = _account["user"]
-IMAP_PASSWORD = _account["password"]
 
 def decode_mime(value):
     if not value:
@@ -51,53 +46,83 @@ def extract_text(msg):
     return ""
 
 
-def read_unread_emails():
+def read_unread_emails(account: str | None = None):
+    """
+    Poll one mailbox's INBOX for unread messages and store them in
+    `inbox_messages` (deduped by Message-ID).
+
+    Account resolution happens here, lazily, on every call -- never at import
+    time -- so a misconfigured/missing mailbox raises a clear error for THIS
+    poll only and can never crash the module (or anything importing it) on load.
+    """
+    acc = get_account(account)
+
+    imap_host = acc["imap_host"]
+    imap_port = acc["imap_port"]
+
+    if not imap_host:
+        raise RuntimeError(
+            f"[mail_reader] No IMAP host configured for account '{acc['alias']}' "
+            f"-- set {acc['alias'].upper()}_IMAP_HOST / _IMAP_PORT in .env"
+        )
+
     db = get_firestore()
-    mail = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT)
-    mail.login(IMAP_USERNAME, IMAP_PASSWORD)
-    mail.select("INBOX")
-    status, messages = mail.search(None, "UNSEEN")
-    email_ids = messages[0].split()
-    print(f"Found {len(email_ids)} unread emails")
+    mail = imaplib.IMAP4_SSL(imap_host, imap_port)
 
-    for email_id in email_ids:
-        status, msg_data = mail.fetch(email_id, "(RFC822)")
-        raw_email = msg_data[0][1]
-        msg = email.message_from_bytes(raw_email)
-        subject = decode_mime(msg.get("Subject"))
-        from_email = decode_mime(msg.get("From"))
+    try:
+        mail.login(acc["user"], acc["password"])
+        mail.select("INBOX")
+        status, messages = mail.search(None, "UNSEEN")
+        email_ids = messages[0].split()
+        print(f"[{acc['alias']}] Found {len(email_ids)} unread emails")
 
-        message_id = msg.get("Message-ID")
-        in_reply_to = msg.get("In-Reply-To")
-        references = msg.get("References")
+        for email_id in email_ids:
+            status, msg_data = mail.fetch(email_id, "(RFC822)")
+            raw_email = msg_data[0][1]
+            msg = email.message_from_bytes(raw_email)
+            subject = decode_mime(msg.get("Subject"))
+            from_email = decode_mime(msg.get("From"))
 
-        body_text = extract_text(msg)
+            message_id = msg.get("Message-ID")
+            in_reply_to = msg.get("In-Reply-To")
+            references = msg.get("References")
 
-        # Duplicate prevention
-        existing = db.collection("inbox_messages") \
-            .where("message_id", "==", message_id) \
-            .limit(1) \
-            .stream()
+            body_text = extract_text(msg)
 
-        if any(existing):
-            print(f"Skipping duplicate: {message_id}")
-            continue
+            # Duplicate prevention
+            existing = db.collection("inbox_messages") \
+                .where("message_id", "==", message_id) \
+                .limit(1) \
+                .stream()
 
-        db.collection("inbox_messages").add({
-            "from_email": from_email,
-            "subject": subject,
-            "body_text": body_text,
-            "received_at": datetime.now(timezone.utc).isoformat(),
-            "message_id": message_id,
-            "in_reply_to": in_reply_to,
-            "references": references,
-            "imap_uid": email_id.decode(),
-            "processed_at": datetime.now(timezone.utc).isoformat()
-        })
+            if any(existing):
+                print(f"Skipping duplicate: {message_id}")
+                continue
 
-        print(f"Saved email: {subject}")
+            db.collection("inbox_messages").add({
+                "account": acc["alias"],
+                "from_email": from_email,
+                "subject": subject,
+                "body_text": body_text,
+                "received_at": datetime.now(timezone.utc).isoformat(),
+                "message_id": message_id,
+                "in_reply_to": in_reply_to,
+                "references": references,
+                "imap_uid": email_id.decode(),
+                "processed_at": datetime.now(timezone.utc).isoformat(),
+                # Reply-matching pipeline (reply_matcher.py) queries on
+                # this flag to find work; it flips to True once a match attempt
+                # has been made (whether or not it succeeded) so messages are
+                # never reprocessed forever.
+                "reply_matched": False,
+            })
 
-    mail.logout()
+            print(f"Saved email: {subject}")
+    finally:
+        try:
+            mail.logout()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

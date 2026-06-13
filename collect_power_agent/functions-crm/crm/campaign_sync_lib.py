@@ -29,16 +29,18 @@ TAB_FOLLOWUP = "Follow up"
 
 # Canonical header → Firestore field mapping (same as export_lib.CONTACT_COLUMNS).
 _HEADER_TO_FIELD: dict[str, str] = {
-    "Status":             "status",
-    "Name":               "name",
-    "Email":              "email",
-    "Title":              "title",
-    "Website":            "website",
-    "Sent at":            "sent_at",
-    "Last action":        "last_action",
-    "Last action status": "last_action_status",
-    "Lead ID":            "lead_id",
-    "Doc ID":             "doc_id",
+    "Status":               "status",
+    "Name":                 "name",
+    "Email":                "email",
+    "Title":                "title",
+    "Website":              "website",
+    "Sent at":              "sent_at",
+    "Follow-up date":       "followup_date",
+    "Follow-up status":     "followup_status",
+    "Follow-up importance": "followup_importance",
+    "Comment":               "followup_comment",
+    "Lead ID":              "lead_id",
+    "Doc ID":               "doc_id",
 }
 
 # Firestore field → sheet header (reverse, for building new sheet rows).
@@ -46,6 +48,19 @@ _FIELD_TO_HEADER: dict[str, str] = {v: k for k, v in _HEADER_TO_FIELD.items()}
 
 # Fields that are always DB-controlled — sheet values are never written back.
 DB_CONTROLLED = {"status", "sent_at"}
+CONTACT_STATUSES = {"pending", "active", "excluded"}
+
+
+def _contact_status(value) -> str:
+    status = str(value or "pending").strip().lower()
+    if status in CONTACT_STATUSES:
+        return status
+    return "pending"
+
+
+def _campaign_status(value) -> str:
+    status = str(value or "draft").strip().lower()
+    return status
 
 
 def _header_to_field(label: str) -> str:
@@ -102,11 +117,11 @@ def run_campaign_sync(db, svc, gd, campaign_id: str, **_kwargs) -> dict:
     # ── 0. Guard: only sync editable campaigns ─────────────────────────────
     camp_doc = db.collection(CAMPAIGNS_COLLECTION).document(campaign_id).get()
     if camp_doc.exists:
-        camp_status = (camp_doc.to_dict() or {}).get("status", "draft")
-        if camp_status in ("sent", "cancelled"):
+        camp_status = _campaign_status((camp_doc.to_dict() or {}).get("status", "draft"))
+        if camp_status in ("active", "canceled"):
             return {
                 "blocked": True,
-                "reason": f"Campaign status is '{camp_status}' — sync only allowed for non-sent campaigns.",
+                "reason": f"Campaign status is '{camp_status}' — sync only allowed for draft/ready campaigns.",
             }
 
     # ── 1. Does the sheet exist? ────────────────────────────────────────────
@@ -158,52 +173,41 @@ def run_campaign_sync(db, svc, gd, campaign_id: str, **_kwargs) -> dict:
     pairs = []
 
     for doc_id, sheet_row in sheet_by_doc.items():
+        if doc_id not in db_contacts:
+            continue   # do not add new rows from the sheet — only update existing
         update: dict = {"doc_id": doc_id, "synced_at": now}
         for header, raw_val in sheet_row.items():
             field = _header_to_field(header)
             if field == "doc_id" or field in DB_CONTROLLED:
                 continue
             update[field] = raw_val
+
         pairs.append((doc_id, update))
 
     for i in range(0, len(pairs), BATCH_SIZE):
         batch = db.batch()
         for doc_id, data in pairs[i:i + BATCH_SIZE]:
-            batch.set(contacts_col.document(doc_id), data, merge=True)
+            # Use update() so ArrayUnion in comment_history is applied correctly.
+            batch.update(contacts_col.document(doc_id), data)
         batch.commit()
         updated += len(pairs[i:i + BATCH_SIZE])
         print(f"[campaign-sync]   written {updated}/{len(pairs)} contacts to DB", flush=True)
 
-    # ── 6. New DB rows not in sheet → append to sheet ──────────────────────
-    new_in_db = [
-        db_data for doc_id, db_data in db_contacts.items()
-        if doc_id not in sheet_by_doc
-    ]
+    # ── 6. Remove sheet rows whose doc_id is no longer in DB ────────────────
     appended = 0
-    if new_in_db:
-        print(f"[campaign-sync] Appending {len(new_in_db)} new DB rows to sheet", flush=True)
-        new_rows = []
-        for c in new_in_db:
-            row = []
-            for h in headers:
-                field = _header_to_field(h)
-                row.append(_cell(c.get(field)))
-            new_rows.append(row)
-        svc.spreadsheets().values().append(
-            spreadsheetId=sheet_id,
-            range=_quote(TAB_FOLLOWUP),
-            valueInputOption="RAW",
-            insertDataOption="INSERT_ROWS",
-            body={"values": new_rows},
-        ).execute()
-        appended = len(new_in_db)
+    stale_doc_ids = [did for did in sheet_by_doc if did not in db_contacts]
+    if stale_doc_ids:
+        print(f"[campaign-sync] Removing {len(stale_doc_ids)} stale rows from sheet", flush=True)
+        # Re-export the full sheet from DB — cleanest way to remove stale rows.
+        # (Row-by-row deletion in Sheets API requires fragile index tracking.)
+        from crm.campaign_export_lib import run_campaign_export
+        run_campaign_export(db, svc, gd, campaign_id)
+        print(f"[campaign-sync] Sheet regenerated after removing stale rows", flush=True)
 
     # ── 7. Update campaign-level stats in DB ────────────────────────────────
-    all_statuses = Counter(
-        row.get("Status", "pending") or "pending" for row in sheet_rows
-    )
+    all_statuses = Counter(_contact_status(c.get("status")) for c in db_contacts.values())
     db.collection(CAMPAIGNS_COLLECTION).document(campaign_id).update({
-        "contact_count":    len(sheet_by_doc) + appended,
+        "contact_count":    len(db_contacts),
         "status_breakdown": dict(all_statuses),
         "updated_at":       now,
     })
@@ -213,8 +217,6 @@ def run_campaign_sync(db, svc, gd, campaign_id: str, **_kwargs) -> dict:
         "sheet_id":                 sheet_id,
         "source":                   "sheet",
         "contacts_updated_in_db":   updated,
-        "new_db_rows_added_to_sheet": appended,
-        "dynamic_columns":          [h for h in headers if h not in _HEADER_TO_FIELD],
+        "contacts_appended_to_sheet": appended,
     }
-    print(f"[campaign-sync] Done: {result}", flush=True)
     return result

@@ -53,7 +53,36 @@ gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
     --role="roles/run.invoker"
 ```
 
-### 1.3 Download the service account key
+### 1.3 Enable Firebase Authentication
+
+1. In the Firebase console → **Build → Authentication** → Get started
+2. Go to **Sign-in method** and enable **Google** and **Email/Password**
+3. Under **Settings → Authorised domains**, confirm your hosting domain is listed
+   (Firebase automatically adds `*.firebaseapp.com` and `*.web.app`)
+
+### 1.4 Create the web app and save the config
+
+1. In the Firebase console → Project settings (gear icon) ��� **Your apps** → **Add app** → Web (`</>`)
+2. Register the app (nickname e.g. "CRM frontend"), then copy the `firebaseConfig` object shown
+3. In the project, copy the template:
+   ```bash
+   cp public/firebase-config.example.js public/firebase-config.js
+   ```
+4. Open `public/firebase-config.js` and paste your values into `window.FIREBASE_CONFIG`:
+   ```js
+   window.FIREBASE_CONFIG = {
+     apiKey:            "AIzaSy...",
+     authDomain:        "your-project.firebaseapp.com",
+     projectId:         "your-project",
+     storageBucket:     "your-project.appspot.com",
+     messagingSenderId: "123456789",
+     appId:             "1:123456789:web:abc123",
+     measurementId:     "G-XXXXXXX"   // optional
+   };
+   ```
+5. **`firebase-config.js` is gitignored** — never commit it. The template `firebase-config.example.js` is committed instead.
+
+### 1.5 Download the service account key
 
 1. In Firebase console → Project settings → **Service accounts**
 2. Click **Generate new private key** → save the JSON file
@@ -151,7 +180,7 @@ The CRM workflow requires two Google Sheets:
 - Copy the sheet ID from the URL (the long alphanumeric string after `/spreadsheets/d/`)
 - Set in `functions-crm/crm/sheets_config.py` or via env var: `CONTACT_SHEET_ID=your_sheet_id`
 
-### 4.2 CRM template sheet
+### 4.2 CRM work sheet
 - Create a second Google Sheet
 - Name the first tab **Outreach**
 - Required columns will be written by `crm/push_and_sync.py` on first run
@@ -230,7 +259,72 @@ firebase deploy --only hosting
 
 ---
 
-## 6. Firestore indexes
+## 6. Cloud Batch (optional)
+
+The `cloud_batch/` framework runs the pipeline scripts unattended on Google Cloud. Set this up if you want scheduled weekly runs or want to trigger pipelines from the Cloud Batch page in the dashboard (admin only).
+
+### 6.1 Prerequisites
+
+You need the `gcloud` CLI installed and logged in:
+
+```bash
+gcloud auth login
+gcloud config set project YOUR_PROJECT_ID
+```
+
+No local Docker installation is required — the image is built on GCP using Cloud Build.
+
+A `.gcloudignore` file in the project root limits what gets uploaded to Cloud Build — only `app/`, `config/`, and `cloud_batch/` are sent. Virtual environments, `public/`, `functions-crm/`, and local exports are excluded, so uploads are fast even in large projects.
+
+### 6.2 First-time setup
+
+Run once from the project root:
+
+```bash
+bash cloud_batch/setup/setup_all.sh
+```
+
+This will:
+1. Enable required GCP APIs (Cloud Run, Cloud Build, Artifact Registry, Secret Manager, Cloud Scheduler)
+2. Create a `batch-runner` service account with the required roles
+3. Push all secrets from your `.env` file to Secret Manager
+4. Build the Docker image on GCP via Cloud Build (no local Docker needed)
+5. Deploy the `batch-runner` Cloud Run service (always-warm, 1 instance)
+6. Create Cloud Scheduler cron jobs for each pipeline
+
+Setup takes around 5–10 minutes on first run.
+
+### 6.3 Deploying code changes
+
+After any change to pipeline scripts (`app/`) or the batch framework (`cloud_batch/`):
+
+```bash
+bash deploy_batch.sh
+```
+
+This rebuilds the image (~3 minutes) and redeploys Cloud Run. It does not affect the CRM frontend or Firebase Cloud Function.
+
+| What changed | Command |
+|---|---|
+| `app/` or `cloud_batch/` scripts | `bash deploy_batch.sh` |
+| `functions-crm/` or `public/` | `bash deploy_crm.sh` |
+| Secrets in `.env` | `bash cloud_batch/setup/06_secrets.sh` then `bash deploy_batch.sh` |
+
+### 6.4 Verify deployment
+
+After setup, the batch runner URL is printed at the end of `setup_all.sh`. You can also retrieve it with:
+
+```bash
+gcloud run services describe batch-runner \
+  --platform managed --region us-central1 --project YOUR_PROJECT_ID \
+  --format "value(status.url)"
+```
+
+Open the dashboard → **Batch Services → Cloud Batch** to confirm jobs are listed and try a manual run.
+
+---
+
+## 7. Firestore indexes
 
 Deploy the Firestore indexes (required for collection group queries):
 
@@ -242,7 +336,7 @@ This deploys both `firestore.indexes.json` and `firestore.rules`.
 
 ---
 
-## 7. Google Drive folder (optional)
+## 8. Google Drive folder (optional)
 
 The campaign export feature uploads spreadsheets to a Google Drive folder.
 
@@ -253,7 +347,7 @@ The campaign export feature uploads spreadsheets to a Google Drive folder.
 
 ---
 
-## 8. Mail accounts
+## 9. Mail accounts
 
 Configure outreach email accounts in the CRM dashboard:
 
@@ -271,7 +365,7 @@ Gmail OAuth2 setup:
 
 ---
 
-## 9. First run checklist
+## 10. First run checklist
 
 Once everything is set up, verify the pipeline works end to end:
 
@@ -308,7 +402,7 @@ python app/build_filter_facets.py --no-write
 
 ---
 
-## 10. Project structure
+## 11. Project structure
 
 ```
 collect_power_agent/
@@ -327,7 +421,10 @@ collect_power_agent/
 │   ├── main.py             # API routes + worker
 │   └── requirements.txt
 ├── public/                 # Frontend (Firebase Hosting)
-│   ├── js/crm-common.js    # Shared nav + helpers
+│   ├── firebase-config.js          ← not committed (copy from example)
+│   ├── firebase-config.example.js  ← template, commit this
+│   ├── js/crm-common.js            # Shared nav + helpers
+│   ├── js/auth.js                  # Firebase Auth guard + helpers
 │   └── *.html
 ├── .env                    ← not committed
 ├── .env.example
@@ -348,8 +445,9 @@ collect_power_agent/
 
 **Cloud Function returns 403** — the service account needs `roles/run.invoker` and `roles/cloudtasks.enqueuer` (run `setup_gcp.sh`).
 
-**Sheets not found (404)** — verify the sheet IDs in `sheets_config.py` and that the service account has Editor access on both sheets.
+**Sheets not found (404)** — verify the sheet IDs in `sheets_config.py` and that the service account has Editor access 
+---
 
-**MailChannels blocks HTML email** — the `MailSender` class inlines CSS via `premailer` automatically. If still blocked, check that the sending domain has SPF and DKIM records configured.
+## 12. Access control — first admin setup
 
-**`_ok() got multiple values for argument 'message'`** — Cloud Function code is outdated. Redeploy: `firebase deploy --only functions:crm`.
+The system requires every user t

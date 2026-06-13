@@ -26,22 +26,42 @@
 
   <div class="d-flex align-items-center justify-content-between mb-3">
     <div class="d-flex align-items-center gap-2">
-      <a id="back-link" href="campaigns.html" class="btn btn-sm btn-outline-secondary" onclick="return goBack()"><i class="ti ti-arrow-left"></i></a>
+      <a id="back-link" href="campaign.html" class="btn btn-sm btn-outline-secondary" onclick="return goBack()"><i class="ti ti-arrow-left"></i></a>
       <div>
-        <div class="fw-600" style="font-size:1rem">Mail editor</div>
+        <div class="fw-600" style="font-size:1rem">Mail editor<span id="page-step-label" style="display:none;color:var(--bb-muted);font-weight:400"> — <span id="page-step-name"></span></span></div>
         <div class="small" style="color:var(--bb-muted)" id="c-campaign-id">loading…</div>
       </div>
     </div>
     <div class="d-flex align-items-center gap-2">
       <span id="save-feedback" class="small" style="display:none;color:var(--bb-muted)"></span>
       <span class="bb-badge" id="c-status-badge"></span>
+      <button class="btn btn-sm btn-outline-primary" onclick="openCampaignTestMail()">
+        <i class="ti ti-send me-1"></i>Send test
+      </button>
+    </div>
+  </div>
+
+  <!-- Step context bar (shown when editing a mail_schedule step) -->
+  <div id="step-context-bar" class="bb-card p-3 mb-3" style="display:none;background:#eff6ff;border-color:#bfdbfe">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-5">
+        <label class="form-label small fw-500 mb-1">Step name</label>
+        <input id="step-name" class="form-control form-control-sm" placeholder="e.g. Initial outreach" oninput="autoSave()">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-500 mb-1">Send after (days)</label>
+        <input id="step-delay" class="form-control form-control-sm" type="number" min="0" placeholder="0" oninput="autoSave()">
+      </div>
+      <div class="col-md-4 d-flex align-items-end">
+        <div class="small" style="color:#3b82f6"><i class="ti ti-info-circle me-1"></i>Day 0 = send on campaign activation</div>
+      </div>
     </div>
   </div>
 
   <!-- Meta fields -->
   <div class="bb-card p-3 mb-3">
     <div class="row g-3">
-      <div class="col-md-6">
+      <div class="col-md-6" id="email-account-col">
         <label class="form-label small fw-500 mb-1">Outreach email account</label>
         <input id="c-email-account-edit" class="form-control form-control-sm" placeholder="sender@example.com" oninput="autoSave()">
       </div>
@@ -120,7 +140,7 @@
 
     <!-- WYSIWYG -->
     <div id="pane-wysiwyg" class="border border-top-0 rounded-bottom mb-3">
-      <div class="px-2 py-1 border-bottom d-flex align-items-center gap-2" style="background:#f9fafb">
+      <div class="px-2 py-1 border-bottom d-flex align-items-center gap-2" class="bb-thead">
         <small style="color:var(--bb-muted)">Insert image:</small>
         <input id="img-url" class="form-control form-control-sm" style="max-width:300px;font-size:11px" placeholder="https://example.com/image.png">
         <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:11px" onclick="insertImageUrl()">Insert URL</button>
@@ -160,6 +180,41 @@
 
 </div>
 
+<!-- Campaign test mail modal -->
+<div class="modal fade" id="campaignTestMailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title"><i class="ti ti-send text-primary me-2"></i>Send test email</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="small text-muted mb-3">From: <strong id="ctm-from">—</strong></div>
+        <div class="row g-2 mb-3">
+          <div class="col-6">
+            <label class="form-label small fw-semibold mb-1">To</label>
+            <input id="ctm-to" class="form-control form-control-sm" type="email" placeholder="recipient@example.com">
+          </div>
+          <div class="col-6">
+            <label class="form-label small fw-semibold mb-1">Subject</label>
+            <input id="ctm-subject" class="form-control form-control-sm">
+          </div>
+        </div>
+        <label class="form-label small fw-semibold mb-1">Preview</label>
+        <div id="ctm-preview" class="border rounded p-3 mb-2"
+             style="background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#333;min-height:60px;max-height:300px;overflow-y:auto"></div>
+        <div id="ctm-feedback" class="alert py-2 small mb-0" style="display:none"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="ctm-send-btn" onclick="doSendCampaignTestMail()">
+          <i class="ti ti-send me-1"></i>Send
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Link modal -->
 <div class="modal fade" id="linkModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered modal-sm">
@@ -187,11 +242,19 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/crm-common.js"></script>
 <script>
 // BASE + helpers from js/crm-common.js
 const urlParams = new URLSearchParams(window.location.search);
 const CAMPAIGN_ID = urlParams.get('campaign_id') || '';
+const STEP_ID     = urlParams.get('step') || '';        // editing a mail_schedule step
+const STEP_NEW    = urlParams.get('step_new') === '1';  // brand-new step
+const STEP_DELAY  = parseInt(urlParams.get('delay') || '0', 10);
+const STEP_NAME   = urlParams.get('step_name') || '';   // preset name (Intro, Reminder 1, …)
 
 let quill = null;
 let _saveTimer = null;
@@ -237,6 +300,47 @@ function initQuill() {
           ['blockquote'],
         ],
         handlers: {
+          image: function() {
+            const input = document.createElement('input');
+            input.setAttribute('type', 'file');
+            input.setAttribute('accept', 'image/*');
+            input.click();
+            input.onchange = () => {
+              const file = input.files[0];
+              if (!file) return;
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                  // resize to max 800px on longest side
+                  const MAX = 800;
+                  let w = img.width, h = img.height;
+                  if (w > MAX || h > MAX) {
+                    if (w >= h) { h = Math.round(h * MAX / w); w = MAX; }
+                    else        { w = Math.round(w * MAX / h); h = MAX; }
+                  }
+                  const canvas = document.createElement('canvas');
+                  canvas.width = w; canvas.height = h;
+                  canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                  // Check if PNG has transparency by sampling pixels
+                  let mime = 'image/jpeg', quality = 0.72;
+                  if (file.type === 'image/png') {
+                    const ctx2 = canvas.getContext('2d');
+                    const px = ctx2.getImageData(0, 0, Math.min(w, 50), Math.min(h, 50)).data;
+                    let hasAlpha = false;
+                    for (let i = 3; i < px.length; i += 4) { if (px[i] < 255) { hasAlpha = true; break; } }
+                    if (hasAlpha) { mime = 'image/png'; quality = undefined; }
+                  }
+                  const dataUrl = canvas.toDataURL(mime, quality);
+                  const range = quill.getSelection(true);
+                  quill.insertEmbed(range ? range.index : quill.getLength(), 'image', dataUrl);
+                  autoSave();
+                };
+                img.src = e.target.result;
+              };
+              reader.readAsDataURL(file);
+            };
+          },
           link: function(value) {
             if (value) {
               const range = quill.getSelection();
@@ -344,10 +448,25 @@ async function saveCampaign(silent = false) {
   if (!silent) { fb.textContent = 'Saving…'; fb.style.color = 'var(--bb-muted)'; fb.style.display = ''; }
   try {
     const css = document.getElementById('c-mail-css').value;
+    let payload;
+    if (STEP_ID) {
+      // Save a specific mail_schedule step
+      const stepName  = document.getElementById('step-name').value.trim() || `Step`;
+      const stepDelay = parseInt(document.getElementById('step-delay').value || '0', 10);
+      payload = {
+        mail_schedule_step: {
+          step_id:    STEP_ID,
+          name:       stepName,
+          delay_days: isNaN(stepDelay) ? 0 : stepDelay,
+          mail:       { subject, body, type: mode, css },
+        }
+      };
+    } else {
+      payload = { mail: { subject, body, type: mode, css }, outreach_email_account: account };
+    }
     const r = await fetch(`${BASE}/api/crm/campaigns/${CAMPAIGN_ID}`, {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ mail: {subject, body, type: mode, css}, outreach_email_account: account })
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
     });
     const d = await r.json();
     fb.style.color = d.status === 'ok' ? '#16a34a' : '#dc2626';
@@ -359,9 +478,38 @@ async function saveCampaign(silent = false) {
   }
 }
 
+const _DEFAULT_CSS = `.mail-wrap, .mail-wrap p, .mail-wrap div, .mail-wrap span, .mail-wrap td { margin: 0; padding: 0; }
+.mail-wrap p { margin-bottom: 8px; }
+.mail-wrap { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; color: #333; max-width: 600px; }
+.mail-wrap a { color: #0066cc; text-decoration: none; }
+.mail-wrap h1, .mail-wrap h2, .mail-wrap h3 { font-weight: bold; margin-bottom: 8px; }
+.mail-wrap ul, .mail-wrap ol { margin: 0 0 8px 20px; padding: 0; }
+.mail-wrap li { margin-bottom: 4px; }`;
+
+function _updateStepLabel(name) {
+  const lbl = document.getElementById('page-step-label');
+  const nm  = document.getElementById('page-step-name');
+  if (!lbl || !nm) return;
+  if (name) { nm.textContent = name; lbl.style.display = ''; }
+  else { lbl.style.display = 'none'; }
+}
+
+function _applyMail(mail) {
+  const mt = mail.type || 'plain';
+  document.getElementById('c-subject').value   = mail.subject || '';
+  document.getElementById('c-body').value      = mail.body    || '';
+  document.getElementById('c-body-html').value = mail.body    || '';
+  document.getElementById('c-mail-css').value  = mail.css     || _DEFAULT_CSS;
+  const mtEl = document.querySelector(`input[name="mail-type"][value="${mt}"]`);
+  if (mtEl) { mtEl.checked = true; switchMode(); }
+  if (mt === 'html') { initQuill(); if (quill) quill.root.innerHTML = mail.body || ''; }
+}
+
 async function loadCampaign() {
   if (!CAMPAIGN_ID) { document.getElementById('c-campaign-id').textContent = 'No campaign selected'; return; }
-  document.getElementById('c-campaign-id').textContent = CAMPAIGN_ID;
+  // Title line: show step label if editing a step
+  const titleSuffix = STEP_ID ? ` · step` : '';
+  document.getElementById('c-campaign-id').textContent = CAMPAIGN_ID + titleSuffix;
   document.getElementById('back-link').href = `campaign.html?campaign_id=${encodeURIComponent(CAMPAIGN_ID)}`;
   try {
     const r = await fetch(`${BASE}/api/crm/campaigns/${CAMPAIGN_ID}`);
@@ -370,23 +518,31 @@ async function loadCampaign() {
     const badge = document.getElementById('c-status-badge');
     badge.className = `bb-badge bb-badge-${st}`; badge.textContent = st;
     document.getElementById('c-email-account-edit').value = c.outreach_email_account || '';
-    const mail = c.mail || {};
-    document.getElementById('c-subject').value   = mail.subject || '';
-    document.getElementById('c-body').value      = mail.body    || '';
-    document.getElementById('c-body-html').value = mail.body    || '';
-    document.getElementById('c-mail-css').value = mail.css || `.mail-wrap, .mail-wrap p, .mail-wrap div, .mail-wrap span, .mail-wrap td { margin: 0; padding: 0; }
-.mail-wrap p { margin-bottom: 8px; }
-.mail-wrap { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.4; color: #333; max-width: 600px; }
-.mail-wrap a { color: #0066cc; text-decoration: none; }
-.mail-wrap h1, .mail-wrap h2, .mail-wrap h3 { font-weight: bold; margin-bottom: 8px; }
-.mail-wrap ul, .mail-wrap ol { margin: 0 0 8px 20px; padding: 0; }
-.mail-wrap li { margin-bottom: 4px; }`;
-    const mt = mail.type || 'plain';
-    const mtEl = document.querySelector(`input[name="mail-type"][value="${mt}"]`);
-    if (mtEl) { mtEl.checked = true; switchMode(); }
-    if (mt === 'html') {
-      initQuill();
-      if (quill) quill.root.innerHTML = mail.body || '';
+
+    if (STEP_ID) {
+      // Show step context bar
+      document.getElementById('step-context-bar').style.display = '';
+      // Hide the email-account column (not relevant per-step; subject stays visible)
+      const emailCol = document.getElementById('email-account-col');
+      if (emailCol) emailCol.style.display = 'none';
+
+      const steps = c.mail_schedule || [];
+      const step  = steps.find(s => s.step_id === STEP_ID);
+      if (step) {
+        document.getElementById('step-name').value  = step.name || '';
+        document.getElementById('step-delay').value = step.delay_days != null ? step.delay_days : 0;
+        _applyMail(step.mail || {});
+        _updateStepLabel(step.name || '');
+      } else {
+        // New step — pre-fill name, delay, and subject from URL params
+        document.getElementById('step-name').value  = STEP_NAME;
+        document.getElementById('step-delay').value = isNaN(STEP_DELAY) ? 0 : STEP_DELAY;
+        if (STEP_NAME) document.getElementById('c-subject').value = STEP_NAME;
+        _applyMail({});
+        _updateStepLabel(STEP_NAME);
+      }
+    } else {
+      _applyMail(c.mail || {});
     }
   } catch(e) {
     document.getElementById('c-campaign-id').textContent = `Error: ${e.message}`;
@@ -394,6 +550,57 @@ async function loadCampaign() {
 }
 
 loadCampaign();
+// ── Campaign test mail (edit page) ────────────────────────────────────────
+function openCampaignTestMail() {
+  const account = document.getElementById('c-email-account-edit').value.trim();
+  const subject = document.getElementById('c-subject').value.trim();
+  const body    = typeof getBody === 'function' ? getBody() : (document.getElementById('c-body-html').value || document.getElementById('c-body').value || '');
+  document.getElementById('ctm-from').textContent    = account || '— set email account first —';
+  document.getElementById('ctm-subject').value       = subject;
+  document.getElementById('ctm-feedback').style.display = 'none';
+  document.getElementById('ctm-send-btn').disabled   = false;
+  document.getElementById('ctm-send-btn').innerHTML  = '<i class="ti ti-send me-1"></i>Send';
+  document.getElementById('ctm-preview').innerHTML   = body
+    ? `<div style="font-family:Arial,sans-serif;font-size:13px;line-height:1.5;color:#333">${body}</div>`
+    : '<span class="text-muted small">No body set yet.</span>';
+  new bootstrap.Modal(document.getElementById('campaignTestMailModal')).show();
+}
+
+async function doSendCampaignTestMail() {
+  const btn = document.getElementById('ctm-send-btn');
+  const fb  = document.getElementById('ctm-feedback');
+  const to      = document.getElementById('ctm-to').value.trim();
+  const subject = document.getElementById('ctm-subject').value.trim();
+  if (!to) {
+    fb.className = 'alert alert-warning py-2 small mb-0';
+    fb.textContent = 'Recipient email is required.'; fb.style.display = ''; return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Sending…';
+  fb.style.display = 'none';
+  try {
+    const body = typeof getBody === 'function' ? getBody() : '';
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(CAMPAIGN_ID)}/send-test-mail`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, subject: subject || 'Test email', body_html: body, body_plain: '' })
+    });
+    const d = await r.json();
+    fb.className = d.status === 'ok'
+      ? 'alert alert-success py-2 small mb-0'
+      : 'alert alert-danger py-2 small mb-0';
+    fb.innerHTML = (d.status === 'ok'
+      ? '<i class="ti ti-circle-check me-1"></i>'
+      : '<i class="ti ti-circle-x me-1"></i>')
+      + escapeHtml(d.message || (d.status === 'ok' ? 'Sent!' : 'Failed'));
+    fb.style.display = '';
+  } catch(err) {
+    fb.className = 'alert alert-danger py-2 small mb-0';
+    fb.textContent = 'Error: ' + err.message; fb.style.display = '';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-send me-1"></i>Send';
+}
+
 </script>
 <script src="vendor/bootstrap.bundle.min.js"></script>
 </body>

@@ -362,23 +362,53 @@ python crm\contact_sync.py --countries NO --max 5 --min-pages 500 --max-pages 50
 
 ---
 
-## CRM Template Columns
+## Facet-to-campaign (filter-based campaign builder)
 
-| # | Column | Source | Notes |
-|---|---|---|---|
-| 1 | Dato lagt i | today | → `crm_date` in site_leads |
-| 2 | Bedrift | `company` / `domain` | |
-| 3 | Nettside | `website` | |
-| 4 | Bransje | `ai_sector \| ai_platform \| ai_company_type` | |
-| 5 | Størrelse | size label + location | page_count based |
-| 6 | Oppsummert | `ai_summary` | |
-| 7 | Land | `country` | |
-| 8 | Site-sider | `page_count` | |
-| 9 | Beslutningstaker | first contact name | |
-| 10 | Rolle | first contact title | |
-| 11 | E-post | first contact email | |
-| 12 | Telefon | first contact phone | text format |
-| 13 | Contacts | `\|name,email,phone,title\|...` | all selected contacts |
-| 14 | Score | — | manual |
-| 15 | Status | — | manual → `crm_status` |
-| 16 | Selger | — | manual → `crm_sales_pe
+Create or refresh a campaign directly from a saved filter-facets preset. Filters `email_contacts`, deduplicates against all other existing campaigns, and writes matching contacts to `campaigns/<id>/campaign_contacts`.
+
+```bash
+python app\facet_campaign.py --facet leif_test_b2b_personal --campaign NO_b2b_jul01
+python app\facet_campaign.py --facet NO_ecom --campaign NO_ecom_jul01 --dry-ru
+
+
+## Name enrichment (`campaign_name_enrich.py`) 🌐 Frontend triggered
+
+Fills missing contact names using a three-pass search pipeline: email pattern rules → Bing search → Brave Search → AI validation (GPT-4o-mini). Only writes a name when there is verifiable evidence linking the name to the specific email address.
+
+```bash
+python app\campaign_name_enrich.py --campaign MY_CAMPAIGN_ID
+python app\campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --dry-run
+python app\campaign_name_enrich.py --all
+python app\campaign_name_enrich.py --emails a@b.com c@d.com
+python app\campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --debug
+```
+
+| Flag | Description |
+|---|---|
+| `--campaign ID` | Enrich contacts without a name in this campaign |
+| `--all` | Enrich across all campaigns |
+| `--emails` | Enrich a flat list of addresses (no campaign needed) |
+| `--dry-run` | Preview without writing |
+| `--skip-ai` | Rule-based extraction only |
+| `--debug` | Print Bing/Brave→AI payload and AI response per contact; prepends `leif@auke.no` as calibration |
+
+**Search passes:**
+1. `"exact@email.com"` — email in snippet = strong evidence
+2. `"firstname" site:domain` + `"firstname" "domain"` — company's own site (moderate, flagged to AI)
+3. Same two queries via Brave API
+
+AI returns `{name, title}` or `null`. A null from AI is final — rule-based suggestions are not written without AI confirmation.
+
+**Writes to:** `campaigns/{id}/campaign_contacts` + `email_contacts` (kept in sync)
+
+**Frontend:** Campaign page → **Enrich names** button
+`POST /api/crm/campaigns/<id>/name-enrich` → Cloud Tasks job: `name-enrich`
+
+Generic API (email list or campaign):
+```
+POST /api/crm/name-enrich
+{ "campaign_id": "MY_CAMPAIGN" }
+{ "emails": ["a@b.com", "c@d.com"] }
+```
+Returns `{ job_id, poll }` — poll `GET /api/crm/status/<job_id>`.
+

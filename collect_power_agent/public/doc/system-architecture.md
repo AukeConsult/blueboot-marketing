@@ -214,7 +214,7 @@ Both pipelines converge here. Each document represents one contactable person.
 | `website` | Company website |
 | `country` | Country |
 | `campaign` | Campaign tag (e.g. `NO_jun`) |
-| `status` | `pending` / `approved` / `rejected` / `sent` / `replied` / `bounced` / `unsubscribed` / `converted` |
+| `status` | `pending` / `active` / `excluded` |
 | `email_type` | `personal` / `role` / `department` / `admin` |
 | `outreach_priority` | 1 – 4 |
 | `mark_site_leads` | `true` if from site pipeline |
@@ -224,8 +224,7 @@ Both pipelines converge here. Each document represents one contactable person.
 **Contact status lifecycle:**
 
 ```
-pending → approved → sent → replied / bounced / unsubscribed / converted
-       ↘ rejected
+pending → active / excluded
 ```
 
 ---
@@ -238,7 +237,7 @@ Campaigns group `email_contacts` by a shared tag and track the outreach process 
 
 **From the master CRM sheet (automated):**
 1. The master Google Sheet has a `Campaign` column
-2. `Discover new` button (or `crm-sync` API) scans the sheet for unique campaign IDs not yet in Firestore
+2. `Discover campaigns` button (or `crm-sync` API) scans the sheet for unique campaign IDs not yet in Firestore
 3. New campaign documents are created with `status: draft` and `source: master-sheet`
 4. A `crm-sync` job runs immediately to populate `campaign_contacts`
 
@@ -250,7 +249,7 @@ Campaign documents can also be created directly via the API (`POST /api/crm/camp
 | Field | Description |
 |---|---|
 | `campaign_id` | Unique string (e.g. `NO_jun`) |
-| `status` | `draft` / `dosend` / `sent` / `cancelled` |
+| `status` | `draft` / `ready` / `active` / `canceled` |
 | `source` | `master-sheet` or `manual` |
 | `outreach_email_account` | Email address of sending account |
 | `owner` | Responsible person name |
@@ -294,7 +293,23 @@ Campaign documents can also be created directly via the API (`POST /api/crm/camp
 
 ### 4.4 Activation
 
-When a campaign is set to `dosend` the **Activate** button appears. Activating marks it `sent` and timestamps `sent_at`. Sent/cancelled campaigns cannot be modified or synced.
+Campaigns move `draft` -> `ready` -> `active` -> `canceled`. The campaign is marked `ready` by the workspace, then becomes `active` when the first real outreach mail is sent and `sent_at` is timestamped. Active/canceled campaigns cannot be synced.
+
+### Campaign mail sequence timing
+
+The campaign document owns the reusable mail plan:
+
+- `mail_schedule` is edited by the campaign workspace.
+- `mail_sequence` is prepared for automatic sending from that schedule.
+- Each step includes a step identity, subject/body, and `delay_days`.
+
+Each campaign contact owns its own send history:
+
+- `campaigns/{campaign_id}/campaign_contacts/{doc_id}.mail_sent` is append-only.
+- A sent entry contains `mail_type`, `sent_at`, and `message_id`.
+- Automatic selection uses `len(mail_sent)` to pick the next `mail_sequence` step.
+
+Follow-up timing is per contact. `delay_days` is counted from that contact's first sent mail date, normally the Intro send, so contacts that enter the same campaign on different days advance through the same sequence independently.
 
 ---
 
@@ -324,12 +339,12 @@ Long-running operations run as Cloud Tasks jobs:
 
 | Job name | Triggered by | What it does |
 |---|---|---|
-| `contact-sync` | CRM step 1 | Import contacts from Leads DB to contact sheet |
-| `push-and-sync` | CRM step 3 | Push selected contacts to CRM template |
-| `template-sync` | CRM step 5 | Sync CRM template back to Leads DB |
+| `contact-sync` | CRM discover step 1 | Export contacts from Leads DB to contact sheet |
+| `push-and-sync` | CRM discover step 3 | Push selected contacts to CRM work sheet |
+| `template-sync` | CRM discover step 5 | Sync CRM work sheet back to Leads DB |
 | `campaign-sync` | Campaign Sync button | Drive sheet → Firestore sync |
 | `campaign-export` | Full override button | Firestore → Drive sheet |
-| `crm-sync` | Discover new / CRM step 6 | Master sheet → Firestore |
+| `crm-sync` | Discover campaigns | Master sheet → Firestore |
 | `statistics` | Collect statistics button | Run all `StatisticsBuilder` aggregations |
 | `filter-count` | Filter facets page | Count leads matching a filter selection |
 
@@ -399,7 +414,83 @@ python app/build_filter_facets.py --cap 300 --no-write   # JSON preview only
 
 ---
 
-## 10. Key Design Principles
+## 10. Cloud Batch (`cloud_batch/`)
+
+The `cloud_batch/` framework runs long-running pipeline scripts on Google Cloud so they don't time out or block local machines. Jobs are triggered from the CRM frontend, from Cloud Scheduler (cron), or manually via CLI.
+
+### Architecture
+
+```
+Cloud Scheduler / cloud-batch.html / CLI
+          │
+          ▼ POST /api/crm/batch/jobs/{job}/run
+CRM API (Firebase Cloud Function)
+          │
+          ▼ HTTP POST /run
+Batch Runner (Cloud Run — batch-runner, min-instances=1)
+          │  ┌──────────────────────────────────────────┐
+          │  │ Flask /run  →  background thread          │
+          │  │   job_runner.py                          │
+          │  │     step 1: python -m app.site_agent ... │
+          │  │     step 2: python -m app.site_enrich ... │
+          │  │     ...                                  │
+          └──┤ writes step status to Firestore          │
+             └──────────────────────────────────────────┘
+          │
+          ▼ gcloud-batch-jobs/{job}/runs/{run_id}
+Firestore
+```
+
+### Key components
+
+`cloud_batch/job_definitions/*.json` — one JSON file per pipeline (site_pipeline, lead_pipeline, etc.) listing the steps, Cloud Scheduler cron expression, and parameter defaults.
+
+`cloud_batch/job_runner.py` — runs each step as `python -m app.<module>` via `subprocess.Popen`, captures the last 50 lines of stdout+stderr, and writes per-step progress to Firestore.
+
+`cloud_batch/entrypoint.py` — Flask HTTP server (gunicorn, 1 worker, 4 threads). Dedup-guards via Firestore (`status == "running"`), spawns a daemon thread for the job, and returns 202 immediately.
+
+`cloud_batch/job_status.py` — all Firestore helpers for the `gcloud-batch-jobs` collection.
+
+`functions-crm/handlers/batch.py` — CRM API blueprint that proxies requests to the Cloud Run runner using OIDC service-to-service authentication.
+
+### Firestore layout
+
+```
+gcloud-batch-jobs/
+  {job_name}/                      ← definition snapshot (synced at startup)
+    runs/
+      {run_id}/                    ← one doc per run
+        status:   running | done | failed
+        started:  timestamp
+        steps: [
+          { name, status, exit_code, started, finished, log_tail }
+        ]
+```
+
+### Pipelines defined
+
+| Job | Schedule | Steps |
+|---|---|---|
+| `site_pipeline` | Mon 02:00 UTC | site_agent → site_enrich → site_location → site_contact → site_email → site_smart_export → build_filter_facets |
+| `site_enrich_pipeline` | on-demand | site_enrich → site_location → site_contact → site_email → build_filter_facets |
+| `lead_pipeline` | Mon 03:00 UTC | lead_agent → lead_enrich → lead_contacts → leads_email → leads_smart_export → build_filter_facets |
+| `lead_enrich_pipeline` | on-demand | lead_enrich → lead_contacts → leads_email → build_filter_facets |
+
+### GCP services used
+
+| Service | Purpose |
+|---|---|
+| Cloud Run | Hosts the batch-runner Flask service (always-warm, min 1 instance) |
+| Cloud Scheduler | Triggers pipeline runs on cron schedule |
+| Artifact Registry | Stores the Docker image (`batch-runner`) |
+| Secret Manager | Stores all secrets (API keys, Firebase credentials) — injected as env vars |
+| Firestore | Tracks job definitions, run history, and per-step progress |
+
+Setup scripts live in `cloud_batch/setup/` (run once, in order 01→06). See `cloud-batch.md` (Documentation → Cloud Batch) for the full setup guide.
+
+---
+
+## 11. Key Design Principles
 
 **Isolation** — every parallel unit of work (site crawl, contact enrichment, job worker) runs in its own class with a hard timeout. One unit failing cannot stall or corrupt siblings.
 
@@ -409,6 +500,34 @@ python app/build_filter_facets.py --cap 300 --no-write   # JSON preview only
 
 **Single source for mail** — all outbound email goes through `MailSender`. CSS inlining, header injection, sent-folder append, and display-name formatting are applied once, everywhere.
 
-**Dual discovery in the lead pipeline** — agencies are found through two independent channels: Bing search queries (controlled by `config/countries.json`) and paginated agency catalog scraping (controlled by `config/catalogs.json`). Both sources are deduplicated by domain before enrichment.
+**Dual discovery in the lead pipeline** — agencies are found t
 
-**Stateless API** — the CRM API (Flask on Cloud Functions) is stateless. All state lives in Firestore. Long operations are queued as Cloud Tasks jobs and polled by the frontend.
+---
+
+## Command-line operations
+
+These scripts are run by a developer from the project root. They are not available from the frontend UI.
+
+### Rebuild the filter facet catalog
+
+The filter facet catalog (the selectable values on the Filter Facets page) is built by scanning all contacts in the pipeline and collecting every value that appears. Run this after a large import to refresh the available filter options:
+
+```bash
+python app/build_filter_facets.py
+python app/build_filter_facets.py --pipeline leads     # leads pipeline only
+python app/build_filter_facets.py --no-write           # preview without saving
+```
+
+### Name enrichment (bulk)
+
+The Enrich names function on the campaign page handles individual campaigns. For bulk runs across all campaigns, or to enrich a specific list of email addresses, use the CLI directly:
+
+```bash
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --dry-run
+python app/campaign_name_enrich.py --all                  # all campaigns at once
+python app/campaign_name_enrich.py --emails a@b.com c@d.com
+python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --debug
+```
+
+The `--debug` flag prints exactly what context Bing and Brave found for each email and what the AI accepted or rejected — useful for diagnosing why a contact is not getting a name.

@@ -1,0 +1,95 @@
+{
+  "name": "lead_enrich_pipeline",
+  "description": "Lead enrichment only — skips discovery, runs on already-found leads",
+  "schedule": null,
+  "params": {
+    "countries": {
+      "type": "str",
+      "required": true,
+      "help": "Comma-separated country codes (omit for all)"
+    },
+    "campaign": {
+      "type": "str",
+      "help": "Campaign name for export"
+    },
+    "dry_run": {
+      "type": "bool",
+      "default": false,
+      "help": "Preview only — no Firestore writes"
+    },
+    "force": {
+      "type": "bool",
+      "default": false,
+      "help": "Re-process already enriched items"
+    },
+    "gdisk": {
+      "type": "bool",
+      "default": true,
+      "help": "Upload Excel exports to Google Drive (requires GDISK_FOLDER_ID)"
+    }
+  },
+  "steps": [
+    {
+      "name": "enrich_ai",
+      "module": "lead_enrich_agent",
+      "args": [
+        "--countries",
+        "{countries}"
+      ],
+      "skip_if_empty": [
+        "countries"
+      ],
+      "dry_run_flag": "--dry-run",
+      "force_flag": "--force",
+      "retries": 2,
+      "retry_delay_sec": 60,
+      "on_error": "abort"
+    },
+    {
+      "name": "enrich_contacts",
+      "module": "lead_enrich_contacts",
+      "args": [
+        "--countries",
+        "{countries}",
+        "--skip-enriched"
+      ],
+      "skip_if_empty": [
+        "countries"
+      ],
+      "dry_run_flag": "--dry-run",
+      "retries": 2,
+      "retry_delay_sec": 60,
+      "on_error": "continue"
+    },
+    {
+      "name": "email_check",
+      "module": "leads_email_check",
+      "args": [
+        "--countries",
+        "{countries}"
+      ],
+      "skip_if_empty": [
+        "countries"
+      ],
+      "dry_run_flag": "--dry-run",
+      "force_flag": "--force",
+      "retries": 2,
+      "retry_delay_sec": 60,
+      "on_error": "continue"
+    },
+    {
+      "name": "export",
+      "module": "leads_smart_export",
+      "args": [
+        "--write-contacts",
+        "--campaign",
+        "{campaign}"
+      ],
+      "dry_run_flag": "--dry-run-contacts",
+      "retries": 1,
+      "retry_delay_sec": 60,
+      "on_error": "abort",
+      "gdisk_flag": "--gdisk"
+    }
+  ]
+}

@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Cloud Batch</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+/* ── Step log / run card ────────────────────────────────────────────────── */
+.step-row  { display:flex; align-items:center; gap:6px; font-size:.8rem; padding:3px 0; }
+.step-icon { width:18px; text-align:center; flex-shrink:0; }
+.step-name { min-width:160px; font-weight:500; }
+.step-log  { font-family:monospace; font-size:.72rem; color:var(--bb-muted);
+             white-space:pre-wrap; word-break:break-all;
+             max-height:120px; overflow-y:auto; background:#f8f9fa;
+             border-radius:4px; padding:4px 6px; margin-top:2px; display:none; }
+.step-log.show { display:block; }
+.run-card  { border-radius:8px; border:1.5px solid var(--bb-border);
+             background:#fff; margin-bottom:8px; overflow:hidden; }
+.run-head  { display:flex; align-items:center; gap:8px; padding:10px 14px;
+             cursor:pointer; user-select:none; }
+.run-head:hover { background:#f8f9fa; }
+.run-body  { padding:0 14px 12px; border-top:1px solid var(--bb-border); display:none; }
+.run-body.open { display:block; }
+/* ── Job card ────────────────────────────────────────────────────────────── */
+.job-card  { border:1.5px solid var(--bb-border); border-radius:10px;
+             background:#fff; margin-bottom:18px; overflow:hidden; }
+.job-head  { padding:13px 16px; background:#f8f9fa;
+             border-bottom:1.5px solid var(--bb-border);
+             display:flex; align-items:center; gap:10px; }
+.job-body  { padding:14px 16px; }
+/* ── Task list ───────────────────────────────────────────────────────────── */
+.task-row  { display:flex; align-items:center; gap:8px; padding:7px 10px;
+             border:1px solid var(--bb-border); border-radius:6px;
+             margin-bottom:6px; background:#fff; }
+.task-row:hover { background:#fafbfc; }
+.task-name { font-weight:600; font-size:.85rem; min-width:130px; }
+.task-schedule { font-family:monospace; font-size:.75rem;
+                 background:#f0f9ff; border:1px solid #bae6fd;
+                 color:#0369a1; border-radius:4px; padding:1px 6px;
+                 white-space:nowrap; }
+.task-params { display:flex; flex-wrap:wrap; gap:3px; flex:1; }
+.task-param-pill { font-size:.7rem; background:#f1f5f9; border:1px solid #e2e8f0;
+                   border-radius:3px; padding:1px 5px; color:#475569; }
+.task-inactive { opacity:.5; }
+/* ── Misc ────────────────────────────────────────────────────────────────── */
+.param-field label { font-size:.75rem; font-weight:600; color:var(--bb-muted); }
+.status-running { color:#d97706; }
+.status-done    { color:#16a34a; }
+.status-failed  { color:#dc2626; }
+.status-pending { color:#6b7280; }
+.spinner-xs { width:12px; height:12px; border-width:2px; }
+.section-label { font-size:.72rem; font-weight:700; letter-spacing:.05em;
+                 color:var(--bb-muted); text-transform:uppercase; margin-bottom:8px; }
+</style>
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:980px">
+
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h5 class="page-title"><i class="ti ti-cloud me-2 text-primary"></i>Cloud Batch</h5>
+    <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadAll()">
+        <i class="ti ti-refresh me-1"></i>Refresh
+      </button>
+      <button class="btn btn-sm btn-outline-primary" id="sync-sched-btn" onclick="syncSchedulers()">
+        <i class="ti ti-calendar-bolt me-1"></i>Sync schedules
+      </button>
+    </div>
+  </div>
+
+  <div id="feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
+  <div id="jobs-container">
+    <div class="text-center py-5" style="color:var(--bb-muted)">
+      <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     Edit Job modal  (description · params schema · steps — static definition)
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="editJobModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header py-2 px-3">
+        <h6 class="modal-title mb-0">
+          <i class="ti ti-settings me-2 text-primary"></i>Job definition:
+          <span id="ej-job-name" class="fw-700"></span>
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body px-3 py-3">
+        <div class="small mb-3" style="color:var(--bb-muted)">
+          Edit the static definition — description, parameter schema, and pipeline steps.
+          These rarely change after setup. To configure scheduled runs, use
+          <strong>tasks</strong> instead.
+        </div>
+        <div id="ej-error" class="alert alert-danger py-1 px-2 small mb-2" style="display:none"></div>
+        <div class="mb-2">
+          <label class="small fw-600 mb-1">description</label>
+          <input type="text" id="ej-description" class="form-control form-control-sm"
+                 placeholder="One-line description of this pipeline">
+        </div>
+        <div class="mb-2">
+          <label class="small fw-600 mb-1">params schema <span class="fw-400" style="color:var(--bb-muted)">(JSON — describes accepted parameters)</span></label>
+          <textarea id="ej-params" class="form-control font-monospace"
+                    style="font-size:.78rem;min-height:150px;resize:vertical"
+                    spellcheck="false"></textarea>
+        </div>
+        <div>
+          <label class="small fw-600 mb-1">steps <span class="fw-400" style="color:var(--bb-muted)">(JSON array)</span></label>
+          <textarea id="ej-steps" class="form-control font-monospace"
+                    style="font-size:.78rem;min-height:200px;resize:vertical"
+                    spellcheck="false"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer py-2 px-3">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="ej-save-btn" onclick="saveJobEdit()">
+          <i class="ti ti-device-floppy me-1"></i>Save job definition
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     Task modal  (name · cron schedule · param values — operational settings)
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="taskModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2 px-3">
+        <h6 class="modal-title mb-0">
+          <i class="ti ti-calendar-event me-2 text-success"></i>
+          <span id="tm-title">Task</span>
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body px-3 py-3">
+        <div class="small mb-3" style="color:var(--bb-muted)">
+          A task defines <em>when</em> and <em>with what parameters</em> the job runs.
+          One job can have multiple tasks (different countries, campaigns, schedules).
+        </div>
+        <div id="tm-error" class="alert alert-danger py-1 px-2 small mb-2" style="display:none"></div>
+
+        <div class="mb-2">
+          <label class="small fw-600 mb-1">Task name <span class="text-danger">*</span></label>
+          <input type="text" id="tm-name" class="form-control form-control-sm"
+                 placeholder="e.g. NO Monday, SE Weekly">
+        </div>
+        <div class="mb-3">
+          <label class="small fw-600 mb-1">Cron schedule
+            <span class="fw-400" style="color:var(--bb-muted)">(leave blank for manual-only)</span>
+          </label>
+          <select class="form-select form-select-sm mb-1" id="tm-cron-preset" onchange="applyCronPreset()">
+            <option value="">— Quick presets —</option>
+            <option value="0 2 * * 1">Every Monday    02:00 UTC</option>
+            <option value="0 2 * * 2">Every Tuesday   02:00 UTC</option>
+            <option value="0 2 * * 3">Every Wednesday 02:00 UTC</option>
+            <option value="0 2 * * 4">Every Thursday  02:00 UTC</option>
+            <option value="0 2 * * 5">Every Friday    02:00 UTC</option>
+            <option value="0 3 * * 1">Every Monday    03:00 UTC</option>
+            <option value="0 3 * * 2">Every Tuesday   03:00 UTC</option>
+            <option value="0 3 * * *">Every day       03:00 UTC</option>
+            <option value="0 2 * * *">Every day       02:00 UTC</option>
+            <option value="0 */6 * * *">Every 6 hours</option>
+          </select>
+          <input type="text" id="tm-schedule" class="form-control form-control-sm font-monospace"
+                 placeholder="e.g. 0 2 * * 1" oninput="updateCronDesc()">
+          <div id="tm-cron-desc" class="small mt-1 fw-500" style="color:#0369a1;min-height:1.1em"></div>
+        </div>
+
+        <div class="section-label">Parameters</div>
+        <div id="tm-params-form"></div>
+
+        <div class="form-check mt-3">
+          <input class="form-check-input" type="checkbox" id="tm-active" checked>
+          <label class="form-check-label small" for="tm-active">Active
+            <span style="color:var(--bb-muted)">— uncheck to pause without deleting</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer py-2 px-3">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-success" id="tm-save-btn" onclick="saveTask()">
+          <i class="ti ti-device-floppy me-1"></i>Save task
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     Ad-hoc Run modal  (manual run with custom params)
+════════════════════════════════════════════════════════════════════════════ -->
+<div class="modal fade" id="runModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2 px-3">
+        <h6 class="modal-title mb-0">
+          <i class="ti ti-player-play me-2"></i>Ad-hoc run:
+          <span id="run-modal-job-name"></span>
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body px-3 py-3">
+        <div class="small mb-3" style="color:var(--bb-muted)">
+          Enter parameters for a one-off run. These are not saved as a task.
+        </div>
+        <div id="run-params-form"></div>
+      </div>
+      <div class="modal-footer py-2 px-3">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="run-submit-btn" onclick="submitAdHocRun()">
+          <i class="ti ti-player-play me-1"></i>Run now
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+<script>
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let _jobs        = [];
+let _activePolls = {};   // run_id -> intervalId
+
+// ── Feedback ─────────────────────────────────────────────────────────────────
+function setFeedback(msg, type) {
+  const fb = document.getElementById('feedback');
+  if (!type) { fb.style.display = 'none'; return; }
+  fb.className   = `alert alert-${type} py-2 px-3 small mb-3`;
+  fb.innerHTML   = msg;
+  fb.style.display = '';
+}
+
+// ── Status helpers ────────────────────────────────────────────────────────────
+function statusIcon(s) {
+  return ({
+    running: '<div class="spinner-border spinner-xs text-warning me-1" role="status"></div>',
+    done:    '<i class="ti ti-circle-check text-success me-1"></i>',
+    failed:  '<i class="ti ti-circle-x text-danger me-1"></i>',
+    pending: '<i class="ti ti-clock text-secondary me-1"></i>',
+    skipped: '<i class="ti ti-minus text-secondary me-1"></i>',
+  })[s] || '<i class="ti ti-minus text-secondary me-1"></i>';
+}
+
+function stepIcon(s) {
+  return ({
+    running: '<div class="spinner-border spinner-xs text-warning" role="status"></div>',
+    done:    '<i class="ti ti-check text-success"></i>',
+    failed:  '<i class="ti ti-x text-danger"></i>',
+    pending: '<i class="ti ti-dots text-secondary"></i>',
+    skipped: '<i class="ti ti-minus text-muted"></i>',
+  })[s] || '<i class="ti ti-dots"></i>';
+}
+
+function statusBadge(s) {
+  const cls = { running:'warning', done:'success', failed:'danger', pending:'secondary', skipped:'secondary' };
+  return `<span class="badge bg-${cls[s]||'secondary'} text-white" style="font-size:.7rem">${s}</span>`;
+}
+
+function fmtDuration(start, end) {
+  if (!start) return '';
+  const ms = new Date(end || new Date()).getTime() - new Date(start).getTime();
+  if (ms < 60000)   return Math.round(ms / 1000) + 's';
+  if (ms < 3600000) return Math.round(ms / 60000) + 'm';
+  return (ms / 3600000).toFixed(1) + 'h';
+}
+
+// ── Load all jobs ─────────────────────────────────────────────────────────────
+async function loadAll() {
+  try {
+    const data = await fetchJSON(BASE + '/api/crm/batch/jobs');
+    _jobs = data.jobs || [];
+    renderJobs();
+  } catch(e) {
+    setFeedback(`<i class="ti ti-alert-circle me-1"></i>Failed to load jobs: ${escapeHtml(e.message)}`, 'danger');
+  }
+}
+
+// ── Render job cards ──────────────────────────────────────────────────────────
+function renderJobs() {
+  const container = document.getElementById('jobs-container');
+  if (!_jobs.length) {
+    container.innerHTML = '<div class="text-center py-4 small" style="color:var(--bb-muted)"><i class="ti ti-inbox me-1"></i>No job definitions found.</div>';
+    return;
+  }
+  container.innerHTML = _jobs.map(j => renderJobCard(j)).join('');
+}
+
+function renderJobCard(job) {
+  const lr   = job.last_run;
+  const lastRunHtml = lr
+    ? `${statusBadge(lr.status)} <span class="small ms-1" style="color:var(--bb-muted)">${fmtDateTime(lr.started_at)} · ${fmtDuration(lr.started_at, lr.ended_at)}</span>`
+    : '<span class="small" style="color:var(--bb-muted)">Never run</span>';
+
+  const tasksHtml = renderTaskList(job);
+
+  return `
+<div class="job-card" id="job-card-${job.name}">
+  <div class="job-head">
+    <div class="flex-grow-1">
+      <div class="fw-700 fs-6">${escapeHtml(job.name)}</div>
+      <div class="small mt-1" style="color:var(--bb-muted)">
+        ${escapeHtml(job.description || '')}
+        &nbsp;<span class="fw-500">${job.step_count || 0} steps</span>
+      </div>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+      <div class="small">${lastRunHtml}</div>
+      <button class="btn btn-sm btn-outline-secondary" onclick="openEditJobModal('${job.name}')">
+        <i class="ti ti-settings me-1"></i>Edit job
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="openAdHocRunModal('${job.name}')">
+        <i class="ti ti-player-play me-1"></i>Ad-hoc run
+      </button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="toggleHistory('${job.name}')">
+        <i class="ti ti-history me-1"></i>History
+      </button>
+    </div>
+  </div>
+
+  <div class="job-body">
+    <!-- Tasks section -->
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <div class="section-label mb-0">Scheduled tasks</div>
+      <button class="btn btn-xs btn-outline-success" style="font-size:.78rem;padding:2px 8px"
+              onclick="openTaskModal('${job.name}', null)">
+        <i class="ti ti-plus me-1"></i>Add task
+      </button>
+    </div>
+    <div id="tasks-${job.name}">${tasksHtml}</div>
+
+    <!-- Run history (collapsed by default) -->
+    <div id="history-wrap-${job.name}" style="display:none">
+      <div class="section-label mt-3">Run history</div>
+      <div id="runs-${job.name}">
+        <div class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></div>
+      </div>
+    </div>
+  </div>
+</div>`;
+}
+
+function renderTaskList(job) {
+  const tasks = job.tasks || [];
+  if (!tasks.length) {
+    return '<div class="small" style="color:var(--bb-muted)">No tasks yet — click <strong>Add task</strong> to create a scheduled run.</div>';
+  }
+  return tasks.map(t => renderTaskRow(job.name, t)).join('');
+}
+
+function renderTaskRow(jobName, task) {
+  const paramPills = Object.entries(task.params || {})
+    .filter(([, v]) => v !== '' && v !== null && v !== false)
+    .map(([k, v]) => `<span class="task-param-pill">${escapeHtml(k)}=${escapeHtml(String(v))}</span>`)
+    .join('');
+
+  const schedHtml = task.schedule
+    ? `<span class="task-schedule">${escapeHtml(task.schedule)}</span>`
+    : '<span class="task-schedule" style="background:#fef9c3;border-color:#fde047;color:#854d0e">manual only</span>';
+
+  const inactiveClass = task.active === false ? ' task-inactive' : '';
+
+  return `
+<div class="task-row${inactiveClass}" id="task-row-${task.task_id}">
+  <div class="task-name">${escapeHtml(task.name)}</div>
+  ${schedHtml}
+  <div class="task-params">${paramPills || '<span class="task-param-pill" style="color:#9ca3af">no params</span>'}</div>
+  <div class="d-flex gap-1 flex-shrink-0 ms-auto">
+    ${task.active === false ? '<span class="badge bg-secondary" style="font-size:.65rem">paused</span>' : ''}
+    <button class="btn btn-xs btn-outline-success" style="font-size:.75rem;padding:2px 7px"
+            onclick="runTask('${jobName}','${task.task_id}')">
+      <i class="ti ti-player-play"></i>
+    </button>
+    <button class="btn btn-xs btn-outline-secondary" style="font-size:.75rem;padding:2px 7px"
+            onclick="openTaskModal('${jobName}','${task.task_id}')">
+      <i class="ti ti-pencil"></i>
+    </button>
+    <button class="btn btn-xs btn-outline-danger" style="font-size:.75rem;padding:2px 7px"
+            onclick="deleteTask('${jobName}','${task.task_id}')">
+      <i class="ti ti-trash"></i>
+    </button>
+  </div>
+</div>`;
+}
+
+// ── Toggle run history ────────────────────────────────────────────────────────
+function toggleHistory(jobName) {
+  const wrap = document.getElementById(`history-wrap-${jobName}`);
+  if (wrap.style.display === 'none') {
+    wrap.style.display = '';
+    loadRuns(jobName);
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+// ── Runs ──────────────────────────────────────────────────────────────────────
+async function loadRuns(jobName) {
+  const el = document.getElementById(`runs-${jobName}`);
+  el.innerHTML = '<div class="text-center py-2"><div class="spinner-border spinner-border-sm"></div></div>';
+  try {
+    const data = await fetchJSON(`${BASE}/api/crm/batch/jobs/${jobName}/runs?limit=10`);
+    renderRuns(jobName, data.runs || []);
+  } catch(e) {
+    el.innerHTML = `<div class="small text-danger">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderRuns(jobName, runs) {
+  const el = document.getElementById(`runs-${jobName}`);
+  if (!runs.length) {
+    el.innerHTML = '<div class="small" style="color:var(--bb-muted)">No runs yet.</div>';
+    return;
+  }
+  el.innerHTML = runs.map(r => renderRunCard(jobName, r)).join('');
+  runs.filter(r => r.status === 'running').forEach(r => startPoll(jobName, r.run_id));
+}
+
+function renderRunCard(jobName, run) {
+  const steps    = run.steps || [];
+  const duration = fmtDuration(run.started_at, run.ended_at);
+  const triggered = run.triggered_by === 'scheduler'
+    ? '<i class="ti ti-clock-play text-secondary" title="Scheduled"></i>'
+    : '<i class="ti ti-hand-click text-secondary" title="Manual"></i>';
+
+  const stepsHtml = steps.map((s, i) => `
+    <div class="step-row">
+      <div class="step-icon">${stepIcon(s.status)}</div>
+      <div class="step-name">${escapeHtml(s.name)}</div>
+      <span class="small" style="color:var(--bb-muted)">
+        ${s.exit_code !== null && s.exit_code !== undefined ? `exit ${s.exit_code}` : ''}
+        ${s.started_at ? fmtDuration(s.started_at, s.ended_at) : ''}
+      </span>
+      ${s.log_tail ? `<button class="btn btn-xs btn-link text-muted p-0 ms-2" style="font-size:.72rem"
+                              onclick="toggleLog('log-${run.run_id}-${i}')">log</button>` : ''}
+    </div>
+    ${s.log_tail ? `<div id="log-${run.run_id}-${i}" class="step-log">${escapeHtml(s.log_tail)}</div>` : ''}
+  `).join('');
+
+  const paramsHtml = Object.entries(run.params || {})
+    .filter(([,v]) => v !== false && v !== null && v !== '')
+    .map(([k,v]) => `<span class="badge bg-light text-dark border me-1" style="font-size:.7rem">${escapeHtml(k)}=${escapeHtml(String(v))}</span>`)
+    .join('');
+
+  return `
+<div class="run-card" id="run-card-${run.run_id}">
+  <div class="run-head" onclick="toggleRun('${run.run_id}')">
+    ${statusIcon(run.status)}
+    <span class="fw-500 small">${run.run_id}</span>
+    ${statusBadge(run.status)}
+    <span class="small ms-1" style="color:var(--bb-muted)">${fmtDateTime(run.started_at)}${duration?' · '+duration:''}</span>
+    ${triggered}
+    <div class="ms-auto d-flex gap-1">${paramsHtml}</div>
+  </div>
+  <div class="run-body" id="run-body-${run.run_id}">
+    <div class="pt-2">${stepsHtml}</div>
+  </div>
+</div>`;
+}
+
+function toggleRun(runId)  { document.getElementById(`run-body-${runId}`).classList.toggle('open'); }
+function toggleLog(logId)  { const el = document.getElementById(logId); if (el) el.classList.toggle('show'); }
+
+// ── Polling ───────────────────────────────────────────────────────────────────
+function startPoll(jobName, runId) {
+  if (_activePolls[runId]) return;
+  _activePolls[runId] = setInterval(async () => {
+    try {
+      const data = await fetchJSON(`${BASE}/api/crm/batch/jobs/${jobName}/runs/${runId}`);
+      const run  = data.run;
+      if (!run) return;
+      const card = document.getElementById(`run-card-${runId}`);
+      if (card) {
+        const wasOpen = !!card.querySelector('.run-body.open');
+        card.outerHTML = renderRunCard(jobName, run);
+        if (wasOpen) { const b = document.getElementById(`run-body-${runId}`); if (b) b.classList.add('open'); }
+      }
+      if (run.status !== 'running') {
+        clearInterval(_activePolls[runId]);
+        delete _activePolls[runId];
+        loadAll();
+      }
+    } catch(e) { /* keep polling */ }
+  }, 3000);
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Edit Job modal
+// ═══════════════════════════════════════════════════════════════════════════
+let _editJobName = null;
+
+function openEditJobModal(jobName) {
+  const job = _jobs.find(j => j.name === jobName);
+  if (!job) return;
+  _editJobName = jobName;
+
+  document.getElementById('ej-job-name').textContent   = jobName;
+  document.getElementById('ej-description').value      = job.description || '';
+  document.getElementById('ej-params').value           = JSON.stringify(job.params || {}, null, 2);
+  document.getElementById('ej-steps').value            = JSON.stringify(job.steps  || [], null, 2);
+  document.getElementById('ej-error').style.display    = 'none';
+
+  new bootstrap.Modal(document.getElementById('editJobModal')).show();
+}
+
+async function saveJobEdit() {
+  if (!_editJobName) return;
+  const btn   = document.getElementById('ej-save-btn');
+  const errEl = document.getElementById('ej-error');
+  errEl.style.display = 'none';
+
+  let params, steps;
+  try { params = JSON.parse(document.getElementById('ej-params').value); }
+  catch(e) { errEl.textContent = 'params: invalid JSON — ' + e.message; errEl.style.display = ''; return; }
+  try { steps  = JSON.parse(document.getElementById('ej-steps').value); }
+  catch(e) { errEl.textContent = 'steps: invalid JSON — ' + e.message;  errEl.style.display = ''; return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Saving…';
+
+  try {
+    await fetchJSON(`${BASE}/api/crm/batch/jobs/${_editJobName}`, {
+      method:  'PATCH',
+      headers: {'Content-Type':'application/json'},
+      body:    JSON.stringify({
+        description: document.getElementById('ej-description').value.trim(),
+        params,
+        steps,
+      }),
+    });
+    bootstrap.Modal.getInstance(document.getElementById('editJobModal')).hide();
+    setFeedback(`<i class="ti ti-check me-1"></i>Job <strong>${escapeHtml(_editJobName)}</strong> definition saved.`, 'success');
+    await loadAll();
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.style.display = '';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-device-floppy me-1"></i>Save job definition';
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Task modal  (create + edit)
+// ═══════════════════════════════════════════════════════════════════════════
+let _taskModalJob  = null;
+let _taskModalId   = null;   // null = create, string = edit
+
+function openTaskModal(jobName, taskId) {
+  const job = _jobs.find(j => j.name === jobName);
+  if (!job) return;
+  _taskModalJob = jobName;
+  _taskModalId  = taskId;
+
+  const task = taskId ? (job.tasks || []).find(t => t.task_id === taskId) : null;
+
+  document.getElementById('tm-title').textContent = taskId ? `Edit task — ${task?.name || taskId}` : `New task — ${jobName}`;
+  document.getElementById('tm-name').value         = task?.name     || '';
+  document.getElementById('tm-schedule').value     = task?.schedule || '';
+  document.getElementById('tm-active').checked     = task ? (task.active !== false) : true;
+  // Match preset selector to current cron value and show description
+  const _presetEl = document.getElementById('tm-cron-preset');
+  if (_presetEl) {
+    const _opts = Array.from(_presetEl.options);
+    const _match = _opts.find(o => o.value === (task?.schedule || ''));
+    _presetEl.value = _match ? _match.value : '';
+  }
+  updateCronDesc();
+  document.getElementById('tm-error').style.display = 'none';
+
+  // Build param fields from job schema, pre-filled from task params
+  const paramDefs  = job.params  || {};
+  const taskParams = task?.params || {};
+  const formEl     = document.getElementById('tm-params-form');
+
+  if (!Object.keys(paramDefs).length) {
+    formEl.innerHTML = '<div class="small" style="color:var(--bb-muted)">This job has no parameters.</div>';
+  } else {
+    formEl.innerHTML = Object.entries(paramDefs).map(([name, def]) => {
+      const val = taskParams[name] !== undefined ? taskParams[name]
+                 : (def.default   !== undefined ? def.default : '');
+      if (def.type === 'bool') {
+        return `<div class="d-flex align-items-center justify-content-between p-2 rounded mb-1"
+                     style="background:#f8fafc;border:1px solid #e2e8f0">
+          <div>
+            <span class="small fw-600">${escapeHtml(name)}</span>
+            ${def.help ? `<span class="small ms-2" style="color:var(--bb-muted)">${escapeHtml(def.help)}</span>` : ''}
+          </div>
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" role="switch" id="tp-${name}"
+                   data-tp="${name}" data-type="bool" ${val ? 'checked' : ''}>
+          </div>
+        </div>`;
+      }
+      const inputType  = def.type === 'int' ? 'number' : 'text';
+      const inputExtra = def.type === 'int' ? 'min="0" style="font-family:monospace"' : '';
+      return `<div class="mb-2">
+        <div class="d-flex align-items-baseline gap-2 mb-1">
+          <label class="small fw-600 mb-0" for="tp-${name}">${escapeHtml(name)}</label>
+          ${def.required ? '<span style="color:#dc2626;font-size:.7rem">required</span>' : ''}
+          ${def.default !== undefined && def.type !== 'bool'
+            ? `<span class="small" style="color:var(--bb-muted)">default: ${escapeHtml(String(def.default))}</span>`
+            : ''}
+        </div>
+        <input type="${inputType}" class="form-control form-control-sm" id="tp-${name}"
+               ${inputExtra}
+               data-tp="${name}" data-type="${def.type||'str'}"
+               value="${escapeHtml(String(val))}"
+               placeholder="${escapeHtml(def.help||'')}">
+      </div>`;
+    }).join('');
+  }
+
+  new bootstrap.Modal(document.getElementById('taskModal')).show();
+}
+
+async function saveTask() {
+  const btn   = document.getElementById('tm-save-btn');
+  const errEl = document.getElementById('tm-error');
+  errEl.style.display = 'none';
+
+  const name     = document.getElementById('tm-name').value.trim();
+  const schedule = document.getElementById('tm-schedule').value.trim();
+  const active   = document.getElementById('tm-active').checked;
+
+  if (!name) { errEl.textContent = 'Task name is required.'; errEl.style.display = ''; return; }
+
+  // Collect params from form
+  const params = {};
+  document.querySelectorAll('#tm-params-form [data-tp]').forEach(el => {
+    const key  = el.dataset.tp;
+    const type = el.dataset.type;
+    if (type === 'bool')     params[key] = el.checked;
+    else if (type === 'int') { if (el.value.trim()) params[key] = parseInt(el.value) || 0; }
+    else                     { if (el.value.trim()) params[key] = el.value.trim(); }
+  });
+
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Saving…';
+
+  try {
+    if (_taskModalId) {
+      // Update existing task
+      await fetchJSON(`${BASE}/api/crm/batch/jobs/${_taskModalJob}/tasks/${_taskModalId}`, {
+        method:  'PATCH',
+        headers: {'Content-Type':'application/json'},
+        body:    JSON.stringify({ name, schedule, params, active }),
+      });
+      setFeedback(`<i class="ti ti-check me-1"></i>Task <strong>${escapeHtml(name)}</strong> updated.`, 'success');
+    } else {
+      // Create new task
+      await fetchJSON(`${BASE}/api/crm/batch/jobs/${_taskModalJob}/tasks`, {
+        method:  'POST',
+        headers: {'Content-Type':'application/json'},
+        body:    JSON.stringify({ name, schedule, params, active }),
+      });
+      setFeedback(`<i class="ti ti-check me-1"></i>Task <strong>${escapeHtml(name)}</strong> created.`, 'success');
+    }
+    bootstrap.Modal.getInstance(document.getElementById('taskModal')).hide();
+    await loadAll();
+    // Auto-sync Cloud Scheduler whenever a task with a schedule is saved
+    if (schedule) syncSchedulers();
+  } catch(e) {
+    errEl.textContent = e.message;
+    errEl.style.display = '';
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-device-floppy me-1"></i>Save task';
+  }
+}
+
+async function deleteTask(jobName, taskId) {
+  const job  = _jobs.find(j => j.name === jobName);
+  const task = (job?.tasks || []).find(t => t.task_id === taskId);
+  if (!confirm(`Delete task "${task?.name || taskId}"?`)) return;
+
+  try {
+    await fetchJSON(`${BASE}/api/crm/batch/jobs/${jobName}/tasks/${taskId}`, { method: 'DELETE' });
+    setFeedback(`<i class="ti ti-check me-1"></i>Task deleted.`, 'success');
+    await loadAll();
+    syncSchedulers();
+  } catch(e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Delete failed: ${escapeHtml(e.message)}`, 'danger');
+  }
+}
+
+// Run a task using its stored params (no modal needed)
+async function runTask(jobName, taskId) {
+  const job  = _jobs.find(j => j.name === jobName);
+  const task = (job?.tasks || []).find(t => t.task_id === taskId);
+  const btn  = document.getElementById(`task-row-${taskId}`)?.querySelector('.btn-outline-success');
+  if (btn) { btn.disabled = true; }
+
+  try {
+    const data = await fetchJSON(`${BASE}/api/crm/batch/jobs/${jobName}/tasks/${taskId}/run`, {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body:    '{}',
+    });
+    if (data.status === 'conflict') {
+      setFeedback('<i class="ti ti-alert-circle me-1"></i>Job is already running.', 'warning');
+    } else {
+      setFeedback(`<i class="ti ti-rocket me-1"></i>Task <strong>${escapeHtml(task?.name||taskId)}</strong> — run <code>${data.run_id}</code> started.`, 'info');
+      // Show history and start polling
+      const wrap = document.getElementById(`history-wrap-${jobName}`);
+      if (wrap) wrap.style.display = '';
+      await loadRuns(jobName);
+      startPoll(jobName, data.run_id);
+    }
+  } catch(e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Error: ${escapeHtml(e.message)}`, 'danger');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Ad-hoc run modal
+// ═══════════════════════════════════════════════════════════════════════════
+let _adHocJobName = null;
+
+function openAdHocRunModal(jobName) {
+  const job = _jobs.find(j => j.name === jobName);
+  if (!job) return;
+  _adHocJobName = jobName;
+
+  document.getElementById('run-modal-job-name').textContent = jobName;
+
+  const paramDefs = job.params || {};
+  const formEl    = document.getElementById('run-params-form');
+
+  if (!Object.keys(paramDefs).length) {
+    formEl.innerHTML = '<div class="small text-muted">No parameters required.</div>';
+  } else {
+    formEl.innerHTML = Object.entries(paramDefs).map(([name, def]) => {
+      if (def.type === 'bool') {
+        return `<div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" id="rp-${name}" data-rp="${name}" data-type="bool" ${def.default ? 'checked' : ''}>
+          <label class="form-check-label small" for="rp-${name}">${escapeHtml(name)}
+            <span style="color:var(--bb-muted);font-size:.72rem"> ${escapeHtml(def.help||'')}</span>
+          </label>
+        </div>`;
+      }
+      return `<div class="mb-2">
+        <label class="small fw-600 mb-1" for="rp-${name}">${escapeHtml(name)}${def.required ? '<span class="text-danger ms-1">*</span>' : ''}</label>
+        <input type="text" class="form-control form-control-sm" id="rp-${name}"
+               data-rp="${name}" data-type="${def.type||'str'}"
+               value="${escapeHtml(String(def.default ?? ''))}"
+               placeholder="${escapeHtml(def.help||'')}">
+      </div>`;
+    }).join('');
+  }
+
+  new bootstrap.Modal(document.getElementById('runModal')).show();
+}
+
+async function submitAdHocRun() {
+  if (!_adHocJobName) return;
+  const btn = document.getElementById('run-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Starting…';
+
+  const params = {};
+  document.querySelectorAll('#run-params-form [data-rp]').forEach(el => {
+    const key  = el.dataset.rp;
+    const type = el.dataset.type;
+    if (type === 'bool')     params[key] = el.checked;
+    else if (type === 'int') { if (el.value.trim()) params[key] = parseInt(el.value) || undefined; }
+    else                     { if (el.value.trim()) params[key] = el.value.trim(); }
+  });
+
+  try {
+    const data = await fetchJSON(`${BASE}/api/crm/batch/jobs/${_adHocJobName}/run`, {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body:    JSON.stringify({ params }),
+    });
+    bootstrap.Modal.getInstance(document.getElementById('runModal')).hide();
+    if (data.status === 'conflict') {
+      setFeedback('<i class="ti ti-alert-circle me-1"></i>Job is already running.', 'warning');
+    } else {
+      setFeedback(`<i class="ti ti-rocket me-1"></i>Run <code>${data.run_id}</code> started.`, 'info');
+      const wrap = document.getElementById(`history-wrap-${_adHocJobName}`);
+      if (wrap) wrap.style.display = '';
+      await loadRuns(_adHocJobName);
+      startPoll(_adHocJobName, data.run_id);
+    }
+  } catch(e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Error: ${escapeHtml(e.message)}`, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-player-play me-1"></i>Run now';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Sync Cloud Schedulers
+// ═══════════════════════════════════════════════════════════════════════════
+async function syncSchedulers(silent) {
+  const btn = document.getElementById('sync-sched-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Syncing…'; }
+  try {
+    const data = await fetchJSON(`${BASE}/api/crm/batch/sync-schedulers`, {
+      method:  'POST',
+      headers: {'Content-Type':'application/json'},
+      body:    '{}',
+    });
+    const s = data.summary || {};
+    const summary = `Scheduler sync — ${s.created||0} created, ${s.updated||0} updated, ${s.deleted||0} deleted, ${s.skipped||0} skipped`;
+    const errorLines = (s.errors || []).map(e =>
+      `<br><i class="ti ti-alert-triangle me-1"></i><strong>${escapeHtml(e.task||'?')}</strong>: ${escapeHtml(e.error||'unknown error')}`
+    ).join('');
+    const msg = summary + (errorLines ? ` — <strong>${s.errors.length} error(s)</strong>${errorLines}` : '');
+    if (!silent || s.errors?.length) {
+      setFeedback(`<i class="ti ti-calendar-check me-1"></i>${msg}`,
+                  s.errors?.length ? 'warning' : 'success');
+    }
+  } catch(e) {
+    if (!silent) setFeedback(`<i class="ti ti-circle-x me-1"></i>Sync failed: ${escapeHtml(e.message)}`, 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-calendar-bolt me-1"></i>Sync schedules'; }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Cron helpers
+// ═══════════════════════════════════════════════════════════════════════════
+function applyCronPreset() {
+  const sel = document.getElementById('tm-cron-preset');
+  if (sel && sel.value) document.getElementById('tm-schedule').value = sel.value;
+  updateCronDesc();
+}
+
+function updateCronDesc() {
+  const el   = document.getElementById('tm-cron-desc');
+  const cron = (document.getElementById('tm-schedule')?.value || '').trim();
+  if (!el) return;
+  const desc = describeCron(cron);
+  el.textContent = desc ? '▸ ' + desc : '';
+}
+
+function describeCron(cron) {
+  if (!cron) return '';
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return '';
+  const [min, hour, dom, month, dow] = parts;
+  const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  try {
+    if (dom !== '*' || month !== '*') return '';
+    const m = parseInt(min), h = parseInt(hour);
+    if (isNaN(m) || isNaN(h)) return '';
+    const time = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ' UTC';
+    if (dow === '*')        return 'Every day at ' + time;
+    if (/^\d$/.test(dow))  return 'Every ' + DAYS[parseInt(dow)] + ' at ' + time;
+    if (dow.includes(',')) return 'Every ' + dow.split(',').map(d => DAYS[parseInt(d)]||d).join(', ') + ' at ' + time;
+    if (/^\*\/\d+$/.test(hour) && min === '0' && dow === '*')
+      return 'Every ' + hour.split('/')[1] + ' hours';
+  } catch(e) {}
+  return '';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadAll();
+setInterval(loadAll, 30000);
+
+</script>
+</body>
+</html>

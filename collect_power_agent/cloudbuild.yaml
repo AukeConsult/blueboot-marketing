@@ -1,0 +1,28 @@
+# cloud_batch/cloudbuild.yaml
+# Builds and pushes the batch-runner image using Google Cloud Build.
+# No local Docker required.
+#
+# Usage (run from project root):
+#   gcloud builds submit --project blueboot-market .
+
+substitutions:
+  _LOCATION: us-central1
+  _PROJECT: blueboot-market
+  _REPO: batch-runner
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -f
+      - cloud_batch/Dockerfile
+      - -t
+      - ${_LOCATION}-docker.pkg.dev/${_PROJECT}/${_REPO}/batch-runner:latest
+      - .
+
+images:
+  - ${_LOCATION}-docker.pkg.dev/${_PROJECT}/${_REPO}/batch-runner:latest
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY

@@ -1,38 +1,68 @@
 #!/bin/bash
 set -e
 
-echo "=== CRM GCP Setup ==="
+echo "=== CRM + Batch Runner GCP Setup ==="
 echo "Project: blueboot-market"
 echo ""
 
-echo "[1/6] Setting project..."
+# ── APIs ──────────────────────────────────────────────────────────────────────
+echo "[1/8] Setting project..."
 gcloud config set project blueboot-market
 
-echo "[2/6] Enabling Cloud Tasks API..."
+echo "[2/8] Enabling Cloud Tasks API..."
 gcloud services enable cloudtasks.googleapis.com
 
-echo "[3/6] Enabling Cloud Functions API..."
+echo "[3/8] Enabling Cloud Functions API..."
 gcloud services enable cloudfunctions.googleapis.com
 
-echo "[4/6] Enabling Cloud Build API..."
+echo "[4/8] Enabling Cloud Build API..."
 gcloud services enable cloudbuild.googleapis.com
 
-echo "[5/6] Creating Cloud Tasks queue 'crm-queue'..."
+echo "[5/8] Enabling Cloud Scheduler API..."
+gcloud services enable cloudscheduler.googleapis.com
+
+echo "[6/8] Enabling Artifact Registry API..."
+gcloud services enable artifactregistry.googleapis.com
+
+# ── Infrastructure ────────────────────────────────────────────────────────────
+echo "[7/8] Creating Cloud Tasks queue 'crm-queue'..."
 gcloud tasks queues create crm-queue --location=us-central1 || echo "  Queue already exists -- skipping"
 
-echo "[6/6] Granting roles to service account..."
+# ── IAM ───────────────────────────────────────────────────────────────────────
+echo "[8/8] Granting IAM roles to service accounts..."
+
+SA_APP="blueboot-market@appspot.gserviceaccount.com"
+
+# CRM / Cloud Tasks
 gcloud projects add-iam-policy-binding blueboot-market \
-    --member="serviceAccount:blueboot-market@appspot.gserviceaccount.com" \
+    --member="serviceAccount:${SA_APP}" \
     --role="roles/cloudtasks.enqueuer"
 
 gcloud projects add-iam-policy-binding blueboot-market \
-    --member="serviceAccount:blueboot-market@appspot.gserviceaccount.com" \
+    --member="serviceAccount:${SA_APP}" \
+    --role="roles/run.invoker"
+
+# Batch runner — Cloud Run default service account
+# Compute SA is used by Cloud Run unless a custom SA is set.
+PROJECT_NUMBER=$(gcloud projects describe blueboot-market --format="value(projectNumber)")
+SA_COMPUTE="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+# Allows the batch-runner Cloud Run service to manage Cloud Scheduler jobs
+# (needed for the /sync-schedulers endpoint that creates/updates cron jobs).
+gcloud projects add-iam-policy-binding blueboot-market \
+    --member="serviceAccount:${SA_COMPUTE}" \
+    --role="roles/cloudscheduler.admin"
+
+# Allows Cloud Scheduler to invoke the batch-runner Cloud Run service
+gcloud projects add-iam-policy-binding blueboot-market \
+    --member="serviceAccount:${SA_COMPUTE}" \
     --role="roles/run.invoker"
 
 echo ""
 echo "=== GCP Setup Complete ==="
 echo ""
 echo "Next steps:"
-echo "  1. Share both Google Sheets with: blueboot-market@appspot.gserviceaccount.com"
-echo "  2. Run: ./deploy_crm.sh"
+echo "  1. Share Google Sheets with: ${SA_APP}"
+echo "  2. Run: bash deploy_crm.sh"
+echo "  3. Run: bash deploy_batch.sh   (builds, deploys, seeds job defs)"
 echo ""

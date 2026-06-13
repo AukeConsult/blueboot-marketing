@@ -227,7 +227,7 @@ def _stream_unclassified(
 
         if countries:
             c = (data.get("country") or "").upper()
-            if c not in countries:
+            if c not in countries and c != "*":  # "*" = global TLD — always classify
                 skipped_country += 1
                 continue
 

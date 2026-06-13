@@ -6,12 +6,14 @@
 <title>Settings — Blueboot CRM</title>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css">
 <link rel="stylesheet" href="css/styles.css">
 <style>
-body { background: #f8f9fa; }
+.settings-test-editor .mail-editor-component .ql-toolbar { background:#f9fafb;border-radius:8px 8px 0 0; }
+.settings-test-editor .mail-editor-component .ql-container { border-radius:0 0 8px 8px; }
 </style>
 </head>
-<body>
+<body class="bg-alt">
 
 <div id="nav"></div>
 
@@ -19,16 +21,21 @@ body { background: #f8f9fa; }
 
   <div class="d-flex align-items-center gap-2 mb-3">
     <a href="index.html" class="btn btn-sm btn-outline-secondary" onclick="return goBack()"><i class="ti ti-arrow-left"></i></a>
-    <h5 class="mb-0"><i class="ti ti-settings me-2"></i>Settings</h5>
+    <h5 class="page-title"><i class="ti ti-settings me-2"></i>Settings</h5>
   </div>
 
   <!-- Mail accounts -->
   <div class="card p-3 mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
       <h6 class="fw-semibold mb-0"><i class="ti ti-at me-1 text-primary"></i>Mail accounts</h6>
-      <button class="btn btn-sm btn-outline-primary" onclick="openMailAccountModal()">
-        <i class="ti ti-plus me-1"></i>Add account
-      </button>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" onclick="openTagStatusModal()">
+          <i class="ti ti-tag me-1"></i>Tag statuses
+        </button>
+        <button class="btn btn-sm btn-outline-primary" onclick="openMailAccountModal()">
+          <i class="ti ti-plus me-1"></i>Add account
+        </button>
+      </div>
     </div>
     <p class="small text-muted mb-3">Outreach mail accounts used by campaigns. Each account is keyed by its email address.</p>
     <div id="mail-accounts-list">
@@ -60,9 +67,36 @@ body { background: #f8f9fa; }
 
 </div>
 
+<!-- Tag statuses modal -->
+<div class="modal fade" id="tagStatusModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:420px">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-tag me-1 text-primary"></i>Mail tag statuses</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-2">
+        <p class="small text-muted mb-3">These statuses appear in the Mailbox tag popover and filter bar.
+           Drag to reorder.</p>
+        <div id="status-list" class="mb-3" style="max-height:320px;overflow-y:auto"></div>
+        <button class="btn btn-sm btn-outline-secondary w-100 mb-3" onclick="addStatusRow()">
+          <i class="ti ti-plus me-1"></i>Add status
+        </button>
+      </div>
+      <div class="modal-footer border-0 pt-0 d-flex align-items-center gap-2">
+        <button class="btn btn-primary btn-sm" onclick="saveStatuses()">
+          <i class="ti ti-device-floppy me-1"></i>Save
+        </button>
+        <span id="status-save-msg" class="small" style="color:var(--bb-muted)"></span>
+        <button class="btn btn-outline-secondary btn-sm ms-auto" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Send test mail modal -->
 <div class="modal fade" id="sendTestModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
     <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
       <div class="modal-header border-0 pb-0">
         <h6 class="modal-title"><i class="ti ti-send text-primary me-2"></i>Send test email</h6>
@@ -74,14 +108,7 @@ body { background: #f8f9fa; }
           <label class="form-label small fw-500">To</label>
           <input id="send-test-to" class="form-control form-control-sm" type="email" placeholder="recipient@example.com">
         </div>
-        <div class="mb-3">
-          <label class="form-label small fw-500">Subject</label>
-          <input id="send-test-subject" class="form-control form-control-sm" value="Test email">
-        </div>
-        <div class="mb-2">
-          <label class="form-label small fw-500">Body</label>
-          <textarea id="send-test-body" class="form-control form-control-sm" rows="3">This is a test email.</textarea>
-        </div>
+        <div id="settings-test-mail-editor" class="settings-test-editor"></div>
         <div id="send-test-feedback" class="alert py-2 small mb-0 mt-2" style="display:none"></div>
       </div>
       <div class="modal-footer border-0 pt-0">
@@ -202,17 +229,42 @@ body { background: #f8f9fa; }
       </div>
     </div>
   </div>
+
+
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/crm-common.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+<script src="js/mail-editor-component.js"></script>
 <script>
 const setStatus = setStatusEl;
 const esc = escapeHtml;
 
+window.addEventListener('error', event => {
+  const fb = document.getElementById('send-test-feedback');
+  const modalOpen = document.getElementById('sendTestModal')?.classList.contains('show');
+  if (!fb || !modalOpen) return;
+  fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
+  fb.textContent = event.message || 'Unexpected page error.';
+  fb.style.display = '';
+});
+window.addEventListener('unhandledrejection', event => {
+  const fb = document.getElementById('send-test-feedback');
+  const modalOpen = document.getElementById('sendTestModal')?.classList.contains('show');
+  if (!fb || !modalOpen) return;
+  const reason = event.reason || {};
+  fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
+  fb.textContent = reason.message || String(reason || 'Unexpected async error.');
+  fb.style.display = '';
+});
+
 async function loadSetting(){
   try{
-    const r = await fetch(BASE + '/api/crm/gdisk/settings');
-    const d = await r.json();
+    const d = await fetchJSON(BASE + '/api/crm/gdisk/settings');
     document.getElementById('folder-id').value = d.folder_id || '';
     if(!d.configured) setStatus('setting-status', 'No folder configured yet — paste a Drive folder ID and save.', 'muted');
   }catch(e){ setStatus('setting-status', 'Could not read settings: ' + prettyError(e.message), 'err', true); }
@@ -268,9 +320,8 @@ let _mailAccounts = {};
 async function loadMailAccounts() {
   const el = document.getElementById('mail-accounts-list');
   try {
-    const r = await fetch(BASE + '/api/crm/settings/mail-accounts');
-    const d = await r.json();
-    const list = d.accounts || [];
+    const d = await fetchJSON(BASE + '/api/crm/settings/mail-accounts');
+    const list = Array.isArray(d.accounts) ? d.accounts : [];
     _mailAccounts = {};
     list.forEach(a => _mailAccounts[a.email] = a);
     if (!list.length) {
@@ -401,8 +452,10 @@ async function maTestConnection() {
       method: 'POST'
     });
     const d = await r.json();
-    fb.className = d.status === 'ok' ? 'alert alert-success py-2 small mb-0 mt-2' : 'alert alert-danger py-2 small mb-0 mt-2';
-    fb.innerHTML = (d.status === 'ok' ? '<i class="ti ti-circle-check me-1"></i>' : '<i class="ti ti-circle-x me-1"></i>') + esc(d.message);
+    const ok = r.ok && d.status === 'ok';
+    const msg = d.message || (ok ? 'Connection OK.' : 'Connection failed.');
+    fb.className = ok ? 'alert alert-success py-2 small mb-0 mt-2' : 'alert alert-danger py-2 small mb-0 mt-2';
+    fb.innerHTML = (ok ? '<i class="ti ti-circle-check me-1"></i>' : '<i class="ti ti-circle-x me-1"></i>') + esc(msg);
     fb.style.display = '';
   } catch(e) {
     fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
@@ -412,32 +465,65 @@ async function maTestConnection() {
 }
 
 let _sendTestEmail = '';
+let _sendTestEditor = null;
+
+function ensureSendTestEditor() {
+  if (!_sendTestEditor) {
+    _sendTestEditor = new MailEditorComponent(document.getElementById('settings-test-mail-editor'), {
+      base: BASE,
+      showMainButton: false,
+      showSaveButton: false,
+      showTestButton: false,
+      showAccountField: false
+    });
+  }
+  return _sendTestEditor;
+}
+
 function openSendTestModal(email) {
   _sendTestEmail = email;
   document.getElementById('send-test-from').textContent = email;
   document.getElementById('send-test-feedback').style.display = 'none';
   document.getElementById('send-test-btn').disabled = false;
   document.getElementById('send-test-btn').innerHTML = '<i class="ti ti-send me-1"></i>Send';
+  ensureSendTestEditor().loadDraft({
+    account: email,
+    accountReadOnly: true,
+    title: 'Test email',
+    subtitle: 'Send a one-off test from this account',
+    mail: { subject: 'Test email', body: 'This is a test email.', type: 'plain' }
+  });
   new bootstrap.Modal(document.getElementById('sendTestModal')).show();
 }
 
 async function doSendTest() {
   const btn = document.getElementById('send-test-btn');
   const fb  = document.getElementById('send-test-feedback');
-  const to      = document.getElementById('send-test-to').value.trim();
-  const subject = document.getElementById('send-test-subject').value.trim();
-  const body    = document.getElementById('send-test-body').value.trim();
+  const to  = document.getElementById('send-test-to').value.trim();
+  const mail = ensureSendTestEditor().buildPayload().mail;
+  const subject = mail.subject || 'Test email';
+  const body = mail.body || '';
   if (!to) { fb.className='alert alert-warning py-2 small mb-0 mt-2'; fb.textContent='Recipient is required.'; fb.style.display=''; return; }
-  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Sending…';
+  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Sending...';
   fb.style.display = 'none';
   try {
+    const isHtml = mail.type === 'html';
+    const bodyHtml = isHtml ? `<style>${mail.css || ''}</style><div class="mail-wrap">${body}</div>` : '';
     const r = await fetch(`${BASE}/api/crm/settings/mail-accounts/${encodeURIComponent(_sendTestEmail)}/send-test`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ to, subject, body })
+      body: JSON.stringify({
+        to,
+        subject,
+        body,
+        body_plain: isHtml ? '' : body,
+        body_html: bodyHtml
+      })
     });
     const d = await r.json();
-    fb.className = d.status === 'ok' ? 'alert alert-success py-2 small mb-0 mt-2' : 'alert alert-danger py-2 small mb-0 mt-2';
-    fb.innerHTML = (d.status === 'ok' ? '<i class="ti ti-circle-check me-1"></i>' : '<i class="ti ti-circle-x me-1"></i>') + esc(d.message);
+    const ok = r.ok && d.status === 'ok';
+    const msg = d.message || (ok ? 'Test mail sent.' : 'Send failed.');
+    fb.className = ok ? 'alert alert-success py-2 small mb-0 mt-2' : 'alert alert-danger py-2 small mb-0 mt-2';
+    fb.innerHTML = (ok ? '<i class="ti ti-circle-check me-1"></i>' : '<i class="ti ti-circle-x me-1"></i>') + esc(msg);
     fb.style.display = '';
   } catch(e) {
     fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
@@ -453,6 +539,118 @@ async function deleteMailAccount(email) {
     loadMailAccounts();
   } catch(e) { alert('Delete failed: ' + e.message); }
 }
+// ── mail tag statuses ───────────────────────────────────────────────────────
+function openTagStatusModal() {
+  loadTagStatuses();
+  new bootstrap.Modal(document.getElementById('tagStatusModal')).show();
+}
+
+async function loadTagStatuses() {
+  try {
+    const r = await fetch(BASE + '/api/crm/settings/mail-tag-statuses');
+    const d = await r.json();
+    renderStatusList(d.statuses || []);
+  } catch(e) {
+    document.getElementById('status-list').innerHTML =
+      '<div class="small text-danger">Error loading statuses: ' + e.message + '</div>';
+  }
+}
+
+function renderStatusList(statuses) {
+  statuses = Array.isArray(statuses) ? statuses : [];
+  const el = document.getElementById('status-list');
+  if (!statuses.length) {
+    el.innerHTML = '<div class="small text-muted">No statuses yet — add one above.</div>';
+    return;
+  }
+  el.innerHTML = statuses.map((s, i) => `
+    <div class="d-flex align-items-center gap-2 mb-2 status-row" draggable="true" data-idx="${i}">
+      <i class="ti ti-grip-vertical text-muted" style="cursor:grab;font-size:1rem"></i>
+      <input class="form-control form-control-sm" value="${esc(s)}"
+             style="max-width:260px" placeholder="Status name"
+             oninput="markUnsaved()">
+      <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="removeStatusRow(this)" title="Remove">
+        <i class="ti ti-x"></i>
+      </button>
+    </div>`).join('');
+  setupDragSort();
+}
+
+function addStatusRow() {
+  const el = document.getElementById('status-list');
+  // clear empty-state placeholder if present
+  if (el.querySelector('.text-muted')) el.innerHTML = '';
+  const div = document.createElement('div');
+  div.className = 'status-row d-flex align-items-center gap-2 mb-2';
+  div.draggable = true;
+  div.dataset.idx = el.querySelectorAll('.status-row').length;
+  div.innerHTML = `
+    <i class="ti ti-grip-vertical text-muted" style="cursor:grab;font-size:1rem"></i>
+    <input class="form-control form-control-sm" style="max-width:260px" placeholder="Status name"
+           oninput="markUnsaved()">
+    <button class="btn btn-sm btn-outline-danger py-0 px-2" onclick="removeStatusRow(this)" title="Remove">
+      <i class="ti ti-x"></i>
+    </button>`;
+  el.appendChild(div);
+  div.querySelector('input').focus();
+  setupDragSort();
+  markUnsaved();
+}
+
+function removeStatusRow(btn) {
+  btn.closest('.status-row').remove();
+  markUnsaved();
+}
+
+function markUnsaved() {
+  document.getElementById('status-save-msg').textContent = 'Unsaved changes';
+}
+
+async function saveStatuses() {
+  const inputs = document.querySelectorAll('#status-list .status-row input');
+  const statuses = [...inputs].map(i => i.value.trim()).filter(Boolean);
+  if (!statuses.length) { alert('Add at least one status.'); return; }
+  try {
+    const r = await fetch(BASE + '/api/crm/settings/mail-tag-statuses', {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ statuses }),
+    });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      renderStatusList(d.statuses || []);
+      const msg = document.getElementById('status-save-msg');
+      msg.textContent = 'Saved!';
+      msg.style.color = 'var(--bb-success, #10b981)';
+      setTimeout(() => { msg.textContent = ''; msg.style.color = ''; }, 2500);
+    } else {
+      alert('Save failed: ' + d.message);
+    }
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+// drag-to-reorder
+function setupDragSort() {
+  const rows = document.querySelectorAll('#status-list .status-row');
+  let dragSrc = null;
+  rows.forEach(row => {
+    row.addEventListener('dragstart', () => { dragSrc = row; row.style.opacity = '.4'; });
+    row.addEventListener('dragend',   () => { dragSrc = null; row.style.opacity = ''; });
+    row.addEventListener('dragover',  e => { e.preventDefault(); });
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!dragSrc || dragSrc === row) return;
+      const parent = row.parentNode;
+      const rows   = [...parent.querySelectorAll('.status-row')];
+      const si = rows.indexOf(dragSrc), ti = rows.indexOf(row);
+      if (si < ti) parent.insertBefore(dragSrc, row.nextSibling);
+      else         parent.insertBefore(dragSrc, row);
+      markUnsaved();
+    });
+  });
+}
+
+
 </script>
 <script src="vendor/bootstrap.bundle.min.js"></script>
 </body>

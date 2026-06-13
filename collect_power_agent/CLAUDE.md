@@ -1,4 +1,22 @@
-# Coding Rules for this Project
+﻿# Coding Rules for this Project
+
+## RULE: Check for SKILL.md in the same subdirectory before working on any file
+
+Before reading, writing, or editing any file under a subdirectory, check whether a
+`SKILL.md` file exists in that same directory. If it does, read it first — it contains
+subdirectory-specific conventions, patterns, and constraints that take precedence over
+general project rules.
+
+```
+# Example: editing functions-crm/handlers/contacts.py
+# → check for functions-crm/handlers/SKILL.md
+# → check for functions-crm/SKILL.md
+# → then apply general CLAUDE.md rules
+```
+
+Walk up one level too: if no `SKILL.md` in the immediate directory, check the parent
+subdirectory (but not the project root — that is this file).
+
 
 ## THE OVERARCHING RULE: parallel work → isolated classes
 
@@ -111,6 +129,25 @@ Never put `queue.task_done()` inside the `try` body where an exception or a nest
 ---
 
 ## File Editing
+
+## Command Line Arguments
+
+### RULE: List filters use space-separated args plus common item delimiters
+
+For command-line list filters, prefer `nargs="+"` so repeated items can be passed as
+normal space-separated arguments. Also split each argument token on comma, semicolon,
+pipe, and newline so pasted lists work consistently.
+
+Example:
+```bash
+python app/outreach_send.py --campaigns NO_jun SE_jun
+python app/outreach_send.py --campaigns NO_jun,SE_jun
+python app/outreach_send.py --campaigns NO_jun;SE_jun
+python app/outreach_send.py --campaigns NO_jun|SE_jun
+```
+
+Use this same strategy for campaign lists and any other CLI parameter that represents
+a list of IDs. Omitting the list parameter must mean "all", not "none".
 
 ### RULE: Never use Edit/Write tools on large Python files directly
 
@@ -568,3 +605,483 @@ Also use Tabler Icons for icons:
 ```
 
 Only write custom `.css` when Bootstrap utilities cannot cover it.
+
+---
+
+## Frontend / CSS rules
+
+### RULE: No inline styles on HTML elements — use CSS classes instead
+
+Do not write `style="..."` directly on HTML elements unless there is absolutely no
+other option (e.g. a truly one-off dynamic value set from JavaScript).
+
+**Never write:**
+```html
+<thead style="background:#f9fafb">
+<div style="font-size:.82rem;color:#6b7280;text-transform:uppercase">
+```
+
+**Always write:**
+```html
+<thead class="bb-thead">
+<div class="bb-section-label">
+```
+
+If no suitable class exists yet, add one to `public/css/styles.css` first, then use
+it. This keeps all visual decisions in one place and makes global changes trivial.
+
+The only exceptions:
+- Truly dynamic values set by JavaScript (e.g. `el.style.width = px + 'px'`)
+- Bootstrap utility classes that already cover the case (prefer those over custom CSS)
+
+---
+
+## Frontend / Firestore rules
+
+### RULE: No direct Firestore calls from the frontend — except authentication
+
+All reads and writes to Firestore **must** go through the CRM API (`crmApi` Cloud
+Function). The frontend is not allowed to call the Firestore REST API or SDK directly,
+with one exception: Firebase Authentication (sign-in, sign-out, token refresh) which
+must use the Firebase Auth SDK as today.
+
+**Never write in frontend JS:**
+```js
+fetch(`https://firestore.googleapis.com/v1/projects/.../documents/...`, ...)
+db.collection("...").document("...").set(...)
+```
+
+**Always route through the CRM API:**
+```js
+await fetchJSON(`${BASE}/api/crm/campaigns/${id}/contacts/${docId}`, {
+  method: 'PATCH',
+  body: JSON.stringify({ followup_status: 'contacted' }),
+})
+```
+
+This keeps all validation, history logging, and business logic server-side, prevents
+unauthorised direct writes, and makes the security rules auditable in one place.
+
+
+---
+
+## Job functions
+
+### RULE: Every job function must have a CLI companion and be documented
+
+Whenever a new job type is added to the CRM backend (`functions-crm/main.py` worker,
+`crm/` lib file), three things are required before the work is considered done:
+
+**1. A `app/<job_name>.py` CLI script** following the same conventions as the
+other scripts in `app/`:
+- `main(argv=None)` entry point with `argparse`
+- `if __name__ == "__main__": main()` at the bottom
+- Uses `get_firestore()` from `app.firestore_client` for Firestore access
+- Path-inserts `functions-crm` to import the shared lib (no code duplication)
+- Supports `--dry-run` to preview without writing
+- Prints a clear summary on completion
+
+**2. Both a `run_<job_name>.bat` (Windows) and `run_<job_name>.sh` (bash) launcher**
+in the project root, following the style of the other launcher pairs:
+- Activate `.venv` (`Scripts\activate.bat` / `bin/activate`)
+- Set sensible parameter defaults overridable via `%*` / `"$@"`
+- Exit with an error code on failure
+- Mark the `.sh` file executable (`chmod +x`)
+
+**3. Documentation** — add a section to `readme.md`
+- What the job does
+- All parameters with defaults
+- Example invocations
+- What is written to Firestore and how dedup works
+
+**Reference implementation:** `inbound-read`
+- Lib: `functions-crm/smart_mail/inbound_read_lib.py`
+- API trigger: `POST /api/crm/inbound-read` in `functions-crm/main.py`
+- CLI: `app/inbound_read.py`
+- Launchers: `run_inbound_read.bat` and `run_inbound_read.sh`
+
+---
+
+## Frontend job polling
+
+### RULE: Every async job triggered from the frontend must show a visible status line
+
+Any page that triggers a background job (via a trigger endpoint that returns a `job_id`)
+must show a clear, persistent status line throughout the full lifecycle:
+
+1. **Queued** — show the `job_id` and "polling for result…" using `alert-info`
+2. **Done** — show a success summary using `alert-success`
+3. **Error** — show the error message using `alert-danger`
+
+Use a dedicated `<div id="sync-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>`
+placed just above the main content area. Never use a plain `<span>` or `console.log`
+as the only status indicator.
+
+The trigger button must be disabled while the job is running and re-enabled when done.
+
+**Standard pattern:**
+```js
+function setFeedback(msg, type) {
+  const fb = document.getElementById('sync-feedback');
+  if (!type) { fb.style.display = 'none'; return; }
+  fb.className = `alert alert-${type} py-2 px-3 small mb-3`;
+  fb.innerHTML = msg;
+  fb.style.display = '';
+}
+
+async function runJob() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  setFeedback(null);
+  try {
+    const res = await fetchJSON(`${BASE}/api/crm/my-job`, { method: 'POST', ... });
+    setFeedback(`<i class="ti ti-clock me-1"></i>Job queued <code>${res.job_id}</code> — polling…`, 'info');
+    await pollJob(res.job_id, {
+      onDone:  result => setFeedback(`<i class="ti ti-check me-1"></i>Done — ${result.count} items.`, 'success'),
+      onError: msg    => setFeedback(`<i class="ti ti-circle-x me-1"></i>Failed: ${escapeHtml(msg)}`, 'danger'),
+    });
+  } catch (e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>Error: ${escapeHtml(e.message)}`, 'danger');
+  } finally {
+    btn.disabled = false;
+  }
+}
+```
+
+**Reference implementation:** `crm_follow.html` — `syncAllEmails()` and `syncContactEmails()`
+
+---
+
+## Cloud Batch script registry
+
+### RULE: Every new `app/` script with `main()` must be added to cloud-batch.md
+
+Whenever a new Python script is added to `app/` that has a `main(argv=None)` entry
+point (i.e. it is a runnable CLI script), it MUST be added to the **Available App
+Scripts** table in `public/doc/cloud-batch.md` before the work is considered done.
+
+Place it in the appropriate table:
+- **Currently in pipelines** -- if it is being added as a step in a new or existing
+  `cloud_batch/job_definitions/*.json` pipeline
+- **Pipeline candidates** -- if it is a new batch-eligible script not yet wired into
+  a pipeline
+- **Maintenance scripts** -- if it is a one-off data repair, export, or admin tool
+- **Not suitable** -- if it is a dev diagnostic, smoke test, or dry-run-only tool
+
+The table lives at: `public/doc/cloud-batch.md` under `## Available App Scripts`.
+
+Verify the script appears there before closing the task.
+
+---
+
+## Documentation rules
+
+### RULE: User guides contain no technical implementation details
+
+User-facing documentation (`doc/user-guide.md`, `doc/crm-follow-up.md`, and any
+other doc accessible from the Documentation menu) must describe **what** features
+do and **how to use them** — never **how they are built**.
+
+The following belong in `README.md`, `doc/system-architecture.md`,
+`doc/installation.md`, or `doc/backend-functions.md` — not in user guides:
+
+- API endpoint URLs and HTTP methods
+- Firestore collection paths or document field names
+- Database write strategies (ArrayUnion, field masks, transactions, etc.)
+- Cloud Function names, job types, or queue names
+- Internal class names, module paths, or library choices
+- Any sentence that starts with "The backend…", "The API call…", or "Firestore…"
+
+**Wrong (user guide):**
+> All reads and writes go through the CRM API. Saving calls
+> `PATCH /api/crm/campaigns/{id}/contacts/{doc_id}`.
+
+**Right (user guide):**
+> Changes are saved automatically as soon as you leave the field — no Save
+> button needed.
+
+**Right (system architecture / README):**
+> Follow-up field writes go through `PATCH /api/crm/campaigns/{id}/contacts/{doc_id}`.
+> The backend appends a `comment_history` entry using Firestore `ArrayUnion`.
+
+---
+
+## Frontend access control
+
+### RULE: You must be at least `user` level to access any internal page
+
+All pages except `index.html`, `login.html`, and `doc-viewer.html` (public pages)
+require the signed-in user to have a role of `user`, `campaign-user`, or `admin`.
+
+A signed-in user with **no role assigned** gets the role `guest`. Guests are
+redirected to `index.html` automatically by `requireRole()` in `crm-common.js`
+because `guest` is not included in any page's `PAGE_ROLES` entry.
+
+`index.html` shows a visible warning banner to guests explaining that their account
+is pending role assignment.
+
+**Implementation:**
+- `auth.js` — `_fetchRole()` falls back to `'guest'` (not `'user'`) when the
+  Firestore user doc is missing or the role field is empty.
+- `crm-common.js` — `PAGE_ROLES` lists allowed roles per page; none include `guest`.
+  `requireRole()` redirects to `index.html` for any unlisted role.
+- `index.html` — shows `#guest-notice` alert when the signed-in user has `guest` role.
+
+**When adding a new page:** add it to `PAGE_ROLES` in `crm-common.js` with the
+minimum required role. Never omit a page from `PAGE_ROLES` unless it is explicitly
+a public page added to `PUBLIC_PAGES`.
+
+---
+
+## Access control documentation
+
+### RULE: All access control rules must be documented in readme-access.md
+
+`readme-access.md` (project root) is the single source of truth for all access
+control documentation — roles, enforcement rules, Firestore paths, Blueprint
+minimums, and how to add new protected endpoints.
+
+When adding or changing any access rule (frontend or backend):
+
+1. **Update `readme-access.md`** — keep the role table, Blueprint minimum table,
+   and `PAGE_ROLES` listing current.
+2. **Update `public/doc/installation.md`** — section 11 covers the first-admin
+   setup and role assignment flow. Keep it aligned with any role or flow changes.
+3. **No access rules live only in code** — if a role check, redirect, or Blueprint
+   minimum is added, it must appear in `readme-access.md` within the same commit.
+
+The two documents serve different audiences:
+- `readme-access.md` — technical reference for developers (roles, API enforcement, code pointers)
+- `installation.md` section 11 — operational guide for administrators (how to set up the first admin, assign roles to new users)
+
+---
+
+## Access control — guest read protection
+
+### RULE: Any blueprint whose GET responses contain internal data must be in `_BLUEPRINTS_BLOCKED_FOR_GUESTS`
+
+By default, authenticated GET requests are allowed for all roles including `guest`.
+This is acceptable for purely public or non-sensitive read endpoints. However, any
+blueprint whose GET responses include contact details, campaign data, file listings,
+or other internal business data **must** be added to `_BLUEPRINTS_BLOCKED_FOR_GUESTS`
+in `functions-crm/main.py`.
+
+Currently blocked:
+
+| Blueprint | Reason |
+|---|---|
+| `campaigns` | Campaign docs embed the full `campaign_contacts` subcollection |
+| `contacts` | Direct reads of `campaign_contacts` via collection-group query |
+| `gdisk` | Google Drive folder contents are internal |
+
+**When adding a new blueprint or route, ask:** can a guest (signed in but no role)
+see this response without any risk? If not, add the blueprint to the set.
+
+**Checklist when adding a new blueprint:**
+1. Add to `_BLUEPRINTS_BLOCKED_FOR_GUESTS` in `main.py` if GET returns sensitive data
+2. Add to `_BLUEPRINT_MIN_ROLES` in `main.py` with the correct minimum role for writes
+3. Add the endpoint to `_JOB_ENDPOINTS` in `main.py` if it triggers a background job
+4. Update `readme-access.md` — all three sets must be kept current
+5. Update `public/doc/installation.md` section 11 if the change affects user onboarding
+
+---
+
+## Role model — user role is read-only
+
+### RULE: `user` role has read access only — all writes require `campaign-user`
+
+The role model is:
+
+| Role | GET reads | Writes (POST / PATCH / PUT / DELETE) |
+|---|---|---|
+| `guest` | blocked for sensitive blueprints | blocked everywhere |
+| `user` | all internal data | **none** |
+| `campaign-user` | everything | everything except admin endpoints |
+| `admin` | everything | everything |
+
+`user` must **never** appear as a minimum role in `_BLUEPRINT_MIN_ROLES` in
+`functions-crm/main.py`. All mutating endpoints require at least `campaign-user`.
+
+This means a `user`-level account can browse campaigns, contacts, the mailbox,
+statistics, and the Drive folder — but cannot change any data, trigger any job,
+or sync anything. They are a read-only observer.
+
+When adding a new write endpoint, the minimum role is always `campaign-user`
+or `admin` — never `user`.
+
+---
+
+## Access control — settings collection is admin-only
+
+### RULE: Any endpoint that writes to the Firestore `settings` collection requires `admin`
+
+The `settings` collection holds system-level configuration — mail accounts, Drive
+folder, user roles, mail tag statuses. Only admins may modify any document under
+this path, regardless of which Blueprint the endpoint belongs to.
+
+Enforced via `_ADMIN_ENDPOINTS` in `functions-crm/main.py`, which is checked
+**after** the Blueprint minimum role. An endpoint in `_ADMIN_ENDPOINTS` returns
+403 for any role below `admin`, even if the Blueprint minimum would allow it.
+
+Currently enforced:
+
+| Endpoint | Writes to |
+|---|---|
+| `PUT /api/crm/settings/mail-tag-statuses` | `settings/mail_tag_statuses` |
+| `POST/PATCH /api/crm/gdisk/settings` | `settings/gdisk` |
+
+`mail_accounts` and `auth` blueprints already enforce `admin` at the Blueprint level
+and do not need to appear in `_ADMIN_ENDPOINTS`.
+
+**When adding a new endpoint that writes to `settings/`:**
+1. Add the Flask endpoint name to `_ADMIN_ENDPOINTS` in `main.py`
+2. Add a row to the Settings table in `readme-access.md`
+3. Do NOT rely on the Blueprint minimum alone — `_ADMIN_ENDPOINTS` is the explicit
+   guard for all settings writes
+
+---
+
+## Access control — guest read protection
+
+### RULE: Any blueprint whose GET responses contain internal data must be in `_BLUEPRINT_MIN_READ_ROLES`
+
+By default, authenticated GET requests are allowed for all roles including `guest`.
+This is acceptable for purely public or non-sensitive read endpoints. However, any
+blueprint whose GET responses include contact details, campaign data, file listings,
+or other internal business data **must** be added to `_BLUEPRINT_MIN_READ_ROLES`
+in `functions-crm/main.py`.
+
+Neither `guest` nor `user` roles can read from any blueprint in this map —
+the minimum is always `campaign-user`.
+
+Currently blocked:
+
+| Blueprint | Min read role | Why |
+|---|---|---|
+| `campaigns` | `campaign-user` | Campaign docs embed the full `campaign_contacts` subcollection |
+| `contacts` | `campaign-user` | Direct reads of `campaign_contacts` via collection-group query |
+| `gdisk` | `campaign-user` | Google Drive folder contents are internal |
+| `mail_accounts` | `campaign-user` | Mail account credentials live under `settings/` |
+| `auth` | `campaign-user` | User role docs live under `settings/users` |
+| `mail_tags` | `campaign-user` | `settings/mail_tag_statuses` is system configuration |
+| `mailbox` | `campaign-user` | IMAP mailbox contents are internal — no read for user/guest |
+
+**When adding a new blueprint or route, ask:** can a guest or basic user see this
+response without any risk? If not, add the blueprint to `_BLUEPRINT_MIN_READ_ROLES`.
+
+**Checklist when adding a new blueprint:**
+1. Add to `_BLUEPRINT_MIN_READ_ROLES` in `main.py` if GET returns sensitive data
+2. Add to `_BLUEPRINT_MIN_ROLES` in `main.py` with the correct minimum role for writes
+3. Add the endpoint to `_JOB_ENDPOINTS` in `main.py` if it triggers a background job
+4. Add to `_ADMIN_ENDPOINTS` in `main.py` if it writes to the `settings` collection
+5. Update `readme-access.md` — all four sets must be kept current
+6. Update `public/doc/installation.md` section 11 if the change affects user onboarding
+
+## Flask API handler structure
+
+### RULE: Every handler file must import shared infrastructure from `handlers/shared.py`
+
+All Blueprint handler files in `functions-crm/handlers/` must import their shared
+infrastructure from `handlers/shared.py` — never reimplement it locally.
+
+**Always import from shared:**
+```python
+from handlers.shared import _get_db, _err, _ok, _accepted  # pick what you need
+```
+
+**Never write local versions of:**
+- `_get_db()` — Firestore singleton
+- `_err(msg, code)` — error JSON response
+- `_ok(msg, **kwargs)` — success JSON response
+- `_accepted(job_id, name)` — 202 queued response
+- `_new_job()`, `_enqueue_task()` — job/task helpers
+
+**Standard handler file structure:**
+```python
+"""handlers/<name>.py — <short description>."""
+from __future__ import annotations
+
+from flask import Blueprint, g, jsonify, request
+
+from handlers.shared import _get_db, _err, _ok
+
+bp = Blueprint("<name>", __name__)
+
+# ── Private helpers (module-specific only) ────────────────────────────────────
+
+def _my_helper(...):
+    ...
+
+# ── Routes ────────────────────────────────────────────────────────────────────
+
+@bp.route("/api/crm/<route>", methods=["GET"])
+def my_endpoint():
+    """One-line docstring."""
+    try:
+        ...
+        return jsonify(...)
+    except Exception as exc:
+        return _err(str(exc), 500)
+```
+
+**Response shapes — use the shared helpers consistently:**
+- Success with data: `return jsonify({"status": "ok", ...data...})`
+- Success with message: `return _ok("Done.", count=n)`
+- Client error: `return _err("Reason.", 400)`
+- Server error: `return _err(str(exc), 500)`
+- Job queued: `return _accepted(job_id, "job-name")`
+
+**Reference implementations:** `handlers/statistics.py` (simple GET + job trigger),
+`handlers/user_prefs.py` (GET + PUT with per-user Firestore scoping via `g.user_email`).
+
+
+## Owner / user dropdowns
+
+### RULE: always display users as "Name (email)" — store email only
+
+Whenever a user or owner is shown in a `<select>` or any dropdown UI, the visible
+label must always be `DisplayName (email@...)`. If the user has no display name, show
+just the email. The **stored value** (the `<option value="...">`) must always be the
+email address — never the display name, never the UID.
+
+```js
+// Correct label + value pattern
+const label = u.displayName ? `${u.displayName} (${u.email})` : u.email;
+const value = u.email;   // always email
+```
+
+This applies to campaign owner, followup_owner, and any future user-assignment field.
+
+## Owner filter on the follow-up page
+
+### RULE: owner filter checks followup_owner first, then falls back to campaign owner
+
+When filtering contacts by owner (the `owner` query param on `/api/crm/followup-contacts`),
+apply this priority order:
+
+1. If the contact has a `followup_owner` set → match against that field only.
+2. If `followup_owner` is empty → fall back to the campaign-level `owner`.
+3. For `__none__` (no owner) → the contact must have neither `followup_owner` nor
+   campaign `owner` set.
+
+This means a contact with an explicit `followup_owner` is **always** owned by that
+person regardless of which campaign it belongs to, while unassigned contacts inherit
+their campaign's owner.
+
+Reference implementation: `handlers/contacts.py` → `followup_contacts()`.
+
+## Frontend / table layout rules
+
+### RULE: Name and email columns must never overlap — always use explicit widths
+
+In any table that shows both a name and an email column, both columns must have
+explicit pixel widths (never `width:auto` on either). Use at minimum:
+
+```html
+<th style="width:180px;min-width:140px">Name</th>
+<th style="width:200px">Email</th>
+```
+
+`width:auto` on Name causes it to collapse into the Email column when other
+columns are added or the viewport shrinks. Always set a concrete width.
+

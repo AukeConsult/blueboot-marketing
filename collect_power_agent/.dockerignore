@@ -1,0 +1,33 @@
+# Secrets — never bake into the image
+# All secrets live in .env and are pushed to Secret Manager by 06_secrets.sh.
+# Cloud Run injects them as env vars at runtime via --set-secrets.
+.env
+config/google_oauth_client.json
+config/google_token.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Node / Firebase tools
+node_modules/
+.firebase/
+firebase-debug.log
+
+# Local outputs and exports
+exports/
+checkpoints/
+*.xlsx
+*.csv
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/

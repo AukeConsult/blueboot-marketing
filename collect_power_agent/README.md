@@ -1,4 +1,4 @@
-# BlueBoot CRM
+﻿# BlueBoot CRM
 
 ## Pipeline Overview
 
@@ -56,6 +56,189 @@ SITE PIPELINE                  LEAD PIPELINE
 | `bounced` | Send delivery | Invalid email |
 | `unsubscribed` | Opt-out | Remove from all lists |
 | `converted` | Manual / CRM | Became customer/partner |
+
+---
+
+## CRM API Authentication Matrix
+
+All CRM API routes are served by `functions-crm/main.py`. Except where noted, requests must include a valid Firebase bearer token:
+
+```text
+Authorization: Bearer <firebase-id-token>
+```
+
+This matrix is defined in `functions-crm/auth_settings.py`. `main.py` still uses
+the legacy runtime auth tables until the guarded `check_auth()` switch is approved.
+User roles are cached per warm Firebase Function instance for 300 seconds to reduce
+Firestore reads during auth checks.
+
+Role levels:
+
+| Role | Access |
+|---|---|
+| `guest` | Signed in with no assigned role. Can read only low-risk general routes. |
+| `user` | Can read normal campaign views. No campaign writes or job triggers. |
+| `campaign-user` | Can read and change campaign work, trigger campaign jobs, and use Smart Mail. |
+| `admin` | Everything, including all settings and user management. |
+
+### No Firebase user auth
+
+These routes bypass Firebase user-token auth:
+
+```text
+OPTIONS <any route>
+POST /api/crm/worker/<name>/<job_id>
+```
+
+`/api/crm/worker/...` is intended for Cloud Tasks calling `crmWorker`, not browser users.
+
+### `guest` or higher
+
+Requires a valid Firebase token. These low-risk read routes allow `guest`:
+
+```text
+GET /
+GET /api/crm/whoami
+
+GET /api/crm/filter-facets
+GET /api/crm/filter-facets/<name>
+
+GET /api/crm/leads/by-domain/<domain>
+
+GET /api/crm/statistics
+```
+
+### `user` or higher
+
+Normal campaign read views require `user`, `campaign-user`, or `admin`:
+
+```text
+GET /api/crm/campaigns
+GET /api/crm/campaigns/<campaign_id>
+GET /api/crm/campaigns/<campaign_id>/contacts/<doc_id>
+GET /api/crm/followup-contacts
+GET /api/crm/followup-meta
+
+GET /api/crm/gdisk/check
+GET /api/crm/gdisk/files
+GET /api/crm/gdisk/files/<name>
+
+GET /api/crm/mailbox-tags/<account_email>
+
+GET /api/crm/batch/jobs
+GET /api/crm/batch/jobs/<job_name>/runs
+GET /api/crm/batch/jobs/<job_name>/runs/<run_id>
+GET /api/crm/batch/jobs/<job_name>/tasks
+
+GET /api/crm/status/<job_id>
+GET /api/crm/jobs
+
+GET /api/crm/user-prefs
+PUT /api/crm/user-prefs
+```
+
+### `campaign-user` or `admin`
+
+Campaign writes, operational mutations, and job-trigger endpoints require `campaign-user`:
+
+```text
+GET /api/crm/contact-sync
+GET /api/crm/push-and-sync
+GET /api/crm/template-sync
+GET /api/crm/crm-sync
+GET /api/crm/campaign-sync
+GET /api/crm/campaign-export
+GET /api/crm/discover-campaigns
+
+POST /api/crm/campaigns/<campaign_id>/create
+POST/PATCH /api/crm/campaigns/<campaign_id>
+DELETE /api/crm/campaigns/<campaign_id>
+POST /api/crm/campaigns/<campaign_id>/ping-mail-account
+POST /api/crm/campaigns/<campaign_id>/send-test-mail
+
+POST/PATCH /api/crm/campaigns/<campaign_id>/contacts/<doc_id>
+POST /api/crm/campaigns/<campaign_id>/contacts/<doc_id>/send-mail
+POST /api/crm/campaigns/<campaign_id>/contacts/remove
+POST /api/crm/campaigns/<src_campaign_id>/contacts/move
+
+POST/PATCH /api/crm/filter-facets/<name>
+POST /api/crm/filter-facets/<name>/create-campaign
+
+POST /api/crm/gdisk/files
+DELETE /api/crm/gdisk/files/<name>
+
+POST /api/crm/leads/by-domain/<domain>/exclude
+POST /api/crm/name-enrich
+POST /api/crm/campaigns/<campaign_id>/name-enrich
+
+POST /api/crm/statistics/collect
+
+PATCH /api/crm/batch/jobs/<job_name>
+POST /api/crm/batch/jobs/<job_name>/run
+POST /api/crm/batch/jobs/<job_name>/tasks
+PATCH /api/crm/batch/jobs/<job_name>/tasks/<task_id>
+DELETE /api/crm/batch/jobs/<job_name>/tasks/<task_id>
+POST /api/crm/batch/jobs/<job_name>/tasks/<task_id>/run
+POST /api/crm/batch/sync-schedulers
+
+PUT /api/crm/mailbox-tags/<account_email>/<msg_key>
+DELETE /api/crm/mailbox-tags/<account_email>/<msg_key>
+```
+
+Direct Smart Mail trigger aliases are service-authenticated:
+
+```text
+POST /outreach-send
+POST /inbound-read
+POST /reply-match
+```
+
+Service authentication is controlled by service roles in
+`functions-crm/auth_settings.py` (`SERVICE_ROLE_POLICIES`), not by hardcoded
+service account email addresses.
+
+CRM API Smart Mail trigger endpoints require `campaign-user` or `admin`:
+
+```text
+POST /api/crm/outreach-send
+POST /api/crm/inbound_read
+POST /api/crm/reply_match
+POST /api/crm/inbound-read
+POST /api/crm/reply-match
+```
+
+Smart Mail direct routes are exposed through the dedicated `smartMail` function:
+
+```text
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/outreach-send
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/inbound-read
+https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-match
+```
+
+Scheduled Smart Mail triggers should use `POST`. Do not expose `outreach-send` as an unauthenticated public GET URL.
+
+### `admin` only
+
+Requires signed-in `admin`:
+
+```text
+GET /api/crm/settings/mail-accounts
+POST /api/crm/settings/mail-accounts
+GET /api/crm/settings/mail-accounts/<email>/mailbox
+GET /api/crm/settings/mail-accounts/<email>/message
+DELETE /api/crm/settings/mail-accounts/<email>
+POST /api/crm/settings/mail-accounts/<email>/ping
+POST /api/crm/settings/mail-accounts/<email>/send-test
+
+GET /api/crm/auth/users
+PATCH /api/crm/auth/users/<email_key>
+DELETE /api/crm/auth/users/<email_key>
+
+GET /api/crm/gdisk/settings
+POST/PATCH /api/crm/gdisk/settings
+GET /api/crm/settings/mail-tag-statuses
+PUT /api/crm/settings/mail-tag-statuses
+```
 
 ---
 
@@ -307,6 +490,61 @@ exports/email_contacts_UK_<ts>.xlsx           ← unified review Excel
 
 ---
 
+## Google Cloud Batch Jobs
+
+The `cloud_batch/` framework runs the same pipeline scripts unattended on Google Cloud — no local machine required, no timeouts.
+
+### How it works
+
+A **Cloud Run** service (`batch-runner`) hosts a Flask HTTP server. Each pipeline is defined in a JSON file under `cloud_batch/job_definitions/` listing the steps and a Cloud Scheduler cron. When triggered (from the CRM frontend, a cron schedule, or CLI), the runner spawns a background thread, executes each step as a subprocess (`python -m app.site_agent …`), and writes per-step progress to Firestore under `gcloud-batch-jobs/{job}/runs/{run_id}`. The frontend page **Google Jobs** polls this collection and shows live status, step icons, and log tails.
+
+### Pipelines
+
+| Job | Schedule | What it runs |
+|---|---|---|
+| `site_pipeline` | Mon 02:00 UTC | Full site track: discover → classify → enrich → locate → email check → export |
+| `site_enrich_pipeline` | on-demand | Enrichment only (skips discovery) |
+| `lead_pipeline` | Mon 03:00 UTC | Full lead track: discover → classify → enrich → email check → export |
+| `lead_enrich_pipeline` | on-demand | Enrichment only |
+
+### One-time GCP setup
+
+```bash
+cd cloud_batch/setup
+bash setup_all.sh          # runs scripts 01–06 in sequence
+```
+
+This enables APIs, creates the service account, pushes secrets from `.env` to Secret Manager, builds the Docker image via **Cloud Build** (no local Docker required), deploys the Cloud Run service, and creates the Cloud Scheduler cron jobs.
+
+> **Note:** The build step uses Google Cloud Build, not local Docker. Docker Desktop does not need to be installed or running.
+>
+> **Upload size:** A `.gcloudignore` file is included that limits the upload to only the files needed (`app/`, `config/`, `cloud_batch/`). Virtual environments, `public/`, `functions-crm/`, and local outputs are excluded, keeping the upload small and fast.
+
+### Deploying code changes
+
+After the initial setup, any change to `cloud_batch/` or `app/` scripts needs a rebuild and redeploy. One command handles both:
+
+```bash
+bash deploy_batch.sh
+```
+
+This rebuilds the image via Cloud Build (~3 min) and redeploys the Cloud Run service. The CRM frontend and Firebase Cloud Function are unaffected — use `deploy_crm.sh` for those.
+
+| What changed | Command |
+|---|---|
+| `cloud_batch/` or `app/` scripts | `bash deploy_batch.sh` |
+| `functions-crm/` or `public/` | `bash deploy_crm.sh` |
+| Secrets in `.env` | `bash cloud_batch/setup/06_secrets.sh` then `bash deploy_batch.sh` |
+| First-time setup | `bash cloud_batch/setup/setup_all.sh` |
+
+### Managing jobs
+
+Open **Google Jobs** in the CRM dashboard to run jobs on demand, view run history, and see live step progress. Use `cloud_batch/setup/teardown.sh` to remove the Cloud Run service and scheduler jobs without touching Firestore data.
+
+For the full architecture, Firestore layout, and dry-run options see the [Google Cloud Jobs guide](doc/gcloud-job.md) in the Documentation menu, or `cloud_batch/README.md`.
+
+---
+
 ## Starter Scripts
 
 Two ready-to-run batch files cover the full pipeline for each track. Edit the two variables at the top before running:
@@ -360,6 +598,7 @@ Firestore
 | `app/site_contact_enrich.py` | Enriches `site_contacts` via Brave Search + GPT |
 | `app/site_email_check.py` | Classifies `site_contacts` by email type and contact role (OpenAI) |
 | `app/site_smart_export.py` | Tiered Excel (6 tiers) + writes to `email_contacts` via `--write-contacts` |
+| `app/facet_campaign.py` | Create or refresh a campaign from a saved filter-facets preset — filters `email_contacts`, deduplicates against existing campaigns, writes `campaign_contacts` |
 | `site_scrape.bat` | Runs site_agent + site_enrich_agent for all countries |
 | `run_site_pipeline.bat` | **Full Site Pipeline starter** — runs all 6 steps, edit `COUNTRIES` + `CAMPAIGN` at top |
 
@@ -749,15 +988,19 @@ python lead_enrich_contacts.py [options]
 | `--collection NAME` | `leads` | Firestore leads collection |
 | `--countries CC [CC ...]` | all | Space or comma-separated country codes, e.g. `--countries NO SE UK` |
 | `--limit N` | _(none)_ | Maximum number of contacts to process |
-| `--workers N` | `50` | Parallel async workers (Bing searches run concurrently) |
-| `--delay SECS` | `1.0` | Seconds to wait between Bing searches per worker |
+| `--workers N` | `3` | Parallel async workers (Bing searches run concurrently) |
+| `--delay SECS` | `2.0` | Seconds to wait between Bing searches per worker |
 | `--skip-enriched` | off | Skip contacts that already have `social_enriched_at` set |
 | `--platforms LIST` | all | Comma-separated subset: `linkedin,twitter,facebook,instagram,telegram,whatsapp` |
 | `--dry-run` | off | Print what would be written without touching Firestore |
 
 ### How parallelism works
 
-Contacts are first filtered synchronously from Firestore. All filtered contacts are then enriched concurrently using `asyncio.gather` capped by a semaphore of `--workers`. Results are batch-written to Firestore after all workers finish. With 20 workers and 5 platforms per contact, throughput is roughly 20× faster than a sequential run.
+Contacts are first filtered synchronously from Firestore. All filtered contacts are then enriched concurrently using `asyncio.gather` capped by a semaphore of `--workers`. Results are batch-written to Firestore after all workers finish.
+
+**Rate limiting:** Bing rate-limits aggressively — typically after ~400 queries in one session, subsequent requests hang until the 90 s per-contact timeout fires. Keep `--workers` low (default 3) and `--delay` at 2.0 s or higher to stay below the threshold (~1.5 queries/second). Increase only if you have a dedicated Bing API key with a higher quota.
+
+**Optional step:** `lead_enrich_contacts.py` only adds social profile links (LinkedIn, Twitter etc.) — it does **not** affect which contacts reach `email_contacts`. You can skip this step entirely and run `leads_email_check.py` + `leads_smart_export.py --write-contacts` directly. Contacts will be exported without social profiles but are otherwise complete.
 
 ### Example runs
 
@@ -1289,6 +1532,83 @@ This script only needs to be run once on existing data. All new contacts written
 
 ---
 
+
+---
+
+## `inbound_read.py` — read inbound/sent mail into contact logs
+
+Fetches inbox and sent messages for every configured outreach account, matches
+emails by address against campaign contacts, and appends `EMAIL_IN` / `EMAIL_OUT`
+entries to each matched contact's `comment_history` in Firestore. The operation is
+idempotent — each entry carries a unique `email_id` from the mail provider's
+`Message-ID` header, so re-running never creates duplicates.
+
+The same logic runs as a Cloud Function job when triggered from the
+CRM Follow-up web page (`crm_follow.html`).
+
+```bat
+:: Sync all contacts, last 7 days (default)
+run_inbound_read.bat
+
+:: Sync last 30 days for all contacts
+run_inbound_read.bat --days 30
+
+:: Sync one campaign only
+run_inbound_read.bat --campaigns NO_jun
+
+:: Sync one specific contact
+run_inbound_read.bat --campaigns NO_jun --contact john_doe_example_com
+
+:: Preview matches without writing to Firestore
+run_inbound_read.bat --dry-run
+
+:: List all campaign IDs
+run_inbound_read.bat --list-campaigns
+```
+
+```bash
+# macOS / Linux
+./run_inbound_read.sh --days 30
+./run_inbound_read.sh --dry-run
+python app/inbound_read.py --campaigns NO_jun --dry-run
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `--campaigns` / `-c` | all campaigns | Only sync contacts in these campaign IDs; accepts space, comma, semicolon, or pipe separated values |
+| `--contact` / `-d` | all contacts | Only sync this contact doc ID (requires exactly one `--campaigns` value) |
+| `--days` / `-n` | `7` | Lookback window in days (`0` = all time) |
+| `--dry-run` | off | Fetch and match emails, print results, skip Firestore writes |
+| `--list-campaigns` | off | Print all campaign IDs and exit |
+
+### What gets written
+
+Each matched email appends one entry to `comment_history` on the contact document
+under `campaigns/{campaign_id}/campaign_contacts/{doc_id}`:
+
+| Field | Value |
+|---|---|
+| `type` | `EMAIL_IN` (received) or `EMAIL_OUT` (sent) |
+| `text` | Email subject line |
+| `date` | Sent / received timestamp from the mail server |
+| `user` | Outreach account address used for matching |
+| `from` / `to` | Raw From / To header values |
+| `email_id` | Unique `Message-ID` from the mail provider (dedup key) |
+
+### Dedup
+
+`email_id` is included in every entry. Firestore `ArrayUnion` silently skips any
+entry whose full value already exists in the array — so running the sync multiple
+times against the same mailbox never creates duplicates.
+
+### Mail account requirements
+
+Mail accounts must be configured in the CRM dashboard under **Settings → Mail accounts**.
+Both IMAP and Gmail OAuth accounts are supported. The sync connects to the inbox
+and the sent folder (auto-detected) for each account.
+
 ---
 
 ## `campaign_exporter.py` — export a campaign to Excel + JSON
@@ -1776,43 +2096,5 @@ Drives `site_agent.py` — defines per-country search instructions for finding c
 |---|---|
 | `name` | Full country name |
 | `language` | Browser `Accept-Language` language code used in Bing search headers |
-| `accept_language` | Full `Accept-Language` header value sent with requests |
-| `description` | Human description of what kinds of sites to target in this country |
-| `min_pages` | Minimum page count for a site to be stored — lower = more inclusive |
-| `target_types` | List of site types the queries aim to find (used for scoring and keywords) |
-| `query_categories` | Map of `category → [query strings]` — the actual Bing search queries |
+| `accept_language` | Full `Accep
 
-### Per-country summary
-
-| Country | `min_pages` | Language | Categories | Queries |
-|---|---|---|---|---|
-| NO — Norway | 50 | no | 16 | 208 |
-| SE — Sweden | 50 | sv | 16 | 205 |
-| DK — Denmark | 50 | da | 16 | 200 |
-| FI — Finland | 50 | fi | 16 | 200 |
-| UK — United Kingdom | 100 | en | 16 | 204 |
-| DE — Germany | 50 | de | 16 | 203 |
-| FR — France | 20 | fr | 19 | 224 |
-| NL — Netherlands | 20 | nl | 19 | 222 |
-| BE — Belgium | 15 | fr,nl | 5 | 32 |
-| IN — India | 10 | en | 12 | 106 |
-| EU — European Union | 4 | en | 16 | 192 |
-
-`min_pages` reflects how content-heavy sites tend to be per market — UK/Nordic public sector sites are large, India and Belgium thresholds are lower to capture more results.
-
-### Query categories (37 total)
-
-| Category | Description |
-|---|---|
-| `municipality` | Local government, kommune, council websites |
-| `public` / `public_sector` | Government agencies, public bodies, national institutions |
-| `healthcare` | Hospitals, health trusts, clinic networks, patient information sites |
-| `education` | Universities, schools, educational institutions |
-| `media` | News sites, broadcasters, online publications |
-| `company` | General businesses, manufacturers, B2B companies |
-| `ecommerce` / `shop` | Online shops, retailers |
-| `technology` / `tech` | SaaS, IT companies, tech platforms |
-| `finance` | Banks, insurance, financial services |
-| `real_estate` | Property portals, housing associations |
-| `legal` | Law firms, legal information sites |
-| `logistics` | Shipping, transport

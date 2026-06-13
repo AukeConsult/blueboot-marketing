@@ -38,6 +38,8 @@ timeouts or locks needed (sync Firestore reads at startup are allowed by project
 """
 from __future__ import annotations
 
+from google.cloud.firestore_v1.base_query import FieldFilter
+
 import argparse
 import json
 import os
@@ -259,20 +261,109 @@ def build_facets(collection: str, cap: int) -> dict:
     }
 
 
+LEADS_COLLECTION      = "leads"
+EMAIL_CONTACTS_COLLECTION = "email_contacts"
+
+
+def _to_list(val) -> list:
+    """Coerce a Firestore field that may be a string or list into a list of items."""
+    if isinstance(val, list):
+        return [str(v).strip() for v in val if str(v).strip()]
+    if isinstance(val, str) and val.strip():
+        import re as _re
+        return [v.strip() for v in _re.split(r"[,;|\n]", val) if v.strip()]
+    return []
+
+
+def build_leads_facets(cap: int) -> dict:
+    """Build a filter-facets catalog from the leads pipeline.
+
+    Lead-level fields scanned from the 'leads' collection:
+      ai_sector, ai_company_type, ai_platform, country, ai_reseller_potential
+    Contact-level fields from email_contacts where mark_leads == True:
+      title, email_type
+    """
+    db = _get_db()
+
+    ai_sector        = EnumFacet(cap, lower=True)
+    ai_company_type  = EnumFacet(cap, lower=True)
+    ai_platform      = EnumFacet(TOP_N_AI_PLATFORM, lower=True)
+    country          = EnumFacet(cap)
+    ai_reseller_pot  = EnumFacet(cap, lower=True)
+    ai_client_base   = EnumFacet(cap, lower=True)
+    ai_specialisation = EnumFacet(cap, kind="array_enum", lower=True)
+
+    lead_count = 0
+    for doc in db.collection(LEADS_COLLECTION).select(
+        ["ai_sector", "ai_company_type", "ai_platform", "country",
+         "ai_reseller_potential", "ai_client_base", "ai_specialisation", "detected_tech"]
+    ).stream():
+        data = doc.to_dict() or {}
+        lead_count += 1
+        ai_sector.add(data.get("ai_sector"))
+        ai_company_type.add(data.get("ai_company_type"))
+        ai_platform.add(data.get("ai_platform"))
+        country.add(data.get("country"))
+        ai_reseller_pot.add(data.get("ai_reseller_potential"))
+        ai_client_base.add(data.get("ai_client_base"))
+        ai_specialisation.add_many(_to_list(data.get("ai_specialisation")))
+
+    # Contact-level fields from email_contacts (leads pipeline only)
+    title      = EnumFacet(cap, lower=True, transform=_first_word, min_count=TITLE_MIN_COUNT)
+    email_type = EnumFacet(cap)
+    contact_count = 0
+    for doc in db.collection(EMAIL_CONTACTS_COLLECTION).where(filter=FieldFilter("mark_leads", "==", True)).select(["title", "email_type"]).stream():
+        data = doc.to_dict() or {}
+        contact_count += 1
+        title.add(data.get("title"))
+        email_type.add(data.get("email_type"))
+
+    return {
+        "generated_at":       datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "source_collection":  LEADS_COLLECTION,
+        "pipeline":           "leads",
+        "lead_count":         lead_count,
+        "contact_count":      contact_count,
+        "value_cap_per_field": cap,
+        "filters": {
+            "ai_sector":            ai_sector.result("leads.ai_sector"),
+            "ai_company_type":      ai_company_type.result("leads.ai_company_type"),
+            "ai_platform":          ai_platform.result("leads.ai_platform"),
+            "country":              country.result("leads.country"),
+            "ai_reseller_potential": ai_reseller_pot.result("leads.ai_reseller_potential"),
+            "ai_client_base":       ai_client_base.result("leads.ai_client_base"),
+            "ai_specialisation":    ai_specialisation.result("leads.ai_specialisation"),
+            "title":                title.result("email_contacts[mark_leads].title"),
+            "email_type":           email_type.result("email_contacts[mark_leads].email_type"),
+        },
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(
         description="Build a filter-facets catalog from site_leads + site_contacts.")
     ap.add_argument("--collection", default=COLLECTION_DEFAULT,
                     help="Top-level leads collection (default: site_leads)")
+    ap.add_argument("--pipeline", choices=["site_leads", "leads"], default="site_leads",
+                    help="Which pipeline to build facets for (default: site_leads)")
     ap.add_argument("--cap", type=int, default=300,
                     help="Max distinct values stored per enum field (default: 300)")
-    ap.add_argument("--no-write", action="store_true",
+    ap.add_argument("--no-write", "--dry-run", dest="no_write", action="store_true",
                     help="Skip the Firestore write; only emit the JSON file")
     args = ap.parse_args()
 
-    print(f"[facets] scanning '{args.collection}' + '{CONTACTS_SUBCOLLECTION}' ...")
-    facets = build_facets(args.collection, args.cap)
-    print(f"[facets] {facets['lead_count']} leads, {facets['contact_count']} contacts")
+    if args.pipeline == "leads":
+        print(f"[facets] scanning leads pipeline ...")
+        facets = build_leads_facets(args.cap)
+        doc_name = "leads"
+    else:
+        print(f"[facets] scanning '{args.collection}' + '{CONTACTS_SUBCOLLECTION}' ...")
+        facets = build_facets(args.collection, args.cap)
+        doc_name = args.collection
+    # also tag site_leads docs with pipeline field
+    if args.pipeline == "site_leads" and "pipeline" not in facets:
+        facets["pipeline"] = "site_leads"
+    print(f"[facets] {facets['lead_count']} leads, {facets['contact_count']} contacts, pipeline={facets.get('pipeline','site_leads')}")
     for name, f in facets["filters"].items():
         if "values" in f:
             flag = "  (TRUNCATED -- high cardinality for an enum)" if f["truncated"] else ""
@@ -281,7 +372,7 @@ def main() -> None:
             print(f"  - {name} [group]: {len(f['groups'])} groups")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    json_path = OUTPUT_DIR / f"filter_facets_{args.collection}.json"
+    json_path = OUTPUT_DIR / f"filter_facets_{doc_name}.json"
     json_path.write_text(json.dumps(facets, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[facets] wrote {json_path}")
 
@@ -291,11 +382,10 @@ def main() -> None:
     else:
         try:
             db = _get_db()
-            db.collection("filter_facets").document(args.collection).set(facets, merge=False)
-            print(f"[facets] wrote Firestore filter_facets/{args.collection}")
+            db.collection("filter_facets").document(doc_name).set(facets, merge=False)
+            print(f"[facets] wrote filter_facets/{doc_name} to Firestore")
         except Exception as exc:
-            print(f"[facets] Firestore write failed ({exc}) -- JSON file is still available")
-
+            print(f"[facets] Firestore write failed: {exc}")
 
 if __name__ == "__main__":
     main()

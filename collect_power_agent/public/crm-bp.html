@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="css/styles.css">
 <style>
 
-.wf-card { background: #fff; border: 1px solid var(--bb-border); border-radius: 10px; box-shadow: var(--bb-card-shadow); padding: 1rem 1.25rem; display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 10px; }
+.wf-card { padding: 1rem 1.25rem; display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 10px; }
 .wf-step-num { width: 26px; height: 26px; border-radius: 50%; background: #eef0ff; color: var(--bb-accent); font-size: .75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
 .wf-body { flex: 1; min-width: 0; }
 .wf-title { font-size: .9rem; font-weight: 600; margin: 0 0 3px; }
@@ -30,15 +30,23 @@
 
 <div class="container py-4" style="max-width:860px">
 
-  <h5 class="mb-3 fw-600" style="font-size:1rem"><i class="ti ti-server-2 me-2 text-primary"></i>CRM</h5>
+  <h5 class="page-title mb-2"><i class="ti ti-server-2 me-2 text-primary"></i>CRM Discover</h5>
+
+  <p class="small mb-3" style="color:var(--bb-muted);max-width:620px;line-height:1.6">
+    This is the <strong>manual discovery route</strong> — you import a selection of contacts from the
+    leads database into a spreadsheet, review and mark the ones worth pursuing, then push them into
+    the CRM work sheet for deeper qualification.
+    For a fully automated alternative, use
+    <a href="filter-facets.html">Filter facets</a> to build a campaign directly from the contact pool.
+  </p>
 
   <div id="action-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
 
   <!-- Step 1: Import -->
-  <div class="wf-card">
+  <div class="wf-card bb-card">
     <div class="wf-step-num">1</div>
     <div class="wf-body">
-      <p class="wf-title"><i class="ti ti-arrow-down-circle me-1 text-primary"></i>Import contacts</p>
+      <p class="wf-title"><i class="ti ti-arrow-up-circle me-1 text-primary"></i>Export contacts</p>
       <p class="wf-desc">Pull contacts from Leads Database into the contact sheet. Choose country and size filters.</p>
       <div class="wf-form">
         <select id="p-countries">
@@ -57,11 +65,11 @@
   </div>
 
   <!-- Step 2: Review -->
-  <div class="wf-card">
+  <div class="wf-card bb-card">
     <div class="wf-step-num">2</div>
     <div class="wf-body">
       <p class="wf-title"><i class="ti ti-table me-1 text-primary"></i>Review &amp; select</p>
-      <p class="wf-desc">Open the contact sheet, review the list and fill the <code>Select</code> column for contacts you want to pursue.</p>
+      <p class="wf-desc">Open the contact sheet, review the list and fill the <code>Select</code> column for contacts you want to pursue. If you also fill in a campaign name in the <code>Campaign</code> column, you can use the campaign route instead — go to <a href="campaigns.html">Campaigns</a> and click <strong>Discover campaigns</strong> to create the campaign and import the contacts automatically.</p>
     </div>
     <div class="wf-action">
       <a href="https://docs.google.com/spreadsheets/d/1aMglV53NiMEArjld37HN5cxliyNRGzIP2mrM4kwlupA" target="_blank" class="wf-ext-link">
@@ -71,11 +79,11 @@
   </div>
 
   <!-- Step 3: Push -->
-  <div class="wf-card">
+  <div class="wf-card bb-card">
     <div class="wf-step-num">3</div>
     <div class="wf-body">
       <p class="wf-title"><i class="ti ti-upload me-1 text-primary"></i>Push selected to CRM</p>
-      <p class="wf-desc">Takes all selected contacts, groups by site, and adds them as new rows in the CRM template.</p>
+      <p class="wf-desc">Takes all selected contacts, groups by site, and adds them as new rows in the CRM work sheet.</p>
     </div>
     <div class="wf-action">
       <button class="btn btn-primary btn-sm" style="height:30px;font-size:.8rem" onclick="trigger('push-and-sync','')">
@@ -85,21 +93,21 @@
   </div>
 
   <!-- Step 4: Work -->
-  <div class="wf-card">
+  <div class="wf-card bb-card">
     <div class="wf-step-num">4</div>
     <div class="wf-body">
       <p class="wf-title"><i class="ti ti-pencil me-1 text-primary"></i>Work the CRM</p>
-      <p class="wf-desc">Fill in <code>Status</code> and <code>Selger</code> in the CRM template as you progress with each lead.</p>
+      <p class="wf-desc">Fill in <code>Status</code> and <code>Selger</code> in the CRM work sheet as you progress with each lead.</p>
     </div>
     <div class="wf-action">
       <a href="https://docs.google.com/spreadsheets/d/1b1kGKIldeawESH3RYiYjOqRFXRR5kG_81qYRFZI1gSY" target="_blank" class="wf-ext-link">
-        <i class="ti ti-external-link"></i>CRM template
+        <i class="ti ti-external-link"></i>CRM work sheet
       </a>
     </div>
   </div>
 
   <!-- Step 5: Sync -->
-  <div class="wf-card">
+  <div class="wf-card bb-card">
     <div class="wf-step-num">5</div>
     <div class="wf-body">
       <p class="wf-title"><i class="ti ti-refresh me-1 text-primary"></i>Sync CRM to Leads Database</p>
@@ -112,24 +120,13 @@
     </div>
   </div>
 
-  <!-- Step 6: Campaign Sync -->
-  <div class="wf-card">
-    <div class="wf-step-num">6</div>
-    <div class="wf-body">
-      <p class="wf-title"><i class="ti ti-speakerphone me-1 text-primary"></i>Campaign sync</p>
-      <p class="wf-desc">Reads the master CRM contact sheet and syncs campaigns to Firestore. New campaigns found in the sheet are created automatically.</p>
-      <div class="wf-form">
-        <input type="text" id="crm-sync-campaign" placeholder="Campaign ID (optional)">
-        <button class="btn btn-primary btn-sm ms-auto" style="height:30px;font-size:.8rem" onclick="runCrmSync()" id="crm-sync-btn">
-          <i class="ti ti-refresh me-1"></i>Sync campaigns
-        </button>
-      </div>
-      <div id="crm-sync-result" class="mt-2" style="display:none"></div>
-    </div>
-  </div>
 
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/crm-common.js"></script>
 <script>
 // BASE + helpers from js/crm-common.js
@@ -206,3 +203,4 @@ async function runCrmSync() {
 </script>
 </body>
 </html>
+                                                    

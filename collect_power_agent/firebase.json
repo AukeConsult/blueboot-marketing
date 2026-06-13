@@ -1,7 +1,8 @@
 {
   "firestore": {
     "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
+    "indexes": "firestore.indexes.json",
+    "predeploy": ["py firestore_sync.py --no-discover"]
   },
   "hosting": {
     "public": "public",
@@ -9,9 +10,16 @@
   },
   "functions": [
     {
+      "codebase": "crm",
       "source": "functions-crm",
       "runtime": "python312",
       "ignore": ["venv", ".venv", "**/__pycache__/**"]
+    },
+    {
+      "codebase": "auth",
+      "source": "functions-auth",
+      "runtime": "nodejs22",
+      "ignore": ["node_modules"]
     }
   ]
 }

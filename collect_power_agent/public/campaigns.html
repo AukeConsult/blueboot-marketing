@@ -9,12 +9,11 @@
 <link rel="stylesheet" href="css/styles.css">
 <style>
 
-.camp-card { background: #fff; border: 1px solid var(--bb-border); border-radius: 10px; box-shadow: var(--bb-card-shadow); padding: 1rem 1.25rem; text-decoration: none; color: inherit; display: block; transition: box-shadow .12s, transform .12s; margin-bottom: 10px; }
+.camp-card { padding: 1rem 1.25rem; text-decoration: none; color: inherit; display: block; transition: box-shadow .12s, transform .12s; margin-bottom: 10px; }
 .camp-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-1px); color: inherit; }
 .camp-card:hover .camp-arrow { opacity: 1; }
 .camp-arrow { opacity: 0; transition: opacity .15s; color: var(--bb-accent); }
 
-.stat-pill { display: inline-flex; align-items: center; gap: .3rem; font-size: .78rem; color: var(--bb-muted); background: #f4f5f7; border-radius: 20px; padding: .15rem .55rem; }
 </style>
 </head>
 <body>
@@ -23,11 +22,17 @@
 
 <div class="container py-4" style="max-width:860px">
 
-  <div class="d-flex align-items-center justify-content-between mb-3">
-    <h5 class="mb-0 fw-600" style="font-size:1rem"><i class="ti ti-speakerphone me-2 text-primary"></i>Campaigns</h5>
-    <button class="btn btn-sm btn-outline-secondary" onclick="load()">
-      <i class="ti ti-refresh me-1"></i>Refresh
-    </button>
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <h5 class="page-title mb-0"><i class="ti ti-speakerphone me-2 text-primary"></i>Campaigns</h5>
+    <div class="ms-auto d-flex gap-2">
+      <a href="filter-facets.html" class="btn btn-sm btn-outline-success">
+        <i class="ti ti-filter me-1"></i>Filter new campaigns
+      </a>
+      <button class="btn btn-sm btn-outline-primary" onclick="discover()" id="discover-btn">
+        <i class="ti ti-search me-1"></i>Discover campaigns
+      </button>
+      <button class="bb-btn-refresh" onclick="load()" title="Refresh"><i class="ti ti-refresh"></i></button>
+    </div>
   </div>
 
   <div id="discover-bar" class="alert py-2 px-3 small mb-3" style="display:none"></div>
@@ -38,20 +43,14 @@
     <select id="status-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
       <option value="">All statuses</option>
       <option value="draft">Draft</option>
-      <option value="dosend">Do send</option>
-      <option value="sent">Sent</option>
-      <option value="cancelled">Cancelled</option>
+      <option value="ready">Ready</option>
+      <option value="active">Active</option>
+      <option value="canceled">Canceled</option>
     </select>
     <select id="owner-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
       <option value="">All owners</option>
     </select>
-    <a href="https://docs.google.com/spreadsheets/d/1aMglV53NiMEArjld37HN5cxliyNRGzIP2mrM4kwlupA" target="_blank"
-       class="btn btn-sm btn-outline-secondary ms-auto text-decoration-none">
-      <i class="ti ti-table me-1"></i>Master sheet
-    </a>
-    <button class="btn btn-sm btn-outline-primary" onclick="discover()" id="discover-btn">
-      <i class="ti ti-search me-1"></i>Discover new
-    </button>
+
   </div>
 
   <div id="list-container">
@@ -62,15 +61,26 @@
 
 </div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
 <script src="js/crm-common.js"></script>
 <script>
+window.location.replace('campaign.html' + window.location.search);
 // BASE + helpers from js/crm-common.js
 let allCampaigns = [];
 
 const fmt = fmtDateMedium;      // shared
 
 function statusBadge(s) {
-  return `<span class="bb-badge bb-badge-${s||'draft'}">${s||'draft'}</span>`;
+  const st = campaignStatus(s);
+  return `<span class="bb-badge bb-badge-${st}">${st}</span>`;
+}
+
+function campaignStatus(s) {
+  const st = String(s || 'draft').toLowerCase();
+  return ['draft', 'ready', 'active', 'canceled'].includes(st) ? st : 'draft';
 }
 
 function render(list) {
@@ -82,10 +92,10 @@ function render(list) {
   el.innerHTML = list.map(c => {
     const sb = c.status_breakdown || {};
     const countries = (c.countries || []).join(', ') || '—';
-    const author = c.owner ? `<span class="stat-pill"><i class="ti ti-user"></i>${c.owner}</span>` : '';
-    const sentPill   = sb.sent ? `<span class="stat-pill" style="color:#15803d;background:#dcfce7"><i class="ti ti-send"></i>${sb.sent} sent</span>` : '';
-    const sourcePill = c.source === 'master-sheet' ? `<span class="stat-pill" style="color:#15803d;background:#f0fdf4"><i class="ti ti-table"></i>master-sheet</span>` : '';
-    return `<a href="campaign.html?campaign_id=${encodeURIComponent(c.campaign_id)}" class="camp-card" onclick="localStorage.setItem('selectedCampaign','${c.campaign_id}')">
+    const author = c.owner ? `<span class="bb-badge bb-badge-muted"><i class="ti ti-user"></i>${c.owner}</span>` : '';
+    const sentPill   = sb.sent ? `<span class="bb-badge bb-badge-muted" style="color:#15803d;background:#dcfce7"><i class="ti ti-send"></i>${sb.sent} sent</span>` : '';
+    const sourcePill = c.source === 'master-sheet' ? `<span class="bb-badge bb-badge-muted" style="color:#15803d;background:#f0fdf4"><i class="ti ti-table"></i>master-sheet</span>` : '';
+    return `<a href="campaign.html?campaign_id=${encodeURIComponent(c.campaign_id)}" class="camp-card bb-card" onclick="localStorage.setItem('selectedCampaign','${c.campaign_id}')">
       <div class="d-flex align-items-start justify-content-between mb-2">
         <div>
           <span class="fw-600" style="font-size:.95rem">${c.campaign_id}</span>
@@ -94,9 +104,9 @@ function render(list) {
         <i class="ti ti-arrow-right camp-arrow" style="font-size:1.1rem;margin-top:2px"></i>
       </div>
       <div class="d-flex flex-wrap gap-2 align-items-center">
-        <span class="stat-pill"><i class="ti ti-users"></i>${c.contact_count || 0} contacts</span>
-        <span class="stat-pill"><i class="ti ti-building-store"></i>${c.sites_count || 0} sites</span>
-        <span class="stat-pill"><i class="ti ti-map-pin"></i>${countries}</span>
+        <span class="bb-badge bb-badge-muted"><i class="ti ti-users"></i>${c.contact_count || 0} contacts</span>
+        <span class="bb-badge bb-badge-muted"><i class="ti ti-building-store"></i>${c.sites_count || 0} sites</span>
+        <span class="bb-badge bb-badge-muted"><i class="ti ti-map-pin"></i>${countries}</span>
         ${sentPill}
         ${sourcePill}
         ${author}
@@ -113,7 +123,7 @@ function filter() {
   const ow = document.getElementById('owner-filter').value;
   render(allCampaigns.filter(c => {
     const matchQ  = !q  || c.campaign_id.toLowerCase().includes(q) || (c.owner||'').toLowerCase().includes(q) || (c.mail?.subject||'').toLowerCase().includes(q);
-    const matchSt = !st || c.status === st;
+    const matchSt = !st || campaignStatus(c.status) === st;
     const matchOw = !ow || (c.owner || '') === ow;
     return matchQ && matchSt && matchOw;
   }));
@@ -130,13 +140,17 @@ function populateOwnerFilter() {
 async function load() {
   document.getElementById('list-container').innerHTML = '<div class="text-center py-5" style="color:var(--bb-muted)"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>';
   try {
-    const r = await fetch(BASE + '/api/crm/campaigns');
-    const d = await r.json();
+    const d = await fetchJSON(BASE + '/api/crm/campaigns');
     allCampaigns = d.campaigns || [];
     populateOwnerFilter();
     filter();
   } catch(e) {
-    document.getElementById('list-container').innerHTML = `<div class="text-center text-danger py-4 small">Could not load campaigns: ${e.message}</div>`;
+    const msg = e.message || 'Unknown error';
+    const isAccess = msg.includes('Access denied') || msg.includes('role required');
+    document.getElementById('list-container').innerHTML =
+      `<div class="text-center py-4 small ${isAccess ? 'text-warning' : 'text-danger'}">
+        <i class="ti ti-${isAccess ? 'lock' : 'alert-circle'} me-1"></i>${escapeHtml(msg)}
+      </div>`;
   }
 }
 
@@ -146,14 +160,16 @@ async function discover() {
   btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Scanning…';
   bar.style.display = 'none';
   try {
-    // Step 1: discover new campaigns
     const r = await fetch(BASE + '/api/crm/discover-campaigns');
     const d = await r.json();
     const newCampaigns = d.created || [];
 
     bar.className = 'alert alert-info py-2 px-3 small mb-3';
+    const renamedList = newCampaigns.filter(c => c.renamed).map(c =>
+      `<em>${escapeHtml(c.original_id)}</em> → <strong>${escapeHtml(c.campaign_id)}</strong>`).join(', ');
     bar.innerHTML = newCampaigns.length
       ? `<i class="ti ti-check me-1 text-success"></i>${d.message} New: <strong>${newCampaigns.map(c=>c.campaign_id).join(', ')}</strong> — syncing contacts from master sheet…`
+        + (renamedList ? `<br><i class="ti ti-info-circle me-1 text-warning"></i>Renamed (already existed): ${renamedList}` : '')
       : `<i class="ti ti-refresh me-1"></i>${d.message || 'No new campaigns.'} Syncing all contacts from master sheet…`;
     bar.style.display = '';
 
@@ -164,29 +180,33 @@ async function discover() {
     if (jobId) {
       for (let i = 0; i < 60; i++) {
         await new Promise(r => setTimeout(r, 3000));
-        const jr = await fetch(`${BASE}/api/crm/status/${jobId}`);
-        const jd = await jr.json();
-        if (jd.status === 'done') {
-          const res = jd.result || {};
-          bar.className = 'alert alert-success py-2 px-3 small mb-3';
-          bar.innerHTML = `<i class="ti ti-check me-1"></i>Done — `
-            + `${res.campaigns_upserted ?? 0} campaigns, ${res.contact_select_synced ?? 0} contacts synced`
-            + (newCampaigns.length ? ` · <strong>${newCampaigns.length} new campaign(s) created</strong>` : '');
-          break;
-        }
-        if (jd.status === 'error') {
-          bar.className = 'alert alert-warning py-2 px-3 small mb-3';
-          bar.innerHTML = `<i class="ti ti-alert-triangle me-1"></i>Sync error: ${jd.error || 'unknown'}`;
-          break;
-        }
+        try {
+          const jr = await fetch(`${BASE}/api/crm/status/${jobId}`);
+          const jd = await jr.json();
+          if (jd.status === 'done') {
+            const res = jd.result || {};
+            bar.className = 'alert alert-success py-2 px-3 small mb-3';
+            bar.innerHTML = `<i class="ti ti-check me-1"></i>Done — `
+              + `${res.campaigns_upserted ?? 0} campaigns, ${res.contact_select_synced ?? 0} contacts synced`
+              + (newCampaigns.length ? ` · <strong>${newCampaigns.length} new campaign(s) created</strong>` : '');
+            break;
+          }
+          if (jd.status === 'error') {
+            bar.className = 'alert alert-danger py-2 px-3 small mb-3';
+            bar.innerHTML = `<i class="ti ti-circle-x me-1"></i>Sync error: ${escapeHtml(jd.error || 'unknown')}`;
+            break;
+          }
+        } catch(_) { /* keep polling */ }
       }
     }
     await load();
   } catch(e) {
     bar.className = 'alert alert-danger py-2 px-3 small mb-3';
-    bar.textContent = 'Error: ' + e.message; bar.style.display = '';
+    bar.innerHTML = `<i class="ti ti-circle-x me-1"></i>${escapeHtml(e.message)}`;
+    bar.style.display = '';
   }
-  btn.disabled = false; btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover new';
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover campaigns';
 }
 
 load();

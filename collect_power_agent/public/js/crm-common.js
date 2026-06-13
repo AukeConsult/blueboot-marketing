@@ -6,6 +6,28 @@
 // Base URL of the CRM API (crmApi Cloud Function).
 const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
 
+// ── Auth interceptor ──────────────────────────────────────────────────────────
+// Wraps window.fetch so that every call to the CRM API (any URL starting with
+// BASE) automatically carries the Firebase ID token — regardless of whether the
+// call site uses fetchJSON or a raw fetch().  Zero per-page changes required.
+(function _installAuthInterceptor() {
+  const _orig = window.fetch.bind(window);
+  window.fetch = async function(url, options) {
+    if (typeof url === 'string' && url.startsWith(BASE)) {
+      options = Object.assign({}, options);
+      options.headers = Object.assign({}, options.headers);
+      // Only add if not already present (avoids duplicating the header)
+      if (!options.headers['Authorization'] && !options.headers['authorization']) {
+        if (typeof getAuthToken === 'function') {
+          const token = await getAuthToken();
+          if (token) options.headers['Authorization'] = 'Bearer ' + token;
+        }
+      }
+    }
+    return _orig(url, options);
+  };
+})();
+
 // HTML-escape a string for safe interpolation into innerHTML.
 function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c =>
@@ -41,10 +63,23 @@ async function fetchWithTimeout(url, options = {}, ms = 8000){
 }
 
 // fetch + parse JSON; throws Error on HTTP error or {status:'error'}.
-async function fetchJSON(url, options = {}){
+// The auth interceptor (below) handles token attachment for all fetch() calls.
+// On 503 (transient auth cert failure) retries once automatically.
+// On 401 redirects to login — the session has expired or the token is invalid.
+async function fetchJSON(url, options = {}, _retry = true){
   const r = await fetch(url, options);
   let d = {};
   try { d = await r.json(); } catch(_){ /* non-JSON */ }
+  if(r.status === 503 && _retry) {
+    await new Promise(res => setTimeout(res, 800));
+    return fetchJSON(url, options, false);
+  }
+  if(r.status === 401) {
+    // Token invalid or expired — redirect to login preserving the current page
+    const next = encodeURIComponent(location.pathname.split('/').pop() + location.search);
+    location.replace('login.html?next=' + next);
+    throw new Error(d.message || 'Sign in required');
+  }
   if(!r.ok || d.status === 'error') throw new Error(d.message || ('HTTP ' + r.status));
   return d;
 }
@@ -54,8 +89,7 @@ async function pollJob(jobId, { onDone, onError, intervalMs = 2000, tries = 60 }
   for(let i = 0; i < tries; i++){
     await new Promise(res => setTimeout(res, intervalMs));
     try{
-      const r = await fetch(BASE + '/api/crm/status/' + jobId);
-      const j = await r.json();
+      const j = await fetchJSON(BASE + '/api/crm/status/' + jobId);
       if(j.status === 'done'){ onDone && onDone(j.result || {}, j); return; }
       if(j.status === 'error'){ onError && onError(j.error || 'unknown', j); return; }
     }catch(_){ /* keep polling */ }
@@ -120,39 +154,85 @@ function prettyError(msg){
 // --- shared top navigation (single source of truth) -------------------------
 // Pages include  <div id="nav"></div>  and load this file; the nav renders
 // automatically with the active link highlighted from the current URL.
+// ---------------------------------------------------------------------------
+// Role-based access.  null = public (no restriction beyond auth).
+// Admin always has access to everything.
+// ---------------------------------------------------------------------------
+const PAGE_ROLES = {
+  'campaigns.html':     ['admin', 'campaign-user', 'user'],
+  'campaign.html':      ['admin', 'campaign-user', 'user'],
+  'campaign-edit.html': ['admin', 'campaign-user', 'user'],
+  'campaign_sites.html': ['admin', 'campaign-user', 'user'],
+  'mailbox.html':       ['admin', 'campaign-user', 'user'],
+  'crm-bp.html':        ['admin', 'user'],
+  'crm-sync.html':      ['admin', 'user'],
+  'crm_follow.html':    ['admin', 'campaign-user', 'user'],
+  'jobs.html':          ['admin'],
+  'statistics.html':    ['admin', 'campaign-user', 'user'],
+  'filter-facets.html': ['admin', 'campaign-user', 'user'],
+  'gdisk.html':         ['admin', 'campaign-user', 'user'],
+  'settings.html':      ['admin'],
+  'users.html':         ['admin'],
+  'cloud-batch.html':    ['admin'],
+  // doc-viewer.html and index.html are PUBLIC_PAGES — no role check
+};
+
 const NAV_LINKS = [
-  { href: 'campaigns.html',     icon: 'ti-speakerphone',      label: 'Campaigns',
-    match: ['campaigns.html', 'campaign.html', 'campaign-edit.html'] },
-  { href: 'crm-bp.html',        icon: 'ti-server-2',          label: 'CRM' },
-  { href: 'jobs.html',          icon: 'ti-list-check',        label: 'Jobs' },
-  { dropdown: 'data-sources',   icon: 'ti-database',          label: 'Data collect',
+  { href: 'campaign.html',      icon: 'ti-speakerphone',      label: 'Campaigns',
+    match: ['campaigns.html', 'campaign.html', 'campaign-edit.html', 'campaign_sites.html'],
+    roles: ['admin', 'campaign-user', 'user'] },
+  { href: 'crm_follow.html',   icon: 'ti-phone-check',       label: 'Follow-up',
+    roles: ['admin', 'campaign-user', 'user'] },
+  { href: 'crm-bp.html', icon: 'ti-server-2', label: 'CRM discover',
+    match: ['crm-bp.html', 'crm-sync.html'],
+    roles: ['admin', 'campaign-user', 'user'] },
+  { dropdown: 'daily-admin', icon: 'ti-tool', label: 'Daily Admin',
+    roles: ['admin', 'campaign-user', 'user'],
+    match: ['statistics.html', 'filter-facets.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html'],
     children: [
-      { href: 'statistics.html',    icon: 'ti-chart-bar', label: 'Statistics' },
-      { href: 'filter-facets.html', icon: 'ti-filter',    label: 'Filter facets' },
+      { href: 'statistics.html',    icon: 'ti-chart-bar',             label: 'Statistics' },
+      { href: 'campaign_sites.html', icon: 'ti-building',              label: 'Campaign Sites' },
+      { href: 'filter-facets.html', icon: 'ti-filter',                label: 'Filter facets' },
+      { divider: true },
+      { href: 'gdisk.html',         icon: 'ti-brand-google-drive',    label: 'Drive Folder' },
+      { href: 'mailbox.html',       icon: 'ti-inbox',                 label: 'Message Box' },
+      { divider: true, roles: ['admin'] },
+      { href: 'jobs.html',          icon: 'ti-list-check',            label: 'Jobs',        roles: ['admin'] },
+      { href: 'cloud-batch.html',   icon: 'ti-cloud-computing',       label: 'Cloud Batch', roles: ['admin'] },
+      { divider: true, roles: ['admin'] },
+      { href: 'settings.html',      icon: 'ti-adjustments-horizontal',label: 'Settings',    roles: ['admin'] },
+      { href: 'users.html',         icon: 'ti-users',                 label: 'Users',       roles: ['admin'] },
     ]},
-  { href: 'gdisk.html',         icon: 'ti-brand-google-drive',label: 'Drive Folder' },
-  { href: 'mailbox.html',       icon: 'ti-inbox',             label: 'Mailbox' },
   { dropdown: 'docs',  match: ['doc-viewer.html'],           icon: 'ti-book',              label: 'Documentation',
     children: [
-      { href: 'doc-viewer.html?doc=installation',        icon: 'ti-download',      label: 'Installation' },
-      { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user', label: 'User guide' },
+      { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user',           label: 'User guide' },
+      { href: 'doc-viewer.html?doc=crm-follow-up',       icon: 'ti-phone-check',    label: 'CRM Follow-up' },
+      { href: 'doc-viewer.html?doc=followup-page-usage', icon: 'ti-help',           label: 'Follow-up page usage' },
+      { href: 'doc-viewer.html?doc=filter-to-campaign',  icon: 'ti-filter',         label: 'Filter to campaign' },
+      { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',     label: 'Pipeline config' },
+      { href: 'doc-viewer.html?doc=ai-assistance',       icon: 'ti-brain',          label: 'AI assistance' },
+      { divider: true },
+      { href: 'doc-viewer.html?doc=smart-mail',          icon: 'ti-mail-cog',       label: 'Smart Mail' },
       { href: 'doc-viewer.html?doc=system-architecture', icon: 'ti-topology-star-3', label: 'System architecture' },
-      { href: 'doc-viewer.html?doc=backend-functions',   icon: 'ti-terminal',      label: 'Backend functions' },
-      { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',    label: 'Pipeline config' },
-      { href: 'doc-viewer.html?doc=ai-assistance',       icon: 'ti-brain',         label: 'AI assistance' },
+      { href: 'doc-viewer.html?doc=backend-functions',   icon: 'ti-terminal',       label: 'Backend functions' },
+      { href: 'doc-viewer.html?doc=installation',        icon: 'ti-download',       label: 'Installation' },
+      { href: 'doc-viewer.html?doc=cloud-batch',          icon: 'ti-cloud-computing', label: 'Cloud Batch' },
     ]},
-  { href: 'settings.html',      icon: 'ti-settings',          label: 'Settings' },
+
 ];
 
 function renderNav(targetId){
   const el = document.getElementById(targetId || 'nav');
   if(!el) return;
   const cur = (location.pathname.split('/').pop() || 'index.html') || 'index.html';
-  const links = NAV_LINKS.map(l => {
+  const role    = window._userRole || null;
+  const visible = l => !l.roles || l.roles.includes(role) || role === 'admin';
+  const links = NAV_LINKS.filter(visible).map(l => {
     if (l.dropdown) {
       // Dropdown group
       const childActive = l.children.some(c => (c.match || [c.href]).includes(cur));
-      const items = l.children.map(c => {
+      const items = l.children.filter(c => !c.roles || c.roles.includes(role) || role === 'admin').map(c => {
+        if (c.divider) return '<div class="nav-dropdown-divider"></div>';
         const a = (c.match || [c.href]).includes(cur) ? ' active' : '';
         return '<a href="' + c.href + '" class="nav-dropdown-item' + a + '">'
              + '<i class="ti ' + c.icon + '"></i>' + c.label + '</a>';
@@ -167,20 +247,88 @@ function renderNav(targetId){
     return '<a href="' + l.href + '" class="nav-link' + active + '">'
          + '<i class="ti ' + l.icon + '"></i>' + l.label + '</a>';
   }).join('');
-  el.outerHTML = '<nav class="bb-nav">'
+  // Build user-area — hidden until Firebase confirms a signed-in user
+  const userArea = '<div class="bb-nav-user" id="bb-nav-user" style="display:none">'
+    + '<span id="bb-nav-email" class="small text-muted me-2" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>'
+    + '<button class="btn btn-sm btn-outline-secondary" style="font-size:.78rem;padding:.2rem .6rem" onclick="signOutUser()">'
+    + '<i class="ti ti-logout me-1"></i>Sign out</button></div>';
+  // Guest area — visible until Firebase confirms a signed-in user
+  const guestArea = '<div class="bb-nav-guest" id="bb-nav-guest">'
+    + '<a href="login.html" class="btn btn-sm btn-outline-secondary" style="font-size:.78rem;padding:.2rem .6rem">'
+    + '<i class="ti ti-login me-1"></i>Sign in</a>'
+    + '<a href="register.html" class="btn btn-sm btn-primary" style="font-size:.78rem;padding:.2rem .6rem">'
+    + '<i class="ti ti-user-plus me-1"></i>Register</a>'
+    + '</div>';
+  const hamburger = '<button class="bb-nav-toggle" onclick="_bbNavToggle()" title="Menu"><i class="ti ti-menu-2"></i></button>';
+  el.outerHTML = '<nav id="nav" class="bb-nav">'
     + '<a href="index.html" class="brand"><i class="ti ti-bolt"></i>Blueboot CRM</a>'
-    + '<div class="nav-links">' + links + '</div></nav>';
-  // Close dropdown when clicking outside
+    + '<div class="nav-links">' + links + '</div>'
+    + '<div class="bb-nav-right">' + guestArea + userArea + hamburger + '</div>'
+    + '</nav>';
+  // Toggle guest/user areas based on auth state
+  if (typeof firebase !== 'undefined') {
+    firebase.auth().onAuthStateChanged(u => {
+      const area  = document.getElementById('bb-nav-user');
+      const guest = document.getElementById('bb-nav-guest');
+      const label = document.getElementById('bb-nav-email');
+      if (area)  area.style.display  = u ? '' : 'none';
+      if (guest) guest.style.display = u ? 'none' : '';
+      if (label && u) label.textContent = u.displayName || u.email || '';
+    });
+  }
+
+  // Close sub-dropdowns when clicking outside
   document.addEventListener('click', e => {
     document.querySelectorAll('.nav-dropdown.open').forEach(d => {
       if (!d.contains(e.target)) d.classList.remove('open');
     });
+    // Close mobile nav panel when clicking outside the nav bar
+    const nav = document.getElementById('nav');
+    if (nav && !nav.contains(e.target)) {
+      const links = nav.querySelector('.nav-links');
+      const btn   = nav.querySelector('.bb-nav-toggle i');
+      if (links) links.classList.remove('nav-open');
+      if (btn) btn.className = 'ti ti-menu-2';
+    }
   }, { once: false, capture: true });
 }
 
-// auto-render on any page that has a #nav placeholder
+// Mobile nav toggle (global so inline onclick can reach it)
+window._bbNavToggle = function () {
+  const nav   = document.getElementById('nav');
+  if (!nav) return;
+  const links = nav.querySelector('.nav-links');
+  const icon  = nav.querySelector('.bb-nav-toggle i');
+  if (!links) return;
+  const open  = links.classList.toggle('nav-open');
+  if (icon) icon.className = open ? 'ti ti-x' : 'ti ti-menu-2';
+};
+
+// auto-render on any page that has a #nav placeholder, and require auth.
+// Public pages (no sign-in required): login.html, index.html, doc-viewer.html
+const PUBLIC_PAGES = new Set(['login.html', 'register.html', 'index.html', 'doc-viewer.html', '']);
 (function(){
-  function go(){ if(document.getElementById('nav')) renderNav(); }
+  function go(){
+    if(!document.getElementById('nav')) return;
+    renderNav();
+    const page = location.pathname.split('/').pop();
+    if(!PUBLIC_PAGES.has(page) && typeof requireAuth === 'function'){
+      // Protected page: require sign-in, then load role and re-render
+      requireAuth().then(() => {
+        renderNav();
+        if(typeof requireRole === 'function') requireRole(PAGE_ROLES[page] || null);
+      });
+    } else if(typeof firebase !== 'undefined') {
+      // Public page: softly load role if already signed in (for nav display only)
+      firebase.auth().onAuthStateChanged(async user => {
+        if(user && typeof _fetchRole === 'function'){
+          window._authUser = user;
+          window._userRole = await _fetchRole(user);
+          renderNav();
+        }
+      });
+    }
+  }
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', go);
   else go();
 })();

@@ -717,6 +717,8 @@ def main(argv=None):
                    help='Print what would be written to email_contacts without writing')
     p.add_argument('--out', default=None, metavar='PATH',
                    help='Output .xlsx path (default: exports/smart_<countries>_<ts>.xlsx)')
+    p.add_argument('--gdisk', action='store_true',
+                   help='Upload the output .xlsx to Google Drive (requires GDISK_FOLDER_ID)')
     args = p.parse_args(argv)
 
     countries = None
@@ -742,6 +744,10 @@ def main(argv=None):
         out = Path(args.out)
 
     _build_excel(rows, out)
+
+    if args.gdisk:
+        from functions.gdisk import upload_file as _gdisk_upload
+        _gdisk_upload(out, out.name)
 
     # Write to email_contacts if requested
     if args.write_contacts or args.dry_run_contacts:

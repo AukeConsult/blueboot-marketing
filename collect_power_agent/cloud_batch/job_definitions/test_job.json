@@ -1,0 +1,21 @@
+{
+  "name": "test_job",
+  "label": "Test Job",
+  "description": "Quick smoke test — verifies the batch runner is working. Runs two fast steps and exits.",
+  "schedule": null,
+  "params": {},
+  "steps": [
+    {
+      "name": "step_1_hello",
+      "label": "Hello from Cloud Run",
+      "module": "batch_test",
+      "args": ["--step", "1", "--message", "Hello from step 1"]
+    },
+    {
+      "name": "step_2_done",
+      "label": "All done",
+      "module": "batch_test",
+      "args": ["--step", "2", "--message", "All done — service is working!"]
+    }
+  ]
+}

@@ -16,6 +16,14 @@ from collections import Counter, defaultdict
 from crm.sheets_config import CONTACT_SHEET_ID, CONTACT_TAB, CRM_COLLECTION, CRM_CONTACT_DOC
 
 CAMPAIGNS_COLLECTION = "campaigns"
+CONTACT_STATUSES = {"pending", "active", "excluded"}
+
+
+def _contact_status(value) -> str:
+    status = str(value or "pending").strip().lower()
+    if status in CONTACT_STATUSES:
+        return status
+    return "pending"
 
 
 def _read_sheet_contacts(svc, tab: str) -> list[dict]:
@@ -92,7 +100,7 @@ def _build_campaign_stats(records: list[dict]) -> dict[str, dict]:
     for campaign_id, rows in by_campaign.items():
         domains   = {r.get("domain", "") or r.get("website", "") for r in rows}
         countries = Counter(r.get("country", "").upper() for r in rows if r.get("country"))
-        statuses  = Counter(r.get("status", "pending") or "pending" for r in rows)
+        statuses  = Counter(_contact_status(r.get("status")) for r in rows)
         selects   = Counter("marked" if r.get("select", "").strip() else "blank" for r in rows)
         tiers     = Counter(r.get("tier", "") or "unknown" for r in rows)
         outreach  = Counter(r.get("outreach", "") or "unknown" for r in rows)
@@ -232,9 +240,9 @@ def run_crm_sync(db, svc, campaign_id: str = "", tab: str = CONTACT_TAB) -> dict
 
     return {
         "contact_select_synced": synced,
-        "email_updated":         email_result["updated"],
-        "campaigns_upserted":    count,
-        "new_campaigns":         new_ids,
-        "campaign_ids":          list(campaign_stats.keys()),
-        "contacts_sync":         contacts_result,
+        "email_updated":        email_result,
+        "campaigns_upserted":   count,
+        "new_campaign_ids":     new_ids,
+        "campaign_ids":         list(campaign_stats.keys()),
+        "contacts_by_campaign": contacts_result,
     }

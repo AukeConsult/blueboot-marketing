@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Users — Blueboot CRM</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:900px">
+
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <a href="settings.html" class="btn btn-sm btn-outline-secondary" onclick="return goBack()">
+      <i class="ti ti-arrow-left"></i>
+    </a>
+    <h5 class="page-title"><i class="ti ti-users me-2"></i>Users</h5>
+    <span id="user-count" class="text-muted small ms-1"></span>
+    <button class="bb-btn-refresh" onclick="load()" title="Refresh"><i class="ti ti-refresh"></i></button>
+  </div>
+
+  <div id="status" class="small mb-2 text-muted"></div>
+
+  <div class="bb-card p-0 overflow-hidden">
+    <table class="table table-sm mb-0" id="users-table">
+      <thead class="bb-thead">
+        <tr>
+          <th style="width:36px"></th>
+          <th class="small">Email</th>
+          <th class="small">Name</th>
+          <th class="small">Providers</th>
+          <th class="small">Role</th>
+          <th class="small">Created</th>
+          <th class="small">Last seen</th>
+          <th style="width:48px"></th>
+        </tr>
+      </thead>
+      <tbody id="users-body">
+        <tr><td colspan="8" class="text-center py-4 text-muted">
+          <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- Edit user modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title"><i class="ti ti-pencil me-2"></i>Edit user</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-1 small text-muted" id="edit-email-label"></div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold mb-1">Display name</label>
+          <input id="edit-displayName" class="form-control form-control-sm" placeholder="Full name">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold mb-1">Role</label>
+          <select id="edit-role" class="form-select form-select-sm">
+            <option value="">— none —</option>
+            <option value="admin">Admin</option>
+            <option value="campaign-user">Campaign user</option>
+            <option value="user">User</option>
+            <option value="guest">Guest</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold mb-1">Default mailbox</label>
+          <select id="edit-defaultMailbox" class="form-select form-select-sm">
+            <option value="">— none —</option>
+          </select>
+        </div>
+        <div class="mb-1">
+          <label class="form-label small fw-semibold mb-1">Notes</label>
+          <textarea id="edit-notes" class="form-control form-control-sm" rows="2" placeholder="Internal notes…"></textarea>
+        </div>
+        <div id="edit-status" class="small mt-2 text-danger"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="edit-save">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+<script>
+const PROVIDER_ICONS = {
+  'google.com':   '<i class="ti ti-brand-google me-1 text-danger"></i>Google',
+  'password':     '<i class="ti ti-mail me-1 text-primary"></i>Email',
+  'github.com':   '<i class="ti ti-brand-github me-1"></i>GitHub',
+};
+
+function providerLabel(providers) {
+  if (!providers || !providers.length) return '<span class="text-muted">—</span>';
+  return providers.map(p => PROVIDER_ICONS[p] || escapeHtml(p)).join(' ');
+}
+
+function avatar(user) {
+  if (user.photoURL)
+    return `<img src="${escapeHtml(user.photoURL)}" width="26" height="26" class="rounded-circle" onerror="this.replaceWith(initials('${escapeHtml(user.displayName||user.email||'?')}'))">`;
+  return initials(user.displayName || user.email || '?');
+}
+
+function initials(name) {
+  const el = document.createElement('div');
+  el.style.cssText = 'width:26px;height:26px;border-radius:50%;background:#eef0ff;color:#4f6ef7;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center';
+  el.textContent = name.split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0,2);
+  return el;
+}
+
+function fmt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString([], { dateStyle: 'medium' });
+}
+
+const ROLE_BADGE = {
+  'admin':         'bb-badge-ready',
+  'campaign-user': 'bb-badge-pending',
+  'user':          'bb-badge-muted',
+  'guest':         'bb-badge-draft',
+};
+function roleBadge(r) { return ROLE_BADGE[r] || 'bb-badge-muted'; }
+
+async function load() {
+  document.getElementById('status').textContent = '';
+  document.getElementById('users-body').innerHTML =
+    '<tr><td colspan="8" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>';
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/auth/users');
+    const users = d.users || [];
+    window._usersCache = users;
+    document.getElementById('user-count').textContent = `(${users.length})`;
+    if (!users.length) {
+      document.getElementById('users-body').innerHTML =
+        '<tr><td colspan="8" class="text-center py-4 text-muted small">No users yet.</td></tr>';
+      return;
+    }
+    document.getElementById('users-body').innerHTML = users.map((u, i) => `
+      <tr>
+        <td class="ps-3">${avatar(u)}</td>
+        <td class="small">${escapeHtml(u.email || u.id)}</td>
+        <td class="small">${escapeHtml(u.displayName || '—')}</td>
+        <td class="small">${providerLabel(u.providers)}</td>
+        <td class="small">${u.role ? `<span class="bb-badge ${roleBadge(u.role)}">${escapeHtml(u.role)}</span>` : '—'}</td>
+        <td class="small text-muted">${fmt(u.createdAt)}</td>
+        <td class="small text-muted">${fmt(u.updatedAt)}</td>
+        <td class="d-flex gap-2 align-items-center">
+          <button class="btn btn-sm btn-link text-secondary p-0" title="Edit"
+              onclick="openEdit(_usersCache[${i}])">
+            <i class="ti ti-pencil" style="font-size:1rem"></i></button>
+
+        </td>
+      </tr>`).join('');
+  } catch(e) {
+    document.getElementById('status').textContent = 'Error: ' + e.message;
+    document.getElementById('users-body').innerHTML = '';
+  }
+}
+
+load();
+
+let _editKey = null;
+async function openEdit(user) {
+  _editKey = user.id || user.email;
+  document.getElementById('edit-email-label').textContent = user.email || user.id;
+  document.getElementById('edit-displayName').value = user.displayName || '';
+  document.getElementById('edit-role').value = user.role || '';
+  document.getElementById('edit-notes').value = user.notes || '';
+  document.getElementById('edit-status').textContent = '';
+
+  // Load mailbox options
+  const sel = document.getElementById('edit-defaultMailbox');
+  sel.innerHTML = '<option value="">— none —</option>';
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/settings/mail-accounts');
+    (d.accounts || []).forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a.email;
+      opt.textContent = a.email + (a.label ? ` (${a.label})` : '');
+      sel.appendChild(opt);
+    });
+  } catch(_) { /* keep empty list if API unreachable */ }
+  sel.value = user.defaultMailbox || '';
+
+  new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+
+document.getElementById('edit-save').addEventListener('click', async () => {
+  if (!_editKey) return;
+  const btn = document.getElementById('edit-save');
+  btn.disabled = true;
+  document.getElementById('edit-status').textContent = '';
+  try {
+    await fetchJSON(BASE + '/api/crm/auth/users/' + encodeURIComponent(_editKey), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        displayName:     document.getElementById('edit-displayName').value.trim(),
+        role:            document.getElementById('edit-role').value,
+        notes:           document.getElementById('edit-notes').value.trim(),
+        defaultMailbox:  document.getElementById('edit-defaultMailbox').value,
+      })
+    });
+    bootstrap.Modal.getInstance(document.getElementById('editModal')).hide();
+    load();
+  } catch(e) {
+    document.getElementById('edit-status').textContent = 'Save failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+</script>
+</body>
+</html>

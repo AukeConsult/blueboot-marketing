@@ -9,9 +9,6 @@ sheet. The sheet has two tabs:
 Column ownership on the Follow up tab:
   * "Status" is BACKEND-CONTROLLED -- it is written from Firestore on every
     export and is NEVER read back from the sheet.
-  * "Last action" (date) and "Last action status" are USER-EDITABLE follow-up
-    fields -- their values are preserved across re-exports (matched by Doc ID),
-    so re-running the export never wipes manual notes.
 
 Used by the crmWorker 'campaign-export' job.
 """
@@ -26,41 +23,37 @@ CONTACTS_SUBCOLLECTION = "campaign_contacts"
 TAB_FOLLOWUP = "Follow up"
 TAB_SUMMARY = "Summary"
 
-# Valid "Last action status" codes (also rendered as a dropdown on the sheet).
-ACTION_CODES = [
-    ("new",          "Not contacted yet"),
-    ("emailed",      "Outreach email sent"),
-    ("no_reply",     "Emailed, no response yet"),
-    ("replied",      "Contact replied"),
-    ("meeting_set",  "Meeting / call booked"),
-    ("negotiating",  "In active discussion"),
-    ("won",          "Converted / deal won"),
-    ("lost",         "Not interested / lost"),
-    ("bounced",      "Email bounced / invalid"),
-    ("unsubscribed", "Opted out / asked to stop"),
-    ("callback",     "Follow up later"),
-]
-ACTION_CODE_VALUES = [c for c, _desc in ACTION_CODES]
-
 # (header label, contact field) -- Follow up columns, in order.
-# Status is backend-owned; last_action* are user-editable (preserved on re-export).
+# Status/sent_at are backend-owned.
+# followup_* are written from Firestore on every export.
+# Comment is last for easy reading.
 CONTACT_COLUMNS = [
-    ("Status",             "status"),
-    ("Name",               "name"),
-    ("Email",              "email"),
-    ("Title",              "title"),
-    ("Website",            "website"),
-    ("Sent at",            "sent_at"),
-    ("Last action",        "last_action"),
-    ("Last action status", "last_action_status"),
-    ("Lead ID",            "lead_id"),
-    ("Doc ID",             "doc_id"),
+    ("Status",               "status"),
+    ("Name",                 "name"),
+    ("Email",                "email"),
+    ("Title",                "title"),
+    ("Website",              "website"),
+    ("Sent at",              "sent_at"),
+    ("Follow-up date",       "followup_date"),
+    ("Follow-up status",     "followup_status"),
+    ("Follow-up importance", "followup_importance"),
+    ("Follow-up owner",      "followup_owner"),
+    ("Lead ID",              "lead_id"),
+    ("Doc ID",               "doc_id"),
+    ("Comment",              "followup_comment"),
 ]
-# Follow up fields preserved from the existing sheet across re-exports.
-PRESERVE_FIELDS = {
-    "Last action":        "last_action",
-    "Last action status": "last_action_status",
-}
+
+# Dropdown values for the follow-up columns.
+FOLLOWUP_STATUS_VALUES     = ["", "in_work", "contacted", "received", "replied", "meeting", "offer", "not_interested"]
+FOLLOWUP_IMPORTANCE_VALUES = ["low", "medium", "high"]
+CONTACT_STATUSES = {"pending", "active", "excluded"}
+
+
+def _contact_status(value) -> str:
+    status = str(value or "pending").strip().lower()
+    if status in CONTACT_STATUSES:
+        return status
+    return "pending"
 
 
 def _cell(v) -> str:
@@ -96,33 +89,6 @@ def _ensure_tabs(svc, sheet_id: str, titles: list[str]) -> None:
             spreadsheetId=sheet_id, body={"requests": requests}).execute()
 
 
-def _read_existing_followup(svc, sheet_id: str) -> dict:
-    """Map doc_id -> {field: value} for the preserved user-editable columns."""
-    try:
-        res = svc.spreadsheets().values().get(
-            spreadsheetId=sheet_id, range=_quote(TAB_FOLLOWUP)).execute()
-    except Exception:
-        return {}
-    rows = res.get("values", [])
-    if not rows:
-        return {}
-    header = rows[0]
-    idx = {h: i for i, h in enumerate(header)}
-    doc_i = idx.get("Doc ID")
-    if doc_i is None:
-        return {}
-    out: dict = {}
-    for r in rows[1:]:
-        doc_id = r[doc_i] if doc_i < len(r) else ""
-        if not doc_id:
-            continue
-        out[doc_id] = {
-            field: (r[idx[label]] if (label in idx and idx[label] < len(r)) else "")
-            for label, field in PRESERVE_FIELDS.items()
-        }
-    return out
-
-
 def _followup_sheet_id(svc, sheet_id: str) -> int | None:
     meta = svc.spreadsheets().get(spreadsheetId=sheet_id).execute()
     for s in meta.get("sheets", []):
@@ -138,24 +104,56 @@ def _write_tab(svc, sheet_id: str, tab: str, rows: list[list]) -> None:
         valueInputOption="RAW", body={"values": rows}).execute()
 
 
-def _apply_status_dropdown(svc, sheet_id: str, fu_sheet_id: int, n_contacts: int) -> None:
-    """Data-validation dropdown of ACTION_CODE_VALUES on the Last action status column."""
+def _apply_dropdown(svc, sheet_id: str, fu_sheet_id: int, n_contacts: int,
+                    field: str, values: list[str]) -> None:
+    """Add a data-validation dropdown to the column that maps to *field*."""
     if fu_sheet_id is None or n_contacts <= 0:
         return
-    col = [f for _l, f in CONTACT_COLUMNS].index("last_action_status")
+    fields = [f for _l, f in CONTACT_COLUMNS]
+    if field not in fields:
+        return
+    col = fields.index(field)
     req = {"setDataValidation": {
         "range": {"sheetId": fu_sheet_id, "startRowIndex": 1, "endRowIndex": 1 + n_contacts,
                   "startColumnIndex": col, "endColumnIndex": col + 1},
         "rule": {
             "condition": {"type": "ONE_OF_LIST",
-                          "values": [{"userEnteredValue": v} for v in ACTION_CODE_VALUES]},
+                          "values": [{"userEnteredValue": v} for v in values]},
             "showCustomUi": True, "strict": False,
         }}}
     try:
         svc.spreadsheets().batchUpdate(
             spreadsheetId=sheet_id, body={"requests": [req]}).execute()
     except Exception as exc:
-        print(f"[campaign-export] dropdown skipped: {exc}", flush=True)
+        print(f"[campaign-export] dropdown skipped ({field}): {exc}", flush=True)
+
+
+def _hide_columns(svc, sheet_id: str, fu_sheet_id: int, fields: list[str]) -> None:
+    """Hide the columns for the given field names (values preserved for sync)."""
+    if fu_sheet_id is None:
+        return
+    col_order = [f for _l, f in CONTACT_COLUMNS]
+    requests = []
+    for field in fields:
+        if field not in col_order:
+            continue
+        col = col_order.index(field)
+        requests.append({"updateDimensionProperties": {
+            "range": {
+                "sheetId":    fu_sheet_id,
+                "dimension":  "COLUMNS",
+                "startIndex": col,
+                "endIndex":   col + 1,
+            },
+            "properties": {"hiddenByUser": True},
+            "fields":     "hiddenByUser",
+        }})
+    if requests:
+        try:
+            svc.spreadsheets().batchUpdate(
+                spreadsheetId=sheet_id, body={"requests": requests}).execute()
+        except Exception as exc:
+            print(f"[campaign-export] hide columns skipped: {exc}", flush=True)
 
 
 def run_campaign_export(db, svc, gd, campaign_id: str) -> dict:
@@ -171,20 +169,15 @@ def run_campaign_export(db, svc, gd, campaign_id: str) -> dict:
 
     contacts = [c.to_dict() or {} for c in db.collection(CAMPAIGNS_COLLECTION)
                 .document(campaign_id).collection(CONTACTS_SUBCOLLECTION).stream()]
+    for c in contacts:
+        c["status"] = _contact_status(c.get("status"))
     contacts.sort(key=lambda c: (str(c.get("status") or ""), str(c.get("name") or "")))
 
     sheet_id = gd.ensure_sheet(campaign_id)
     _ensure_tabs(svc, sheet_id, [TAB_FOLLOWUP, TAB_SUMMARY])
 
-    # Preserve user-editable follow-up fields from the current sheet (by Doc ID).
-    prev = _read_existing_followup(svc, sheet_id)
-    for c in contacts:
-        carried = prev.get(str(c.get("doc_id") or ""), {})
-        for field in PRESERVE_FIELDS.values():
-            c[field] = carried.get(field, "")
-
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    status_counts = Counter(str(c.get("status") or "unknown") for c in contacts)
+    status_counts = Counter(c.get("status", "pending") for c in contacts)
 
     followup_rows = [[label for label, _f in CONTACT_COLUMNS]]
     for c in contacts:
@@ -206,12 +199,14 @@ def run_campaign_export(db, svc, gd, campaign_id: str) -> dict:
     ]
     for status, n in sorted(status_counts.items(), key=lambda kv: (-kv[1], kv[0])):
         summary_rows.append([status, n])
-    summary_rows += [[], ["Action codes (Last action status)", "meaning"]]
-    summary_rows += [[code, desc] for code, desc in ACTION_CODES]
-
     _write_tab(svc, sheet_id, TAB_FOLLOWUP, followup_rows)
     _write_tab(svc, sheet_id, TAB_SUMMARY, summary_rows)
-    _apply_status_dropdown(svc, sheet_id, _followup_sheet_id(svc, sheet_id), len(contacts))
+    fu_sheet_id = _followup_sheet_id(svc, sheet_id)
+    _apply_dropdown(svc, sheet_id, fu_sheet_id, len(contacts),
+                    "followup_status",     FOLLOWUP_STATUS_VALUES)
+    _apply_dropdown(svc, sheet_id, fu_sheet_id, len(contacts),
+                    "followup_importance", FOLLOWUP_IMPORTANCE_VALUES)
+    _hide_columns(svc, sheet_id, fu_sheet_id, ["lead_id", "doc_id"])
 
     return {
         "campaign_id":  campaign_id,
@@ -220,6 +215,5 @@ def run_campaign_export(db, svc, gd, campaign_id: str) -> dict:
         "tabs":         [TAB_FOLLOWUP, TAB_SUMMARY],
         "contacts":     len(contacts),
         "by_status":    dict(status_counts),
-        "action_codes": ACTION_CODE_VALUES,
         "url":          f"https://docs.google.com/spreadsheets/d/{sheet_id}",
     }

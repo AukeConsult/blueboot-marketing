@@ -357,6 +357,8 @@ def main(argv=None):
                    help='Firestore collection (default: email_contacts)')
     p.add_argument('--out', default=None, metavar='PATH',
                    help='Output .xlsx path (default: exports/email_contacts_<cc>_<ts>.xlsx)')
+    p.add_argument('--gdisk', action='store_true',
+                   help='Upload the output .xlsx to Google Drive (requires GDISK_FOLDER_ID)')
     args = p.parse_args(argv)
 
     countries = None
@@ -389,6 +391,10 @@ def main(argv=None):
         out = Path(args.out)
 
     _build_excel(rows, out)
+
+    if args.gdisk:
+        from functions.gdisk import upload_file as _gdisk_upload
+        _gdisk_upload(out, out.name)
 
     tc = Counter(r.get('tier_label', 'unknown') for r in rows)
     print('\n[ec-export] Tier breakdown:')

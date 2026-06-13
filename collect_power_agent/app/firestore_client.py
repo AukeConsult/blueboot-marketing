@@ -5,7 +5,7 @@ from firebase_admin import credentials, firestore
 
 from dotenv import load_dotenv
 load_dotenv()
-from functions.firebase_cred import get_firebase_cred
+from app.functions.firebase_cred import get_firebase_cred
 
 _db = None
 _lock = threading.Lock()   # protects _db initialisation across threads

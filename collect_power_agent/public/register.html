@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Register — Blueboot CRM</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+body { background: #f4f5f7; }
+.login-card {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.1);
+  padding: 2.5rem 2rem;
+  max-width: 400px;
+  width: 100%;
+}
+.brand-logo {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 52px; height: 52px; border-radius: 13px;
+  background: #eef0ff; margin-bottom: 1rem;
+}
+.btn-google {
+  display: flex; align-items: center; justify-content: center; gap: .6rem;
+  background: #fff; border: 1px solid var(--bb-border); color: #111;
+  border-radius: 8px; padding: .55rem 1rem; font-size: .9rem; font-weight: 500;
+  width: 100%; cursor: pointer; transition: background .15s, box-shadow .15s;
+}
+.btn-google:hover { background: #f8f9fa; box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+.btn-google svg { flex-shrink: 0; }
+.divider {
+  display: flex; align-items: center; gap: .75rem;
+  color: var(--bb-muted); font-size: .78rem; margin: 1rem 0;
+}
+.divider::before, .divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--bb-border);
+}
+#status { min-height: 1.4rem; }
+</style>
+</head>
+<body class="d-flex align-items-center justify-content-center" style="min-height:100vh">
+
+<div class="login-card text-center">
+
+  <div class="brand-logo mx-auto">
+    <i class="ti ti-bolt" style="font-size:1.5rem;color:var(--bb-accent)"></i>
+  </div>
+  <h1 style="font-size:1.35rem;font-weight:700;margin-bottom:.25rem;color:#111">Blueboot CRM</h1>
+  <p class="text-muted small mb-4" style="line-height:1.5">Create your account</p>
+
+  <div id="success-panel" style="display:none">
+    <div class="alert alert-success py-3 px-3 small text-start mb-3">
+      <i class="ti ti-check me-1"></i>
+      <strong>Account created.</strong><br>
+      Your account is pending access. Contact an administrator to be assigned a role before you can use the system.
+    </div>
+    <a href="login.html" class="btn btn-primary btn-sm w-100">
+      <i class="ti ti-login me-1"></i>Go to sign in
+    </a>
+  </div>
+
+  <!-- Google registration -->
+  <button class="btn-google mb-1" id="btn-google" onclick="registerWithGoogle()">
+    <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.2l6.7-6.7C35.7 2.3 30.2 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.8 6c1.8-5.4 6.9-9.8 13.6-9.8z"/>
+      <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.5 2.9-2.2 5.4-4.7 7l7.3 5.7c4.3-4 6.7-9.9 6.7-16.7z"/>
+      <path fill="#FBBC05" d="M10.4 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.8-6A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.8-6z"/>
+      <path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.3-5.7c-2 1.4-4.6 2.2-7.9 2.2-6.7 0-12.4-4.5-14.4-10.6l-7.8 6C6.6 42.6 14.6 48 24 48z"/>
+    </svg>
+    Continue with Google
+  </button>
+
+  <div class="divider">or register with email</div>
+
+  <form id="register-form" onsubmit="register(event)" novalidate>
+    <div class="mb-3 text-start">
+      <label class="form-label small text-muted mb-1" for="inp-email">Email</label>
+      <input id="inp-email" type="email" class="form-control form-control-sm"
+        placeholder="you@example.com" autocomplete="email" required>
+    </div>
+    <div class="mb-3 text-start">
+      <label class="form-label small text-muted mb-1" for="inp-password">Password</label>
+      <input id="inp-password" type="password" class="form-control form-control-sm"
+        placeholder="At least 8 characters" autocomplete="new-password" required>
+    </div>
+    <div class="mb-4 text-start">
+      <label class="form-label small text-muted mb-1" for="inp-confirm">Confirm password</label>
+      <input id="inp-confirm" type="password" class="form-control form-control-sm"
+        placeholder="Repeat password" autocomplete="new-password" required>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm w-100" id="btn-register">
+      <i class="ti ti-user-plus me-1"></i>Create account
+    </button>
+  </form>
+
+  <div id="status" class="small mt-3 text-danger"></div>
+
+  <p class="small text-muted mt-4 mb-0">
+    Already have an account? <a href="login.html">Sign in</a>
+  </p>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+if (!firebase.apps.length) {
+  firebase.initializeApp(window.FIREBASE_CONFIG || {});
+}
+
+// Handle redirect result (Google popup fell back to redirect flow)
+firebase.auth().getRedirectResult()
+  .then(result => {
+    if (result && result.user) {
+      firebase.auth().signOut().then(showSuccess);
+    }
+  })
+  .catch(err => { if (err.code !== 'auth/no-current-user') setStatus(friendlyError(err)); });
+
+// If already signed in via session cookie, go straight to the app
+firebase.auth().onAuthStateChanged(user => {
+  if (user) location.replace('index.html');
+});
+
+async function registerWithGoogle() {
+  setStatus('');
+  setBusy(true);
+  const provider = new firebase.auth.GoogleAuthProvider();
+  try {
+    await firebase.auth().signInWithPopup(provider);
+    await firebase.auth().signOut();
+    showSuccess();
+  } catch (err) {
+    const REDIRECT_CODES = [
+      'auth/operation-not-supported-in-this-environment',
+      'auth/popup-blocked',
+      'auth/popup-cancelled-by-user',
+    ];
+    if (REDIRECT_CODES.includes(err.code)) {
+      firebase.auth().signInWithRedirect(provider);
+      return;
+    }
+    setStatus(friendlyError(err));
+    setBusy(false);
+  }
+}
+
+async function register(e) {
+  e.preventDefault();
+  setStatus('');
+
+  const email   = document.getElementById('inp-email').value.trim();
+  const pass    = document.getElementById('inp-password').value;
+  const confirm = document.getElementById('inp-confirm').value;
+
+  if (!email || !pass || !confirm) {
+    setStatus('Please fill in all fields.'); return;
+  }
+  if (pass.length < 8) {
+    setStatus('Password must be at least 8 characters.'); return;
+  }
+  if (pass !== confirm) {
+    setStatus('Passwords do not match.'); return;
+  }
+
+  setBusy(true);
+  try {
+    await firebase.auth().createUserWithEmailAndPassword(email, pass);
+    // Sign out immediately — user must wait for a role to be assigned
+    await firebase.auth().signOut();
+    showSuccess();
+  } catch (err) {
+    setStatus(friendlyError(err));
+    setBusy(false);
+  }
+}
+
+function showSuccess() {
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('btn-google').style.display    = 'none';
+  document.getElementById('success-panel').style.display = '';
+}
+
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+function setBusy(busy) {
+  document.getElementById('btn-register').disabled = busy;
+  document.getElementById('btn-google').disabled   = busy;
+}
+
+function friendlyError(err) {
+  const code = err.code || '';
+  if (code === 'auth/email-already-in-use')  return 'An account with this email already exists.';
+  if (code === 'auth/invalid-email')          return 'That doesn\'t look like a valid email address.';
+  if (code === 'auth/weak-password')          return 'Password is too weak — choose something stronger.';
+  if (code === 'auth/network-request-failed') return 'Network error — check your connection.';
+  if (code === 'auth/too-many-requests')      return 'Too many attempts — try again later.';
+  return err.message || 'Registration failed.';
+}
+</script>
+</body>
+</html>
