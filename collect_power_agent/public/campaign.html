@@ -6,7 +6,7 @@
 <title>Blueboot — Campaigns</title>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css">
+<link rel="stylesheet" href="vendor/quill.snow.css">
 <link rel="stylesheet" href="css/styles.css">
 <style>
 .bb-lead-link{color:var(--bs-link-color,#0d6efd);cursor:pointer;text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color .15s}
@@ -93,23 +93,20 @@ body { overflow: hidden; }
   width: 100%;
   min-width: 0;
 }
-.campaign-detail-grid {
-  display: grid;
-  grid-template-columns: minmax(360px, 0.9fr) minmax(520px, 1.4fr);
-  gap: 16px;
-  align-items: start;
-}
-.campaign-info-col,
-.campaign-contacts-col {
-  min-width: 0;
-}
-.campaign-contacts-col {
-  position: sticky;
-  top: 0;
-}
-.campaign-contacts-col .table-responsive {
-  max-height: calc(100vh - 190px);
+.campaign-tab-pane .table-responsive {
+  max-height: calc(100vh - 240px);
   overflow: auto;
+}
+.tab-content > .campaign-tab-pane {
+  border: 1px solid #dee2e6;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 16px;
+  background: #fff;
+}
+#campaign-tabs .nav-link {
+  font-size: .85rem;
+  padding: .45rem .85rem;
 }
 .contacts-card-header {
   display: grid;
@@ -163,13 +160,7 @@ body { overflow: hidden; }
     overflow: visible;
     padding: 14px;
   }
-  .campaign-detail-grid {
-    grid-template-columns: 1fr;
-  }
-  .campaign-contacts-col {
-    position: static;
-  }
-  .campaign-contacts-col .table-responsive {
+  .campaign-tab-pane .table-responsive {
     max-height: none;
   }
   .contacts-card-header,
@@ -266,11 +257,9 @@ body { overflow: hidden; }
   </div>
 
   <div id="campaign-detail" style="display:none">
-    <div class="campaign-detail-grid">
-      <section class="campaign-info-col">
 
     <!-- Status line -->
-    <div class="mb-3 small d-flex align-items-center flex-wrap gap-2" style="color:var(--bb-muted)">
+    <div class="mb-2 small d-flex align-items-center flex-wrap gap-2" style="color:var(--bb-muted)">
       <span><strong id="c-contacts" style="color:#111">—</strong> contacts</span>
       <span>·</span>
       <span><strong id="c-sites" style="color:#111">—</strong> sites</span>
@@ -283,7 +272,30 @@ body { overflow: hidden; }
       <span id="c-pipeline-badge" style="display:none"></span>
     </div>
 
-    <div id="sync-feedback" class="alert py-1 px-2 small mb-3" style="display:none"></div>
+    <div id="sync-feedback" class="alert py-1 px-2 small mb-2" style="display:none"></div>
+
+    <!-- Tab nav -->
+    <ul class="nav nav-tabs mb-0" id="campaign-tabs">
+      <li class="nav-item">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-info">
+          <i class="ti ti-info-circle me-1"></i>Info
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-contacts">
+          <i class="ti ti-users me-1"></i>Contacts
+        </button>
+      </li>
+      <li class="nav-item ms-auto">
+        <a id="sites-btn" href="campaign_sites.html" class="nav-link">
+          <i class="ti ti-building me-1"></i>Sites
+        </a>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <!-- Info tab -->
+      <div class="tab-pane fade show active campaign-tab-pane" id="tab-info">
 
     <!-- Campaign details (expandable) -->
     <div class="bb-card mb-3">
@@ -362,9 +374,10 @@ body { overflow: hidden; }
         </div>
       </div>
     </div>
+      </div><!-- /tab-pane#tab-info -->
 
-      </section>
-      <section class="campaign-contacts-col">
+      <!-- Contacts tab -->
+      <div class="tab-pane fade campaign-tab-pane" id="tab-contacts">
 
     <!-- Contacts table -->
     <div class="bb-card" id="contacts-list-card">
@@ -383,9 +396,6 @@ body { overflow: hidden; }
           <button id="enrich-btn" class="btn btn-sm btn-outline-secondary" onclick="enrichNames()" title="Fill missing names using Bing + AI">
             <i class="ti ti-user-search"></i>
           </button>
-          <a id="sites-btn" href="campaign_sites.html" class="btn btn-sm btn-outline-primary" title="View campaign sites">
-            <i class="ti ti-building me-1"></i>Sites
-          </a>
           <input id="contact-search" class="form-control form-control-sm" style="max-width:180px" placeholder="Search…" oninput="filterContacts()">
         </div>
       </div>
@@ -417,10 +427,10 @@ body { overflow: hidden; }
         <div id="campaign-mail-editor"></div>
       </div>
     </div>
-      </section>
-    </div>
+      </div><!-- /tab-pane#tab-contacts -->
+    </div><!-- /tab-content -->
 
-  </div>
+  </div><!-- /#campaign-detail -->
     </div>
   </main>
 </div>
@@ -628,6 +638,7 @@ body { overflow: hidden; }
 <script src="js/crm-common.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
 <script src="js/mail-editor-component.js"></script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
 <script>
 // BASE + helpers from js/crm-common.js
 let allContacts = [];
@@ -1952,19 +1963,24 @@ function startEdit(span) {
   inp.addEventListener('blur', save);
   inp.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
-    if (e.key === 'Escape') { renderSpan(cur === '—' ? '' : cur); }
   });
 }
 
+// ── Page init ─────────────────────────────────────────────────────────────────
 (async () => {
+  await requireAuth();
+  requireRole(['user', 'campaign-user', 'admin']);
+  const params    = new URLSearchParams(location.search);
+  const paramId   = params.get('campaign_id') || '';
+  const storedId  = localStorage.getItem('selectedCampaign') || '';
   await loadCampaignList();
-  const cid = new URLSearchParams(window.location.search).get('campaign_id')
-           || localStorage.getItem('selectedCampaign')
-           || ((allCampaigns[0] || {}).campaign_id || '');
-  document.getElementById('campaign-select').value = cid || '';
-  if (cid) await loadCampaign();
+  const startId = paramId || storedId || (allCampaigns[0] || {}).campaign_id || '';
+  if (startId) await selectCampaign(startId, null);
+  else {
+    document.getElementById('campaign-empty').style.display = '';
+    document.getElementById('campaign-detail').style.display = 'none';
+  }
 })();
 </script>
-<script src="vendor/bootstrap.bundle.min.js"></script>
 </body>
 </html>
