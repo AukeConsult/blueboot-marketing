@@ -108,6 +108,43 @@ body { overflow: hidden; }
   font-size: .85rem;
   padding: .45rem .85rem;
 }
+/* ── Sites tab ─────────────────────────────────────────────── */
+.site-row { cursor: pointer; }
+.site-row:hover td { background: #f5f7ff; }
+.site-row.expanded td { background: #f0fdf4 !important; border-top: 2px solid #16a34a; }
+.site-row.expanded td:first-child { border-left: 2px solid #16a34a; }
+.site-row.expanded td:last-child  { border-right: 2px solid #16a34a; }
+.contacts-sub-row > td { background: #f0fdf4; border-bottom: 2px solid #16a34a;
+  border-left: 2px solid #16a34a; border-right: 2px solid #16a34a; padding: 0; }
+.lead-status-pending  { background:#f1f5f9; color:#475569; }
+.lead-status-active   { background:#dcfce7; color:#15803d; }
+.lead-status-sent     { background:#dbeafe; color:#1d4ed8; }
+.lead-status-excluded { background:#fee2e2; color:#b91c1c; }
+.lead-pill { display:inline-block; font-size:11px; padding:1px 7px; border-radius:20px;
+             background:#f3f4f6; color:#374151; margin:1px; }
+.lc-editable {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 3px;
+  padding: 2px 5px;
+  outline: none;
+  transition: background .15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc-editable:hover  { background: #f1f5f9; text-overflow: clip; overflow: visible; }
+.lc-editable:focus  { background: #eff6ff; box-shadow: 0 0 0 2px #93c5fd; text-overflow: clip; overflow: visible; white-space: normal; }
+td:has(.lc-editable) { padding: 2px 4px !important; }
+.lc-editable.saving { opacity: .5; pointer-events: none; }
+.lc-editable.saved  { background: #dcfce7; }
+.lc-editable.error  { background: #fee2e2; }
+.lead-detail-label { font-size:11px; color:var(--bb-muted); white-space:nowrap; }
+.lead-detail-value { font-size:13px; color:#111; word-break:break-word; }
+.lead-detail-grid  { display:grid; grid-template-columns:130px 1fr; gap:4px 14px; align-items:baseline; }
+.lead-summary-box  { background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;
+                     padding:10px 12px; font-size:13px; color:#334155; white-space:pre-wrap; line-height:1.55; }
 .contacts-card-header {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -286,10 +323,10 @@ body { overflow: hidden; }
           <i class="ti ti-users me-1"></i>Contacts
         </button>
       </li>
-      <li class="nav-item ms-auto">
-        <a id="sites-btn" href="campaign_sites.html" class="nav-link">
+      <li class="nav-item">
+        <button class="nav-link" id="tab-sites-btn" data-bs-toggle="tab" data-bs-target="#tab-sites">
           <i class="ti ti-building me-1"></i>Sites
-        </a>
+        </button>
       </li>
     </ul>
 
@@ -428,6 +465,62 @@ body { overflow: hidden; }
       </div>
     </div>
       </div><!-- /tab-pane#tab-contacts -->
+
+      <!-- Sites tab -->
+      <div class="tab-pane fade campaign-tab-pane" id="tab-sites">
+
+        <!-- Toolbar -->
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+          <input id="sites-search" class="form-control form-control-sm"
+                 style="max-width:200px" placeholder="Search…" oninput="applySitesFilter()">
+          <select id="sites-status-sel" class="form-select form-select-sm"
+                  style="max-width:140px" onchange="applySitesFilter()">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="active">Active</option>
+            <option value="sent">Sent</option>
+            <option value="excluded">Excluded</option>
+          </select>
+          <select id="sites-sector-sel" class="form-select form-select-sm"
+                  style="max-width:160px" onchange="applySitesFilter()">
+            <option value="">All sectors</option>
+          </select>
+          <select id="sites-source-sel" class="form-select form-select-sm"
+                  style="max-width:140px" onchange="applySitesFilter()">
+            <option value="">All sources</option>
+            <option value="site_leads">site_leads</option>
+            <option value="leads">leads</option>
+          </select>
+          <span id="sites-count-badge" class="badge bg-light text-secondary border ms-1"
+                style="font-size:12px"></span>
+          <button class="bb-btn-refresh ms-auto" title="Refresh" onclick="loadSites()">
+            <i class="ti ti-refresh"></i>
+          </button>
+        </div>
+
+        <!-- Sites table -->
+        <div class="bb-card">
+          <div class="table-responsive" style="max-height:calc(100vh - 270px);overflow:auto">
+            <table class="table table-sm table-hover mb-0" id="sites-table">
+              <thead class="bb-thead" id="sites-thead"><tr>
+                <th class="small sites-th" style="width:170px;cursor:pointer" data-col="company">Company <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+                <th class="small" style="width:180px">Website</th>
+                <th class="small sites-th" style="width:110px;cursor:pointer" data-col="ai_sector">Sector <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+                <th class="small">Summary</th>
+                <th class="small text-center sites-th" style="width:90px;cursor:pointer" data-col="contact_count">Contacts <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+                <th class="small text-center sites-th" style="width:65px;cursor:pointer" data-col="priority">Prio <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+                <th class="small sites-th" style="width:115px;cursor:pointer" data-col="status">Status <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+              </tr></thead>
+              <tbody id="sites-body">
+                <tr><td colspan="7" class="text-center py-5 small" style="color:var(--bb-muted)">
+                  Select a campaign to view sites.
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /tab-pane#tab-sites -->
     </div><!-- /tab-content -->
 
   </div><!-- /#campaign-detail -->
@@ -800,10 +893,10 @@ async function discover() {
 }
 
 async function selectCampaign(id, event) {
+  _sitesLoaded = '';
   if (event) event.preventDefault();
   if (!id) return;
   document.getElementById('campaign-select').value = id;
-  document.getElementById('sites-btn').href = `campaign_sites.html?campaign=${encodeURIComponent(id)}`;
   localStorage.setItem('selectedCampaign', id);
   const url = new URL(window.location.href);
   url.searchParams.set('campaign_id', id);
@@ -1021,11 +1114,11 @@ function renderContacts(list) {
       <a href="${c.website}" target="_blank" class="bb-lead-ext" title="Open site"><i class="ti ti-external-link"></i></a>` : '—'}
     </td>
     <td class="text-center">
-      <div class="d-inline-flex align-items-center justify-content-center gap-1">
-        <button class="btn btn-xs ${cStatus === 'active' ? 'btn-success' : 'btn-outline-success'} py-0 px-2" style="font-size:.72rem" data-email="${escapeHtml(c.email || '')}" data-doc="${escapeHtml(docId)}" onclick="toggleContactStatusBtn(this,'active')" title="${cStatus === 'active' ? 'Unset active' : 'Set active'}">
-          <i class="ti ti-user-check"></i>
+      <div class="d-inline-flex gap-1">
+        <button class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:.72rem" onclick="openContactDetail('${escapeHtml(docId)}','${escapeHtml(c.email||'')}')" title="Contact details">
+          <i class="ti ti-info-circle"></i>
         </button>
-        <button class="btn btn-xs ${cStatus === 'excluded' ? 'btn-danger' : 'btn-outline-danger'} py-0 px-2" style="font-size:.72rem" data-email="${escapeHtml(c.email || '')}" data-doc="${escapeHtml(docId)}" onclick="toggleContactStatusBtn(this,'excluded')" title="${cStatus === 'excluded' ? 'Unset excluded' : 'Set excluded'}">
+        <button class="btn btn-xs ${isExcluded ? 'btn-danger' : 'btn-success'} py-0 px-2" style="font-size:.72rem" data-email="${escapeHtml(c.email || '')}" data-doc="${escapeHtml(docId)}" onclick="toggleContactStatusBtn(this,'${isExcluded ? 'pending' : 'excluded'}')" title="${isExcluded ? 'Remove exclusion' : 'Exclude contact'}">
           <i class="ti ti-user-x"></i>
         </button>
       </div>
@@ -1186,7 +1279,7 @@ function filterContacts() {
 // ── Bulk selection helpers ────────────────────────────────────────────────
 async function loadCampaign() {
   const id = document.getElementById('campaign-select').value;
-  if (id) document.getElementById('sites-btn').href = `campaign_sites.html?campaign=${encodeURIComponent(id)}`;
+  if (id)
   document.getElementById('sync-feedback').style.display = 'none';
   document.getElementById('campaign-detail').style.display = 'none';
   document.getElementById('campaign-actions').style.display = 'none';
@@ -1966,6 +2059,599 @@ function startEdit(span) {
   });
 }
 
+
+// ── Sites tab ─────────────────────────────────────────────────────────────────
+let _allLeads       = [];
+let _sitesLoaded    = '';   // campaign id last loaded
+let _leadDetailModal = null;
+const _leadContactCache = {};
+
+function _leadCountHtml(l) {
+  if (l.contact_count == null) return '—';
+  return `<span title="Total">${l.contact_count}</span>`
+    + (l.pending_count  > 0 ? ` <span class="text-success" title="Pending">${l.pending_count}p</span>`  : '')
+    + (l.excluded_count > 0 ? ` <span class="text-danger"  title="Excluded">${l.excluded_count}x</span>` : '');
+}
+
+function leadStatusBadge(s) {
+  return `<span class="badge lead-status-${s||'pending'}">${escapeHtml(s||'pending')}</span>`;
+}
+
+function priorityBadge(p) {
+  if (!p) return '<span class="text-muted">—</span>';
+  const colors = { A:'success', B:'warning', C:'secondary' };
+  return `<span class="badge bg-${colors[p]||'secondary'}">${escapeHtml(p)}</span>`;
+}
+
+async function loadSites() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  _sitesLoaded = id;
+  _allLeads = [];
+  Object.keys(_leadContactCache).forEach(k => delete _leadContactCache[k]);
+  document.getElementById('sites-body').innerHTML =
+    '<tr><td colspan="7" class="text-center py-5 small" style="color:var(--bb-muted)">' +
+    '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>';
+  try {
+    const data = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads`);
+    _allLeads = data.leads || [];
+    _populateSectorFilter(_allLeads);
+    applySitesFilter();
+  } catch(e) {
+    document.getElementById('sites-body').innerHTML =
+      `<tr><td colspan="7" class="text-center py-5 small text-danger">Error: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function _populateSectorFilter(leads) {
+  const sectors = [...new Set(leads.map(l => l.ai_sector).filter(Boolean))].sort();
+  const sel = document.getElementById('sites-sector-sel');
+  sel.innerHTML = '<option value="">All sectors</option>' +
+    sectors.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+}
+
+
+
+// ── Inline contact field editing (name / title) ───────────────────────────────
+document.addEventListener('blur', async e => {
+  const el = e.target;
+  if (!el.classList.contains('lc-editable')) return;
+  const campaignId = document.getElementById('campaign-select').value;
+  const leadId     = el.dataset.lead;
+  const ci         = parseInt(el.dataset.ci, 10);
+  const field      = el.dataset.field;
+  const docId      = el.dataset.doc;
+  const val        = el.textContent.trim();
+  if (!docId) return;
+
+  // Check if value actually changed
+  const contacts = _leadContactCache[leadId] || [];
+  const c = contacts[ci];
+  if (!c) return;
+  const current = (field === 'name' ? c.name : (c.title || c.role)) || '';
+  if (val === current) return;
+
+  el.classList.add('saving');
+  try {
+    await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/${encodeURIComponent(docId)}`,
+      { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ [field]: val }) }
+    );
+    c[field] = val;
+    el.classList.remove('saving');
+    el.classList.add('saved');
+    setTimeout(() => el.classList.remove('saved'), 1200);
+  } catch (err) {
+    el.classList.remove('saving');
+    el.classList.add('error');
+    el.textContent = current;  // revert
+    setTimeout(() => el.classList.remove('error'), 2000);
+  }
+}, true);  // capture phase so blur fires on contenteditable
+
+// Prevent Enter from inserting newlines — commit on Enter instead
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.classList.contains('lc-editable')) {
+    e.preventDefault();
+    e.target.blur();
+  }
+}, true);
+
+// ── Sites sort state ──────────────────────────────────────────────────────────
+let _sitesSort = { col: '', dir: 1 };
+
+function _sortLeads(leads) {
+  const { col, dir } = _sitesSort;
+  if (!col) return leads;
+  return [...leads].sort((a, b) => {
+    let av = a[col], bv = b[col];
+    if (col === 'company') { av = (a.company || a.domain || '').toLowerCase(); bv = (b.company || b.domain || '').toLowerCase(); }
+    if (col === 'priority') { const order = { A:1, B:2, C:3 }; av = order[av] || 99; bv = order[bv] || 99; }
+    if (col === 'contact_count') { av = av ?? -1; bv = bv ?? -1; }
+    if (av == null) av = '';
+    if (bv == null) bv = '';
+    if (av < bv) return -1 * dir;
+    if (av > bv) return  1 * dir;
+    return 0;
+  });
+}
+
+function _updateSortIcons() {
+  document.querySelectorAll('#sites-thead .sites-th').forEach(th => {
+    const icon = th.querySelector('.sites-sort-icon');
+    if (!icon) return;
+    if (th.dataset.col === _sitesSort.col) {
+      icon.className = `ti ${_sitesSort.dir === 1 ? 'ti-sort-ascending' : 'ti-sort-descending'} sites-sort-icon`;
+      icon.style.opacity = '1';
+    } else {
+      icon.className = 'ti ti-arrows-sort sites-sort-icon';
+      icon.style.opacity = '.45';
+    }
+  });
+}
+
+document.addEventListener('click', e => {
+  const th = e.target.closest('#sites-thead .sites-th');
+  if (!th) return;
+  const col = th.dataset.col;
+  if (_sitesSort.col === col) _sitesSort.dir *= -1;
+  else { _sitesSort.col = col; _sitesSort.dir = 1; }
+  _updateSortIcons();
+  applySitesFilter();
+});
+
+function applySitesFilter() {
+  const q      = (document.getElementById('sites-search').value||'').trim().toLowerCase();
+  const status = document.getElementById('sites-status-sel').value;
+  const sector = document.getElementById('sites-sector-sel').value;
+  const source = document.getElementById('sites-source-sel').value;
+  const filtered = _allLeads.filter(l => {
+    if (status && l.status !== status) return false;
+    if (sector && l.ai_sector !== sector) return false;
+    if (source && !(l.sources||[]).includes(source)) return false;
+    if (q) {
+      const hay = [l.company, l.domain, l.website, l.country_name, l.ai_sector, l.title]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  const badge = document.getElementById('sites-count-badge');
+  badge.textContent = filtered.length === _allLeads.length
+    ? `${_allLeads.length} sites`
+    : `${filtered.length} / ${_allLeads.length} sites`;
+  renderSitesTable(_sortLeads(filtered));
+}
+
+function renderSitesTable(leads) {
+  const tbody = document.getElementById('sites-body');
+  if (!leads.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 small" style="color:var(--bb-muted)">No sites match the filter.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = leads.map(l => {
+    const idx = _allLeads.indexOf(l);
+    return `
+    <tr class="site-row" data-idx="${idx}" data-lead-id="${escapeHtml(l.lead_id||'')}" onclick="toggleLeadExpand(this)">
+      <td class="fw-semibold small">
+        <i class="ti ti-chevron-right expand-icon me-1" style="font-size:11px;transition:transform .15s;color:#94a3b8"></i>
+        ${escapeHtml(l.company||l.domain||'—')}
+      </td>
+      <td style="font-size:12px">
+        <a href="${escapeHtml(l.website||'#')}" target="_blank" onclick="event.stopPropagation()">
+          ${escapeHtml(l.website||l.domain||'—')}
+        </a>
+      </td>
+      <td style="font-size:12px">${escapeHtml(l.ai_sector||'—')}</td>
+      <td style="font-size:12px;color:#475569">${escapeHtml((l.summary||'').slice(0,120)||'—')}</td>
+      <td class="text-center" style="font-size:11px;white-space:nowrap">${_leadCountHtml(l)}</td>
+      <td>${priorityBadge(l.priority)}</td>
+      <td>
+        <div class="d-inline-flex align-items-center gap-1">
+          ${leadStatusBadge(l.status)}
+          <button class="btn btn-xs ${l.status==='excluded'?'btn-danger':'btn-success'} py-0 px-1"
+            title="${l.status==='excluded'?'Remove exclusion':'Exclude site'}"
+            onclick="event.stopPropagation();toggleLeadExclude(this,${idx},'${l.status==='excluded'?'pending':'excluded'}')">
+            <i class="ti ti-building-off"></i>
+          </button>
+          <button class="btn btn-xs btn-outline-secondary py-0 px-1" title="Full details"
+            onclick="event.stopPropagation();openLeadDetail(${idx})">
+            <i class="ti ti-info-circle"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function toggleLeadExclude(btn, leadIdx, newStatus) {
+  const lead = _allLeads[leadIdx];
+  if (!lead) return;
+  const id = document.getElementById('campaign-select').value;
+  btn.disabled = true;
+  try {
+    await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads/${encodeURIComponent(lead.lead_id)}`,
+      { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:newStatus}) }
+    );
+    lead.status = newStatus;
+    applySitesFilter();
+  } catch(e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
+async function toggleLeadExpand(row) {
+  if (row.classList.contains('expanded')) {
+    row.classList.remove('expanded');
+    row.querySelector('.expand-icon').style.transform = '';
+    const next = row.nextElementSibling;
+    if (next && next.classList.contains('contacts-sub-row')) next.remove();
+    return;
+  }
+  document.querySelectorAll('#sites-body .site-row.expanded').forEach(r => {
+    r.classList.remove('expanded');
+    r.querySelector('.expand-icon').style.transform = '';
+    const nx = r.nextElementSibling;
+    if (nx && nx.classList.contains('contacts-sub-row')) nx.remove();
+  });
+  row.classList.add('expanded');
+  row.querySelector('.expand-icon').style.transform = 'rotate(90deg)';
+  const leadId = row.dataset.leadId;
+  const sub = document.createElement('tr');
+  sub.className = 'contacts-sub-row';
+  sub.innerHTML = `<td colspan="7" class="py-2 px-3">
+    <div class="text-muted small"><div class="spinner-border spinner-border-sm me-1"></div>Loading contacts…</div>
+  </td>`;
+  row.insertAdjacentElement('afterend', sub);
+  const id = document.getElementById('campaign-select').value;
+  if (!_leadContactCache[leadId]) {
+    try {
+      const data = await fetchJSON(
+        `${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads/${encodeURIComponent(leadId)}/contacts`
+      );
+      _leadContactCache[leadId] = data.contacts || [];
+    } catch(e) {
+      sub.querySelector('td').innerHTML = `<span class="text-danger small">Error: ${escapeHtml(e.message)}</span>`;
+      return;
+    }
+  }
+  const contacts = _leadContactCache[leadId];
+  renderLeadContacts(sub.querySelector('td'), leadId, contacts);
+}
+
+function renderLeadContacts(cell, leadId, contacts) {
+  const lid = escapeHtml(leadId);
+  const rows = contacts.length
+    ? contacts.map((c, ci) => {
+        const isExcl = (c.status||'pending') === 'excluded';
+        const docId  = escapeHtml(c.doc_id||'');
+        return `<tr>
+          <td class="small">
+            <span class="lc-editable" data-lead="${lid}" data-ci="${ci}" data-field="name"
+              data-doc="${docId}" contenteditable="true" spellcheck="false"
+              title="Click to edit name">${escapeHtml(c.name||'')}</span>
+          </td>
+          <td class="small">${escapeHtml(c.email||'—')}</td>
+          <td class="small text-muted">
+            <span class="lc-editable" data-lead="${lid}" data-ci="${ci}" data-field="title"
+              data-doc="${docId}" contenteditable="true" spellcheck="false"
+              title="Click to edit title">${escapeHtml(c.title||c.role||'')}</span>
+          </td>
+          <td class="text-end" style="white-space:nowrap">
+            <div class="d-inline-flex align-items-center gap-1">
+              ${leadStatusBadge(c.status)}
+              <button class="btn btn-xs btn-outline-secondary py-0 px-1" title="Contact details"
+                onclick="openContactDetail('${docId}','${escapeHtml(c.email||'')}')">
+                <i class="ti ti-info-circle"></i>
+              </button>
+              <button class="btn btn-xs ${isExcl?'btn-danger':'btn-success'} py-0 px-1"
+                title="${isExcl?'Remove exclusion':'Exclude contact'}"
+                onclick="toggleLeadContactExclude(this,'${lid}',${ci})">
+                <i class="ti ti-user-x"></i>
+              </button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="4" class="text-muted small py-2">No contacts.</td></tr>`;
+
+  cell.innerHTML = `
+    <table class="table table-sm mb-0" style="font-size:12px">
+      <thead><tr style="background:#f1f5f9">
+        <th style="width:180px" class="small">Name</th>
+        <th style="width:200px" class="small">Email</th>
+        <th class="small">Title / Role</th>
+        <th style="width:130px" class="small text-end">Status</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="d-flex gap-2 flex-wrap align-items-center p-2 border-top" style="background:#f8fafc">
+      <input class="form-control form-control-sm" style="width:150px" placeholder="Name" id="lc-name-${lid}">
+      <input class="form-control form-control-sm" style="width:190px" placeholder="Email *" id="lc-email-${lid}">
+      <input class="form-control form-control-sm" style="width:150px" placeholder="Title / Role" id="lc-title-${lid}">
+      <button class="btn btn-sm btn-primary" onclick="saveSiteContact('${lid}')">
+        <i class="ti ti-plus me-1"></i>Add
+      </button>
+    </div>`;
+}
+
+async function toggleLeadContactExclude(btn, leadId, ci) {
+  const contacts = _leadContactCache[leadId];
+  if (!contacts || !contacts[ci]) return;
+  const c = contacts[ci];
+  if (!c.doc_id) { alert('Contact has no doc_id.'); return; }
+  const nextStatus = (c.status||'pending') === 'excluded' ? 'pending' : 'excluded';
+  const id = document.getElementById('campaign-select').value;
+  btn.disabled = true;
+  const oldHtml = btn.innerHTML;
+  btn.innerHTML = '<i class="ti ti-loader"></i>';
+  try {
+    await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/contacts/${encodeURIComponent(c.doc_id)}`,
+      { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:nextStatus}) }
+    );
+    c.status = nextStatus;
+    const subRow = document.querySelector(`#sites-body .site-row[data-lead-id="${leadId}"] + .contacts-sub-row`);
+    if (subRow) renderLeadContacts(subRow.querySelector('td'), leadId, contacts);
+  } catch(e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+  }
+}
+
+async function saveSiteContact(leadId) {
+  const name  = document.getElementById('lc-name-'  + leadId).value.trim();
+  const email = document.getElementById('lc-email-' + leadId).value.trim();
+  const title = document.getElementById('lc-title-' + leadId).value.trim();
+  if (!email) { alert('Email is required.'); return; }
+  const id = document.getElementById('campaign-select').value;
+  try {
+    const resp = await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads/${encodeURIComponent(leadId)}/contacts`,
+      { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,email,title}) }
+    );
+    if (!_leadContactCache[leadId]) _leadContactCache[leadId] = [];
+    _leadContactCache[leadId].push(resp.contact);
+    const subRow = document.querySelector(`#sites-body .site-row[data-lead-id="${leadId}"] + .contacts-sub-row`);
+    if (subRow) renderLeadContacts(subRow.querySelector('td'), leadId, _leadContactCache[leadId]);
+    const lead = _allLeads.find(l => l.lead_id === leadId);
+    if (lead) {
+      lead.contact_count = (lead.contact_count||0) + 1;
+      lead.pending_count  = (lead.pending_count ||0) + 1;
+      const siteRow = document.querySelector(`#sites-body .site-row[data-lead-id="${leadId}"]`);
+      if (siteRow) {
+        const cell = siteRow.querySelectorAll('td')[4];
+        if (cell) cell.innerHTML = _leadCountHtml(lead);
+      }
+    }
+  } catch(e) {
+    alert(e.message);
+  }
+}
+
+function openLeadDetail(leadIdx) {
+  const lead = _allLeads[leadIdx];
+  if (!lead) return;
+  if (!_leadDetailModal)
+    _leadDetailModal = new bootstrap.Modal(document.getElementById('leadDetailModal'));
+
+  // header
+  document.getElementById('lead-detail-title').textContent = lead.company || lead.domain || lead.lead_id;
+  document.getElementById('lead-detail-sub').innerHTML =
+    (lead.website ? `<a href="${escapeHtml(lead.website)}" target="_blank" class="text-decoration-none">${escapeHtml(lead.domain||lead.website)}</a>` : escapeHtml(lead.domain||''))
+    + (lead.country_name ? ` · ${escapeHtml(lead.country_name)}` : '');
+
+  const badges = document.getElementById('lead-detail-badges');
+  badges.innerHTML = leadStatusBadge(lead.status)
+    + (lead.priority ? ` ${priorityBadge(lead.priority)}` : '');
+
+  document.getElementById('lead-detail-website-btn').href = lead.website || '#';
+
+  // exclude button
+  const exclBtn = document.getElementById('lead-detail-excl-btn');
+  const isExcl  = lead.status === 'excluded';
+  exclBtn.className = `btn btn-sm ${isExcl ? 'btn-danger' : 'btn-outline-danger'}`;
+  exclBtn.innerHTML = `<i class="ti ti-building-off me-1"></i>${isExcl ? 'Remove exclusion' : 'Exclude'}`;
+  exclBtn.onclick = () => toggleLeadExclude(exclBtn, leadIdx, isExcl ? 'pending' : 'excluded');
+
+  // pills helper
+  const pills = arr => (arr||[]).map(v =>
+    `<span class="badge" style="font-size:10px;font-weight:400;background:var(--bb-surface);color:var(--bb-muted);border:0.5px solid var(--bb-border)">${escapeHtml(v)}</span>`
+  ).join(' ');
+
+  const sources = pills(lead.sources);
+  const spec    = pills(lead.ai_specialisation);
+
+  function row(label, val) {
+    if (!val && val !== 0) return '';
+    return `<tr>
+      <td style="color:var(--bb-muted);font-size:12px;padding:4px 12px 4px 0;white-space:nowrap;vertical-align:top">${escapeHtml(label)}</td>
+      <td style="font-size:13px;padding:4px 0">${val}</td></tr>`;
+  }
+
+  document.getElementById('lead-detail-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:0.5px solid var(--bb-border)">
+      <div style="padding:14px 20px;border-right:0.5px solid var(--bb-border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">Identity</div>
+        <table style="width:100%;border-collapse:collapse">
+          ${row('Sector',      escapeHtml(lead.ai_sector||''))}
+          ${row('Type',        escapeHtml(lead.ai_company_type||''))}
+          ${row('Platform',    escapeHtml(lead.platform||lead.ai_platform||''))}
+          ${row('Client base', escapeHtml(lead.ai_client_base||''))}
+          ${row('Location',    escapeHtml(lead.location||''))}
+          ${row('Pages',       lead.page_count != null ? lead.page_count : '')}
+        </table>
+      </div>
+      <div style="padding:14px 20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">Scoring</div>
+        <table style="width:100%;border-collapse:collapse">
+          ${row('Priority',       lead.priority ? priorityBadge(lead.priority) : '')}
+          ${row('Reseller score', lead.reseller_score != null ? lead.reseller_score : '')}
+          ${row('Query cat.',     escapeHtml(lead.query_category||''))}
+          ${row('AI country',     escapeHtml(lead.ai_country||''))}
+          ${row('Sources',        sources)}
+        </table>
+      </div>
+    </div>
+    ${spec ? `<div style="padding:12px 20px;border-bottom:0.5px solid var(--bb-border)">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">Specialisation</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">${spec}</div>
+    </div>` : ''}
+    ${lead.suggested_angle ? `<div style="padding:12px 20px;border-bottom:0.5px solid var(--bb-border)">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:6px">Suggested angle</div>
+      <div style="font-size:13px;line-height:1.55;padding:8px 12px;border-radius:6px;background:var(--bb-surface);border-left:2px solid #93c5fd">${escapeHtml(lead.suggested_angle)}</div>
+    </div>` : ''}
+    ${lead.summary ? `<div style="padding:12px 20px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:6px">Summary</div>
+      <div style="font-size:13px;color:var(--bb-muted);line-height:1.55">${escapeHtml(lead.summary)}</div>
+    </div>` : ''}
+  `;
+  _leadDetailModal.show();
+}
+
+
+// ── Contact detail modal ───────────────────────────────────────────────────────
+let _contactDetailModal = null;
+
+function _initials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+}
+
+async function openContactDetail(docId, email) {
+  if (!_contactDetailModal)
+    _contactDetailModal = new bootstrap.Modal(document.getElementById('contactDetailModal'));
+
+  // populate header from local cache while loading
+  const cached = allContacts.find(c => (c.doc_id || contactDocId(c)) === docId || c.email === email) || {};
+  const name   = cached.name || email || docId;
+  document.getElementById('contact-detail-name').textContent = name;
+  document.getElementById('contact-detail-sub').textContent  =
+    [cached.title, cached.email || email].filter(Boolean).join(' · ');
+  document.getElementById('contact-detail-avatar').textContent = _initials(name);
+  document.getElementById('contact-detail-status-badge').innerHTML =
+    contactStatusBadge(contactStatus(cached.status));
+  document.getElementById('contact-detail-body').innerHTML =
+    '<div class="text-center py-5 text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>';
+
+  // follow-up link
+  document.getElementById('contact-detail-follow-btn').href =
+    `crm_follow.html?email=${encodeURIComponent(cached.email||email||'')}`;
+
+  // exclude button
+  const exclBtn  = document.getElementById('contact-detail-excl-btn');
+  const isExcl   = contactStatus(cached.status) === 'excluded';
+  exclBtn.className = `btn btn-sm ${isExcl ? 'btn-danger' : 'btn-outline-danger'}`;
+  exclBtn.innerHTML = `<i class="ti ti-user-x me-1"></i>${isExcl ? 'Remove exclusion' : 'Exclude'}`;
+  exclBtn.onclick = async () => {
+    const nextStatus = isExcl ? 'pending' : 'excluded';
+    try {
+      await toggleContactStatusBtn(exclBtn, nextStatus === 'excluded' ? 'excluded' : 'pending');
+    } catch(e) {}
+    _contactDetailModal.hide();
+  };
+
+  _contactDetailModal.show();
+
+  // fetch full record
+  const campaignId = document.getElementById('campaign-select').value;
+  let d;
+  try {
+    d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/${encodeURIComponent(docId)}`);
+  } catch(e) {
+    document.getElementById('contact-detail-body').innerHTML =
+      `<div class="text-center py-5 text-danger small">Error: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+
+  // update header with full data
+  document.getElementById('contact-detail-name').textContent = d.name || d.email || docId;
+  document.getElementById('contact-detail-avatar').textContent = _initials(d.name || d.email);
+  document.getElementById('contact-detail-sub').textContent =
+    [d.title, d.email].filter(Boolean).join(' · ');
+  document.getElementById('contact-detail-status-badge').innerHTML =
+    contactStatusBadge(contactStatus(d.status));
+
+  function row(icon, label, val, isLink) {
+    if (!val) return '';
+    const disp = isLink
+      ? `<a href="${escapeHtml(val)}" target="_blank" style="color:var(--bb-muted)">${escapeHtml(val.replace(/^https?:\/\//,'').slice(0,40))}</a>`
+      : `<span style="color:var(--bb-text)">${escapeHtml(String(val))}</span>`;
+    return `<tr>
+      <td style="padding:4px 10px 4px 0;white-space:nowrap;vertical-align:top">
+        <i class="ti ti-${icon}" style="font-size:14px;color:var(--bb-muted)"></i>
+        <span style="font-size:12px;color:var(--bb-muted);margin-left:4px">${escapeHtml(label)}</span>
+      </td>
+      <td style="padding:4px 0;font-size:13px">${disp}</td></tr>`;
+  }
+
+  function fuRow(label, val) {
+    if (!val) return '';
+    return `<tr>
+      <td style="font-size:12px;color:var(--bb-muted);padding:4px 12px 4px 0;white-space:nowrap">${escapeHtml(label)}</td>
+      <td style="font-size:13px;padding:4px 0">${escapeHtml(String(val))}</td></tr>`;
+  }
+
+  const history = (d.comment_history || []).slice().reverse().slice(0, 8);
+  const histHtml = history.length ? history.map(h => {
+    const icon = (h.type||'').toLowerCase().includes('mail') ? 'mail' : 'note';
+    return `<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:0.5px solid var(--bb-border)">
+      <div style="width:28px;height:28px;border-radius:50%;background:var(--bb-surface);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="ti ti-${icon}" style="font-size:13px;color:var(--bb-muted)"></i>
+      </div>
+      <div>
+        <div style="font-size:12px">${escapeHtml(h.text||'')}</div>
+        <div style="font-size:11px;color:var(--bb-muted)">${escapeHtml((h.date||'').slice(0,10))}${h.user ? ' · ' + escapeHtml(h.user) : ''}</div>
+      </div>
+    </div>`;
+  }).join('') : '<div style="font-size:12px;color:var(--bb-muted);padding:6px 0">No history.</div>';
+
+  const hasFu = d.followup_status || d.followup_date || d.followup_owner || d.followup_importance;
+
+  document.getElementById('contact-detail-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:0.5px solid var(--bb-border)">
+      <div style="padding:14px 20px;border-right:0.5px solid var(--bb-border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">Contact</div>
+        <table style="width:100%;border-collapse:collapse">
+          ${row('globe',          'Website',  d.website, true)}
+          ${row('phone',          'Phone',    d.phone)}
+          ${row('brand-linkedin', 'LinkedIn', d.linkedin, true)}
+          ${row('brand-twitter',  'Twitter',  d.twitter, true)}
+        </table>
+      </div>
+      ${hasFu ? `<div style="padding:14px 20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">Follow-up</div>
+        <table style="width:100%;border-collapse:collapse">
+          ${fuRow('Status',     d.followup_status)}
+          ${fuRow('Date',       d.followup_date)}
+          ${fuRow('Owner',      d.followup_owner)}
+          ${fuRow('Importance', d.followup_importance)}
+        </table>
+      </div>` : '<div style="padding:14px 20px"><div style="font-size:12px;color:var(--bb-muted)">No follow-up set.</div></div>'}
+    </div>
+    ${d.followup_comment ? `<div style="padding:12px 20px;border-bottom:0.5px solid var(--bb-border)">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:6px">Comment</div>
+      <div style="font-size:13px;color:var(--bb-muted);font-style:italic;line-height:1.5">${escapeHtml(d.followup_comment)}</div>
+    </div>` : ''}
+    <div style="padding:12px 20px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">History</div>
+      ${histHtml}
+    </div>
+  `;
+}
+
+// Load sites when tab shown (if campaign changed since last load)
+document.addEventListener('shown.bs.tab', e => {
+  if (e.target.id === 'tab-sites-btn') {
+    const id = document.getElementById('campaign-select').value;
+    if (id && id !== _sitesLoaded) loadSites();
+  }
+});
+
 // ── Page init ─────────────────────────────────────────────────────────────────
 (async () => {
   await requireAuth();
@@ -1982,5 +2668,66 @@ function startEdit(span) {
   }
 })();
 </script>
+<!-- Lead detail modal -->
+<div class="modal fade" id="leadDetailModal" tabindex="-1" aria-labelledby="lead-detail-title" aria-modal="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:600px">
+    <div class="modal-content border-0" style="border-radius:12px;overflow:hidden">
+      <!-- header -->
+      <div class="d-flex align-items-center gap-3 px-4 py-3" style="border-bottom:0.5px solid var(--bb-border)">
+        <div class="d-flex align-items-center justify-content-center flex-shrink-0"
+             style="width:44px;height:44px;border-radius:8px;background:var(--bb-surface);border:0.5px solid var(--bb-border)">
+          <i class="ti ti-building" style="font-size:22px;color:var(--bb-muted)"></i>
+        </div>
+        <div class="flex-grow-1 min-width-0">
+          <div class="fw-medium" id="lead-detail-title" style="font-size:15px"></div>
+          <div id="lead-detail-sub" style="font-size:12px;color:var(--bb-muted)"></div>
+        </div>
+        <div id="lead-detail-badges" class="d-flex gap-1 flex-shrink-0"></div>
+        <button type="button" class="btn-close ms-1" data-bs-dismiss="modal"></button>
+      </div>
+      <!-- body -->
+      <div class="modal-body p-0" id="lead-detail-body" style="max-height:70vh;overflow-y:auto"></div>
+      <!-- footer -->
+      <div class="d-flex gap-2 justify-content-end px-4 py-3" style="border-top:0.5px solid var(--bb-border)">
+        <a id="lead-detail-website-btn" href="#" target="_blank" class="btn btn-sm btn-outline-secondary">
+          <i class="ti ti-external-link me-1"></i>Open site
+        </a>
+        <button id="lead-detail-excl-btn" class="btn btn-sm" data-bs-dismiss="modal">
+          <i class="ti ti-building-off me-1"></i>Exclude
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Contact detail modal -->
+<div class="modal fade" id="contactDetailModal" tabindex="-1" aria-labelledby="contact-detail-name" aria-modal="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:560px">
+    <div class="modal-content border-0" style="border-radius:12px;overflow:hidden">
+      <div class="d-flex align-items-center gap-3 px-4 py-3" style="border-bottom:0.5px solid var(--bb-border)">
+        <div id="contact-detail-avatar"
+             style="width:44px;height:44px;border-radius:50%;background:#e0e7ff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:500;color:#4338ca;flex-shrink:0"></div>
+        <div class="flex-grow-1 min-width-0">
+          <div class="fw-medium" id="contact-detail-name" style="font-size:15px"></div>
+          <div id="contact-detail-sub" style="font-size:12px;color:var(--bb-muted)"></div>
+        </div>
+        <span id="contact-detail-status-badge"></span>
+        <button type="button" class="btn-close ms-1" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0" id="contact-detail-body" style="max-height:70vh;overflow-y:auto">
+        <div class="text-center py-5 text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>
+      </div>
+      <div class="d-flex gap-2 justify-content-end px-4 py-3" style="border-top:0.5px solid var(--bb-border)">
+        <a id="contact-detail-follow-btn" href="#" class="btn btn-sm btn-outline-secondary">
+          <i class="ti ti-external-link me-1"></i>Open full profile
+        </a>
+        <button id="contact-detail-excl-btn" class="btn btn-sm btn-danger" data-bs-dismiss="modal">
+          <i class="ti ti-user-x me-1"></i>Exclude
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
