@@ -69,6 +69,8 @@ Authorization: Bearer <firebase-id-token>
 
 This matrix is defined in `functions-crm/auth_settings.py`. `main.py` still uses
 the legacy runtime auth tables until the guarded `check_auth()` switch is approved.
+User roles are cached per warm Firebase Function instance for 300 seconds to reduce
+Firestore reads during auth checks.
 
 Role levels:
 

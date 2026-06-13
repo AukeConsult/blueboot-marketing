@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Campaign Sites</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+.site-row { cursor: pointer; }
+.site-row:hover td { background: #f5f7ff; }
+
+/* ── Expanded / focused site ── */
+.site-row.expanded td {
+  background: #f0fdf4 !important;
+  border-top: 2px solid #16a34a;
+}
+.site-row.expanded td:first-child { border-left: 2px solid #16a34a; }
+.site-row.expanded td:last-child  { border-right: 2px solid #16a34a; }
+
+.contacts-sub-row > td {
+  background: #f0fdf4;
+  border-bottom: 2px solid #16a34a;
+  border-left:   2px solid #16a34a;
+  border-right:  2px solid #16a34a;
+  padding: 0;
+}
+.badge-status-pending  { background: #f1f5f9; color: #475569; }
+.badge-status-active   { background: #dcfce7; color: #15803d; }
+.badge-status-sent     { background: #dbeafe; color: #1d4ed8; }
+.badge-status-excluded { background: #fee2e2; color: #b91c1c; }
+.pill { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 20px;
+        background: #f3f4f6; color: #374151; margin: 1px; }
+.detail-label { font-size: 11px; color: var(--bb-muted); white-space: nowrap; }
+.detail-value { font-size: 13px; color: #111; word-break: break-word; }
+.detail-grid  { display: grid; grid-template-columns: 130px 1fr; gap: 4px 14px; align-items: baseline; }
+.summary-box  { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+                padding: 10px 12px; font-size: 13px; color: #334155;
+                white-space: pre-wrap; line-height: 1.55; }
+.modal-dialog { max-width: 680px; }
+#search-box   { max-width: 220px; }
+#status-sel   { max-width: 150px; }
+#sector-sel   { max-width: 170px; }
+</style>
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container-fluid py-3 px-4" style="max-width:1100px">
+
+  <!-- Header -->
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <a href="campaign.html" class="text-muted me-1" style="font-size:13px">
+      <i class="ti ti-arrow-left"></i>
+    </a>
+    <h5 class="page-title mb-0">
+      <i class="ti ti-building me-2 text-primary"></i>
+      Campaign Sites — <span id="campaign-label" class="text-muted fw-normal"></span>
+    </h5>
+    <div class="ms-auto d-flex gap-2">
+      <span id="count-badge" class="badge bg-light text-secondary border" style="font-size:12px"></span>
+      <button class="bb-btn-refresh" onclick="load()" title="Refresh"><i class="ti ti-refresh"></i></button>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+    <input id="search-box" class="form-control form-control-sm" placeholder="Search…" oninput="applyFilter()">
+    <select id="status-sel" class="form-select form-select-sm" onchange="applyFilter()">
+      <option value="">All statuses</option>
+      <option value="pending">Pending</option>
+      <option value="active">Active</option>
+      <option value="sent">Sent</option>
+      <option value="excluded">Excluded</option>
+    </select>
+    <select id="sector-sel" class="form-select form-select-sm" onchange="applyFilter()">
+      <option value="">All sectors</option>
+    </select>
+    <select id="source-sel" class="form-select form-select-sm" style="max-width:150px" onchange="applyFilter()">
+      <option value="">All sources</option>
+      <option value="site_leads">site_leads</option>
+      <option value="leads">leads</option>
+    </select>
+  </div>
+
+  <!-- Table -->
+  <div class="card shadow-sm border-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0" id="sites-table">
+        <thead class="bb-thead">
+          <tr>
+            <th style="width:170px">Company</th>
+            <th style="width:190px">Website</th>
+            <th style="width:100px">Sector</th>
+            <th>Summary</th>
+            <th style="width:100px">Contacts</th>
+            <th style="width:80px">Priority</th>
+            <th style="width:80px">Status</th>
+          </tr>
+        </thead>
+        <tbody id="sites-body">
+          <tr><td colspan="7" class="text-center py-5 text-muted">
+            <div class="spinner-border spinner-border-sm me-2"></div>Loading…
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Detail modal -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0" id="modal-title">Site details</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer py-2">
+        <a id="modal-website-btn" href="#" target="_blank" class="btn btn-sm btn-outline-primary">
+          <i class="ti ti-external-link me-1"></i>Visit site
+        </a>
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+<script>
+const params     = new URLSearchParams(location.search);
+const campaignId = params.get('campaign') || '';
+let allLeads = [];
+let modal;
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+function initModal() {
+  if (!modal) modal = new bootstrap.Modal(document.getElementById('detailModal'));
+}
+
+// ── Data loading ──────────────────────────────────────────────────────────────
+async function load() {
+  if (!campaignId) {
+    document.getElementById('sites-body').innerHTML =
+      '<tr><td colspan="7" class="text-center py-5 text-danger">No campaign specified. Add ?campaign=ID to the URL.</td></tr>';
+    return;
+  }
+  document.getElementById('campaign-label').textContent = campaignId;
+  document.getElementById('sites-body').innerHTML =
+    '<tr><td colspan="7" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>';
+  try {
+    const data = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/leads`);
+    allLeads = data.leads || [];
+    populateSectorFilter(allLeads);
+    applyFilter();
+  } catch (e) {
+    document.getElementById('sites-body').innerHTML =
+      `<tr><td colspan="7" class="text-center py-5 text-danger">Error: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function populateSectorFilter(leads) {
+  const sectors = [...new Set(leads.map(l => l.ai_sector).filter(Boolean))].sort();
+  const sel = document.getElementById('sector-sel');
+  sel.innerHTML = '<option value="">All sectors</option>' +
+    sectors.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+}
+
+// ── Filtering ─────────────────────────────────────────────────────────────────
+function applyFilter() {
+  const q      = document.getElementById('search-box').value.trim().toLowerCase();
+  const status = document.getElementById('status-sel').value;
+  const sector = document.getElementById('sector-sel').value;
+  const source = document.getElementById('source-sel').value;
+
+  const filtered = allLeads.filter(l => {
+    if (status && l.status !== status) return false;
+    if (sector && l.ai_sector !== sector) return false;
+    if (source && !(l.sources || []).includes(source)) return false;
+    if (q) {
+      const haystack = [l.company, l.domain, l.website, l.country_name, l.ai_sector, l.title]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+
+  document.getElementById('count-badge').textContent =
+    filtered.length === allLeads.length
+      ? `${allLeads.length} sites`
+      : `${filtered.length} / ${allLeads.length} sites`;
+
+  renderTable(filtered);
+}
+
+// ── Table rendering ─────────────────────────────────────────────────────────
+function _contactCountHtml(l) {
+  if (l.contact_count == null) return '—';
+  return `<span title="Total">${l.contact_count}</span>`
+    + (l.pending_count  > 0 ? ` <span class="text-success" title="Pending">${l.pending_count}p</span>`  : '')
+    + (l.excluded_count > 0 ? ` <span class="text-danger"  title="Excluded">${l.excluded_count}x</span>` : '');
+}
+
+// ──
+function statusBadge(s) {
+  const cls = `badge-status-${s || 'pending'}`;
+  return `<span class="badge ${cls}">${escapeHtml(s || 'pending')}</span>`;
+}
+
+function priorityBadge(p) {
+  if (!p) return '<span class="text-muted">—</span>';
+  const colors = { A: 'success', B: 'warning', C: 'secondary' };
+  return `<span class="badge bg-${colors[p] || 'secondary'}">${escapeHtml(p)}</span>`;
+}
+
+function renderTable(leads) {
+  if (!leads.length) {
+    document.getElementById('sites-body').innerHTML =
+      '<tr><td colspan="7" class="text-center py-5 text-muted">No sites match the current filter.</td></tr>';
+    return;
+  }
+  document.getElementById('sites-body').innerHTML = leads.map((l, i) => {
+    const idx = allLeads.indexOf(l);
+    return `
+    <tr class="site-row" data-idx="${idx}" data-lead-id="${escapeHtml(l.lead_id||'')}" onclick="toggleExpand(this)">
+      <td class="fw-semibold">
+        <i class="ti ti-chevron-right expand-icon me-1" style="font-size:11px;transition:transform .15s;color:#94a3b8"></i>${escapeHtml(l.company || l.domain || '—')}
+      </td>
+      <td style="font-size:12px"><a href="${escapeHtml(l.website||'#')}" target="_blank" onclick="event.stopPropagation()">${escapeHtml(l.website || l.domain || '—')}</a></td>
+      <td style="font-size:12px">${escapeHtml(l.ai_sector || '—')}</td>
+      <td style="font-size:12px;color:#475569">${escapeHtml((l.summary || '').slice(0, 120) || '—')}</td>
+      <td class="text-center" style="font-size:11px;white-space:nowrap">${_contactCountHtml(l)}</td>
+      <td>${priorityBadge(l.priority)}</td>
+      <td>
+        <div class="d-inline-flex align-items-center gap-1">
+          ${statusBadge(l.status)}
+          <button class="btn btn-xs ${l.status === 'excluded' ? 'btn-danger' : 'btn-outline-danger'} py-0 px-2"
+            style="font-size:.72rem"
+            title="${l.status === 'excluded' ? 'Remove exclusion' : 'Exclude site'}"
+            onclick="event.stopPropagation();toggleExclude(this,${idx},'${l.status === 'excluded' ? 'pending' : 'excluded'}')">
+            <i class="ti ti-building-off"></i>
+          </button>
+        </div>
+        <button class="btn btn-link btn-sm p-0 ms-1" title="Full details" onclick="event.stopPropagation();openDetail(${i})">
+          <i class="ti ti-info-circle" style="font-size:13px;color:#94a3b8"></i>
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Exclude toggle ────────────────────────────────────────────────────────────
+async function toggleExclude(btn, leadIdx, newStatus) {
+  const lead = allLeads[leadIdx];
+  if (!lead) return;
+  btn.disabled = true;
+  try {
+    await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/leads/${encodeURIComponent(lead.lead_id)}`,
+      { method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ status: newStatus }) }
+    );
+    lead.status = newStatus;
+    applyFilter();          // re-render table (also re-renders expanded row)
+  } catch(e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
+// ── Expand / collapse contacts inline ─────────────────────────────────────────
+const _contactCache = {};
+
+async function toggleExpand(row) {
+  if (row.classList.contains('expanded')) return; // already open — do nothing
+  // Collapse any other open row
+  document.querySelectorAll('.site-row.expanded').forEach(r => {
+    r.classList.remove('expanded');
+    r.querySelector('.expand-icon').style.transform = '';
+    const next = r.nextElementSibling;
+    if (next && next.classList.contains('contacts-sub-row')) next.remove();
+  });
+
+  row.classList.add('expanded');
+  row.querySelector('.expand-icon').style.transform = 'rotate(90deg)';
+
+  const leadId = row.dataset.leadId;
+  const colCount = 7;
+
+  // Insert placeholder
+  const sub = document.createElement('tr');
+  sub.className = 'contacts-sub-row';
+  sub.innerHTML = `<td colspan="${colCount}" class="py-2 px-4" style="background:#f8fafc">
+    <div class="text-muted small"><div class="spinner-border spinner-border-sm me-1"></div>Loading contacts…</div>
+  </td>`;
+  row.insertAdjacentElement('afterend', sub);
+
+  // Fetch (cached)
+  if (!_contactCache[leadId]) {
+    try {
+      const data = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/leads/${encodeURIComponent(leadId)}/contacts`);
+      _contactCache[leadId] = data.contacts || [];
+    } catch(e) {
+      sub.querySelector('td').innerHTML = `<span class="text-danger small">Error: ${escapeHtml(e.message)}</span>`;
+      return;
+    }
+  }
+
+  const contacts = _contactCache[leadId];
+  if (!contacts.length) {
+    sub.querySelector('td').innerHTML = '<span class="text-muted small">No contacts found.</span>';
+    return;
+  }
+
+  renderContacts(sub.querySelector('td'), leadId, contacts);
+}
+
+function renderContacts(cell, leadId, contacts) {
+  const lid = escapeHtml(leadId);
+  cell.innerHTML = `
+    <table class="table table-sm mb-0" style="font-size:12px">
+      <thead><tr style="background:#f1f5f9">
+        <th style="width:180px">Name</th>
+        <th style="width:200px">Email</th>
+        <th>Title / Role</th>
+        <th style="width:130px" class="text-end">Status</th>
+      </tr></thead>
+      <tbody>
+        ${contacts.map((c, ci) => {
+          const isExcl = (c.status || 'pending') === 'excluded';
+          return `<tr data-ci="${ci}" data-doc="${escapeHtml(c.doc_id||'')}" data-email="${escapeHtml(c.email||'')}">
+            <td>${escapeHtml(c.name || '—')}</td>
+            <td>${escapeHtml(c.email || '—')}</td>
+            <td class="text-muted">${escapeHtml(c.title || c.role || '')}</td>
+            <td class="text-end">
+              <div class="d-inline-flex align-items-center gap-1">
+                ${statusBadge(c.status)}
+                <button class="btn btn-xs ${isExcl ? 'btn-danger' : 'btn-outline-danger'} py-0 px-2"
+                  style="font-size:.72rem"
+                  title="${isExcl ? 'Remove exclusion' : 'Exclude contact'}"
+                  onclick="toggleContactExclude(this,'${escapeHtml(leadId)}',${ci})">
+                  <i class="ti ti-user-x"></i>
+                </button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <div class="d-flex gap-2 flex-wrap align-items-center p-2 border-top bg-light">
+      <input class="form-control form-control-sm" style="width:160px" placeholder="Name" id="af-name-${lid}">
+      <input class="form-control form-control-sm" style="width:200px" placeholder="Email *" id="af-email-${lid}">
+      <input class="form-control form-control-sm" style="width:160px" placeholder="Title / Role" id="af-title-${lid}">
+      <button class="btn btn-sm btn-primary" onclick="saveContact('${lid}')">Add</button>
+    </div>`;
+}
+
+function _clearAddForm(leadId) {
+  document.getElementById('af-name-'  + leadId).value = '';
+  document.getElementById('af-email-' + leadId).value = '';
+  document.getElementById('af-title-' + leadId).value = '';
+}
+
+// ── Contact exclude / restore ─────────────────────────────────────────────────
+async function toggleContactExclude(btn, leadId, ci) {
+  const contacts = _contactCache[leadId];
+  if (!contacts || !contacts[ci]) return;
+  const c = contacts[ci];
+  const docId = c.doc_id;
+  if (!docId) { alert('Contact has no doc_id.'); return; }
+  const currentStatus = c.status || 'pending';
+  const nextStatus = currentStatus === 'excluded' ? 'pending' : 'excluded';
+  btn.disabled = true;
+  const oldHtml = btn.innerHTML;
+  btn.innerHTML = '<i class="ti ti-loader"></i>';
+  try {
+    await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/${encodeURIComponent(docId)}`,
+      { method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ status: nextStatus }) }
+    );
+    c.status = nextStatus;
+    // Re-render the contacts sub-row for this lead
+    const subRow = document.querySelector(`.site-row[data-lead-id="${leadId}"] + .contacts-sub-row`);
+    if (subRow) renderContacts(subRow.querySelector('td'), leadId, contacts);
+  } catch(e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+  }
+}
+
+async function saveContact(leadId) {
+  const name  = document.getElementById('af-name-'  + leadId).value.trim();
+  const email = document.getElementById('af-email-' + leadId).value.trim();
+  const title = document.getElementById('af-title-' + leadId).value.trim();
+  if (!email) { alert('Email is required.'); return; }
+  try {
+    const resp = await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/leads/${encodeURIComponent(leadId)}/contacts`,
+      { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ name, email, title }) }
+    );
+    _clearAddForm(leadId);
+    if (!_contactCache[leadId]) _contactCache[leadId] = [];
+    _contactCache[leadId].push(resp.contact);
+    const subRow = document.querySelector(`.site-row[data-lead-id="${leadId}"] + .contacts-sub-row`);
+    if (subRow) renderContacts(subRow.querySelector('td'), leadId, _contactCache[leadId]);
+    const lead = allLeads.find(l => l.lead_id === leadId);
+    if (lead) {
+      lead.contact_count = (lead.contact_count || 0) + 1;
+      lead.pending_count  = (lead.pending_count  || 0) + 1;
+      // Update the count cell in the existing row without rebuilding the table
+      const siteRow = document.querySelector(`.site-row[data-lead-id="${leadId}"]`);
+      if (siteRow) {
+        const countCell = siteRow.querySelectorAll('td')[4];
+        if (countCell) countCell.innerHTML = _contactCountHtml(lead);
+      }
+    }
+  } catch(e) {
+    _clearAddForm(leadId);
+    alert(e.message);
+  }
+}
+
+
+// ── Detail modal ──────────────────────────────────────────────────────────────
+function openDetail(tableIdx) {
+  initModal();
+  // tableIdx is index in the filtered view — resolve via data-idx on the row
+  const row  = document.querySelectorAll('.site-row')[tableIdx];
+  const idx  = parseInt(row.dataset.idx, 10);
+  const lead = allLeads[idx];
+  if (!lead) return;
+
+  document.getElementById('modal-title').textContent =
+    lead.company || lead.domain || lead.lead_id;
+  document.getElementById('modal-website-btn').href = lead.website || '#';
+
+  const sources = (lead.sources || []).map(s =>
+    `<span class="pill">${escapeHtml(s)}</span>`).join('');
+
+  const kw = (lead.keywords || []).slice(0, 12).map(k =>
+    `<span class="pill">${escapeHtml(k)}</span>`).join('');
+
+  const spec = (lead.ai_specialisation || []).map(s =>
+    `<span class="pill">${escapeHtml(s)}</span>`).join('');
+
+  function field(label, val) {
+    if (!val && val !== 0) return '';
+    return `<div class="detail-label">${escapeHtml(label)}</div>
+            <div class="detail-value">${val}</div>`;
+  }
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="detail-grid mb-3">
+      ${field('Domain',        `<a href="${escapeHtml(lead.website||'')}" target="_blank">${escapeHtml(lead.domain||'')}</a>`)}
+      ${field('Country',       escapeHtml((lead.country_name||'') + (lead.country ? ` (${lead.country})` : '')))}
+      ${field('Location',      escapeHtml(lead.location || ''))}
+      ${field('Loc. country',  escapeHtml(lead.location_country || ''))}
+      ${field('AI country',    escapeHtml(lead.ai_country || ''))}
+    </div>
+
+    <div class="detail-grid mb-3">
+      ${field('Sector',        escapeHtml(lead.ai_sector || ''))}
+      ${field('Company type',  escapeHtml(lead.ai_company_type || ''))}
+      ${field('Platform',      escapeHtml(lead.platform || lead.ai_platform || ''))}
+      ${field('Query cat.',    escapeHtml(lead.query_category || ''))}
+      ${field('Page count',    lead.page_count != null ? lead.page_count : '')}
+      ${field('Sitemap type',  escapeHtml(lead.sitemap_type || ''))}
+    </div>
+
+    <div class="detail-grid mb-3">
+      ${field('Priority',      lead.priority ? priorityBadge(lead.priority) : '')}
+      ${field('Reseller score',lead.reseller_score != null ? lead.reseller_score : '')}
+      ${field('Client base',   escapeHtml(lead.ai_client_base || ''))}
+      ${field('Reseller pot.', escapeHtml(lead.ai_reseller_potential || ''))}
+      ${field('Status',        statusBadge(lead.status))}
+      ${field('Sources',       sources)}
+    </div>
+
+    ${spec ? `<div class="mb-2"><div class="detail-label mb-1">Specialisation</div>${spec}</div>` : ''}
+    ${kw   ? `<div class="mb-3"><div class="detail-label mb-1">Keywords</div>${kw}</div>` : ''}
+
+    ${lead.suggested_angle ? `
+      <div class="detail-label mb-1">Suggested angle</div>
+      <div class="summary-box mb-3">${escapeHtml(lead.suggested_angle)}</div>` : ''}
+
+    ${lead.summary ? `
+      <div class="detail-label mb-1">Summary</div>
+      <div class="summary-box">${escapeHtml(lead.summary)}</div>` : ''}
+  `;
+
+  modal.show();
+}
+load();
+</script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>

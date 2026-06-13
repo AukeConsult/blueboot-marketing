@@ -105,6 +105,7 @@ class ContactRow:
     next_mail_index: int  = 0
     in_reply_to:    str | None = None
     selected_step:  dict | None = None
+    lead_id:        str  = ""
     extra:          dict = field(default_factory=dict)
 
 
@@ -153,6 +154,7 @@ class SentConfirmation:
 _CONTACT_KNOWN = {
     "email", "contact_name", "company", "domain", "country",
     "status", "followup_status", "mail_sent", "created_at", "sent_at", "message_id", "sender_account",
+    "lead_id",
 }
 
 _CAMPAIGN_KNOWN = {
@@ -486,6 +488,7 @@ def read_outreach(
                 country        = d.get("country", ""),
                 status         = contact_status,
                 mail_sent      = mail_sent,
+                lead_id        = str(d.get("lead_id") or "").strip(),
                 extra          = {k: v for k, v in d.items() if k not in _CONTACT_KNOWN},
             ))
             total += 1
@@ -493,6 +496,40 @@ def read_outreach(
             break
 
     if not by_campaign:
+        return []
+
+    # Step 1b: filter contacts whose site (campaign_lead) exists but is not pending.
+    # Pre-load all campaign_leads statuses per campaign in one read each (select status only).
+    # If a lead doc does not exist in campaign_leads, the contact is allowed through.
+    for camp_id, contacts in list(by_campaign.items()):
+        leads_col = (
+            db.collection("campaigns")
+              .document(camp_id)
+              .collection("campaign_leads")
+        )
+        lead_statuses: dict[str, str] = {}
+        for ldoc in leads_col.select(["status"]).stream():
+            lead_statuses[ldoc.id] = str((ldoc.to_dict() or {}).get("status", "")).strip().lower()
+
+        filtered: list = []
+        for contact in contacts:
+            lid = contact.lead_id
+            if lid and lid in lead_statuses and lead_statuses[lid] != "pending":
+                print(
+                    f"[outreach_mail_select] SKIP contact {contact.email} "
+                    f"-- site lead '{lid}' status='{lead_statuses[lid]}'",
+                    flush=True,
+                )
+                continue
+            filtered.append(contact)
+
+        if filtered:
+            by_campaign[camp_id] = filtered
+        else:
+            del by_campaign[camp_id]
+
+    if not by_campaign:
+        print("[outreach_mail_select] all contacts filtered out by site-lead status check")
         return []
 
     # Step 2: resolve campaigns; cache accounts (one Firestore read per account)

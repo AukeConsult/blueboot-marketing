@@ -389,3 +389,199 @@ def discover_campaigns():
         return jsonify({"existing": sorted(existing), "created": created, "message": msg})
     except Exception as exc:
         return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/campaigns/<campaign_id>/leads", methods=["GET"])
+def list_campaign_leads(campaign_id):
+    """Return all campaign_leads docs for a campaign."""
+    try:
+        db   = _get_db()
+        docs = (
+            db.collection("campaigns")
+              .document(campaign_id)
+              .collection("campaign_leads")
+              .stream()
+        )
+        leads = []
+        for doc in docs:
+            d = doc.to_dict() or {}
+            d.setdefault("lead_id", doc.id)
+            leads.append(d)
+        leads.sort(key=lambda x: x.get("company") or x.get("domain") or "")
+        return jsonify({"campaign_id": campaign_id, "leads": leads, "count": len(leads)})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/campaigns/<campaign_id>/leads/<lead_id>/contacts", methods=["GET"])
+def list_lead_contacts(campaign_id, lead_id):
+    """Return campaign_contacts that belong to a specific lead_id."""
+    try:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        db   = _get_db()
+        docs = (
+            db.collection("campaigns")
+              .document(campaign_id)
+              .collection("campaign_contacts")
+              .where(filter=FieldFilter("lead_id", "==", lead_id))
+              .stream()
+        )
+        contacts = []
+        for doc in docs:
+            d = doc.to_dict() or {}
+            d.setdefault("doc_id", doc.id)
+            contacts.append(d)
+        contacts.sort(key=lambda x: x.get("name") or x.get("email") or "")
+        return jsonify({"lead_id": lead_id, "contacts": contacts, "count": len(contacts)})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+
+@bp.route("/api/crm/campaigns/<campaign_id>/leads/<lead_id>/contacts", methods=["POST"])
+def create_lead_contact(campaign_id, lead_id):
+    """Create a new campaign_contact for a specific lead.
+
+    doc_id is derived from email: re.sub(r"[^a-zA-Z0-9_-]", "_", email.lower())
+    — the same algorithm used everywhere in the pipeline.
+    Site fields are copied from the campaign_lead doc so the contact is enriched
+    from the start.
+    """
+    try:
+        import re as _re
+        from datetime import datetime, timezone
+        body = request.get_json(silent=True) or {}
+        email = str(body.get("email") or "").strip().lower()
+        if not email:
+            return _err("email is required.", 400)
+
+        # Normalised doc_id — same algorithm used everywhere in the pipeline
+        doc_id = _re.sub(r"[^a-zA-Z0-9_-]", "_", email)
+
+        db = _get_db()
+        contacts_col = (
+            db.collection("campaigns").document(campaign_id)
+              .collection("campaign_contacts")
+        )
+
+        # Abort if this email already exists anywhere in the campaign
+        # (query on email field catches contacts with any doc_id format)
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        dupes = list(contacts_col.where(filter=FieldFilter("email", "==", email)).limit(1).stream())
+        if dupes:
+            return _err(f"A contact for '{email}' already exists in this campaign.", 409)
+
+        # Pull site fields from the campaign_lead doc
+        lead_snap = (
+            db.collection("campaigns").document(campaign_id)
+              .collection("campaign_leads").document(lead_id).get()
+        )
+        lead = lead_snap.to_dict() if lead_snap.exists else {}
+
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        contact = {
+            "doc_id":             doc_id,
+            "email":              email,
+            "name":               str(body.get("name")  or "").strip(),
+            "title":              str(body.get("title") or "").strip(),
+            "lead_id":            lead_id,
+            # Site fields inherited from the lead
+            "website":            lead.get("website",        ""),
+            "domain":             lead.get("domain",         ""),
+            "company":            lead.get("company",        ""),
+            "country":            lead.get("country",        ""),
+            "country_name":       lead.get("country_name",   ""),
+            "location":           lead.get("location",       ""),
+            "query_category":     lead.get("query_category", ""),
+            "platform":           lead.get("platform") or lead.get("ai_platform", ""),
+            "ai_sector":          lead.get("ai_sector",      ""),
+            "page_count":         lead.get("page_count"),
+            # Lifecycle
+            "status":             "pending",
+            "sent_at":            None,
+            "last_action":        "",
+            "last_action_status": "",
+            "mail_sent":          [],
+            "created_at":         now,
+            "added_manually":     True,
+        }
+
+        contacts_col.document(doc_id).set(contact)
+        contact["doc_id"] = doc_id
+        return jsonify({"status": "ok", "contact": contact}), 201
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/campaigns/<campaign_id>/leads/<lead_id>", methods=["PATCH"])
+def patch_campaign_lead(campaign_id, lead_id):
+    """Update fields on a campaign_lead doc (e.g. status).
+
+    When status is set to 'excluded', all campaign_contacts for this lead are
+    also excluded.  When restored to 'pending', only currently-excluded contacts
+    are restored (active/sent contacts are left untouched).
+    """
+    try:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        body = request.get_json(silent=True) or {}
+        allowed = {"status"}
+        updates = {k: v for k, v in body.items() if k in allowed}
+        if not updates:
+            return _err("No updatable fields provided.", 400)
+        new_status = updates.get("status")
+        if new_status is not None:
+            valid = {"pending", "active", "sent", "excluded"}
+            if new_status not in valid:
+                return _err(f"Invalid status '{new_status}'.", 400)
+
+        db = _get_db()
+        campaign_ref = db.collection("campaigns").document(campaign_id)
+
+        # Update the lead doc
+        campaign_ref.collection("campaign_leads").document(lead_id).update(updates)
+
+        # Cascade status to campaign_contacts for this lead
+        contacts_updated = 0
+        if new_status in ("excluded", "pending"):
+            contacts_col = campaign_ref.collection("campaign_contacts")
+            query = contacts_col.where(filter=FieldFilter("lead_id", "==", lead_id))
+            if new_status == "pending":
+                # Only restore contacts that are currently excluded
+                query = query.where(filter=FieldFilter("status", "==", "excluded"))
+            batch = db.batch()
+            count = 0
+            for doc in query.stream():
+                batch.update(doc.reference, {"status": new_status})
+                count += 1
+                if count % 400 == 0:
+                    batch.commit()
+                    batch = db.batch()
+            if count % 400:
+                batch.commit()
+            contacts_updated = count
+
+        # Recount pending/excluded on the lead after cascade
+        if new_status in ("excluded", "pending"):
+            try:
+                all_siblings = list(
+                    contacts_col.where(filter=FieldFilter("lead_id", "==", lead_id))
+                                .select(["status"]).stream()
+                )
+                pending_count  = sum(
+                    1 for c in all_siblings
+                    if (c.to_dict() or {}).get("status", "pending") == "pending"
+                )
+                excluded_count = sum(
+                    1 for c in all_siblings
+                    if (c.to_dict() or {}).get("status", "") == "excluded"
+                )
+                campaign_ref.collection("campaign_leads").document(lead_id).update({
+                    "pending_count":  pending_count,
+                    "excluded_count": excluded_count,
+                })
+            except Exception:
+                pass  # best-effort
+
+        return _ok("Updated.", lead_id=lead_id, contacts_updated=contacts_updated, **updates)
+    except Exception as exc:
+        return _err(str(exc), 500)

@@ -162,6 +162,7 @@ const PAGE_ROLES = {
   'campaigns.html':     ['admin', 'campaign-user', 'user'],
   'campaign.html':      ['admin', 'campaign-user', 'user'],
   'campaign-edit.html': ['admin', 'campaign-user', 'user'],
+  'campaign_sites.html': ['admin', 'campaign-user', 'user'],
   'mailbox.html':       ['admin', 'campaign-user', 'user'],
   'crm-bp.html':        ['admin', 'user'],
   'crm-sync.html':      ['admin', 'user'],
@@ -178,7 +179,7 @@ const PAGE_ROLES = {
 
 const NAV_LINKS = [
   { href: 'campaign.html',      icon: 'ti-speakerphone',      label: 'Campaigns',
-    match: ['campaigns.html', 'campaign.html', 'campaign-edit.html'],
+    match: ['campaigns.html', 'campaign.html', 'campaign-edit.html', 'campaign_sites.html'],
     roles: ['admin', 'campaign-user', 'user'] },
   { href: 'crm_follow.html',   icon: 'ti-phone-check',       label: 'Follow-up',
     roles: ['admin', 'campaign-user', 'user'] },
@@ -190,6 +191,7 @@ const NAV_LINKS = [
     match: ['statistics.html', 'filter-facets.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html'],
     children: [
       { href: 'statistics.html',    icon: 'ti-chart-bar',             label: 'Statistics' },
+      { href: 'campaign_sites.html', icon: 'ti-building',              label: 'Campaign Sites' },
       { href: 'filter-facets.html', icon: 'ti-filter',                label: 'Filter facets' },
       { divider: true },
       { href: 'gdisk.html',         icon: 'ti-brand-google-drive',    label: 'Drive Folder' },

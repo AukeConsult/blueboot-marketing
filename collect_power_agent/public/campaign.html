@@ -383,6 +383,9 @@ body { overflow: hidden; }
           <button id="enrich-btn" class="btn btn-sm btn-outline-secondary" onclick="enrichNames()" title="Fill missing names using Bing + AI">
             <i class="ti ti-user-search"></i>
           </button>
+          <a id="sites-btn" href="campaign_sites.html" class="btn btn-sm btn-outline-primary" title="View campaign sites">
+            <i class="ti ti-building me-1"></i>Sites
+          </a>
           <input id="contact-search" class="form-control form-control-sm" style="max-width:180px" placeholder="Search…" oninput="filterContacts()">
         </div>
       </div>
@@ -789,6 +792,7 @@ async function selectCampaign(id, event) {
   if (event) event.preventDefault();
   if (!id) return;
   document.getElementById('campaign-select').value = id;
+  document.getElementById('sites-btn').href = `campaign_sites.html?campaign=${encodeURIComponent(id)}`;
   localStorage.setItem('selectedCampaign', id);
   const url = new URL(window.location.href);
   url.searchParams.set('campaign_id', id);
@@ -1171,6 +1175,7 @@ function filterContacts() {
 // ── Bulk selection helpers ────────────────────────────────────────────────
 async function loadCampaign() {
   const id = document.getElementById('campaign-select').value;
+  if (id) document.getElementById('sites-btn').href = `campaign_sites.html?campaign=${encodeURIComponent(id)}`;
   document.getElementById('sync-feedback').style.display = 'none';
   document.getElementById('campaign-detail').style.display = 'none';
   document.getElementById('campaign-actions').style.display = 'none';

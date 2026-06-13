@@ -174,10 +174,18 @@ settings, mail-tag status settings, or user role documents requires `admin`.
 
 Once the token is verified, `flask.g.user_email` holds the real authenticated identity. Route handlers that write to `comment_history` (e.g. `update_campaign_contact`) use this value instead of trusting a `_user` field sent from the client.
 
+### Auth caching
+
+`functions-crm/auth_cache.py` caches `settings/users/users/{email}` role lookups
+for 300 seconds per warm Firebase Function instance. This reduces Firestore reads on
+busy instances. Role changes may take up to that TTL to appear on a warm instance;
+cold starts always begin with an empty cache.
+
 ### Key files
 
 | File | Role |
 |---|---|
+| `functions-crm/auth_cache.py` | Warm-instance user role cache |
 | `functions-crm/auth_settings.py` | Editable API route/auth/role policy table |
 | `functions-crm/main.py` | `before_request` hook and current runtime enforcement |
 | `functions-crm/handlers/shared.py` | `_get_user_role()`, `ROLE_LEVELS` |

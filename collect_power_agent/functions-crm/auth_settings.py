@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from fnmatch import fnmatchcase
+from functools import lru_cache
 
 
 ADMIN = "admin"
@@ -197,6 +198,7 @@ def _path_matches(pattern: str, path: str) -> bool:
     return fnmatchcase(path, pattern)
 
 
+@lru_cache(maxsize=512)
 def find_api_rule(method: str, path: str) -> ApiRule | None:
     method = method.upper()
     path = _normalize_path(path)

@@ -519,6 +519,11 @@ def _run_facet_campaign_site_leads(
     written = added + refreshed
     print(f"[facet-campaign] done. {written} contacts in campaign '{campaign_id}' "
           f"(+{added} new, ~{refreshed} refreshed, -{removed} removed)", flush=True)
+
+    # ── 9. Populate campaign_leads ────────────────────────────────────────────
+    from crm.campaign_leads_lib import populate_campaign_leads
+    leads_summary = populate_campaign_leads(db, campaign_id, dry_run=False)
+
     return {
         "campaign_id":               campaign_id,
         "facet_name":                facet_name,
@@ -531,6 +536,7 @@ def _run_facet_campaign_site_leads(
         "contacts_protected":        protected,
         "sites_count":               len(sites),
         "countries":                 countries_list,
+        "leads_written":             leads_summary.get("leads_written", 0),
         "dry_run":                   False,
     }
 
@@ -731,6 +737,11 @@ def run_facet_campaign_leads(
     written = added + refreshed
     print(f"[facet-campaign-leads] done. +{added} new, ~{refreshed} refreshed, -{removed} removed",
           flush=True)
+
+    # ── Populate campaign_leads ───────────────────────────────────────────────
+    from crm.campaign_leads_lib import populate_campaign_leads
+    leads_summary = populate_campaign_leads(db, campaign_id, dry_run=False)
+
     return {
         "campaign_id": campaign_id, "facet_name": facet_name,
         "pipeline": "leads",
@@ -740,7 +751,8 @@ def run_facet_campaign_leads(
         "contacts_added": added, "contacts_refreshed": refreshed,
         "contacts_removed": removed, "contacts_protected": protected,
         "dedup_by_campaign": dedup_by_campaign,
-        "sites_count": len(sites), "countries": countries_list, "dry_run": False,
+        "sites_count": len(sites), "countries": countries_list,
+        "leads_written": leads_summary.get("leads_written", 0), "dry_run": False,
     }
 
 

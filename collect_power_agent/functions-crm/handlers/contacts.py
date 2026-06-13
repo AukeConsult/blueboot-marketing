@@ -163,6 +163,38 @@ def update_campaign_contact(campaign_id, doc_id):
             update["comment_history"] = _gfs.ArrayUnion(entries)
 
         ref.update(update)
+
+        # ── Recount pending/excluded on the parent lead after status change ──
+        if "status" in update:
+            try:
+                from google.cloud.firestore_v1.base_query import FieldFilter as _FF
+                contact_snap = ref.get()
+                lead_id = ((contact_snap.to_dict() or {}).get("lead_id") or "").strip()
+                if lead_id:
+                    contacts_col = (db.collection("campaigns").document(campaign_id)
+                                      .collection("campaign_contacts"))
+                    siblings = list(
+                        contacts_col.where(filter=_FF("lead_id", "==", lead_id))
+                                    .select(["status"]).stream()
+                    )
+                    pending_count  = sum(
+                        1 for c in siblings
+                        if (c.to_dict() or {}).get("status", "pending") == "pending"
+                    )
+                    excluded_count = sum(
+                        1 for c in siblings
+                        if (c.to_dict() or {}).get("status", "") == "excluded"
+                    )
+                    lead_ref = (db.collection("campaigns").document(campaign_id)
+                                  .collection("campaign_leads").document(lead_id))
+                    if lead_ref.get().exists:
+                        lead_ref.update({
+                            "pending_count":  pending_count,
+                            "excluded_count": excluded_count,
+                        })
+            except Exception:
+                pass  # counter update is best-effort; don't fail the main response
+
         safe = {k: v for k, v in update.items() if k != "comment_history"}
         return _ok(f"Contact '{doc_id}' updated", updated=safe)
     except Exception as exc:

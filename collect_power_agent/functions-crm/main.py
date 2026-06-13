@@ -5,7 +5,7 @@ Thin shell: creates the Flask app, registers all Blueprints, and exposes the
 two Cloud Function entry points (crmApi / crmWorker).  All business logic lives
 in handlers/*.py and crm/*.py.
 
-Trigger endpoints return job_id immediately (crmApi — 30 s timeout).
+Trigger endpoints return job_id immediately (crmApi — 300 s timeout).
 Cloud Tasks calls crmWorker which runs up to 15 minutes.
 Poll GET /api/crm/status/<job_id> for result.
 """
@@ -22,6 +22,7 @@ from firebase_functions import https_fn, options as fn_options
 from flask import Flask, jsonify
 from flask_cors import CORS
 
+from auth_cache import get_user_role_cached
 from handlers.shared import _err
 
 # -- Flask app ----------------------------------------------------------------
@@ -166,7 +167,7 @@ def check_auth():
         return _err("Auth service temporarily unavailable — please retry", 503)
 
     # ── Fetch role from Firestore user doc ────────────────────────────────────
-    role = _get_user_role(db, user_email)
+    role = get_user_role_cached(db, user_email, _get_user_role)
     _log.info(f"[auth] role={role}  user={user_email}  {req.method} {req.path}")
 
     g.user_email = user_email
@@ -252,7 +253,7 @@ def whoami():
 
 # -- Cloud Function entry points ----------------------------------------------
 
-@https_fn.on_request(region="us-central1", timeout_sec=30)
+@https_fn.on_request(region="us-central1", timeout_sec=300)
 def crmApi(req: https_fn.Request) -> https_fn.Response:
     """Trigger + status endpoints — returns quickly."""
     with app.request_context(req.environ):
