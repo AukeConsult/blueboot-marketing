@@ -225,6 +225,7 @@ tr.row-sp-active + .follow-comment-row > td { background: #eef0ff !important; }
   .follow-side-panel.sp-open { width: min(100vw, 420px); }
   .follow-side-panel .bb-card { width: 100%; min-width: 0; border-radius: 0; border-right: none; border-top: none; border-bottom: none; }
 }
+
 tr.row-sp-active > td { background: #f0f2ff !important; }
 .sp-avatar {
   width: 42px; height: 42px; border-radius: 50%;
@@ -425,7 +426,12 @@ tr.row-sp-active > td { background: #f0f2ff !important; }
 html, body { height: 100%; overflow: hidden; }
 body { display: flex; flex-direction: column; }
 #main-container { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; max-width: none !important; }
+/* Thread the tab content into the flex height chain */
+.tab-content { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.tab-pane { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: hidden; }
+.tab-pane.show.active { display: flex; }
 #follow-layout { flex: 1; min-height: 0; align-items: stretch; overflow: hidden; }
+#sites-tab-layout { flex: 1; min-height: 0; overflow: hidden; }
 #follow-layout > .bb-card { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 #follow-layout > .bb-card .table-responsive { flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; scrollbar-gutter: stable; }
 /* Sticky thead inside the scrolling container */
@@ -692,10 +698,10 @@ body { display: flex; flex-direction: column; }
       <!-- Filter group: owner / campaign / outreach -->
       <div class="hdr-group hdr-group-filter">
         <span class="hdr-group-label"><i class="ti ti-filter me-1"></i>Filter</span>
-        <select id="owner-header" class="group-select bb-header-select" title="Filter by owner" onchange="onOwnerChange()" style="max-width:150px">
+        <select id="owner-header" class="group-select bb-header-select" title="Filter by owner" onchange="onOwnerChange(); _maybeReloadSites();" style="max-width:150px">
           <option value="">All owners</option>
         </select>
-        <select id="campaign-filter" class="group-select bb-header-select" title="Filter by campaign" onchange="load()" style="max-width:180px">
+        <select id="campaign-filter" class="group-select bb-header-select" title="Filter by campaign" onchange="load(); _maybeReloadSites();" style="max-width:180px">
           <option value="">All campaigns</option>
         </select>
         <label class="bb-header-check" title="Include pending contacts">
@@ -725,7 +731,7 @@ body { display: flex; flex-direction: column; }
   <!-- Filters -->
   <div id="hdr-filter-row" class="d-flex flex-wrap align-items-center gap-2 mb-3">
     <input id="search" class="form-control form-control-sm" style="max-width:240px"
-      placeholder="Search name, email, website or title…" oninput="applyFilter()">
+      placeholder="Search name, email, website or title…" oninput="applyFilter(); _maybeFilterSites();">
 
 
     <select id="followup-filter" class="form-select form-select-sm" style="max-width:170px" onchange="applyFilter()">
@@ -740,7 +746,7 @@ body { display: flex; flex-direction: column; }
       <option value="not_interested">Not-interested</option>
     </select>
 
-    <select id="importance-filter" class="form-select form-select-sm" style="max-width:145px" onchange="applyFilter()">
+    <select id="importance-filter" class="form-select form-select-sm" style="max-width:145px" onchange="applyFilter(); _maybeFilterSites();">
       <option value="">All importances</option>
       <option value="high">High</option>
       <option value="medium">Medium</option>
@@ -748,7 +754,7 @@ body { display: flex; flex-direction: column; }
       <option value="__none__">Not set</option>
     </select>
 
-    <select id="contact-status-filter" class="form-select form-select-sm" style="max-width:155px" onchange="load()">
+    <select id="contact-status-filter" class="form-select form-select-sm" style="max-width:155px" onchange="load();">
       <option value="active">Active only</option>
       <option value="">All contacts</option>
       <option value="pending">Pending only</option>
@@ -850,6 +856,25 @@ body { display: flex; flex-direction: column; }
   <!-- Job status feedback -->
   <div id="sync-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
 
+  <!-- Tab nav: Contacts | Sites -->
+  <ul class="nav nav-tabs mb-0" id="follow-tabs" style="border-bottom:none">
+    <li class="nav-item">
+      <button class="nav-link active" id="tab-contacts-btn" data-bs-toggle="tab" data-bs-target="#tab-contacts-pane">
+        <i class="ti ti-users me-1"></i>Contacts
+        <span class="badge bg-secondary ms-1 fw-normal" id="contacts-tab-count" style="font-size:10px"></span>
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" id="tab-sites-btn" data-bs-toggle="tab" data-bs-target="#tab-sites-pane">
+        <i class="ti ti-building me-1"></i>Sites
+        <span class="badge bg-secondary ms-1 fw-normal" id="sites-tab-count" style="font-size:10px"></span>
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+  <!-- ── Contacts tab ───────────────────────────────────────────────────────── -->
+  <div class="tab-pane fade show active" id="tab-contacts-pane">
   <!-- Table + side panel -->
   <div id="follow-layout">
   <div class="bb-card">
@@ -889,6 +914,9 @@ body { display: flex; flex-direction: column; }
           </button>
           <button id="view-list-btn" class="btn btn-sm btn-primary" onclick="toggleView('list')" title="Full list view">
             <i class="ti ti-list"></i>
+          </button>
+          <button id="side-panel-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleSidePanel()" title="Toggle contact detail panel">
+            <i class="ti ti-layout-sidebar-right"></i>
           </button>
         </div>
       </div>
@@ -933,6 +961,42 @@ body { display: flex; flex-direction: column; }
   </div>
   <div id="sp-backdrop" onclick="closeSidePanel()"></div>
   </div><!-- /#follow-layout -->
+  </div><!-- /tab-pane#tab-contacts-pane -->
+
+  <!-- ── Sites tab ─────────────────────────────────────────────────────────── -->
+  <div class="tab-pane fade" id="tab-sites-pane">
+    <div id="sites-tab-layout" style="display:flex;align-items:stretch;gap:0">
+    <div class="bb-card" style="flex:1;min-width:0">
+      <!-- Sites toolbar -->
+      <div class="px-3 py-2 d-flex align-items-center gap-2 border-bottom bb-card-header">
+        <span class="fw-500 small"><i class="ti ti-building me-1 text-primary"></i>Sites</span>
+        <span id="sites-tab-count-label" class="small ms-auto" style="color:var(--bb-muted)"></span>
+        <button class="header-action-btn" title="Refresh sites" onclick="loadSitesTab(true)"><i class="ti ti-refresh"></i></button>
+      </div>
+      <!-- Sites table -->
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="bb-thead"><tr>
+            <th class="small bb-sortable" style="width:170px;cursor:pointer" onclick="sortSitesBy('company')">Company <span class="sites-sort-icon"></span></th>
+            <th class="small bb-sortable" style="width:110px;cursor:pointer" onclick="sortSitesBy('ai_sector')">Sector <span class="sites-sort-icon"></span></th>
+            <th class="small bb-sortable" style="width:55px;text-align:center;cursor:pointer" onclick="sortSitesBy('priority')">Prio <span class="sites-sort-icon"></span></th>
+            <th class="small bb-sortable" style="width:95px;cursor:pointer" onclick="sortSitesBy('followup_status')">Follow-up <span class="sites-sort-icon"></span></th>
+            <th class="small bb-sortable" style="width:80px;cursor:pointer" onclick="sortSitesBy('followup_importance')">Importance <span class="sites-sort-icon"></span></th>
+            <th class="small text-center" style="width:70px">Contacts</th>
+          </tr></thead>
+          <tbody id="sites-tab-body">
+            <tr><td colspan="8" class="text-center py-5 small" style="color:var(--bb-muted)">
+              Select a campaign or owner above to load sites.
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div><!-- /.bb-card list -->
+
+    </div><!-- /#sites-tab-layout -->
+  </div><!-- /tab-pane#tab-sites-pane -->
+
+  </div><!-- /tab-content -->
 
 </div>
 
@@ -1265,8 +1329,9 @@ function sortBy(col) {
 }
 
 function _updateSortIndicators() {
-  document.querySelectorAll('.bb-sortable').forEach(th => {
+  document.querySelectorAll('.bb-sortable[data-col]').forEach(th => {
     const ic = th.querySelector('.sort-icon');
+    if (!ic) return;
     if (th.dataset.col === _sortCol) { ic.textContent = _sortAsc ? ' ▲' : ' ▼'; th.style.color = 'var(--bb-accent)'; }
     else { ic.textContent = ''; th.style.color = ''; }
   });
@@ -3102,7 +3167,240 @@ function _relayoutTable() {
   await load();
 })();
 
+
+// ── Sites tab ─────────────────────────────────────────────────────────────────
+let _allSiteLeads     = [];
+let _sitesTabLoaded   = '';
+let _sitesSortCol     = 'company';
+let _sitesSortAsc     = true;
+
+function sortSitesBy(col) {
+  if (_sitesSortCol === col) { _sitesSortAsc = !_sitesSortAsc; }
+  else { _sitesSortCol = col; _sitesSortAsc = true; }
+  _updateSitesSortIndicators();
+  applySitesTabFilter();
+}
+
+function _updateSitesSortIndicators() {
+  document.querySelectorAll('#sites-tab-layout .bb-sortable').forEach(th => {
+    const ic = th.querySelector('.sites-sort-icon');
+    if (!ic) return;
+    const m = (th.getAttribute('onclick') || '').match(/sortSitesBy\('(.+?)'\)/);
+    const col = m ? m[1] : null;
+    if (col === _sitesSortCol) { ic.textContent = _sitesSortAsc ? ' ▲' : ' ▼'; th.style.color = 'var(--bb-accent)'; }
+    else { ic.textContent = ''; th.style.color = ''; }
+  });
+}
+
+function _sortSiteLeads(list) {
+  const impRank = { high: 0, medium: 1, low: 2, '': 3 };
+  const prioRank = { A: 0, B: 1, C: 2, '': 3 };
+  return [...list].sort((a, b) => {
+    let va, vb;
+    if (_sitesSortCol === 'followup_importance') {
+      va = impRank[a.followup_importance || ''] ?? 3;
+      vb = impRank[b.followup_importance || ''] ?? 3;
+      return _sitesSortAsc ? va - vb : vb - va;
+    }
+    if (_sitesSortCol === 'priority') {
+      va = prioRank[a.priority || ''] ?? 3;
+      vb = prioRank[b.priority || ''] ?? 3;
+      return _sitesSortAsc ? va - vb : vb - va;
+    }
+    va = String(a[_sitesSortCol] || '').toLowerCase();
+    vb = String(b[_sitesSortCol] || '').toLowerCase();
+    return _sitesSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+  });
+}
+
+const _SITE_FU_STATUSES = [
+  {value:'',              label:'— no status —'},
+  {value:'to_contact',    label:'To contact'},
+  {value:'contacted',     label:'Contacted'},
+  {value:'in_work',       label:'In work'},
+  {value:'not_interested',label:'Not interested'},
+  {value:'deal',          label:'Deal'},
+];
+const _SITE_IMPORTANCE = [
+  {value:'',      label:'— none —'},
+  {value:'low',   label:'Low'},
+  {value:'medium',label:'Medium'},
+  {value:'high',  label:'High'},
+];
+
+function _sitesTabKey() {
+  const c = document.getElementById('campaign-filter')?.value || '';
+  const o = document.getElementById('owner-header')?.value    || '';
+  return c + '|' + o;
+}
+
+async function loadSitesTab(force) {
+  const key = _sitesTabKey();
+  if (!force && key === _sitesTabLoaded) { applySitesTabFilter(); return; }
+  _sitesTabLoaded = key;
+  _allSiteLeads   = [];
+
+  const tbody = document.getElementById('sites-tab-body');
+  tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5 small" style="color:var(--bb-muted)">'
+    + '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>';
+  document.getElementById('sites-tab-count-label').textContent = '';
+
+  const camp  = document.getElementById('campaign-filter')?.value || '';
+  const owner = document.getElementById('owner-header')?.value    || '';
+  const params = new URLSearchParams();
+  if (camp)       params.set('campaign_id', camp);
+  else if (owner) params.set('owner', owner);
+
+  try {
+    const data = await fetchJSON(BASE + '/api/crm/leads?' + params.toString());
+    _allSiteLeads = data.leads || [];
+    _updateSitesSortIndicators();
+    applySitesTabFilter();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 small text-danger">Error: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function applySitesTabFilter() {
+  const q   = (document.getElementById('search')?.value          || '').trim().toLowerCase();
+  const imp = document.getElementById('importance-filter')?.value || '';
+
+  const filtered = _allSiteLeads.filter(l => {
+    if (imp && l.followup_importance !== imp) return false;
+    if (q) {
+      const hay = [l.company, l.domain, l.website, l.ai_sector, l.campaign_name]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const sorted = _sortSiteLeads(filtered);
+  const total = _allSiteLeads.length;
+  document.getElementById('sites-tab-count-label').textContent =
+    filtered.length === total ? `${total} sites` : `${filtered.length} / ${total}`;
+  document.getElementById('sites-tab-count').textContent = filtered.length || '';
+  renderSitesTabTable(sorted);
+}
+
+function _siteStatusBadge(s) {
+  const map = { pending:'secondary', active:'success', excluded:'danger' };
+  return `<span class="badge bg-${map[s]||'secondary'} fw-normal" style="font-size:10px">${escapeHtml(s||'pending')}</span>`;
+}
+function _sitePrioBadge(p) {
+  if (!p) return '<span class="text-muted small">—</span>';
+  const map = { A:'success', B:'warning', C:'secondary' };
+  return `<span class="badge bg-${map[p]||'secondary'} fw-normal" style="font-size:10px">${escapeHtml(p)}</span>`;
+}
+function _siteImpBadge(i) {
+  if (!i) return '<span class="text-muted small">—</span>';
+  const map = { high:'danger', medium:'warning', low:'secondary' };
+  return `<span class="badge bg-${map[i]||'secondary'} fw-normal" style="font-size:10px">${escapeHtml(i)}</span>`;
+}
+function _siteFuBadge(fu) {
+  if (!fu) return '<span class="text-muted small">—</span>';
+  const label = (_SITE_FU_STATUSES.find(x => x.value === fu)||{}).label || fu;
+  return `<span style="font-size:11px;color:var(--bb-muted)">${escapeHtml(label)}</span>`;
+}
+function _siteContactCount(l) {
+  const total = l.contact_count ?? null;
+  if (total === null) return '—';
+  let out = String(total);
+  if (l.pending_count)  out += ` <span class="text-success" style="font-size:10px">${l.pending_count}p</span>`;
+  if (l.excluded_count) out += ` <span class="text-danger"  style="font-size:10px">${l.excluded_count}x</span>`;
+  return out;
+}
+
+function renderSitesTabTable(leads) {
+  const tbody = document.getElementById('sites-tab-body');
+  if (!leads.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-5 small" style="color:var(--bb-muted)">No sites match the current filters.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = leads.map(l => {
+    const idx    = _allSiteLeads.indexOf(l);
+    const fuOpts = _SITE_FU_STATUSES.map(s =>
+      `<option value="${s.value}"${l.followup_status === s.value ? ' selected' : ''}>${escapeHtml(s.label)}</option>`
+    ).join('');
+    const impCls = (IMPORTANCE_LEVELS.find(i => i.value === (l.followup_importance||'')) || IMPORTANCE_LEVELS[0]).cls;
+    const impOpts = IMPORTANCE_LEVELS.map(i =>
+      `<option value="${i.value}"${(l.followup_importance||'') === i.value ? ' selected' : ''}>${i.label}</option>`
+    ).join('');
+    return `<tr class="site-tab-row" data-idx="${idx}">
+      <td class="small fw-semibold">${escapeHtml(l.company||l.domain||'—')}</td>
+      <td class="small">${escapeHtml(l.ai_sector||'—')}</td>
+      <td class="text-center">${_sitePrioBadge(l.priority)}</td>
+      <td><select class="follow-select" data-idx="${idx}" data-field="followup_status" onchange="saveSiteLeadField(this)">${fuOpts}</select></td>
+      <td><select class="imp-select ${impCls}" data-idx="${idx}" data-field="followup_importance"
+        onchange="saveSiteLeadField(this);this.className='imp-select '+(IMPORTANCE_LEVELS.find(i=>i.value===this.value)||IMPORTANCE_LEVELS[0]).cls">${impOpts}</select></td>
+      <td class="text-center small">${_siteContactCount(l)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function saveSiteLeadField(el) {
+  const idx   = parseInt(el.dataset.idx, 10);
+  const field = el.dataset.field;
+  const val   = el.value;
+  const lead  = _allSiteLeads[idx];
+  if (!lead) return;
+  el.style.opacity = '.5';
+  el.disabled = true;
+  try {
+    await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(lead.campaign_id)}/leads/${encodeURIComponent(lead.lead_id)}`,
+      { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({[field]: val}) }
+    );
+    lead[field] = val;
+  } catch(e) {
+    alert('Save failed: ' + e.message);
+    el.value = lead[field] || '';  // revert on failure
+  }
+  finally { el.style.opacity = ''; el.disabled = false; }
+}
+
+document.addEventListener('shown.bs.tab', e => {
+  if (e.target.id === 'tab-sites-btn') loadSitesTab(false);
+});
+function _maybeReloadSites() {
+  const active = document.querySelector('#follow-tabs .nav-link.active');
+  if (active && active.id === 'tab-sites-btn') loadSitesTab(true);
+  else _sitesTabLoaded = '';
+}
+function _maybeFilterSites() {
+  const active = document.querySelector('#follow-tabs .nav-link.active');
+  if (active && active.id === 'tab-sites-btn') applySitesTabFilter();
+}
+
 </script>
+
+<!-- Site tab detail modal -->
+<div class="modal fade" id="siteTabDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:600px">
+    <div class="modal-content border-0" style="border-radius:12px;overflow:hidden">
+      <div class="d-flex align-items-center gap-3 px-4 py-3" style="border-bottom:0.5px solid var(--bb-border)">
+        <div class="d-flex align-items-center justify-content-center flex-shrink-0"
+             style="width:44px;height:44px;border-radius:8px;background:var(--bb-surface);border:0.5px solid var(--bb-border)">
+          <i class="ti ti-building" style="font-size:22px;color:var(--bb-muted)"></i>
+        </div>
+        <div class="flex-grow-1 min-width-0">
+          <div class="fw-medium" id="std-title" style="font-size:15px"></div>
+          <div id="std-sub" style="font-size:12px;color:var(--bb-muted)"></div>
+        </div>
+        <div id="std-badges" class="d-flex gap-1 flex-shrink-0"></div>
+        <button type="button" class="btn-close ms-1" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0" id="std-body" style="max-height:70vh;overflow-y:auto"></div>
+      <div class="d-flex gap-2 justify-content-end px-4 py-3" style="border-top:0.5px solid var(--bb-border)">
+        <a id="std-website-btn" href="#" target="_blank" class="btn btn-sm btn-outline-secondary">
+          <i class="ti ti-external-link me-1"></i>Open site
+        </a>
+        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
 

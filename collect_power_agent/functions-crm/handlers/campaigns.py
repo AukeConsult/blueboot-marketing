@@ -391,6 +391,53 @@ def discover_campaigns():
         return _err(str(exc), 500)
 
 
+
+@bp.route("/api/crm/leads", methods=["GET"])
+def list_leads_cross_campaign():
+    """Return campaign_leads across all campaigns, optionally filtered by campaign_id or owner."""
+    try:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        db          = _get_db()
+        campaign_id = request.args.get("campaign_id", "").strip()
+        owner       = request.args.get("owner", "").strip()
+        status      = request.args.get("status", "").strip()
+
+        # Collect campaigns to query
+        camp_docs = []
+        if campaign_id:
+            doc = db.collection("campaigns").document(campaign_id).get()
+            if doc.exists:
+                camp_docs = [doc]
+        else:
+            q = db.collection("campaigns")
+            if owner:
+                q = q.where(filter=FieldFilter("owner", "==", owner))
+            camp_docs = list(q.stream())
+
+        leads = []
+        for camp_doc in camp_docs:
+            cid   = camp_doc.id
+            cdata = camp_doc.to_dict() or {}
+            cname = cdata.get("name") or cid
+            q2    = db.collection("campaigns").document(cid).collection("campaign_leads")
+            if status:
+                q2 = q2.where(filter=FieldFilter("status", "==", status))
+            for ldoc in q2.stream():
+                d = ldoc.to_dict() or {}
+                d.setdefault("lead_id", ldoc.id)
+                d["campaign_id"]   = cid
+                d["campaign_name"] = cname
+                # ensure followup fields are always present
+                for fk in ("followup_status","followup_date","followup_importance",
+                           "followup_comment","followup_owner"):
+                    d.setdefault(fk, "")
+                leads.append(d)
+
+        leads.sort(key=lambda x: (x.get("priority") or "Z", (x.get("company") or x.get("domain") or "").lower()))
+        return jsonify({"leads": leads, "count": len(leads)})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
 @bp.route("/api/crm/campaigns/<campaign_id>/leads", methods=["GET"])
 def list_campaign_leads(campaign_id):
     """Return all campaign_leads docs for a campaign."""
@@ -523,9 +570,16 @@ def patch_campaign_lead(campaign_id, lead_id):
     """
     try:
         from google.cloud.firestore_v1.base_query import FieldFilter
+        from datetime import datetime, timezone
         body = request.get_json(silent=True) or {}
-        allowed = {"status"}
-        updates = {k: v for k, v in body.items() if k in allowed}
+        _FOLLOWUP = {"followup_status", "followup_date", "followup_importance",
+                     "followup_comment", "followup_owner"}
+        allowed   = {"status"} | _FOLLOWUP
+        updates   = {}
+        for k, v in body.items():
+            if k not in allowed:
+                continue
+            updates[k] = str(v).strip() if v is not None else ""
         if not updates:
             return _err("No updatable fields provided.", 400)
         new_status = updates.get("status")
@@ -536,6 +590,11 @@ def patch_campaign_lead(campaign_id, lead_id):
 
         db = _get_db()
         campaign_ref = db.collection("campaigns").document(campaign_id)
+
+        # Timestamp followup changes
+        fu_changed = [f for f in _FOLLOWUP if f in updates]
+        if fu_changed:
+            updates["followup_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
         # Update the lead doc
         campaign_ref.collection("campaign_leads").document(lead_id).update(updates)
