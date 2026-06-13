@@ -403,6 +403,10 @@ def followup_contacts():
         for doc in contacts_iter:
             d     = doc.to_dict() or {}
             status = _contact_status(d.get("status"))
+            # Never show excluded on the follow-up page;
+            # pending only shown when include_pending is set
+            if status == "excluded":
+                continue
             if not include_pending and status == "pending":
                 continue
             parts = doc.reference.path.split("/")

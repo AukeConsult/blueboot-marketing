@@ -394,13 +394,28 @@ def discover_campaigns():
 
 @bp.route("/api/crm/leads", methods=["GET"])
 def list_leads_cross_campaign():
-    """Return campaign_leads across all campaigns, optionally filtered by campaign_id or owner."""
+    """Return campaign_leads across all campaigns, optionally filtered by campaign_id or owner.
+
+    Status filtering rules (mirrors /followup-contacts):
+    - Default: only status == "active" leads are returned.
+    - include_pending=true : return all statuses (active + pending + excluded).
+    - status=<value>       : override with an explicit status filter.
+    """
     try:
         from google.cloud.firestore_v1.base_query import FieldFilter
         db          = _get_db()
         campaign_id = request.args.get("campaign_id", "").strip()
         owner       = request.args.get("owner", "").strip()
-        status      = request.args.get("status", "").strip()
+        # Explicit status override (e.g. status=excluded)
+        status_arg  = request.args.get("status", "").strip()
+        include_all = request.args.get("include_pending", "").strip().lower() in {"1", "true", "yes", "on"}
+
+        # Never return excluded leads on this endpoint.
+        # Default: active only. include_pending=true adds pending too.
+        if status_arg and status_arg != "excluded":
+            filter_status = status_arg          # explicit wins (except excluded)
+        else:
+            filter_status = ""                  # post-filter below
 
         # Collect campaigns to query
         camp_docs = []
@@ -420,10 +435,16 @@ def list_leads_cross_campaign():
             cdata = camp_doc.to_dict() or {}
             cname = cdata.get("name") or cid
             q2    = db.collection("campaigns").document(cid).collection("campaign_leads")
-            if status:
-                q2 = q2.where(filter=FieldFilter("status", "==", status))
             for ldoc in q2.stream():
                 d = ldoc.to_dict() or {}
+                lead_status = (d.get("status") or "pending").strip().lower()
+                # Never show excluded; pending only with include_pending
+                if lead_status == "excluded":
+                    continue
+                if filter_status and lead_status != filter_status:
+                    continue
+                if not filter_status and not include_all and lead_status != "active":
+                    continue
                 d.setdefault("lead_id", ldoc.id)
                 d["campaign_id"]   = cid
                 d["campaign_name"] = cname
