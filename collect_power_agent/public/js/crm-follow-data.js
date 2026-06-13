@@ -153,7 +153,7 @@ async function load() {
     const _camp  = document.getElementById('campaign-filter')?.value || '';
     const _owner = document.getElementById('owner-header')?.value || '';
     const _cst = document.getElementById('contact-status-filter')?.value || '';
-    const _includePending = !!document.getElementById('include-pending')?.checked || _cst !== 'active';
+    const _includePending = !!document.getElementById('include-pending')?.checked;
     const params = new URLSearchParams();
     if (_camp)  params.set('campaign_id', _camp);
     if (_owner && !_camp) params.set('owner', _owner);
