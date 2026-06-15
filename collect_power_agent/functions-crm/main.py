@@ -83,6 +83,7 @@ _JOB_ENDPOINTS = frozenset({
     "jobs.campaign_export",
     "jobs.outreach_send",
     "jobs.reply_match",
+    "jobs.build_facets_trigger",
     "jobs.job_status",
     "jobs.list_jobs",
     "campaigns.discover_campaigns",

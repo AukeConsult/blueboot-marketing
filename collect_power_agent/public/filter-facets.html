@@ -31,6 +31,21 @@
 
   <!-- Load / save toolbar -->
   <div class="bb-card p-3 mb-3">
+    <div class="mb-3 d-flex align-items-end justify-content-between flex-wrap gap-2">
+      <div>
+        <label class="form-label small fw-500 mb-1 d-block">Pipeline</label>
+        <div class="btn-group btn-group-sm" role="group" aria-label="Pipeline selector">
+          <input type="radio" class="btn-check" name="pipeline" id="pl-site" autocomplete="off" onchange="onPipelineChange('site_leads')">
+          <label class="btn btn-outline-primary" for="pl-site"><i class="ti ti-building-store me-1"></i>Site leads</label>
+          <input type="radio" class="btn-check" name="pipeline" id="pl-leads" autocomplete="off" onchange="onPipelineChange('leads')">
+          <label class="btn btn-outline-success" for="pl-leads"><i class="ti ti-database me-1"></i>Leads</label>
+        </div>
+      </div>
+      <button class="btn btn-outline-secondary btn-sm" id="rebuild-btn" onclick="rebuildFacets()"
+              title="Rescan the data and rebuild this pipeline's base facet catalog">
+        <i class="ti ti-refresh me-1"></i>Rebuild <span id="rebuild-pl">site_leads</span> facets
+      </button>
+    </div>
     <div class="row g-2 align-items-end">
       <div class="col-md-5">
         <label class="form-label small fw-500 mb-1">Load facets</label>
@@ -126,24 +141,105 @@
 <script src="js/crm-common.js"></script>
 <script>
 // BASE, fetchWithTimeout, escapeHtml, setStatusEl come from js/crm-common.js
-const DEFAULT_SOURCE = 'site_leads';
+const BASE_DOC = { site_leads: 'site_leads', leads: 'leads' };
+let DEFAULT_SOURCE = 'site_leads';          // base doc for the active pipeline
+let allFacets = [];                          // full list from the API (with pipeline)
+let currentPipeline = localStorage.getItem('facetPipeline') || 'site_leads';
 let facets = null;
 
 // page-local status helper -> shared setStatusEl, fixed to the #status element
 function setStatus(msg, kind, html){ setStatusEl('status', msg, kind, html); }
 
+function baseDoc(){ return BASE_DOC[currentPipeline] || 'site_leads'; }
+function facetPipeline(f){
+  return f.pipeline || (f.source_collection === 'leads' ? 'leads' : 'site_leads');
+}
+
 async function loadList(){
   try{
     const r = await fetchWithTimeout(BASE + '/api/crm/filter-facets');
     const d = await r.json();
-    const sel = document.getElementById('load-select');
-    const names = (d.facets || []).map(f => f.name);
-    if(!names.includes(DEFAULT_SOURCE)) names.unshift(DEFAULT_SOURCE);
-    sel.innerHTML = names.map(n =>
-      `<option value="${n}"${n===DEFAULT_SOURCE?' selected':''}>${n}</option>`).join('');
+    allFacets = d.facets || [];
   }catch(e){
-    document.getElementById('load-select').innerHTML = `<option>${DEFAULT_SOURCE}</option>`;
+    allFacets = [];
   }
+  populateFacetSelect();
+}
+
+// Fill the Load dropdown with only the facets for the active pipeline, always
+// including that pipeline's base doc. Preserves the current selection if it
+// still belongs to the active pipeline.
+function populateFacetSelect(){
+  DEFAULT_SOURCE = baseDoc();
+  const sel = document.getElementById('load-select');
+  const prev = sel.value;
+  const names = allFacets
+    .filter(f => facetPipeline(f) === currentPipeline)
+    .map(f => f.name);
+  if(!names.includes(DEFAULT_SOURCE)) names.unshift(DEFAULT_SOURCE);
+  sel.innerHTML = names.map(n => `<option value="${n}">${n}</option>`).join('');
+  sel.value = names.includes(prev) ? prev : DEFAULT_SOURCE;
+}
+
+function syncPipelineToggle(){
+  const el = document.getElementById(currentPipeline === 'leads' ? 'pl-leads' : 'pl-site');
+  if(el) el.checked = true;
+  updateRebuildLabel();
+}
+
+function updateRebuildLabel(){
+  const lbl = document.getElementById('rebuild-pl');
+  if(lbl) lbl.textContent = currentPipeline;
+}
+
+// Rebuild the base facet catalog for the active pipeline (rescans the data).
+async function rebuildFacets(){
+  const btn = document.getElementById('rebuild-btn');
+  btn.disabled = true;
+  setStatus(`<span class="spinner-border spinner-border-sm me-1"></span>Rebuilding ${currentPipeline} facets…`, 'ok', true);
+  try{
+    const r = await fetchWithTimeout(BASE + '/api/crm/build-facets?pipeline=' + encodeURIComponent(currentPipeline));
+    const d = await r.json();
+    if(!r.ok || d.status === 'error'){ throw new Error(d.message || d.error || r.status); }
+    setStatus(`<span class="spinner-border spinner-border-sm me-1"></span>Rebuild queued (${d.job_id}) — scanning data…`, 'ok', true);
+    await pollRebuild(d.job_id);
+  }catch(e){
+    setStatus('Rebuild failed: ' + e.message, 'err');
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+async function pollRebuild(jobId){
+  for(let i = 0; i < 90; i++){
+    await new Promise(res => setTimeout(res, 2000));
+    try{
+      const r = await fetch(BASE + '/api/crm/status/' + jobId);
+      const j = await r.json();
+      if(j.status === 'done'){
+        const res = j.result || {};
+        setStatus(`Rebuilt '${res.doc}' — ${res.lead_count ?? '?'} leads, ${res.contact_count ?? '?'} contacts, ${(res.fields||[]).length} fields.`, 'ok');
+        await loadList();
+        const sel = document.getElementById('load-select');
+        sel.value = baseDoc();
+        loadFacets(baseDoc());
+        return;
+      }
+      if(j.status === 'error'){ setStatus('Rebuild failed: ' + (j.error || 'unknown'), 'err'); return; }
+    }catch(e){ /* keep polling */ }
+  }
+  setStatus('Rebuild is taking longer than expected — check CRM Jobs.', 'err');
+}
+
+function onPipelineChange(p){
+  currentPipeline = (p === 'leads') ? 'leads' : 'site_leads';
+  localStorage.setItem('facetPipeline', currentPipeline);
+  populateFacetSelect();
+  const sel = document.getElementById('load-select');
+  sel.value = baseDoc();
+  localStorage.setItem('selectedFacet', sel.value);
+  document.getElementById('save-name').value = '';
+  loadFacets(sel.value);
 }
 
 async function loadFacets(name){
@@ -532,12 +628,22 @@ async function pollCreateCampaign(jobId, campaignId, dryRun) {
 }
 
 console.log('[facets] page script loaded, starting…');
+syncPipelineToggle();
 loadList().then(() => {
-  const saved = localStorage.getItem('selectedFacet') || DEFAULT_SOURCE;
+  const saved = localStorage.getItem('selectedFacet');
+  // If the saved facet belongs to a different pipeline, switch to it.
+  const savedFacet = allFacets.find(f => f.name === saved);
+  if (savedFacet) {
+    currentPipeline = facetPipeline(savedFacet);
+    localStorage.setItem('facetPipeline', currentPipeline);
+    syncPipelineToggle();
+    populateFacetSelect();
+  }
   const sel = document.getElementById('load-select');
-  const opt = Array.from(sel.options).find(o => o.value === saved);
-  if (opt) { sel.value = saved; }
-  loadFacets(sel.value || DEFAULT_SOURCE);
+  const target = (saved && Array.from(sel.options).some(o => o.value === saved))
+      ? saved : baseDoc();
+  sel.value = target;
+  loadFacets(sel.value || baseDoc());
 });
 </script>
 <script src="vendor/bootstrap.bundle.min.js"></script>

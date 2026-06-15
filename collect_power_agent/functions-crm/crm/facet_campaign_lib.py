@@ -45,6 +45,7 @@ EMAIL_CONTACTS_COLLECTION = "email_contacts"
 
 LEADS_COLLECTION = "leads"
 BATCH_SIZE = 400
+MAX_CONTACTS_PER_COPY = 200  # hard cap: contacts written per copy-to-campaign
 
 # ── Leads pipeline field spec (facet field → leads collection field) ──────────
 # Fields that exist on the 'leads' collection docs directly.
@@ -315,6 +316,18 @@ def _run_facet_campaign_site_leads(
           f"scalar={list(flt._scalar)}, array={list(flt._array)}, "
           f"page_keys={flt._page_keys}, contact={list(flt._contact)}", flush=True)
 
+    # Mirror the counts section EXACTLY: the contacts copied must be the same
+    # email_contacts the count job reports as 'contacts_in_email_contacts', and
+    # the sites the same it reports as 'leads'. Reuse the count job's matching
+    # (site_leads + site_contacts, including the occupation contact filter that
+    # email_contacts cannot express) to get the precise email_contacts to copy.
+    import sys as _sys2, os as _os2
+    _sys2.path.insert(0, _os2.path.join(_os2.path.dirname(__file__), ".."))
+    from crm.filter_count_lib import site_leads_matched_email_ids
+    matched_email_ids, matched_site_ids = site_leads_matched_email_ids(db, filters)
+    print(f"[facet-campaign] count-aligned match: {len(matched_email_ids)} "
+          f"email_contacts across {len(matched_site_ids)} sites", flush=True)
+
     # ── 2. Collect emails already in other campaigns (dedup set) ─────────────
     print("[facet-campaign] loading existing campaign contacts for dedup…", flush=True)
     taken_emails, dedup_by_campaign = _collect_existing_campaign_emails(db, campaign_id)
@@ -328,8 +341,8 @@ def _run_facet_campaign_site_leads(
     skipped_filter = 0
 
     for doc in db.collection(EMAIL_CONTACTS_COLLECTION).stream():
-        ec = doc.to_dict() or {}
-        if not flt.has_any or flt.matches(ec):
+        if doc.id in matched_email_ids:
+            ec = doc.to_dict() or {}
             email = str(ec.get("email") or "").strip().lower()
             if not email:
                 skipped_filter += 1
@@ -353,6 +366,14 @@ def _run_facet_campaign_site_leads(
         )
 
     # ── 4. Compute campaign-level stats ─────────────────────────────────────
+    # Hard cap: never copy more than MAX_CONTACTS_PER_COPY contacts per copy.
+    capped_from = 0
+    if len(matched) > MAX_CONTACTS_PER_COPY:
+        capped_from = len(matched)
+        matched = matched[:MAX_CONTACTS_PER_COPY]
+        print(f"[facet-campaign] hard cap applied: {capped_from} -> "
+              f"{MAX_CONTACTS_PER_COPY} contacts", flush=True)
+
     sites: set[str] = set()
     country_counter: Counter = Counter()
     for ec in matched:
@@ -381,6 +402,7 @@ def _run_facet_campaign_site_leads(
             "dedup_by_campaign":         dedup_by_campaign,
             "sites_count":               len(sites),
             "countries":                 countries_list,
+            "contacts_capped_from": capped_from,
             "dry_run":                   True,
         }
 
@@ -396,6 +418,11 @@ def _run_facet_campaign_site_leads(
         facet_filters_snapshot["page_count"] = sorted(flt._page_keys)
     for field, vals in flt._contact.items():
         facet_filters_snapshot[field] = sorted(vals)
+    # occupation isn't a _Filter field (no email_contacts column) but it IS part
+    # of the match via the count-aligned set, so record it for traceability.
+    _occ_sel = _selected_values(filters.get("occupation") or {})
+    if _occ_sel:
+        facet_filters_snapshot["occupation"] = sorted(_occ_sel)
 
     facet_ref_fields = {
         "source_facet":         facet_name,
@@ -537,6 +564,7 @@ def _run_facet_campaign_site_leads(
         "sites_count":               len(sites),
         "countries":                 countries_list,
         "leads_written":             leads_summary.get("leads_written", 0),
+        "contacts_capped_from": capped_from,
         "dry_run":                   False,
     }
 
@@ -579,29 +607,27 @@ def run_facet_campaign_leads(
     taken_emails, dedup_by_campaign = _collect_existing_campaign_emails(db, campaign_id)
     print(f"[facet-campaign-leads] {len(taken_emails)} emails in other campaigns", flush=True)
 
-    # ── 2. Filter leads → candidate_lead_ids ─────────────────────────────────
-    print("[facet-campaign-leads] filtering leads collection…", flush=True)
-    candidate_leads: set[str] = set()
-    for doc in db.collection(LEADS_COLLECTION).stream():
-        data = doc.to_dict() or {}
-        if not flt.has_any or flt.matches_lead(data):
-            lid = data.get("lead_id") or doc.id
-            candidate_leads.add(lid)
-    print(f"[facet-campaign-leads] {len(candidate_leads)} candidate leads", flush=True)
+    # ── 2. Canonical matched set (single source of truth shared with the count) ─
+    #    Reuse the leads count job's matching so the copied contacts/leads are
+    #    EXACTLY what the counts section reported (contact-first: only leads with
+    #    >=1 matching email_contact).
+    import sys as _sys2, os as _os2
+    _sys2.path.insert(0, _os2.path.join(_os2.path.dirname(__file__), ".."))
+    from crm.filter_count_lib import leads_matched_email_ids
+    matched_email_ids, matched_lead_ids = leads_matched_email_ids(db, filters)
+    print(f"[facet-campaign-leads] count-aligned match: {len(matched_email_ids)} "
+          f"email_contacts across {len(matched_lead_ids)} leads", flush=True)
 
-    # ── 3. Filter email_contacts (mark_leads==True, lead_id_leads in candidates) ─
-    print("[facet-campaign-leads] filtering email_contacts (leads)…", flush=True)
+    # ── 3. Stream email_contacts, keep the matched set, apply dedup ───────────
+    print("[facet-campaign-leads] streaming email_contacts (leads)…", flush=True)
     matched: list[dict] = []
     skipped_dedup = skipped_filter = 0
     for doc in db.collection(EMAIL_CONTACTS_COLLECTION).where(
             "mark_leads", "==", True).stream():
+        if doc.id not in matched_email_ids:
+            skipped_filter += 1
+            continue
         ec = doc.to_dict() or {}
-        if ec.get("lead_id_leads") not in candidate_leads:
-            skipped_filter += 1
-            continue
-        if flt._contact and not flt.matches_contact(ec):
-            skipped_filter += 1
-            continue
         email = str(ec.get("email") or "").strip().lower()
         if not email:
             skipped_filter += 1
@@ -622,6 +648,14 @@ def run_facet_campaign_leads(
         )
 
     # ── 4. Campaign-level stats ───────────────────────────────────────────────
+    # Hard cap: never copy more than MAX_CONTACTS_PER_COPY contacts per copy.
+    capped_from = 0
+    if len(matched) > MAX_CONTACTS_PER_COPY:
+        capped_from = len(matched)
+        matched = matched[:MAX_CONTACTS_PER_COPY]
+        print(f"[facet-campaign-leads] hard cap applied: {capped_from} -> "
+              f"{MAX_CONTACTS_PER_COPY} contacts", flush=True)
+
     sites: set[str] = set()
     country_counter: Counter = Counter()
     for ec in matched:
@@ -648,6 +682,7 @@ def run_facet_campaign_leads(
             "dedup_by_campaign":         dedup_by_campaign,
             "sites_count":               len(sites),
             "countries":                 countries_list,
+            "contacts_capped_from": capped_from,
             "dry_run":                   True,
         }
 
@@ -752,6 +787,7 @@ def run_facet_campaign_leads(
         "contacts_removed": removed, "contacts_protected": protected,
         "dedup_by_campaign": dedup_by_campaign,
         "sites_count": len(sites), "countries": countries_list,
+        "contacts_capped_from": capped_from,
         "leads_written": leads_summary.get("leads_written", 0), "dry_run": False,
     }
 

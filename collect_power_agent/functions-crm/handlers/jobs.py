@@ -180,6 +180,26 @@ def reply_match():
         return _err(str(exc), 500)
 
 
+@bp.route("/api/crm/build-facets", methods=["GET", "POST"])
+def build_facets_trigger():
+    """Rebuild a base filter-facets catalog from current data.
+
+    Params: pipeline=site_leads|leads (default site_leads), cap=N (default 300).
+    Returns a job_id to poll via GET /api/crm/status/<job_id>.
+    """
+    data = _request_data()
+    pipeline = str(_first_param(data, "pipeline", "site_leads") or "site_leads").strip().lower()
+    if pipeline not in ("site_leads", "leads"):
+        return _err("pipeline must be 'site_leads' or 'leads'", 400)
+    params = {"pipeline": pipeline, "cap": int(_first_param(data, "cap", 300) or 300)}
+    try:
+        job_id = _new_job("build-facets", params)
+        _enqueue_task("build-facets", job_id, params)
+        return _accepted(job_id, "build-facets")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @bp.route("/api/crm/worker/<name>/<job_id>", methods=["POST"])
 def worker(name, job_id):
     try:
@@ -375,6 +395,14 @@ def worker(name, job_id):
                 target_campaign_id = body.get("target_campaign_id", ""),
                 new_campaign_name  = body.get("new_campaign_name", ""),
                 user               = body.get("user", "api"),
+            )
+
+        elif name == "build-facets":
+            from crm.build_facets_lib import run_build_facets
+            result = run_build_facets(
+                db=db,
+                pipeline=body.get("pipeline", "site_leads"),
+                cap=int(body.get("cap") or 300),
             )
 
         else:
