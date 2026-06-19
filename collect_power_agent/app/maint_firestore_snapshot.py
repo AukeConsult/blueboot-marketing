@@ -2,6 +2,7 @@
 
 Usage:
     python app\firestore_snapshot.py wordpress
+from google.cloud.firestore_v1.base_query import FieldFilter
     python app\firestore_snapshot.py wordpress --field source_query
     python app\firestore_snapshot.py wordpress --limit 20
     python app\firestore_snapshot.py wordpress --country NO
@@ -60,17 +61,17 @@ def search(keyword: str, field: str | None, country: str | None,
     # (avoids a full collection scan for the common case).
     if fields_to_check == ["source_query"]:
         query = (col
-                 .where("source_query", ">=", keyword)
-                 .where("source_query", "<=", keyword + ""))
+                 .where(filter=FieldFilter("source_query", ">=", keyword))
+                 .where(filter=FieldFilter("source_query", "<=", keyword + "")))
         if country:
-            query = query.where("country", "==", country.upper())
+            query = query.where(filter=FieldFilter("country", "==", country.upper()))
         for doc in query.limit(limit).stream():
             matches.append(doc.to_dict())
     else:
         # Full scan with client-side filter
         query = col
         if country:
-            query = col.where("country", "==", country.upper())
+            query = col.where(filter=FieldFilter("country", "==", country.upper()))
         gen = query.stream()
         while True:
             try:

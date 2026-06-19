@@ -300,7 +300,7 @@ def remove_campaign_contacts(campaign_id):
         contacts_col = doc_ref.collection("campaign_contacts")
         deleted = 0
         for email in emails:
-            matches = contacts_col.where("email", "==", email).stream()
+            matches = contacts_col.where(filter=FieldFilter("email", "==", email)).stream()
             for m in matches:
                 m.reference.delete()
                 deleted += 1

@@ -53,6 +53,21 @@
     </div>
   </div>
 
+  <!-- Budget remaining -->
+  <div class="card p-3 mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h6 class="fw-semibold mb-0"><i class="ti ti-battery me-1 text-primary"></i>Budget remaining</h6>
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadBudget()">
+        <i class="ti ti-refresh me-1"></i>Refresh
+      </button>
+    </div>
+    <p class="small text-muted mb-2">Available send quota right now per account, after subtracting sent mails and active run reservations.</p>
+    <div id="budget-table">
+      <div class="text-center py-3 small text-muted"><div class="spinner-border spinner-border-sm me-1"></div>Loading…</div>
+    </div>
+    <div id="budget-calc-at" class="small text-muted mt-1" style="display:none"></div>
+  </div>
+
   <!-- Send run reservations -->
   <div class="card p-3 mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
@@ -129,6 +144,69 @@ async function saveSendLimits() {
   }
 }
 
+// ── Budget remaining ──────────────────────────────────────────────────────────
+
+function _bar(used, max, depleted) {
+  const pct = max > 0 ? Math.min(100, Math.round(used / max * 100)) : 100;
+  const cls = depleted ? 'bg-danger' : (pct > 80 ? 'bg-warning' : 'bg-primary');
+  return `<div class="progress" style="height:6px;min-width:80px">
+    <div class="progress-bar ${cls}" style="width:${pct}%"></div>
+  </div>`;
+}
+
+async function loadBudget() {
+  const el = document.getElementById('budget-table');
+  const ts = document.getElementById('budget-calc-at');
+  el.innerHTML = '<div class="text-center py-2 small text-muted"><div class="spinner-border spinner-border-sm me-1"></div>Loading…</div>';
+  ts.style.display = 'none';
+  try {
+    const d    = await fetchJSON(BASE + '/api/crm/settings/send-budget');
+    const rows = d.accounts || [];
+    if (!rows.length) {
+      el.innerHTML = '<div class="small text-muted py-2">No mail accounts configured.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="table-responsive">
+        <table class="table table-sm small mb-0">
+          <thead class="bb-thead">
+            <tr>
+              <th>Account</th>
+              <th class="text-end">Sent/hr</th>
+              <th class="text-end">Sent/day</th>
+              <th class="text-end">Reserved</th>
+              <th class="text-end">Budget left</th>
+              <th style="min-width:90px">Hour</th>
+              <th style="min-width:90px">Day</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => {
+              const budgetCls = r.budget === 0 ? 'text-danger fw-500'
+                              : r.budget < 10  ? 'text-warning fw-500'
+                              : 'text-success fw-500';
+              return `<tr>
+                <td class="text-truncate" style="max-width:170px" title="${esc(r.account)}">${esc(r.account)}</td>
+                <td class="text-end">${r.sent_last_hour}/${r.max_per_hour}</td>
+                <td class="text-end">${r.sent_last_day}/${r.max_per_day}</td>
+                <td class="text-end text-muted">${r.reserved}</td>
+                <td class="text-end ${budgetCls}">${r.budget}</td>
+                <td>${_bar(r.sent_last_hour + r.reserved, r.max_per_hour, r.remaining_hour === 0)}</td>
+                <td>${_bar(r.sent_last_day  + r.reserved, r.max_per_day,  r.remaining_day  === 0)}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    if (d.calculated_at) {
+      ts.textContent = 'Calculated at ' + _fmtDt(d.calculated_at);
+      ts.style.display = '';
+    }
+  } catch (e) {
+    el.innerHTML = `<div class="small text-danger">Error: ${esc(e.message)}</div>`;
+  }
+}
+
 // ── Send run reservations ─────────────────────────────────────────────────────
 
 function _fmtDt(iso) {
@@ -185,6 +263,7 @@ async function loadReservations() {
 requireAuth().then(() => {
   requireRole(['admin']);
   loadSendLimits();
+  loadBudget();
   loadReservations();
 });
 </script>

@@ -327,6 +327,11 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
         </button>
       </li>
       <li class="nav-item">
+        <button class="nav-link" id="tab-mail-btn" data-bs-toggle="tab" data-bs-target="#tab-mail">
+          <i class="ti ti-mail me-1"></i>Mail
+        </button>
+      </li>
+      <li class="nav-item">
         <button class="nav-link" id="tab-sites-btn" data-bs-toggle="tab" data-bs-target="#tab-sites">
           <i class="ti ti-building me-1"></i>Sites
         </button>
@@ -383,37 +388,6 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
       </div>
     </div>
 
-    <!-- Mail schedule panel -->
-    <div class="bb-card mb-3" id="mail-schedule-card">
-      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
-           style="border-radius:10px 10px 0 0;background:#f9fafb">
-        <span class="fw-500 small"><i class="ti ti-mail me-1 text-primary"></i>Mail schedule
-          <span id="mail-schedule-count" class="ms-1" style="color:var(--bb-muted);font-weight:400"></span>
-        </span>
-        <div class="d-flex align-items-center gap-2">
-          <button class="bb-btn-refresh" title="Refresh" onclick="refreshMailSchedule()"><i class="ti ti-refresh"></i></button>
-          <div class="dropdown">
-          <button class="btn btn-sm btn-outline-primary py-0 dropdown-toggle" style="font-size:.78rem"
-                  data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="ti ti-plus me-1"></i>Add step
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:160px;font-size:.85rem">
-            <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Intro');return false">
-              <i class="ti ti-mail me-2 text-primary"></i>Intro</a></li>
-            <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Reminder 1');return false">
-              <i class="ti ti-bell me-2 text-warning"></i>Reminder 1</a></li>
-            <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Reminder 2');return false">
-              <i class="ti ti-bell-ringing me-2 text-danger"></i>Reminder 2</a></li>
-          </ul>
-          </div>
-        </div>
-      </div>
-      <div id="mail-schedule-body" class="px-3 pt-2 pb-1">
-        <div class="text-center py-3 small" style="color:var(--bb-muted)" id="mail-schedule-empty">
-          No mail steps yet — use <strong>Add step</strong> to add Intro, Reminder 1, or Reminder 2.
-        </div>
-      </div>
-    </div>
       </div><!-- /tab-pane#tab-info -->
 
       <!-- Contacts tab -->
@@ -455,19 +429,60 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
       <div id="contacts-empty" class="text-center py-3 small" style="color:var(--bb-muted);display:none">No contacts found.</div>
     </div>
 
-    <div class="bb-card" id="mail-editor-card" style="display:none">
-      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
-           style="border-radius:10px 10px 0 0;background:#f9fafb">
-        <span class="fw-500 small"><i class="ti ti-pencil me-1 text-primary"></i>Mail editor</span>
-        <button class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="showContactListView()" title="Back to contacts">
-          <i class="ti ti-arrow-left me-1"></i>Contacts
-        </button>
-      </div>
-      <div class="p-3">
-        <div id="campaign-mail-editor"></div>
-      </div>
-    </div>
       </div><!-- /tab-pane#tab-contacts -->
+
+      <!-- Mail tab -->
+      <div class="tab-pane fade campaign-tab-pane" id="tab-mail">
+
+        <!-- Mail schedule -->
+        <div class="bb-card mb-3" id="mail-schedule-card">
+          <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
+               style="border-radius:10px 10px 0 0;background:#f9fafb">
+            <span class="fw-500 small"><i class="ti ti-mail me-1 text-primary"></i>Mail schedule
+              <span id="mail-schedule-count" class="ms-1" style="color:var(--bb-muted);font-weight:400"></span>
+            </span>
+            <div class="d-flex align-items-center gap-2">
+              <button class="bb-btn-refresh" title="Refresh" onclick="refreshMailSchedule()"><i class="ti ti-refresh"></i></button>
+              <div class="dropdown">
+                <button class="btn btn-sm btn-outline-primary py-0 dropdown-toggle" style="font-size:.78rem"
+                        data-bs-toggle="dropdown" aria-expanded="false">
+                  <i class="ti ti-plus me-1"></i>Add step
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:160px;font-size:.85rem">
+                  <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Intro');return false">
+                    <i class="ti ti-mail me-2 text-primary"></i>Intro</a></li>
+                  <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Reminder 1');return false">
+                    <i class="ti ti-bell me-2 text-warning"></i>Reminder 1</a></li>
+                  <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Reminder 2');return false">
+                    <i class="ti ti-bell-ringing me-2 text-danger"></i>Reminder 2</a></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div id="mail-schedule-body" class="px-3 pt-2 pb-1">
+            <div class="text-center py-3 small" style="color:var(--bb-muted)" id="mail-schedule-empty">
+              No mail steps yet — use <strong>Add step</strong> to add Intro, Reminder 1, or Reminder 2.
+            </div>
+          </div>
+        </div>
+
+        <!-- Mail editor (shown when a step is selected) -->
+        <div class="bb-card" id="mail-editor-card" style="display:none">
+          <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
+               style="border-radius:10px 10px 0 0;background:#f9fafb">
+            <span class="fw-500 small"><i class="ti ti-pencil me-1 text-primary"></i>Mail editor
+              <span id="mail-editor-step-label" class="ms-1" style="color:var(--bb-muted);font-weight:400"></span>
+            </span>
+            <button class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="closeMailEditor()">
+              <i class="ti ti-x me-1"></i>Close
+            </button>
+          </div>
+          <div class="p-3">
+            <div id="campaign-mail-editor"></div>
+          </div>
+        </div>
+
+      </div><!-- /tab-pane#tab-mail -->
 
       <!-- Sites tab -->
       <div class="tab-pane fade campaign-tab-pane" id="tab-sites">
@@ -928,14 +943,9 @@ function refreshMailSchedule() {
   if (id) loadCampaign(id);
 }
 
-function showContactListView() {
+function closeMailEditor() {
   document.getElementById('mail-editor-card').style.display = 'none';
-  document.getElementById('contacts-list-card').style.display = '';
-}
-
-function showMailEditorView() {
-  document.getElementById('contacts-list-card').style.display = 'none';
-  document.getElementById('mail-editor-card').style.display = '';
+  document.getElementById('mail-editor-step-label').textContent = '';
 }
 
 function ensureMailEditor() {
@@ -1055,7 +1065,13 @@ function addScheduleStep(name) {
 function openMailEditorStep(stepId, opts = {}) {
   const id = document.getElementById('campaign-select').value;
   if (!id || !stepId) return;
-  showMailEditorView();
+  // Switch to Mail tab
+  const mailTabBtn = document.getElementById('tab-mail-btn');
+  if (mailTabBtn) bootstrap.Tab.getOrCreateInstance(mailTabBtn).show();
+  // Show editor card
+  document.getElementById('mail-editor-card').style.display = '';
+  const label = opts.stepName ? ` — ${opts.stepName}` : '';
+  document.getElementById('mail-editor-step-label').textContent = label;
   ensureMailEditor().load({
     campaignId: id,
     stepId,
@@ -1063,7 +1079,7 @@ function openMailEditorStep(stepId, opts = {}) {
     stepName: opts.stepName || '',
     delay: opts.delay || 0
   }).catch(e => console.warn('[mail-editor-step]', e.message));
-  document.getElementById('mail-editor-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => document.getElementById('mail-editor-card').scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
 }
 
 async function deleteScheduleStep(stepId, name) {
@@ -1335,7 +1351,7 @@ async function loadCampaign() {
     window._campaignMail = { ...(c.mail || {}), outreach_email: c.outreach_email_account || '',
                               _display_name: (c.mail_account || {}).display_name || '' };
     renderMailSchedule(c);
-    showContactListView();
+    closeMailEditor();
     // Facet reference
     const facetRow = document.getElementById('c-facet-row');
     if (c.source_facet) {

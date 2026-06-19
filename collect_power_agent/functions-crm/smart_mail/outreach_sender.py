@@ -19,6 +19,7 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from google.cloud.firestore_v1.base_query import FieldFilter
 from .firestore_client import get_firestore
 from .outreach_stats import refresh_campaign_stats
 from .config import (
@@ -44,8 +45,8 @@ def _sent_count_since(db, sender_account: str, since_iso: str) -> int:
     try:
         docs = (
             db.collection("outreach_sent")
-            .where("sender_account", "==", sender_account)
-            .where("sent_at", ">=", since_iso)
+            .where(filter=FieldFilter("sender_account", "==", sender_account))
+            .where(filter=FieldFilter("sent_at", ">=", since_iso))
             .stream()
         )
         return sum(1 for _ in docs)
@@ -100,9 +101,9 @@ def _claim_send_budget(db, sender_account: str) -> tuple[int, str, float]:
     try:
         active = (
             db.collection("send_run_reservations")
-            .where("account", "==", sender_account)
-            .where("status",  "==", "active")
-            .where("started_at", ">=", stale_cutoff)
+            .where(filter=FieldFilter("account", "==", sender_account))
+            .where(filter=FieldFilter("status",  "==", "active"))
+            .where(filter=FieldFilter("started_at", ">=", stale_cutoff))
             .stream()
         )
         already_reserved = sum(d.to_dict().get("budget_claimed", 0) for d in active)
@@ -469,9 +470,22 @@ def send_outreach(
                 sender.close()
             _release_send_run(db, run_id, budget, sent_batch, failed_batch)
 
+    sep = "=" * 60
+    print(f"\n{sep}")
     print(
         f"[sender] done  mode={mode!r}  dry_run={dry_run}  "
         f"sent={summary['sent']}  failed={summary['failed']}  "
         f"skipped={summary['skipped']}  would_send={summary['would_send']}"
     )
+    if dry_run and summary["would_send"] > 0:
+        print()
+        print("  *** DRY RUN — NO MAIL WAS SENT ***")
+        print(f"  {summary['would_send']} contact(s) are ready to receive mail.")
+        print("  To send for real, run:")
+        print("    python app/outreach_send.py --send --mode intro")
+        print("  or with a specific campaign:")
+        print("    python app/outreach_send.py --send --campaigns <campaign_id>")
+    elif dry_run:
+        print("  *** DRY RUN — no eligible contacts found ***")
+    print(sep)
     return summary

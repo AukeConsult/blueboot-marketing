@@ -681,7 +681,7 @@ def confirm_sent(
     # 2 - append to outreach_sent (skip if duplicate message_id)
     existing = (
         db.collection("outreach_sent")
-        .where("message_id", "==", message_id)
+        .where(filter=FieldFilter("message_id", "==", message_id))
         .limit(1)
         .stream()
     )

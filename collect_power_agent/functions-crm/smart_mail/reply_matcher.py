@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timezone
 
 from .firestore_client import get_firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 from .outreach_stats import refresh_campaign_stats
 
 
@@ -38,7 +39,7 @@ def _find_outreach_by_message_id(db, message_ids):
     for mid in message_ids:
         docs = list(
             db.collection("outreach_sent")
-            .where("message_id", "==", mid)
+            .where(filter=FieldFilter("message_id", "==", mid))
             .limit(1)
             .stream()
         )
@@ -56,7 +57,7 @@ def _find_outreach_by_from_email(db, from_email):
     try:
         docs = list(
             db.collection("outreach_sent")
-            .where("to_email", "==", addr)
+            .where(filter=FieldFilter("to_email", "==", addr))
             .order_by("sent_at", direction="DESCENDING")
             .limit(1)
             .stream()
@@ -122,7 +123,7 @@ def match_new_replies(limit: int = 200) -> dict:
 
     docs = list(
         db.collection("inbox_messages")
-        .where("reply_matched", "==", False)
+        .where(filter=FieldFilter("reply_matched", "==", False))
         .limit(limit)
         .stream()
     )
