@@ -2,6 +2,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify
+from google.cloud.firestore_v1.base_query import FieldFilter
 from handlers.shared import (
     _get_db, _sheets_service, _gdisk, _jobs_col,
     _new_job, _update_job, _enqueue_task,
@@ -455,7 +456,6 @@ def list_jobs():
         cutoff = (datetime.now(timezone.utc) - timedelta(minutes=since_minutes)).isoformat()
 
     if running:
-        from google.cloud.firestore_v1.base_query import FieldFilter as FF
         queued       = list(_jobs_col().where(filter=FF("status", "==", "queued")).stream())
         running_docs = list(_jobs_col().where(filter=FF("status", "==", "running")).stream())
         all_jobs = [d.to_dict() for d in queued + running_docs]

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
+from google.cloud.firestore_v1.base_query import FieldFilter
 from handlers.shared import (
     _get_db, _sheets_service, _gdisk, _get_mail_account, _ma_col,
     _new_job, _enqueue_task, _ok, _err, _accepted,
@@ -402,7 +403,6 @@ def list_leads_cross_campaign():
     - status=<value>       : override with an explicit status filter.
     """
     try:
-        from google.cloud.firestore_v1.base_query import FieldFilter
         db          = _get_db()
         campaign_id = request.args.get("campaign_id", "").strip()
         owner       = request.args.get("owner", "").strip()
@@ -485,7 +485,6 @@ def list_campaign_leads(campaign_id):
 def list_lead_contacts(campaign_id, lead_id):
     """Return campaign_contacts that belong to a specific lead_id."""
     try:
-        from google.cloud.firestore_v1.base_query import FieldFilter
         db   = _get_db()
         docs = (
             db.collection("campaigns")
@@ -534,7 +533,6 @@ def create_lead_contact(campaign_id, lead_id):
 
         # Abort if this email already exists anywhere in the campaign
         # (query on email field catches contacts with any doc_id format)
-        from google.cloud.firestore_v1.base_query import FieldFilter
         dupes = list(contacts_col.where(filter=FieldFilter("email", "==", email)).limit(1).stream())
         if dupes:
             return _err(f"A contact for '{email}' already exists in this campaign.", 409)
@@ -590,7 +588,6 @@ def patch_campaign_lead(campaign_id, lead_id):
     are restored (active/sent contacts are left untouched).
     """
     try:
-        from google.cloud.firestore_v1.base_query import FieldFilter
         from datetime import datetime, timezone
         body = request.get_json(silent=True) or {}
         _FOLLOWUP = {"followup_status", "followup_date", "followup_importance",
@@ -685,7 +682,6 @@ def reset_campaign(campaign_id):
     Returns { contacts_reset, leads_reset, sent_deleted }.
     """
     try:
-        from google.cloud.firestore_v1.base_query import FieldFilter
         from datetime import datetime, timezone
 
         body    = request.get_json(silent=True) or {}

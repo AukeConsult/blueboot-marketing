@@ -2,6 +2,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
+from google.cloud.firestore_v1.base_query import FieldFilter
 from handlers.shared import _get_db, _ok, _err, _accepted
 
 bp = Blueprint("contacts", __name__)
@@ -167,7 +168,6 @@ def update_campaign_contact(campaign_id, doc_id):
         # ── Recount pending/excluded on the parent lead after status change ──
         if "status" in update:
             try:
-                from google.cloud.firestore_v1.base_query import FieldFilter as _FF
                 contact_snap = ref.get()
                 lead_id = ((contact_snap.to_dict() or {}).get("lead_id") or "").strip()
                 if lead_id:

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
+from google.cloud.firestore_v1.base_query import FieldFilter
 from handlers.shared import _get_db, _err, _ok
 
 bp = Blueprint("send_limits", __name__)
@@ -105,7 +106,6 @@ def get_send_budget():
     """
     try:
         from datetime import datetime, timedelta, timezone
-        from google.cloud.firestore_v1.base_query import FieldFilter
 
         db  = _get_db()
         now = datetime.now(timezone.utc)
