@@ -217,6 +217,72 @@ https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-match
 
 Scheduled Smart Mail triggers should use `POST`. Do not expose `outreach-send` as an unauthenticated public GET URL.
 
+---
+
+## Outreach Sender — Contact Eligibility Rules
+
+A contact must pass **all** of the following checks before a mail is dispatched.
+Checks run in this order; the first failure skips the contact.
+
+1. **Contact status = `pending`**
+   The `campaign_contacts` document must have `status == "pending"`. Contacted,
+   replied, excluded, or any other status is never re-sent.
+
+2. **Mode gate (intro vs followup)**
+   - `intro` — `mail_sent` must be empty (first-ever mail).
+   - `followup` — `mail_sent` must contain at least one entry (prior contact exists).
+
+3. **Site lead status** *(when the contact has a `lead_id`)*
+   The associated `campaign_leads/{lead_id}` document is checked.
+   - If the lead doc **does not exist** → contact is allowed through.
+   - If the lead doc exists, its `status` must be `"pending"` or `"active"`.
+   - Any other status (`excluded`, `rejected`, etc.) → contact is skipped.
+   This prevents sending to a company whose site was subsequently excluded from
+   the pipeline after the contact was already queued.
+
+4. **Campaign status**
+   - `intro` mode → campaign must be `"ready"`.
+   - `followup` mode → campaign must be `"active"`.
+
+5. **Campaign has an Intro mail step**
+   The `mail_sequence` must contain at least one step where `mail_type`, `name`,
+   `step_name`, or `step_id` contains the word `"intro"`. Campaigns without an
+   intro step are skipped in full.
+
+6. **Next sequence step is due** *(followup only)*
+   The next step (`mail_sequence[len(mail_sent)]`) must have a `delay_days` field
+   and `now >= first_sent_at + delay_days`.
+
+7. **Next step exists**
+   `mail_sequence[len(mail_sent)]` must exist — the contact has not exhausted all
+   steps in the sequence.
+
+8. **Sending account is configured**
+   The campaign's `outreach_email_account` must resolve to a valid document in
+   `settings/mail_accounts/accounts/{email}` with credentials (OAuth tokens for
+   Gmail; host + username + password for IMAP/SMTP).
+
+9. **Send budget available** *(per sending account)*
+   `sent_last_hour < max_sends_per_hour` and `sent_last_day < max_sends_per_day`
+   after subtracting budget claimed by other active run reservations.
+   Limits are read from `settings/send_limits` (Firestore) with fallback to
+   env-var / config defaults. Budget is reserved once per run start, not
+   recalculated per send.
+
+10. **Bounce-rate circuit breaker** *(live, per account per run)*
+    If `failed / (sent + failed) > bounce_rate_pause_threshold` after at least
+    8 attempts, the whole remaining batch for that account is stopped immediately.
+
+### Source files
+
+| File | Role |
+|---|---|
+| `functions-crm/smart_mail/outreach_mail_select.py` | Rules 1–8: contact selection and account resolution |
+| `functions-crm/smart_mail/outreach_sender.py` | Rules 9–10: budget reservation and bounce breaker |
+| `app/outreach_send.py` | CLI entry point (`--dry-run` / `--send`) |
+
+---
+
 ### `admin` only
 
 Requires signed-in `admin`:

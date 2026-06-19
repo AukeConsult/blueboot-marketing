@@ -665,3 +665,110 @@ def patch_campaign_lead(campaign_id, lead_id):
         return _ok("Updated.", lead_id=lead_id, contacts_updated=contacts_updated, **updates)
     except Exception as exc:
         return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/campaigns/<campaign_id>/reset", methods=["POST"])
+def reset_campaign(campaign_id):
+    """Full campaign reset — option A.
+
+    Resets a campaign to its default start state:
+      1. Delete all outreach_sent docs for this campaign.
+      2. Reset every campaign_contacts doc:
+           status → "pending", followup_status → "", mail_sent → [],
+           comment_history → [], sent_at → null, new_mail → False
+      3. Reset every campaign_leads doc:
+           status → "pending"
+      4. Reset the campaign doc:
+           status → "ready", sent_at → null
+
+    Accepts optional JSON body { "dry_run": true } to preview counts.
+    Returns { contacts_reset, leads_reset, sent_deleted }.
+    """
+    try:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        from datetime import datetime, timezone
+
+        body    = request.get_json(silent=True) or {}
+        dry_run = bool(body.get("dry_run", False))
+        db      = _get_db()
+
+        campaign_ref    = db.collection("campaigns").document(campaign_id)
+        contacts_col    = campaign_ref.collection("campaign_contacts")
+        leads_col       = campaign_ref.collection("campaign_leads")
+        sent_col        = db.collection("outreach_sent")
+
+        # ── 1. Delete outreach_sent docs ──────────────────────────────────────
+        sent_docs   = list(sent_col.where(
+            filter=FieldFilter("campaign_id", "==", campaign_id)
+        ).stream())
+        sent_deleted = len(sent_docs)
+
+        # ── 2. Count contacts & leads ─────────────────────────────────────────
+        contact_docs = list(contacts_col.stream())
+        lead_docs    = list(leads_col.stream())
+        contacts_reset = len(contact_docs)
+        leads_reset    = len(lead_docs)
+
+        if dry_run:
+            return _ok(
+                "Dry run — no changes written.",
+                dry_run=True,
+                contacts_reset=contacts_reset,
+                leads_reset=leads_reset,
+                sent_deleted=sent_deleted,
+            )
+
+        # ── 3. Delete outreach_sent (batched) ─────────────────────────────────
+        batch = db.batch()
+        for i, doc in enumerate(sent_docs):
+            batch.delete(doc.reference)
+            if (i + 1) % 400 == 0:
+                batch.commit()
+                batch = db.batch()
+        if sent_docs:
+            batch.commit()
+
+        # ── 4. Reset campaign_contacts (batched) ──────────────────────────────
+        batch = db.batch()
+        for i, doc in enumerate(contact_docs):
+            batch.update(doc.reference, {
+                "status":          "pending",
+                "followup_status": "",
+                "mail_sent":       [],
+                "comment_history": [],
+                "sent_at":         None,
+                "new_mail":        False,
+                "last_action":        "",
+                "last_action_status": "",
+            })
+            if (i + 1) % 400 == 0:
+                batch.commit()
+                batch = db.batch()
+        if contact_docs:
+            batch.commit()
+
+        # ── 5. Reset campaign_leads (batched) ─────────────────────────────────
+        batch = db.batch()
+        for i, doc in enumerate(lead_docs):
+            batch.update(doc.reference, {"status": "pending"})
+            if (i + 1) % 400 == 0:
+                batch.commit()
+                batch = db.batch()
+        if lead_docs:
+            batch.commit()
+
+        # ── 6. Reset campaign doc ─────────────────────────────────────────────
+        campaign_ref.update({
+            "status":     "ready",
+            "sent_at":    None,
+            "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        })
+
+        return _ok(
+            "Campaign reset to start.",
+            contacts_reset=contacts_reset,
+            leads_reset=leads_reset,
+            sent_deleted=sent_deleted,
+        )
+    except Exception as exc:
+        return _err(str(exc), 500)

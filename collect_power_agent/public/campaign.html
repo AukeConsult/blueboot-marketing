@@ -285,6 +285,9 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
       <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete()" id="delete-btn" style="display:none">
         <i class="ti ti-trash me-1"></i>Delete
       </button>
+      <button class="btn btn-sm btn-outline-warning" onclick="openResetModal()" id="reset-btn" style="display:none" title="Reset campaign to start">
+        <i class="ti ti-refresh-alert me-1"></i>Reset
+      </button>
     </div>
   </div>
 
@@ -1372,6 +1375,7 @@ async function loadCampaign() {
     sendBtn.style.display = st === 'draft' ? '' : 'none';
     document.getElementById('cancel-btn').style.display = (st === 'ready' || st === 'active') ? '' : 'none';
     document.getElementById('delete-btn').style.display = (st === 'draft' || st === 'canceled') ? '' : 'none';
+    document.getElementById('reset-btn').style.display = (st !== 'draft') ? '' : 'none';
     const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
     if (syncBtn) syncBtn.disabled = isLocked;
     allContacts = c.campaign_contacts || [];
@@ -1723,6 +1727,7 @@ async function doSend() {
       }
       document.getElementById('send-btn').style.display = 'none';
       document.getElementById('cancel-btn').style.display = '';
+      document.getElementById('reset-btn').style.display = '';
       fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
       fb.textContent = 'Campaign marked as ready. It will become active after the first real mail is sent.'; fb.style.display = '';
     } else {
@@ -1754,6 +1759,7 @@ async function confirmCancel() {
     document.getElementById('send-btn').style.display = 'none';
     document.getElementById('cancel-btn').style.display = 'none';
     document.getElementById('delete-btn').style.display = '';
+    document.getElementById('reset-btn').style.display = 'none';
     const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
     if (syncBtn) syncBtn.disabled = true;
     fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
@@ -2729,5 +2735,97 @@ document.addEventListener('shown.bs.tab', e => {
   </div>
 </div>
 
+
+<!-- Reset campaign modal -->
+<div class="modal fade" id="resetModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title text-danger"><i class="ti ti-refresh-alert me-2"></i>Reset campaign</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="reset-preview" class="alert alert-secondary py-2 small mb-3">
+          <div class="spinner-border spinner-border-sm me-1"></div>Calculating…
+        </div>
+        <p class="small mb-1">This will <strong>permanently</strong>:</p>
+        <ul class="small mb-2">
+          <li>Delete all send history (<code>outreach_sent</code>)</li>
+          <li>Reset all contacts → <code>pending</code>, clear <code>mail_sent</code> &amp; <code>comment_history</code></li>
+          <li>Reset all leads → <code>pending</code></li>
+          <li>Reset campaign status → <code>ready</code></li>
+        </ul>
+        <p class="small text-danger mb-0"><strong>This cannot be undone.</strong></p>
+        <div id="reset-feedback" class="alert py-2 small mt-2 mb-0" style="display:none"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button id="reset-confirm-btn" class="btn btn-sm btn-danger" onclick="confirmReset()">
+          <i class="ti ti-refresh-alert me-1"></i>Reset campaign
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Campaign reset ────────────────────────────────────────────────────────────
+async function openResetModal() {
+  const cid = document.getElementById('campaign-select').value;
+  if (!cid) return;
+  const preview = document.getElementById('reset-preview');
+  const fb      = document.getElementById('reset-feedback');
+  const btn     = document.getElementById('reset-confirm-btn');
+  preview.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Calculating…';
+  preview.className = 'alert alert-secondary py-2 small mb-3';
+  fb.style.display  = 'none';
+  btn.disabled      = false;
+  new bootstrap.Modal(document.getElementById('resetModal')).show();
+  try {
+    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(cid)}/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: true }),
+    });
+    preview.className = 'alert alert-warning py-2 small mb-3';
+    preview.innerHTML = `Will reset: <strong>${d.contacts_reset}</strong> contacts, `
+      + `<strong>${d.leads_reset}</strong> leads, `
+      + `delete <strong>${d.sent_deleted}</strong> send history records.`;
+  } catch(e) {
+    preview.className = 'alert alert-danger py-2 small mb-3';
+    preview.textContent = 'Could not load preview: ' + (e.message || e);
+  }
+}
+
+async function confirmReset() {
+  const cid = document.getElementById('campaign-select').value;
+  if (!cid) return;
+  const fb  = document.getElementById('reset-feedback');
+  const btn = document.getElementById('reset-confirm-btn');
+  btn.disabled  = true;
+  fb.className  = 'alert alert-secondary py-2 small mt-2 mb-0';
+  fb.innerHTML  = '<div class="spinner-border spinner-border-sm me-1"></div>Resetting…';
+  fb.style.display = '';
+  try {
+    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(cid)}/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: false }),
+    });
+    fb.className = 'alert alert-success py-2 small mt-2 mb-0';
+    fb.innerHTML = `<i class="ti ti-check me-1"></i>Reset complete — `
+      + `${d.contacts_reset} contacts, ${d.leads_reset} leads reset; `
+      + `${d.sent_deleted} send records deleted.`;
+    setTimeout(() => {
+      bootstrap.Modal.getInstance(document.getElementById('resetModal')).hide();
+      selectCampaign(cid, null);
+    }, 1800);
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 small mt-2 mb-0';
+    fb.innerHTML = '<i class="ti ti-circle-x me-1"></i>Reset failed: ' + escapeHtml(e.message || String(e));
+    btn.disabled = false;
+  }
+}
+</script>
 </body>
 </html>

@@ -171,7 +171,8 @@ const PAGE_ROLES = {
   'statistics.html':    ['admin', 'campaign-user', 'user'],
   'filter-facets.html': ['admin', 'campaign-user', 'user'],
   'gdisk.html':         ['admin', 'campaign-user', 'user'],
-  'settings.html':      ['admin'],
+  'settings.html':          ['admin'],
+  'outreach-settings.html': ['admin'],
   'users.html':         ['admin'],
   'cloud-batch.html':    ['admin'],
   // doc-viewer.html and index.html are PUBLIC_PAGES — no role check
@@ -188,7 +189,7 @@ const NAV_LINKS = [
     roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'daily-admin', icon: 'ti-tool', label: 'Daily Admin',
     roles: ['admin', 'campaign-user', 'user'],
-    match: ['statistics.html', 'filter-facets.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html'],
+    match: ['statistics.html', 'filter-facets.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html', 'outreach-settings.html'],
     children: [
       { href: 'statistics.html',    icon: 'ti-chart-bar',             label: 'Statistics' },
       { href: 'campaign_sites.html', icon: 'ti-building',              label: 'Campaign Sites' },

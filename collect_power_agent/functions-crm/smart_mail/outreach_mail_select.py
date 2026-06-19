@@ -514,7 +514,7 @@ def read_outreach(
         filtered: list = []
         for contact in contacts:
             lid = contact.lead_id
-            if lid and lid in lead_statuses and lead_statuses[lid] != "pending":
+            if lid and lid in lead_statuses and lead_statuses[lid] not in ("pending", "active"):
                 print(
                     f"[outreach_mail_select] SKIP contact {contact.email} "
                     f"-- site lead '{lid}' status='{lead_statuses[lid]}'",

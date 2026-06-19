@@ -588,6 +588,49 @@ showing:
 
 ---
 
+## Frontend / page boilerplate rules
+
+### RULE: Every protected HTML page must include Firebase auth, nav, and call requireAuth()
+
+All pages in `public/` except `login.html`, `index.html`, and `doc-viewer.html` must:
+
+1. **Load Firebase SDK + config** before `auth.js`:
+```html
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+```
+
+2. **Include the nav bar** placeholder in `<body>`:
+```html
+<div id="nav"></div>
+```
+`crm-common.js` renders the nav automatically when this element is present.
+
+3. **Call `requireAuth()` before loading any data**, and chain `requireRole()` for
+   role-restricted pages:
+```js
+requireAuth().then(() => {
+  requireRole(['admin']);   // omit for pages open to all authenticated users
+  load();                   // your page's data-loading entry point
+});
+```
+
+Never call data-loading functions at the top level of a `<script>` block — they
+must run inside the `requireAuth()` `.then()` callback so that unauthenticated
+users are redirected before any API calls fire.
+
+**Checklist when adding a new page:**
+- [ ] Firebase SDK + `firebase-config.js` + `auth.js` + `crm-common.js` loaded in that order
+- [ ] `<div id="nav"></div>` present at the top of `<body>`
+- [ ] `requireAuth().then(...)` wraps all data loading
+- [ ] `requireRole([...])` called inside `.then()` if the page is role-restricted
+- [ ] Page added to `PAGE_ROLES` in `public/js/crm-common.js`
+
+---
+
 ## Frontend / HTML rules
 
 ### RULE: Always use Bootstrap for HTML pages
