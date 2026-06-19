@@ -344,12 +344,10 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
 
     <!-- Campaign details (expandable) -->
     <div class="bb-card mb-3">
-      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
-           style="cursor:pointer;border-radius:10px 10px 0 0;background:#f9fafb" onclick="toggleDetails()">
+      <div class="px-3 py-2 d-flex align-items-center border-bottom bb-card-header">
         <span class="fw-500 small"><i class="ti ti-info-circle me-1 text-primary"></i>Campaign details</span>
-        <i class="ti ti-chevron-down" style="color:var(--bb-muted)" id="details-chevron"></i>
       </div>
-      <div id="details-body" style="display:none" class="px-3 pb-3 pt-3">
+      <div id="details-body" class="px-3 pb-3 pt-3">
         <div class="row g-3 small">
           <div class="col-6">
             <label class="mb-1" style="color:var(--bb-muted)">Email account</label>
@@ -929,13 +927,6 @@ document.getElementById('campaign-list').addEventListener('click', event => {
   selectCampaign(item.dataset.campaignId || '', event);
 });
 
-function toggleDetails() {
-  const b = document.getElementById('details-body');
-  const c = document.getElementById('details-chevron');
-  const open = b.style.display === 'block';
-  b.style.display = open ? 'none' : 'block';
-  c.className = open ? 'ti ti-chevron-down' : 'ti ti-chevron-up';
-}
 
 // ── Mail schedule ────────────────────────────────────────────────────────
 function refreshMailSchedule() {

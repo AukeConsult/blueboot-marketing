@@ -82,7 +82,10 @@
         <div class="mail-editor-component">
           <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
             <div>
-              <div class="fw-600 small"><i class="ti ti-mail text-primary me-1"></i><span data-me="title">Mail editor</span></div>
+              <div class="fw-600 small d-flex align-items-center gap-2">
+                <i class="ti ti-mail text-primary me-1"></i><span data-me="title">Mail editor</span>
+                <span data-me="stepBadge" class="badge fw-normal" style="display:none;background:#dbeafe;color:#1d4ed8;font-size:.72rem;letter-spacing:.01em"></span>
+              </div>
               <div class="small" style="color:var(--bb-muted)" data-me="subtitle">No campaign selected</div>
             </div>
             <div class="d-flex align-items-center gap-2">
@@ -99,17 +102,9 @@
             </div>
           </div>
 
-          <div data-me="stepBar" class="p-2 mb-2 rounded" style="display:none;background:#eff6ff;border:1px solid #bfdbfe">
-            <div class="row g-2 align-items-end">
-              <div class="col-md-7">
-                <label class="form-label small fw-500 mb-1">Step name</label>
-                <input data-me="stepName" class="form-control form-control-sm" placeholder="Initial outreach">
-              </div>
-              <div class="col-md-5">
-                <label class="form-label small fw-500 mb-1">Send after days</label>
-                <input data-me="stepDelay" class="form-control form-control-sm" type="number" min="0" placeholder="0">
-              </div>
-            </div>
+          <div data-me="stepBar" class="p-2 mb-2 rounded d-flex align-items-center gap-3" style="display:none;background:#eff6ff;border:1px solid #bfdbfe">
+            <label class="form-label small fw-500 mb-0 text-nowrap">Send after days</label>
+            <input data-me="stepDelay" class="form-control form-control-sm" type="number" min="0" placeholder="0" style="max-width:90px">
           </div>
 
           <div class="row g-2 mb-2">
@@ -154,7 +149,7 @@
     }
 
     bind() {
-      ['subject', 'account', 'bodyPlain', 'bodyHtml', 'css', 'stepName', 'stepDelay'].forEach(name => {
+      ['subject', 'account', 'bodyPlain', 'bodyHtml', 'css', 'stepDelay'].forEach(name => {
         const el = this.$(name);
         if (el) el.addEventListener('input', () => this.autoSave());
       });
@@ -184,16 +179,21 @@
 
       if (this.stepId) {
         const step = (c.mail_schedule || []).find(s => s.step_id === this.stepId);
-        this.$('title').textContent = step ? `Mail editor - ${step.name || 'Step'}` : 'Mail editor - new step';
-        this.$('subtitle').textContent = `${this.campaignId} / schedule step`;
+        this._stepName = step ? (step.name || stepName || 'Step') : (stepName || 'Step');
+        this.$('title').textContent = 'Mail editor';
+        this.$('subtitle').textContent = this.campaignId;
+        const badge = this.$('stepBadge');
+        badge.textContent = this._stepName;
+        badge.style.display = '';
         this.$('stepBar').style.display = '';
         this.$('accountWrap').style.display = 'none';
-        this.$('stepName').value = step ? (step.name || '') : (stepName || '');
         this.$('stepDelay').value = step ? (step.delay_days ?? 0) : (delay || 0);
         this.applyMail((step && step.mail) || { subject: stepName || '', body: '', type: 'plain', css: DEFAULT_CSS });
       } else {
+        this._stepName = '';
         this.$('title').textContent = 'Mail editor';
         this.$('subtitle').textContent = this.campaignId;
+        this.$('stepBadge').style.display = 'none';
         this.$('stepBar').style.display = 'none';
         this.$('accountWrap').style.display = this.showAccountField ? '' : 'none';
         this.applyMail(c.mail || { type: 'plain', css: DEFAULT_CSS });
@@ -262,45 +262,176 @@
       });
     }
 
+    // ── Shared modal helper ───────────────────────────────────────────────────
+
+    _ensureModals() {
+      if (document.getElementById('me-link-modal')) return;
+
+      // Link modal
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="me-link-modal" tabindex="-1">
+          <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
+            <div class="modal-content">
+              <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title"><i class="ti ti-link text-primary me-2"></i>Insert link</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label small fw-500">Link text</label>
+                  <input id="me-link-text" class="form-control form-control-sm" placeholder="Click here">
+                </div>
+                <div>
+                  <label class="form-label small fw-500">URL</label>
+                  <input id="me-link-url" class="form-control form-control-sm" placeholder="https://">
+                </div>
+              </div>
+              <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary" id="me-link-insert">Insert</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
+
+      // Image modal
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="me-image-modal" tabindex="-1">
+          <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
+            <div class="modal-content">
+              <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title"><i class="ti ti-photo text-primary me-2"></i>Insert image</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label small fw-500">Image file</label>
+                  <input id="me-image-file" type="file" accept="image/*" class="form-control form-control-sm">
+                </div>
+                <div class="mb-1 small text-muted text-center">— or —</div>
+                <div class="mb-3">
+                  <label class="form-label small fw-500">Image URL</label>
+                  <input id="me-image-url" class="form-control form-control-sm" placeholder="https://example.com/image.png">
+                </div>
+                <div>
+                  <label class="form-label small fw-500">Link URL <span class="text-muted fw-normal">(optional — makes image clickable)</span></label>
+                  <input id="me-image-link" class="form-control form-control-sm" placeholder="https://">
+                </div>
+              </div>
+              <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary" id="me-image-insert">Insert</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
+    }
+
     handleLink(value) {
       if (!this.quill) return;
       if (!value) {
         this.quill.format('link', false);
         return;
       }
+      this._ensureModals();
       const range = this.quill.getSelection(true);
-      const current = range ? this.quill.getFormat(range).link : '';
-      let url = window.prompt('Link URL', current || 'https://');
-      if (!url) return;
-      url = url.trim();
-      if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url;
-      if (range && range.length > 0) {
-        this.quill.format('link', url);
-      } else {
-        this.quill.insertText(range ? range.index : this.quill.getLength(), url, 'link', url);
-      }
-      this.$('bodyHtml').value = this.quill.root.innerHTML;
-      this.autoSave();
+      const currentUrl  = range ? (this.quill.getFormat(range).link || '') : '';
+      const currentText = (range && range.length > 0)
+        ? this.quill.getText(range.index, range.length).trim()
+        : '';
+
+      const urlInput  = document.getElementById('me-link-url');
+      const textInput = document.getElementById('me-link-text');
+      urlInput.value  = currentUrl || 'https://';
+      textInput.value = currentText;
+
+      const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('me-link-modal'));
+      modal.show();
+      setTimeout(() => (currentUrl ? urlInput : textInput).focus(), 300);
+
+      const insertBtn = document.getElementById('me-link-insert');
+      const doInsert = () => {
+        let url = urlInput.value.trim();
+        const text = textInput.value.trim();
+        if (!url || url === 'https://') return;
+        if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url;
+        modal.hide();
+
+        if (range && range.length > 0) {
+          // Replace selection text if user changed it
+          if (text && text !== currentText) {
+            this.quill.deleteText(range.index, range.length);
+            this.quill.insertText(range.index, text, 'link', url);
+          } else {
+            this.quill.format('link', url);
+          }
+        } else {
+          const label = text || url;
+          this.quill.insertText(range ? range.index : this.quill.getLength(), label, 'link', url);
+        }
+        this.$('bodyHtml').value = this.quill.root.innerHTML;
+        this.autoSave();
+        insertBtn.removeEventListener('click', doInsert);
+      };
+      insertBtn.addEventListener('click', doInsert);
+      document.getElementById('me-link-modal').addEventListener('hidden.bs.modal', () => {
+        insertBtn.removeEventListener('click', doInsert);
+      }, { once: true });
     }
 
     handleImage() {
       if (!this.quill) return;
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.addEventListener('change', () => {
-        const file = input.files && input.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
+      this._ensureModals();
+
+      const fileInput  = document.getElementById('me-image-file');
+      const urlInput   = document.getElementById('me-image-url');
+      const linkInput  = document.getElementById('me-image-link');
+      fileInput.value  = '';
+      urlInput.value   = '';
+      linkInput.value  = '';
+
+      const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('me-image-modal'));
+      modal.show();
+
+      const insertBtn = document.getElementById('me-image-insert');
+      const doInsert = () => {
+        const linkUrl = linkInput.value.trim();
+        const imgUrl  = urlInput.value.trim();
+        const file    = fileInput.files && fileInput.files[0];
+
+        const _embed = (src) => {
+          modal.hide();
           const range = this.quill.getSelection(true);
-          this.quill.insertEmbed(range ? range.index : this.quill.getLength(), 'image', reader.result);
+          const idx   = range ? range.index : this.quill.getLength();
+          if (linkUrl) {
+            // Insert as raw HTML <a><img></a> via clipboard delta workaround
+            const html = `<a href="${esc(linkUrl)}" target="_blank"><img src="${esc(src)}" style="max-width:100%"></a>`;
+            const curHtml = this.quill.root.innerHTML;
+            // Insert at cursor by manipulating innerHTML directly then re-syncing
+            const tmp = document.createElement('div');
+            tmp.innerHTML = curHtml;
+            // Append after cursor position using Quill's clipboard
+            this.quill.clipboard.dangerouslyPasteHTML(idx, html);
+          } else {
+            this.quill.insertEmbed(idx, 'image', src);
+          }
           this.$('bodyHtml').value = this.quill.root.innerHTML;
           this.autoSave();
+          insertBtn.removeEventListener('click', doInsert);
         };
-        reader.readAsDataURL(file);
-      });
-      input.click();
+
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = () => _embed(reader.result);
+          reader.readAsDataURL(file);
+        } else if (imgUrl) {
+          _embed(imgUrl);
+        }
+      };
+      insertBtn.addEventListener('click', doInsert);
+      document.getElementById('me-image-modal').addEventListener('hidden.bs.modal', () => {
+        insertBtn.removeEventListener('click', doInsert);
+      }, { once: true });
     }
 
     switchMode() {
@@ -350,7 +481,7 @@
         return {
           mail_schedule_step: {
             step_id: this.stepId,
-            name: this.$('stepName').value.trim() || 'Step',
+            name: this._stepName || 'Step',
             delay_days: parseInt(this.$('stepDelay').value || '0', 10) || 0,
             mail
           }

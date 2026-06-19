@@ -24,6 +24,7 @@ No SMTP / sending code lives here.
 from __future__ import annotations
 
 from collections import defaultdict
+from google.cloud.firestore_v1.base_query import FieldFilter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 import re
@@ -432,7 +433,6 @@ def read_outreach(
 
     # Step 1: query contacts. If campaign_ids is set, read those campaigns'
     # subcollections directly so non-matching campaigns can never leak in.
-    from google.cloud.firestore_v1.base_query import FieldFilter
     campaign_filter = _coerce_id_set(campaign_ids)
     if campaign_filter:
         queries = []

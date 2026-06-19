@@ -437,6 +437,24 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "send_run_reservations",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "account",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "started_at",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
