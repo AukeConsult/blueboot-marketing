@@ -181,6 +181,15 @@ def _upsert_campaign_contacts(db, campaign_id: str, records: list[dict]) -> dict
         }
         to_write.append((doc_id, entry))
 
+    # Cross-campaign dedup: skip new contacts already active in another campaign
+    new_ids  = {did for did, _ in to_write if did not in existing_docs}
+    from crm.campaign_import_lib import _contacts_in_other_campaigns
+    reserved = _contacts_in_other_campaigns(db, campaign_id, new_ids)
+    if reserved:
+        print(f"[crm-sync] {len(reserved)} contacts skipped — active in another campaign",
+              flush=True)
+    to_write = [(did, d) for did, d in to_write if did in existing_docs or did not in reserved]
+
     added   = sum(1 for did, _ in to_write if did not in existing_docs)
     updated = len(to_write) - added
 

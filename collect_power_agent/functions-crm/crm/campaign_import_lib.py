@@ -134,6 +134,40 @@ def parse_sheet(file_bytes: bytes) -> tuple[list[dict], list[str]]:
 # Core import logic
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Cross-campaign deduplication
+# ---------------------------------------------------------------------------
+
+_BLOCKED_STATUSES = {"pending", "active", "sent", "replied", "bounced", "converted"}
+
+
+def _contacts_in_other_campaigns(db, campaign_id: str, doc_ids: set) -> set:
+    """Return doc_ids that are already active in a campaign other than campaign_id.
+
+    Statuses that block: pending, active, sent, replied, bounced, converted.
+    Statuses that free up the contact: excluded, rejected (contact was dropped).
+    """
+    if not doc_ids:
+        return set()
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    blocked = set()
+    ids = list(doc_ids)
+    for i in range(0, len(ids), 30):          # Firestore 'in' limit = 30
+        snap = (
+            db.collection_group("campaign_contacts")
+            .where(filter=FieldFilter("doc_id", "in", ids[i:i + 30]))
+            .stream()
+        )
+        for d in snap:
+            parts = d.reference.path.split("/")
+            other_campaign = parts[1] if len(parts) >= 4 else ""
+            if other_campaign != campaign_id:
+                status = (d.to_dict() or {}).get("status", "pending")
+                if status in _BLOCKED_STATUSES:
+                    blocked.add(d.id)
+    return blocked
+
+
 def run_campaign_import(
     db,
     campaign_id: str,
@@ -211,13 +245,20 @@ def run_campaign_import(
     contacts_new     = [cid for cid in contacts_by_id if cid not in existing_contacts]
     contacts_updated = [cid for cid in contacts_by_id if cid in  existing_contacts]
 
+    # Cross-campaign dedup: skip new contacts already active in another campaign
+    reserved = _contacts_in_other_campaigns(db, campaign_id, set(contacts_new))
+    if reserved:
+        print(f"[campaign-import] {len(reserved)} contacts skipped — active in another campaign",
+              flush=True)
+    contacts_new = [cid for cid in contacts_new if cid not in reserved]
+
     summary = {
         "campaign_id":      campaign_id,
         "leads_new":        len(leads_new),
         "leads_updated":    len(leads_updated),
         "contacts_new":     len(contacts_new),
         "contacts_updated": len(contacts_updated),
-        "skipped":          skipped,
+        "skipped":          skipped + len(reserved),
         "dry_run":          dry_run,
     }
 
@@ -258,6 +299,8 @@ def run_campaign_import(
                 safe = {k: v for k, v in contact_doc.items()
                         if k not in _PROTECTED_CONTACT_FIELDS}
                 batch.set(contacts_col.document(doc_id), safe, merge=True)
+            elif doc_id in reserved:
+                continue  # active in another campaign — skip
             else:
                 # New contact: set defaults
                 contact_doc.setdefault("status",    "pending")

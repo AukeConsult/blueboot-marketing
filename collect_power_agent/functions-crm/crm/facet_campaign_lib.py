@@ -476,7 +476,20 @@ def _run_facet_campaign_site_leads(
     # ── 7. Batch-write matched contacts ──────────────────────────────────────
     # Lifecycle fields are preserved for contacts that already exist.
     # New contacts get status=pending and blank lifecycle fields.
+    # Cross-campaign dedup: skip new contacts already active in another campaign.
     LIFECYCLE = ("status", "sent_at", "last_action", "last_action_status")
+    new_candidate_ids = set()
+    for ec in matched:
+        did = ec.get("doc_id") or re.sub(
+            r"[^a-zA-Z0-9_-]", "_", str(ec.get("email") or "").strip().lower()
+        )
+        if did not in existing:
+            new_candidate_ids.add(did)
+    from crm.campaign_import_lib import _contacts_in_other_campaigns
+    reserved = _contacts_in_other_campaigns(db, campaign_id, new_candidate_ids)
+    if reserved:
+        print(f"[facet-campaign] {len(reserved)} contacts skipped — active in another campaign",
+              flush=True)
     added = refreshed = 0
     for i in range(0, len(matched), BATCH_SIZE):
         chunk = matched[i:i + BATCH_SIZE]
@@ -505,6 +518,8 @@ def _run_facet_campaign_site_leads(
                     contact_doc[field] = prev.get(field, "" if field != "sent_at" else None)
                 batch.set(contacts_col.document(doc_id), contact_doc, merge=True)
                 refreshed += 1
+            elif doc_id in reserved:
+                continue  # active in another campaign — skip
             else:
                 # New contact — set initial lifecycle values
                 contact_doc.update({
