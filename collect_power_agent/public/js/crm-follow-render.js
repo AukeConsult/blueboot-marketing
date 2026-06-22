@@ -137,7 +137,6 @@ function ensureFollowMailEditor() {
       showMainButton: false,
       showSaveButton: false,
       showTestButton: false,
-      showAccountField: false
     });
   }
   return _followMailEditor;

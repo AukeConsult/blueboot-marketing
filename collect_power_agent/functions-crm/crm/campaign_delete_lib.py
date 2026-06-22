@@ -24,6 +24,7 @@ from __future__ import annotations
 
 CAMPAIGNS_COLLECTION  = "campaigns"
 CAMPAIGN_CONTACTS_SUB = "campaign_contacts"
+CAMPAIGN_LEADS_SUB    = "campaign_leads"
 BATCH_SIZE = 400
 
 
@@ -70,24 +71,35 @@ def run_campaign_delete(db, campaign_id: str) -> dict:
     print(f"[campaign-delete] status locked to 'deleting' for '{campaign_id}'",
           flush=True)
 
-    # ── 2. Batch-delete campaign_contacts ─────────────────────────────────────
-    contacts_col = camp_ref.collection(CAMPAIGN_CONTACTS_SUB)
-    deleted = 0
-    while True:
-        docs = list(contacts_col.limit(BATCH_SIZE).stream())
-        if not docs:
-            break
-        batch = db.batch()
-        for doc in docs:
-            batch.delete(doc.reference)
-        batch.commit()
-        deleted += len(docs)
-        print(f"[campaign-delete]   deleted {deleted} contacts so far…", flush=True)
+    # ── 2. Batch-delete subcollections ────────────────────────────────────────
+    def _delete_subcollection(col_ref, label: str) -> int:
+        count = 0
+        while True:
+            docs = list(col_ref.limit(BATCH_SIZE).stream())
+            if not docs:
+                break
+            batch = db.batch()
+            for doc in docs:
+                batch.delete(doc.reference)
+            batch.commit()
+            count += len(docs)
+            print(f"[campaign-delete]   deleted {count} {label} so far…", flush=True)
+        print(f"[campaign-delete] {count} {label} deleted", flush=True)
+        return count
 
-    print(f"[campaign-delete] {deleted} contacts deleted", flush=True)
+    contacts_deleted = _delete_subcollection(
+        camp_ref.collection(CAMPAIGN_CONTACTS_SUB), "contacts"
+    )
+    leads_deleted = _delete_subcollection(
+        camp_ref.collection(CAMPAIGN_LEADS_SUB), "leads"
+    )
 
     # ── 3. Delete campaign document ───────────────────────────────────────────
     camp_ref.delete()
     print(f"[campaign-delete] campaign '{campaign_id}' deleted", flush=True)
 
-    return {"campaign_id": campaign_id, "contacts_deleted": deleted}
+    return {
+        "campaign_id":      campaign_id,
+        "contacts_deleted": contacts_deleted,
+        "leads_deleted":    leads_deleted,
+    }

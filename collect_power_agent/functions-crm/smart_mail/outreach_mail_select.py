@@ -308,11 +308,8 @@ def _attach_selected_step(contact: ContactRow, campaign: CampaignMail) -> bool:
 
 
 def _is_intro_step(step: dict) -> bool:
-    marker = " ".join(
-        str(step.get(k) or "")
-        for k in ("mail_type", "name", "step_name", "step_id")
-    ).strip().lower()
-    return "intro" in marker
+    mail_type = str(step.get("mail_type") or "").strip().lower()
+    return mail_type == "intro" or step.get("index", 999) == 0
 
 
 def _prepare_mail_sequence(seq: list) -> list:
@@ -341,39 +338,6 @@ def _log_campaign_skip(db, campaign_id: str, text: str) -> None:
     except Exception as exc:
         print(f"[outreach_mail_select] skip-log failed for {campaign_id}: {exc}")
 
-
-def prepare_mail_sequences(db=None) -> int:
-    """Build mail_sequence from the current mail_schedule format when needed."""
-    db = db or _get_db()
-    updated = 0
-    for doc in db.collection("campaigns").stream():
-        d = doc.to_dict() or {}
-        if d.get("mail_sequence"):
-            continue
-
-        mail_schedule = d.get("mail_schedule") or []
-        if mail_schedule and isinstance(mail_schedule, list):
-            mail_sequence = []
-            for i, step in enumerate(mail_schedule):
-                step_mail = step.get("mail") or {}
-                subject   = step_mail.get("subject", "").strip()
-                body      = step_mail.get("body",    "").strip()
-                step_name = (step.get("name") or "").strip().lower()
-                mail_type = "intro" if i == 0 or "intro" in step_name else f"followup_{i}"
-                is_plain = step_mail.get("type", "html") == "plain"
-                mail_sequence.append({
-                    "index":      i,
-                    "mail_type":  mail_type,
-                    "delay_days": int(step.get("delay_days") or 0),
-                    "subject":    subject,
-                    "body_html":  "" if is_plain else body,
-                    "body_text":  body if is_plain else "",
-                })
-            if mail_sequence:
-                doc.reference.update({"mail_sequence": mail_sequence})
-                print(f"[prepare-mail-sequence] {doc.id!r}: built {len(mail_sequence)} step(s) from mail_schedule")
-                updated += 1
-    return updated
 
 
 # ---------------------------------------------------------------------------
@@ -544,11 +508,11 @@ def read_outreach(
             continue
 
         campaign.status = _campaign_status(campaign.status)
-        required_status = "active" if mode == "followup" else "ready"
-        if campaign.status != required_status:
+        allowed_statuses = {"active"} if mode == "followup" else {"ready", "active"}
+        if campaign.status not in allowed_statuses:
             print(
                 f"[outreach_mail_select] {mode} send requires campaign status "
-                f"{required_status!r}; campaign '{campaign_id}' is "
+                f"{allowed_statuses}; campaign '{campaign_id}' is "
                 f"{campaign.status!r} -- skipping"
             )
             continue
@@ -718,5 +682,4 @@ __all__ = [
     "SentConfirmation",
     "read_outreach",
     "confirm_sent",
-    "prepare_mail_sequences",
 ]

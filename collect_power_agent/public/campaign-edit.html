@@ -44,18 +44,14 @@
     </div>
   </div>
 
-  <!-- Step context bar (shown when editing a mail_schedule step) -->
+  <!-- Step context bar (shown when editing a mail_sequence step) -->
   <div id="step-context-bar" class="bb-card p-3 mb-3" style="display:none;background:#eff6ff;border-color:#bfdbfe">
     <div class="row g-2 align-items-end">
-      <div class="col-md-5">
-        <label class="form-label small fw-500 mb-1">Step name</label>
-        <input id="step-name" class="form-control form-control-sm" placeholder="e.g. Initial outreach" oninput="autoSave()">
-      </div>
-      <div class="col-md-3">
+      <div class="col-md-4">
         <label class="form-label small fw-500 mb-1">Send after (days)</label>
         <input id="step-delay" class="form-control form-control-sm" type="number" min="0" placeholder="0" oninput="autoSave()">
       </div>
-      <div class="col-md-4 d-flex align-items-end">
+      <div class="col-md-8 d-flex align-items-end">
         <div class="small" style="color:#3b82f6"><i class="ti ti-info-circle me-1"></i>Day 0 = send on campaign activation</div>
       </div>
     </div>
@@ -63,16 +59,8 @@
 
   <!-- Meta fields -->
   <div class="bb-card p-3 mb-3">
-    <div class="row g-3">
-      <div class="col-md-6" id="email-account-col">
-        <label class="form-label small fw-500 mb-1">Outreach email account</label>
-        <input id="c-email-account-edit" class="form-control form-control-sm" placeholder="sender@example.com" oninput="autoSave()">
-      </div>
-      <div class="col-md-6">
-        <label class="form-label small fw-500 mb-1">Subject</label>
-        <input id="c-subject" class="form-control form-control-sm" placeholder="Email subject line" oninput="autoSave()">
-      </div>
-    </div>
+    <label class="form-label small fw-500 mb-1">Subject</label>
+    <input id="c-subject" class="form-control form-control-sm" placeholder="Email subject line" oninput="autoSave()">
   </div>
 
   <!-- Help panel -->
@@ -254,7 +242,8 @@
 // BASE + helpers from js/crm-common.js
 const urlParams = new URLSearchParams(window.location.search);
 const CAMPAIGN_ID = urlParams.get('campaign_id') || '';
-const STEP_ID     = urlParams.get('step') || '';        // editing a mail_schedule step
+const _stepParam  = urlParams.get('step');
+const STEP_INDEX  = _stepParam != null ? parseInt(_stepParam, 10) : null;  // editing a mail_sequence step
 const STEP_NEW    = urlParams.get('step_new') === '1';  // brand-new step
 const STEP_DELAY  = parseInt(urlParams.get('delay') || '0', 10);
 const STEP_NAME   = urlParams.get('step_name') || '';   // preset name (Intro, Reminder 1, …)
@@ -446,26 +435,28 @@ async function saveCampaign(silent = false) {
   const mode    = document.querySelector('input[name="mail-type"]:checked').value;
   const subject = document.getElementById('c-subject').value.trim();
   const body    = getBody();
-  const account = document.getElementById('c-email-account-edit').value.trim();
   const fb = document.getElementById('save-feedback');
   if (!silent) { fb.textContent = 'Saving…'; fb.style.color = 'var(--bb-muted)'; fb.style.display = ''; }
   try {
     const css = document.getElementById('c-mail-css').value;
     let payload;
-    if (STEP_ID) {
-      // Save a specific mail_schedule step
-      const stepName  = document.getElementById('step-name').value.trim() || `Step`;
+    if (STEP_INDEX != null) {
+      // Save a mail_sequence step — flat format, identified by index
       const stepDelay = parseInt(document.getElementById('step-delay').value || '0', 10);
+      const isHtml    = mode === 'html';
       payload = {
-        mail_schedule_step: {
-          step_id:    STEP_ID,
-          name:       stepName,
+        mail_sequence_step: {
+          index:      STEP_INDEX,
+          mail_type:  STEP_INDEX === 0 ? 'intro' : `followup_${STEP_INDEX}`,
           delay_days: isNaN(stepDelay) ? 0 : stepDelay,
-          mail:       { subject, body, type: mode, css },
+          subject,
+          body_html:  isHtml ? body : '',
+          body_text:  isHtml ? '' : body,
+          css,
         }
       };
     } else {
-      payload = { mail: { subject, body, type: mode, css }, outreach_email_account: account };
+      payload = { mail: { subject, body, type: mode, css } };
     }
     const r = await fetch(`${BASE}/api/crm/campaigns/${CAMPAIGN_ID}`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
@@ -511,7 +502,7 @@ function _applyMail(mail) {
 async function loadCampaign() {
   if (!CAMPAIGN_ID) { document.getElementById('c-campaign-id').textContent = 'No campaign selected'; return; }
   // Title line: show step label if editing a step
-  const titleSuffix = STEP_ID ? ` · step` : '';
+  const titleSuffix = STEP_INDEX != null ? ` · step ${STEP_INDEX}` : '';
   document.getElementById('c-campaign-id').textContent = CAMPAIGN_ID + titleSuffix;
   document.getElementById('back-link').href = `campaign.html?campaign_id=${encodeURIComponent(CAMPAIGN_ID)}`;
   try {
@@ -520,29 +511,26 @@ async function loadCampaign() {
     const st = c.status || 'draft';
     const badge = document.getElementById('c-status-badge');
     badge.className = `bb-badge bb-badge-${st}`; badge.textContent = st;
-    document.getElementById('c-email-account-edit').value = c.outreach_email_account || '';
 
-    if (STEP_ID) {
+    if (STEP_INDEX != null) {
       // Show step context bar
       document.getElementById('step-context-bar').style.display = '';
-      // Hide the email-account column (not relevant per-step; subject stays visible)
-      const emailCol = document.getElementById('email-account-col');
-      if (emailCol) emailCol.style.display = 'none';
 
-      const steps = c.mail_schedule || [];
-      const step  = steps.find(s => s.step_id === STEP_ID);
+      const seq  = c.mail_sequence || [];
+      const step = seq.find(s => s.index === STEP_INDEX);
+      const label = STEP_NAME || (STEP_INDEX === 0 ? 'Intro' : `Reminder ${STEP_INDEX}`);
       if (step) {
-        document.getElementById('step-name').value  = step.name || '';
         document.getElementById('step-delay').value = step.delay_days != null ? step.delay_days : 0;
-        _applyMail(step.mail || {});
-        _updateStepLabel(step.name || '');
+        const body = step.body_html || step.body_text || '';
+        const type = step.body_html ? 'html' : 'plain';
+        _applyMail({ subject: step.subject || '', body, type, css: step.css || '' });
+        _updateStepLabel(label);
       } else {
-        // New step — pre-fill name, delay, and subject from URL params
-        document.getElementById('step-name').value  = STEP_NAME;
+        // New step — pre-fill delay and subject from URL params
         document.getElementById('step-delay').value = isNaN(STEP_DELAY) ? 0 : STEP_DELAY;
         if (STEP_NAME) document.getElementById('c-subject').value = STEP_NAME;
         _applyMail({});
-        _updateStepLabel(STEP_NAME);
+        _updateStepLabel(label);
       }
     } else {
       _applyMail(c.mail || {});
@@ -555,7 +543,7 @@ async function loadCampaign() {
 loadCampaign();
 // ── Campaign test mail (edit page) ────────────────────────────────────────
 function openCampaignTestMail() {
-  const account = document.getElementById('c-email-account-edit').value.trim();
+  const account = (window._campaignData || {}).outreach_email_account || '';
   const subject = document.getElementById('c-subject').value.trim();
   const body    = typeof getBody === 'function' ? getBody() : (document.getElementById('c-body-html').value || document.getElementById('c-body').value || '');
   document.getElementById('ctm-from').textContent    = account || '— set email account first —';

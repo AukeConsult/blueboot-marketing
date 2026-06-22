@@ -173,7 +173,6 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
 .contacts-toolbar #status-filter { order: 1; }
 .contacts-toolbar #contact-search { order: 2; max-width: none !important; }
 .contacts-toolbar #enrich-btn { order: 3; }
-.contacts-toolbar #delete-excluded-btn { order: 4; }
 .mail-editor-component .ql-toolbar {
   background: #f9fafb;
   border-radius: 8px 8px 0 0;
@@ -288,6 +287,9 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
       <button class="btn btn-sm btn-outline-warning" onclick="openResetModal()" id="reset-btn" style="display:none" title="Reset campaign to start">
         <i class="ti ti-refresh-alert me-1"></i>Reset
       </button>
+      <button class="btn btn-sm btn-outline-danger" id="delete-excluded-btn" style="display:none" onclick="openRemoveExcludedModal()" title="Remove all excluded contacts and sites from this campaign">
+        <i class="ti ti-trash me-1"></i>Delete excluded
+      </button>
     </div>
   </div>
 
@@ -315,15 +317,10 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
     <div id="sync-feedback" class="alert py-1 px-2 small mb-2" style="display:none"></div>
 
     <!-- Tab nav -->
-    <ul class="nav nav-tabs mb-0" id="campaign-tabs">
+    <ul class="nav nav-tabs mb-0 align-items-center" id="campaign-tabs">
       <li class="nav-item">
         <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-info">
           <i class="ti ti-info-circle me-1"></i>Info
-        </button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-contacts">
-          <i class="ti ti-users me-1"></i>Contacts
         </button>
       </li>
       <li class="nav-item">
@@ -332,9 +329,20 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
         </button>
       </li>
       <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-contacts">
+          <i class="ti ti-users me-1"></i>Contacts
+        </button>
+      </li>
+      <li class="nav-item">
         <button class="nav-link" id="tab-sites-btn" data-bs-toggle="tab" data-bs-target="#tab-sites">
           <i class="ti ti-building me-1"></i>Sites
         </button>
+      </li>
+      <li class="nav-item ms-2" id="lists-refresh-indicator" style="display:none">
+        <span class="small text-muted d-flex align-items-center gap-1">
+          <span class="spinner-border spinner-border-sm" style="width:.75rem;height:.75rem"></span>
+          Refreshing…
+        </span>
       </li>
     </ul>
 
@@ -402,9 +410,6 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
             <option value="active">Active</option>
             <option value="excluded">Excluded</option>
           </select>
-          <button id="delete-excluded-btn" class="btn btn-sm btn-outline-danger" style="display:none" onclick="openRemoveExcludedModal()" title="Remove excluded contacts from this campaign">
-            <i class="ti ti-trash"></i>
-          </button>
           <button id="enrich-btn" class="btn btn-sm btn-outline-secondary" onclick="enrichNames()" title="Fill missing names using Bing + AI">
             <i class="ti ti-user-search"></i>
           </button>
@@ -692,15 +697,14 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
         <h6 class="modal-title"><i class="ti ti-trash text-danger me-2"></i>Remove excluded from campaign</h6>
       </div>
       <div class="modal-body">
-        <p class="mb-2">
-          Remove <strong><span id="remove-excluded-count">0</span></strong> excluded contact(s) from this campaign?
-        </p>
+        <p class="mb-2">This will remove all excluded items from this campaign:</p>
+        <ul class="small mb-2">
+          <li><span id="remove-excluded-count">0</span> excluded contact(s)</li>
+          <li id="remove-excluded-sites-row" style="display:none"><span id="remove-excluded-sites-count">0</span> excluded site(s) and all their contacts</li>
+        </ul>
         <div class="alert alert-warning py-2 small mb-2">
           <i class="ti ti-alert-triangle me-1"></i>
-          This does not delete the contact from the database. It only removes the contact from this campaign, so the same email address can be picked up by another campaign later.
-        </div>
-        <div class="small" style="color:var(--bb-muted)">
-          If you keep a contact excluded in this campaign, that email address will stay reserved here and will not appear in other campaigns.
+          Removed contacts and sites are not deleted from the database — they are only removed from this campaign, so they can be picked up by another campaign later.
         </div>
       </div>
       <div class="modal-footer border-0 pt-0">
@@ -975,18 +979,20 @@ function ensureMailEditor() {
   return mailEditor;
 }
 
+function _stepLabel(step) {
+  return step.index === 0 ? 'Intro' : `Reminder ${step.index}`;
+}
+
 function renderMailSchedule(campaign) {
-  const steps   = campaign.mail_schedule || [];
+  const steps = campaign.mail_sequence || [];
   const body    = document.getElementById('mail-schedule-body');
   const empty   = document.getElementById('mail-schedule-empty');
   const countEl = document.getElementById('mail-schedule-count');
-  const id      = campaign.campaign_id;
 
   countEl.textContent = steps.length ? `(${steps.length} step${steps.length > 1 ? 's' : ''})` : '';
 
   if (!steps.length) {
     empty.style.display = '';
-    // remove any old step rows
     body.querySelectorAll('.sched-step').forEach(el => el.remove());
     return;
   }
@@ -1002,17 +1008,17 @@ function renderMailSchedule(campaign) {
     body.insertBefore(warn, body.firstChild);
   }
 
-  steps.forEach((step, i) => {
-    const mail    = step.mail || {};
-    const subject = mail.subject || '—';
+  steps.forEach((step) => {
+    const name    = _stepLabel(step);
+    const subject = step.subject || '—';
     const day     = step.delay_days != null ? `Day ${step.delay_days}` : 'Day 0';
-    const name    = step.name || `Step ${i + 1}`;
     const sentAt  = step.sent_at ? fmt(step.sent_at) : '—';
+    const idx     = step.index;
     const row = document.createElement('div');
     row.className = 'sched-step d-flex align-items-center gap-2 py-2 border-bottom';
     row.style = 'font-size:.87rem';
     row.innerHTML = `
-      <div class="sched-num">${i + 1}</div>
+      <div class="sched-num">${idx + 1}</div>
       <div style="flex:1;min-width:0">
         <div class="fw-500">${escapeHtml(name)}</div>
         <div style="color:var(--bb-muted);font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="opacity:.6">Subject:</span> ${escapeHtml(subject)}</div>
@@ -1020,15 +1026,15 @@ function renderMailSchedule(campaign) {
       </div>
       <span class="bb-badge bb-badge-muted" style="flex-shrink:0">${escapeHtml(day)}</span>
       <button class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:.75rem;flex-shrink:0"
-              onclick="openCampaignTestMailStep('${escapeHtml(step.step_id)}')">
+              onclick="openCampaignTestMailStep(${idx})">
         <i class="ti ti-send"></i>
       </button>
       <button class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:.75rem;flex-shrink:0"
-              onclick="openMailEditorStep('${escapeHtml(step.step_id)}')" title="Edit step">
+              onclick="openMailEditorStep(${idx})" title="Edit step">
         <i class="ti ti-edit"></i>
       </button>
       <button class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size:.75rem;flex-shrink:0"
-              onclick="deleteScheduleStep('${escapeHtml(step.step_id)}', '${escapeHtml(name)}')">
+              onclick="deleteScheduleStep(${idx}, '${escapeHtml(name)}')">
         <i class="ti ti-trash"></i>
       </button>`;
     body.appendChild(row);
@@ -1041,31 +1047,51 @@ const MAIL_STEP_DEFAULTS = {
   'Reminder 2': { delay: 12 },
 };
 
-function addScheduleStep(name) {
+async function addScheduleStep(name) {
   const id = document.getElementById('campaign-select').value;
   if (!id) return;
-  const stepId = 'step_' + Date.now();
-  const steps  = (window._campaignData || {}).mail_schedule || [];
-  // Use preset delay if defined, otherwise increment from last step
+  const steps = (window._campaignData || {}).mail_sequence || [];
+  const nextIndex = steps.length;
   const preset = name && MAIL_STEP_DEFAULTS[name];
   const lastDelay = steps.length ? (steps[steps.length - 1].delay_days ?? 0) : -5;
   const delay = preset ? preset.delay : (steps.length ? lastDelay + 5 : 0);
-  openMailEditorStep(stepId, { stepNew: true, stepName: name || '', delay });
+  // Save skeleton immediately so step appears in list right away
+  try {
+    await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mail_sequence_step: {
+          index:      nextIndex,
+          mail_type:  nextIndex === 0 ? 'intro' : `followup_${nextIndex}`,
+          delay_days: delay,
+          subject:    '',
+          body_html:  '',
+          body_text:  '',
+          css:        ''
+        }
+      })
+    });
+    const c = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`);
+    window._campaignData = c;
+    renderMailSchedule(c);
+  } catch(e) {
+    console.warn('[addScheduleStep]', e.message);
+  }
+  openMailEditorStep(nextIndex, { stepNew: false, stepName: name || '', delay });
 }
 
-function openMailEditorStep(stepId, opts = {}) {
+function openMailEditorStep(stepIndex, opts = {}) {
   const id = document.getElementById('campaign-select').value;
-  if (!id || !stepId) return;
-  // Switch to Mail tab
+  if (!id || stepIndex == null) return;
   const mailTabBtn = document.getElementById('tab-mail-btn');
   if (mailTabBtn) bootstrap.Tab.getOrCreateInstance(mailTabBtn).show();
-  // Show editor card
   document.getElementById('mail-editor-card').style.display = '';
   const label = opts.stepName ? ` — ${opts.stepName}` : '';
   document.getElementById('mail-editor-step-label').textContent = label;
   ensureMailEditor().load({
     campaignId: id,
-    stepId,
+    stepIndex,
     stepNew: !!opts.stepNew,
     stepName: opts.stepName || '',
     delay: opts.delay || 0
@@ -1073,13 +1099,13 @@ function openMailEditorStep(stepId, opts = {}) {
   setTimeout(() => document.getElementById('mail-editor-card').scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
 }
 
-async function deleteScheduleStep(stepId, name) {
+async function deleteScheduleStep(stepIndex, name) {
   if (!confirm(`Delete step "${name}"?`)) return;
   const id = document.getElementById('campaign-select').value;
   try {
     const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ delete_step: stepId })
+      body: JSON.stringify({ delete_step: stepIndex })
     });
     const d = await r.json();
     if (d.status !== 'ok') { alert(d.message || 'Delete failed'); return; }
@@ -1087,14 +1113,20 @@ async function deleteScheduleStep(stepId, name) {
   } catch(e) { alert(e.message); }
 }
 
-function openCampaignTestMailStep(stepId) {
-  const steps = (window._campaignData || {}).mail_schedule || [];
-  const step  = steps.find(s => s.step_id === stepId);
+function openCampaignTestMailStep(stepIndex) {
+  const steps = (window._campaignData || {}).mail_sequence || [];
+  const step  = steps.find(s => s.index === stepIndex);
   if (!step) return;
-  const mail = step.mail || {};
-  window._campaignMail = { ...mail,
+  const body = step.body_html || step.body_text || '';
+  const type = step.body_html ? 'html' : 'plain';
+  window._campaignMail = {
+    subject: step.subject || '',
+    body,
+    type,
+    css: step.css || '',
     outreach_email: (window._campaignData || {}).outreach_email_account || '',
-    _display_name:  ((window._campaignData || {}).mail_account || {}).display_name || '' };
+    _display_name:  ((window._campaignData || {}).mail_account || {}).display_name || ''
+  };
   openCampaignTestMail();
 }
 
@@ -1165,6 +1197,7 @@ async function toggleContactStatusBtn(btn, status) {
     await patchContactStatus(email, doc, nextStatus);
     filterContacts();
     updateCampaignCountsFromContacts();
+    _refreshBothLists(document.getElementById('campaign-select').value);
   } catch(e) {
     console.warn('[contact-status] save failed:', e.message);
     btn.disabled = false;
@@ -1182,56 +1215,90 @@ function updateCampaignCountsFromContacts() {
   }
 }
 
-function updateRemoveExcludedBtn() {
-  // Show "Delete excluded" button when any contact is excluded
-  const btn = document.getElementById('delete-excluded-btn');
-  if (!btn) return;
-  const hasExcluded = allContacts.some(c => contactStatus(c.status) === 'excluded');
-  btn.style.display = hasExcluded ? '' : 'none';
+function _refreshBothLists(id) {
+  if (!id) return;
+  const indicator = document.getElementById('lists-refresh-indicator');
+  if (indicator) indicator.style.display = '';
+  Promise.all([
+    fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`),
+    fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads`),
+  ]).then(([campaign, sitesData]) => {
+    if (campaign?.campaign_contacts) {
+      allContacts = campaign.campaign_contacts;
+      filterContacts();
+    }
+    if (sitesData?.leads) {
+      _allLeads = sitesData.leads;
+      applySitesFilter();
+    }
+    updateRemoveExcludedBtn();
+  }).catch(() => {}).finally(() => {
+    if (indicator) indicator.style.display = 'none';
+  });
 }
 
-function openRemoveExcludedModal() {
-  const excluded = allContacts.filter(c => contactStatus(c.status) === 'excluded');
-  if (!excluded.length) return;
-  document.getElementById('remove-excluded-count').textContent = excluded.length;
+function updateRemoveExcludedBtn() {
+  const btn = document.getElementById('delete-excluded-btn');
+  if (!btn) return;
+  const hasExcludedContacts = allContacts.some(c => contactStatus(c.status) === 'excluded');
+  const hasExcludedSites    = _allLeads.some(l => l.status === 'excluded');
+  btn.style.display = (hasExcludedContacts || hasExcludedSites) ? '' : 'none';
+}
+
+async function openRemoveExcludedModal() {
+  const campaignId = document.getElementById('campaign-select').value;
+  if (!campaignId) return;
   const btn = document.getElementById('remove-excluded-confirm-btn');
-  btn.disabled = false;
-  btn.innerHTML = '<i class="ti ti-trash me-1"></i>Remove from campaign';
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Checking…';
+  document.getElementById('remove-excluded-count').textContent = '…';
+  const sitesRow = document.getElementById('remove-excluded-sites-row');
+  sitesRow.style.display = 'none';
   new bootstrap.Modal(document.getElementById('removeExcludedModal')).show();
+  try {
+    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/excluded-counts`);
+    document.getElementById('remove-excluded-count').textContent = d.excluded_contacts ?? 0;
+    if (d.excluded_sites) {
+      document.getElementById('remove-excluded-sites-count').textContent = d.excluded_sites;
+      sitesRow.style.display = '';
+    }
+    if (!d.excluded_contacts && !d.excluded_sites) {
+      bootstrap.Modal.getInstance(document.getElementById('removeExcludedModal')).hide();
+      return;
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-trash me-1"></i>Remove from campaign';
+  } catch(e) {
+    document.getElementById('remove-excluded-count').textContent = '?';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-trash me-1"></i>Remove from campaign';
+  }
 }
 
 async function deleteExcluded() {
-  const excluded = allContacts.filter(c => contactStatus(c.status) === 'excluded').map(c => c.email);
-  if (!excluded.length) return;
   const campaignId = document.getElementById('campaign-select').value;
-  const fb = document.getElementById('sync-feedback');
+  if (!campaignId) return;
+  const fb    = document.getElementById('sync-feedback');
   const modal = bootstrap.Modal.getInstance(document.getElementById('removeExcludedModal'));
-  const btn = document.getElementById('remove-excluded-confirm-btn');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="ti ti-loader me-1"></i>Removing...';
-  }
+  const btn   = document.getElementById('remove-excluded-confirm-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Removing...'; }
   fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
-  fb.textContent = `Removing ${excluded.length} excluded contact(s) from this campaign...`;
+  fb.textContent = 'Removing excluded contacts and sites…';
   fb.style.display = '';
   try {
-    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/remove`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ emails: excluded })
+    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/remove`, {
+      method: 'POST'
     });
-    const d = await r.json();
     if (d.status !== 'ok') throw new Error(d.message || 'remove failed');
     if (modal) modal.hide();
+    const sitePart = d.leads_deleted ? `, ${d.leads_deleted} site(s)` : '';
     fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
-    fb.textContent = `Removed ${d.deleted} contact(s) from this campaign. Refreshing...`;
+    fb.textContent = `Removed ${d.deleted} contact(s)${sitePart}. Refreshing…`;
     await loadCampaign();
     await loadCampaignList();
-    fb.textContent = `Removed ${d.deleted} contact(s) from this campaign.`;
+    fb.textContent = `Removed ${d.deleted} contact(s)${sitePart} from this campaign.`;
   } catch(e) {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="ti ti-trash me-1"></i>Remove from campaign';
-    }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-trash me-1"></i>Remove from campaign'; }
     fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
     fb.textContent = 'Error: ' + e.message;
   }
@@ -2110,6 +2177,7 @@ async function loadSites() {
     _allLeads = data.leads || [];
     _populateSectorFilter(_allLeads);
     applySitesFilter();
+    updateRemoveExcludedBtn();
   } catch(e) {
     document.getElementById('sites-body').innerHTML =
       `<tr><td colspan="7" class="text-center py-5 small text-danger">Error: ${escapeHtml(e.message)}</td></tr>`;
@@ -2289,6 +2357,7 @@ async function toggleLeadExclude(btn, leadIdx, newStatus) {
     );
     lead.status = newStatus;
     applySitesFilter();
+    _refreshBothLists(id);
   } catch(e) {
     alert('Error: ' + e.message);
     btn.disabled = false;
@@ -2408,6 +2477,7 @@ async function toggleLeadContactExclude(btn, leadId, ci) {
     c.status = nextStatus;
     const subRow = document.querySelector(`#sites-body .site-row[data-lead-id="${leadId}"] + .contacts-sub-row`);
     if (subRow) renderLeadContacts(subRow.querySelector('td'), leadId, contacts);
+    _refreshBothLists(id);
   } catch(e) {
     alert('Error: ' + e.message);
     btn.disabled = false;
@@ -2764,75 +2834,4 @@ document.addEventListener('shown.bs.tab', e => {
         </ul>
         <p class="small text-danger mb-0"><strong>This cannot be undone.</strong></p>
         <div id="reset-feedback" class="alert py-2 small mt-2 mb-0" style="display:none"></div>
-      </div>
-      <div class="modal-footer py-2">
-        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
-        <button id="reset-confirm-btn" class="btn btn-sm btn-danger" onclick="confirmReset()">
-          <i class="ti ti-refresh-alert me-1"></i>Reset campaign
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-// ── Campaign reset ────────────────────────────────────────────────────────────
-async function openResetModal() {
-  const cid = document.getElementById('campaign-select').value;
-  if (!cid) return;
-  const preview = document.getElementById('reset-preview');
-  const fb      = document.getElementById('reset-feedback');
-  const btn     = document.getElementById('reset-confirm-btn');
-  preview.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Calculating…';
-  preview.className = 'alert alert-secondary py-2 small mb-3';
-  fb.style.display  = 'none';
-  btn.disabled      = false;
-  new bootstrap.Modal(document.getElementById('resetModal')).show();
-  try {
-    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(cid)}/reset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dry_run: true }),
-    });
-    preview.className = 'alert alert-warning py-2 small mb-3';
-    preview.innerHTML = `Will reset: <strong>${d.contacts_reset}</strong> contacts, `
-      + `<strong>${d.leads_reset}</strong> leads, `
-      + `delete <strong>${d.sent_deleted}</strong> send history records.`;
-  } catch(e) {
-    preview.className = 'alert alert-danger py-2 small mb-3';
-    preview.textContent = 'Could not load preview: ' + (e.message || e);
-  }
-}
-
-async function confirmReset() {
-  const cid = document.getElementById('campaign-select').value;
-  if (!cid) return;
-  const fb  = document.getElementById('reset-feedback');
-  const btn = document.getElementById('reset-confirm-btn');
-  btn.disabled  = true;
-  fb.className  = 'alert alert-secondary py-2 small mt-2 mb-0';
-  fb.innerHTML  = '<div class="spinner-border spinner-border-sm me-1"></div>Resetting…';
-  fb.style.display = '';
-  try {
-    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(cid)}/reset`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dry_run: false }),
-    });
-    fb.className = 'alert alert-success py-2 small mt-2 mb-0';
-    fb.innerHTML = `<i class="ti ti-check me-1"></i>Reset complete — `
-      + `${d.contacts_reset} contacts, ${d.leads_reset} leads reset; `
-      + `${d.sent_deleted} send records deleted.`;
-    setTimeout(() => {
-      bootstrap.Modal.getInstance(document.getElementById('resetModal')).hide();
-      selectCampaign(cid, null);
-    }, 1800);
-  } catch(e) {
-    fb.className = 'alert alert-danger py-2 small mt-2 mb-0';
-    fb.innerHTML = '<i class="ti ti-circle-x me-1"></i>Reset failed: ' + escapeHtml(e.message || String(e));
-    btn.disabled = false;
-  }
-}
-</script>
-</body>
-</html>
+     

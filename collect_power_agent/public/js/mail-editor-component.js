@@ -28,7 +28,7 @@
       this.onSaved = opts.onSaved || null;
       this.campaignId = '';
       this.campaign = null;
-      this.stepId = '';
+      this.stepIndex = null;
       this.stepNew = false;
       this.saveTimer = null;
       this.quill = null;
@@ -37,7 +37,6 @@
       this.showMainButton = opts.showMainButton !== false;
       this.showSaveButton = opts.showSaveButton !== false;
       this.showTestButton = opts.showTestButton !== false;
-      this.showAccountField = opts.showAccountField !== false;
       if (!this.root) throw new Error('MailEditorComponent root not found');
       MailEditorComponent.ensureStyles();
       this.renderShell();
@@ -107,15 +106,9 @@
             <input data-me="stepDelay" class="form-control form-control-sm" type="number" min="0" placeholder="0" style="max-width:90px">
           </div>
 
-          <div class="row g-2 mb-2">
-            <div class="col-md-5" data-me="accountWrap" style="${this.showAccountField ? '' : 'display:none'}">
-              <label class="form-label small fw-500 mb-1">Outreach account</label>
-              <input data-me="account" class="form-control form-control-sm" placeholder="sender@example.com">
-            </div>
-            <div class="${this.showAccountField ? 'col-md-7' : 'col-12'}">
-              <label class="form-label small fw-500 mb-1">Subject</label>
-              <input data-me="subject" class="form-control form-control-sm" placeholder="Email subject">
-            </div>
+          <div class="mb-2">
+            <label class="form-label small fw-500 mb-1">Subject</label>
+            <input data-me="subject" class="form-control form-control-sm" placeholder="Email subject">
           </div>
 
           <div class="d-flex align-items-center gap-3 mb-2 small" style="color:var(--bb-muted)">
@@ -149,7 +142,7 @@
     }
 
     bind() {
-      ['subject', 'account', 'bodyPlain', 'bodyHtml', 'css', 'stepDelay'].forEach(name => {
+      ['subject', 'bodyPlain', 'bodyHtml', 'css', 'stepDelay'].forEach(name => {
         const el = this.$(name);
         if (el) el.addEventListener('input', () => this.autoSave());
       });
@@ -163,9 +156,9 @@
       });
     }
 
-    async load({ campaignId, stepId = '', stepNew = false, stepName = '', delay = 0 } = {}) {
+    async load({ campaignId, stepIndex = null, stepNew = false, stepName = '', delay = 0 } = {}) {
       this.campaignId = campaignId || '';
-      this.stepId = stepId || '';
+      this.stepIndex = stepIndex != null ? parseInt(stepIndex, 10) : null;
       this.stepNew = !!stepNew;
       if (!this.campaignId) {
         this.$('subtitle').textContent = 'No campaign selected';
@@ -175,27 +168,31 @@
       const c = await r.json();
       if (!r.ok || c.status === 'error') throw new Error(c.message || 'Could not load campaign');
       this.campaign = c;
-      this.$('account').value = c.outreach_email_account || '';
 
-      if (this.stepId) {
-        const step = (c.mail_schedule || []).find(s => s.step_id === this.stepId);
-        this._stepName = step ? (step.name || stepName || 'Step') : (stepName || 'Step');
+      if (this.stepIndex != null) {
+        const seq  = c.mail_sequence || [];
+        const step = seq.find(s => s.index === this.stepIndex);
+        const label = stepName || (this.stepIndex === 0 ? 'Intro' : `Reminder ${this.stepIndex}`);
         this.$('title').textContent = 'Mail editor';
         this.$('subtitle').textContent = this.campaignId;
         const badge = this.$('stepBadge');
-        badge.textContent = this._stepName;
+        badge.textContent = label;
         badge.style.display = '';
         this.$('stepBar').style.display = '';
-        this.$('accountWrap').style.display = 'none';
         this.$('stepDelay').value = step ? (step.delay_days ?? 0) : (delay || 0);
-        this.applyMail((step && step.mail) || { subject: stepName || '', body: '', type: 'plain', css: DEFAULT_CSS });
+        if (step) {
+          const body = step.body_html || step.body_text || '';
+          const type = step.body_html ? 'html' : 'plain';
+          this.applyMail({ subject: step.subject || '', body, type, css: step.css || DEFAULT_CSS });
+        } else {
+          this.applyMail({ subject: stepName || '', body: '', type: 'plain', css: DEFAULT_CSS });
+        }
       } else {
-        this._stepName = '';
+        this.stepIndex = null;
         this.$('title').textContent = 'Mail editor';
         this.$('subtitle').textContent = this.campaignId;
         this.$('stepBadge').style.display = 'none';
         this.$('stepBar').style.display = 'none';
-        this.$('accountWrap').style.display = this.showAccountField ? '' : 'none';
         this.applyMail(c.mail || { type: 'plain', css: DEFAULT_CSS });
       }
     }
@@ -205,17 +202,14 @@
       this.load({ campaignId: this.campaignId }).catch(err => this.feedback(err.message, true));
     }
 
-    loadDraft({ account = '', title = 'Mail editor', subtitle = '', mail = {}, accountReadOnly = false } = {}) {
+    loadDraft({ title = 'Mail editor', subtitle = '', mail = {} } = {}) {
       this.campaignId = '';
       this.campaign = null;
-      this.stepId = '';
+      this.stepIndex = null;
       this.stepNew = false;
       this.$('title').textContent = title;
       this.$('subtitle').textContent = subtitle;
       this.$('stepBar').style.display = 'none';
-      this.$('accountWrap').style.display = this.showAccountField ? '' : 'none';
-      this.$('account').value = account || '';
-      this.$('account').readOnly = !!accountReadOnly;
       this.applyMail({ type: 'plain', css: DEFAULT_CSS, ...mail });
     }
 
@@ -471,23 +465,29 @@
     }
 
     buildPayload() {
+      if (this.stepIndex != null) {
+        const body    = this.getBody();
+        const isHtml  = this.getType() === 'html';
+        const idx     = this.stepIndex;
+        return {
+          mail_sequence_step: {
+            index:      idx,
+            mail_type:  idx === 0 ? 'intro' : `followup_${idx}`,
+            delay_days: parseInt(this.$('stepDelay').value || '0', 10) || 0,
+            subject:    this.$('subject').value.trim(),
+            body_html:  isHtml ? body : '',
+            body_text:  isHtml ? '' : body,
+            css:        this.$('css').value || DEFAULT_CSS,
+          }
+        };
+      }
       const mail = {
         subject: this.$('subject').value.trim(),
         body: this.getBody(),
         type: this.getType(),
         css: this.$('css').value || DEFAULT_CSS
       };
-      if (this.stepId) {
-        return {
-          mail_schedule_step: {
-            step_id: this.stepId,
-            name: this._stepName || 'Step',
-            delay_days: parseInt(this.$('stepDelay').value || '0', 10) || 0,
-            mail
-          }
-        };
-      }
-      return { mail, outreach_email_account: this.$('account').value.trim() };
+      return { mail };
     }
 
     autoSave() {
@@ -541,7 +541,7 @@
     openTest() {
       const detail = {
         campaignId: this.campaignId,
-        account: this.stepId ? (this.campaign?.outreach_email_account || '') : this.$('account').value.trim(),
+        account: this.campaign?.outreach_email_account || '',
         subject: this.$('subject').value.trim(),
         body: this.getBody(),
         type: this.getType(),

@@ -283,38 +283,68 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
         return _err(str(exc), 500)
 
 
+@bp.route("/api/crm/campaigns/<campaign_id>/excluded-counts", methods=["GET"])
+def excluded_counts(campaign_id):
+    """Return counts of excluded contacts and excluded sites for a campaign."""
+    try:
+        db = _get_db()
+        doc_ref = db.collection("campaigns").document(campaign_id)
+        if not doc_ref.get().exists:
+            return _err(f"Campaign '{campaign_id}' not found", 404)
+        contacts_col = doc_ref.collection("campaign_contacts")
+        leads_col    = doc_ref.collection("campaign_leads")
+        excl_contacts = sum(1 for _ in contacts_col.where(filter=FieldFilter("status", "==", "excluded")).stream())
+        excl_sites    = sum(1 for _ in leads_col.where(filter=FieldFilter("status", "==", "excluded")).stream())
+        return jsonify({"status": "ok", "excluded_contacts": excl_contacts, "excluded_sites": excl_sites})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @bp.route("/api/crm/campaigns/<campaign_id>/contacts/remove", methods=["POST"])
 def remove_campaign_contacts(campaign_id):
-    """Remove contacts from a campaign by email list."""
+    """Delete all excluded contacts and excluded sites (+ their contacts) from a campaign."""
     try:
-        db   = _get_db()
-        body = request.get_json(silent=True) or {}
-        emails = body.get("emails", [])
-        if not emails or not isinstance(emails, list):
-            return _err("Body must contain a non-empty 'emails' list", 400)
-
+        db = _get_db()
         doc_ref = db.collection("campaigns").document(campaign_id)
         if not doc_ref.get().exists:
             return _err(f"Campaign '{campaign_id}' not found", 404)
 
         contacts_col = doc_ref.collection("campaign_contacts")
+        leads_col    = doc_ref.collection("campaign_leads")
         deleted = 0
-        for email in emails:
-            matches = contacts_col.where(filter=FieldFilter("email", "==", email)).stream()
-            for m in matches:
-                m.reference.delete()
-                deleted += 1
 
-        remaining = sum(1 for _ in contacts_col.stream())
-        doc_ref.update({"contact_count": remaining, "updated_at": datetime.now(timezone.utc).isoformat()})
+        # 1. Delete excluded contacts directly from Firestore
+        for doc in contacts_col.where(filter=FieldFilter("status", "==", "excluded")).stream():
+            doc.reference.delete()
+            deleted += 1
+
+        # 2. Delete excluded leads and all their contacts
+        excluded_leads = list(leads_col.where(filter=FieldFilter("status", "==", "excluded")).stream())
+        leads_deleted = 0
+        for lead_doc in excluded_leads:
+            lead_id = lead_doc.id
+            for lc in contacts_col.where(filter=FieldFilter("lead_id", "==", lead_id)).stream():
+                lc.reference.delete()
+                deleted += 1
+            lead_doc.reference.delete()
+            leads_deleted += 1
+
+        remaining_contacts = sum(1 for _ in contacts_col.stream())
+        remaining_leads    = sum(1 for _ in leads_col.stream())
+        doc_ref.update({
+            "contact_count": remaining_contacts,
+            "lead_count":    remaining_leads,
+            "updated_at":    datetime.now(timezone.utc).isoformat(),
+        })
 
         from handlers.shared import _new_job, _enqueue_task
         export_params = {"campaign_id": campaign_id}
         export_job_id = _new_job("campaign-export", export_params)
         _enqueue_task("campaign-export", export_job_id, export_params)
 
-        return jsonify({"status": "ok", "deleted": deleted,
-                        "contact_count": remaining, "export_job_id": export_job_id})
+        return jsonify({"status": "ok", "deleted": deleted, "leads_deleted": leads_deleted,
+                        "contact_count": remaining_contacts, "lead_count": remaining_leads,
+                        "export_job_id": export_job_id})
     except Exception as exc:
         return _err(str(exc), 500)
 

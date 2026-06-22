@@ -159,37 +159,39 @@ def update_campaign(campaign_id):
             merged_mail.update(body["mail"])
             update["mail"] = merged_mail
 
-        # --- mail_schedule support -----------------------------------------
-        # Full schedule replace: PATCH with {"mail_schedule": [...]}
-        # Single-step upsert:   PATCH with {"mail_schedule_step": {...}}
-        #   The step must contain a "step_id".  It is merged into (or appended
-        #   to) the existing array.  To delete a step send {"delete_step": id}.
-        if "mail_schedule" in body:
-            sched = body["mail_schedule"]
-            if not isinstance(sched, list):
-                return _err("mail_schedule must be an array", 400)
-            update["mail_schedule"] = sched
+        # --- mail_sequence support -----------------------------------------
+        # Full sequence replace: PATCH with {"mail_sequence": [...]}
+        # Single-step upsert:   PATCH with {"mail_sequence_step": {...}}
+        #   The step must contain an "index" field.  It is merged into (or
+        #   appended to) the existing array, kept sorted by index.
+        #   To delete a step send {"delete_step": <index>}.
+        if "mail_sequence" in body:
+            seq = body["mail_sequence"]
+            if not isinstance(seq, list):
+                return _err("mail_sequence must be an array", 400)
+            update["mail_sequence"] = seq
 
-        if "mail_schedule_step" in body:
-            step = body["mail_schedule_step"]
-            if not isinstance(step, dict) or not step.get("step_id"):
-                return _err("mail_schedule_step must be an object with step_id", 400)
-            existing_schedule = list((doc.to_dict() or {}).get("mail_schedule") or [])
-            idx = next((i for i, s in enumerate(existing_schedule)
-                        if s.get("step_id") == step["step_id"]), None)
-            if idx is not None:
-                merged = dict(existing_schedule[idx])
+        if "mail_sequence_step" in body:
+            step = body["mail_sequence_step"]
+            if not isinstance(step, dict) or step.get("index") is None:
+                return _err("mail_sequence_step must be an object with an index field", 400)
+            existing_seq = list((doc.to_dict() or {}).get("mail_sequence") or [])
+            step_idx = next((i for i, s in enumerate(existing_seq)
+                             if s.get("index") == step["index"]), None)
+            if step_idx is not None:
+                merged = dict(existing_seq[step_idx])
                 merged.update(step)
-                existing_schedule[idx] = merged
+                existing_seq[step_idx] = merged
             else:
-                existing_schedule.append(step)
-            update["mail_schedule"] = existing_schedule
+                existing_seq.append(step)
+            existing_seq.sort(key=lambda s: s.get("index", 999))
+            update["mail_sequence"] = existing_seq
 
         if "delete_step" in body:
-            step_id = body["delete_step"]
-            existing_schedule = list((doc.to_dict() or {}).get("mail_schedule") or [])
-            update["mail_schedule"] = [s for s in existing_schedule
-                                       if s.get("step_id") != step_id]
+            step_index = body["delete_step"]
+            existing_seq = list((doc.to_dict() or {}).get("mail_sequence") or [])
+            update["mail_sequence"] = [s for s in existing_seq
+                                       if s.get("index") != step_index]
 
         if "imap" in body or "gmail" in body or "mail_account_type" in body:
             campaign_data    = doc.to_dict() or {}

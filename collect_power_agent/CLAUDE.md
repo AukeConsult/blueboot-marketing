@@ -1128,3 +1128,33 @@ explicit pixel widths (never `width:auto` on either). Use at minimum:
 `width:auto` on Name causes it to collapse into the Email column when other
 columns are added or the viewport shrinks. Always set a concrete width.
 
+---
+
+## Outreach email account architecture
+
+### RULE: `outreach_email_account` is set only on the campaign — never in mail steps or the mail editor
+
+The sending account is a campaign-level concern, not a per-step or per-editor concern.
+Never add an "Outreach account" input to the mail editor UI, mail steps, or per-step data.
+
+**Architecture:**
+
+| Concern | Location |
+|---|---|
+| Which account to send from | `campaigns/{id}.outreach_email_account` (email address string) |
+| SMTP credentials for that account | `settings/mail_accounts/accounts/{email}` |
+| Where the user selects the account | Campaign Info tab in `campaign.html` — the ONLY place |
+
+**Send flow:**
+1. `outreach_mail_select.py` → `_load_campaign()` reads `campaign.outreach_email_account` → stored as `sender_email` on `CampaignMail`
+2. `read_outreach()` groups contacts by `sender_email`, calls `_load_account(db, sender_email)` to look up SMTP credentials
+3. `MailSender` uses those credentials for SMTP
+
+**Rules:**
+- `mail-editor-component.js` must NEVER render an account input field; it may read `campaign.outreach_email_account` silently (e.g. to populate "From:" in the test modal) — read-only only
+- `mail_sequence` step objects must NEVER contain an account field
+- `campaign-edit.html` must NEVER write `outreach_email_account` to the campaign
+- The campaign Info tab (`campaign.html` Info section) is the sole UI for setting `outreach_email_account`
+
+This bug was fixed after `mail-editor-component.js` had `showAccountField` + an account `<input>` that wrote to the step payload. The fix was to remove all account UI from the editor and steps, and confirm the send engine reads only from `campaign.outreach_email_account`.
+

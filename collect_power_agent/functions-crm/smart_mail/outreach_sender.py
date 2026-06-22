@@ -99,10 +99,41 @@ def _claim_send_budget(db, sender_account: str) -> tuple[int, str, float]:
     sent_last_day  = _sent_count_since(db, sender_account, day_ago)
 
     try:
+        # Delete done reservations older than 24 h — they serve no guard purpose.
+        done_cutoff = (now - timedelta(hours=24)).isoformat()
+        done_old = (
+            db.collection("send_run_reservations")
+            .where(filter=FieldFilter("account",    "==", sender_account))
+            .where(filter=FieldFilter("status",     "==", "done"))
+            .where(filter=FieldFilter("started_at", "<",  done_cutoff))
+            .stream()
+        )
+        for done_doc in done_old:
+            try:
+                done_doc.reference.delete()
+                print(f"[budget] deleted done reservation {done_doc.id}")
+            except Exception as del_ex:
+                print(f"[budget] could not delete done reservation {done_doc.id}: {del_ex}")
+
+        # Delete stale active reservations (older than TTL) before counting.
+        stale = (
+            db.collection("send_run_reservations")
+            .where(filter=FieldFilter("account",    "==", sender_account))
+            .where(filter=FieldFilter("status",     "==", "active"))
+            .where(filter=FieldFilter("started_at", "<",  stale_cutoff))
+            .stream()
+        )
+        for stale_doc in stale:
+            try:
+                stale_doc.reference.delete()
+                print(f"[budget] deleted stale reservation {stale_doc.id}")
+            except Exception as del_ex:
+                print(f"[budget] could not delete stale reservation {stale_doc.id}: {del_ex}")
+
         active = (
             db.collection("send_run_reservations")
-            .where(filter=FieldFilter("account", "==", sender_account))
-            .where(filter=FieldFilter("status",  "==", "active"))
+            .where(filter=FieldFilter("account",    "==", sender_account))
+            .where(filter=FieldFilter("status",     "==", "active"))
             .where(filter=FieldFilter("started_at", ">=", stale_cutoff))
             .stream()
         )
@@ -285,13 +316,11 @@ def send_outreach(
         from smart_mail.mail_sender import MailSender              # noqa: PLC0415
     else:
         MailSender = None
-    from smart_mail.outreach_mail_select import read_outreach, confirm_sent, prepare_mail_sequences  # noqa: PLC0415
+    from smart_mail.outreach_mail_select import read_outreach, confirm_sent  # noqa: PLC0415
     from smart_mail.outreach_render_mail import render_mail, MailStep  # noqa: PLC0415
 
     db = get_firestore()
 
-    # Prepare current campaigns that have mail_schedule but no mail_sequence.
-    prepare_mail_sequences(db)
 
     summary: dict = {
         "mode": mode,
