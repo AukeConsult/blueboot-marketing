@@ -146,8 +146,8 @@ GET /api/crm/contact-sync
 GET /api/crm/push-and-sync
 GET /api/crm/template-sync
 GET /api/crm/crm-sync
-GET /api/crm/campaign-sync
 GET /api/crm/campaign-export
+POST /api/crm/campaign-import
 GET /api/crm/discover-campaigns
 
 POST /api/crm/campaigns/<campaign_id>/create

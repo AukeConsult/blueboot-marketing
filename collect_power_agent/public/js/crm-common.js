@@ -161,8 +161,8 @@ function prettyError(msg){
 const PAGE_ROLES = {
   'campaigns.html':     ['admin', 'campaign-user', 'user'],
   'campaign.html':      ['admin', 'campaign-user', 'user'],
-  'campaign-edit.html': ['admin', 'campaign-user', 'user'],
-  'campaign_sites.html': ['admin', 'campaign-user', 'user'],
+  'campaign-edit.html':   ['admin', 'campaign-user', 'user'],
+  'campaign-import.html': ['admin', 'campaign-user'],
   'mailbox.html':       ['admin', 'campaign-user', 'user'],
   'crm-bp.html':        ['admin', 'user'],
   'crm-sync.html':      ['admin', 'user'],
@@ -179,9 +179,15 @@ const PAGE_ROLES = {
 };
 
 const NAV_LINKS = [
-  { href: 'campaign.html',      icon: 'ti-speakerphone',      label: 'Campaigns',
-    match: ['campaigns.html', 'campaign.html', 'campaign-edit.html', 'campaign_sites.html'],
-    roles: ['admin', 'campaign-user', 'user'] },
+  { dropdown: 'campaigns', icon: 'ti-speakerphone', label: 'Campaigns',
+    roles: ['admin', 'campaign-user', 'user'],
+    match: ['campaigns.html', 'campaign.html', 'campaign-edit.html', 'campaign-import.html', 'filter-facets.html'],
+    children: [
+      { href: 'campaigns.html',       icon: 'ti-list',          label: 'Campaign list' },
+      { href: 'campaign-import.html', icon: 'ti-table-import',  label: 'Import campaign', roles: ['admin', 'campaign-user'] },
+      { divider: true },
+      { href: 'filter-facets.html',   icon: 'ti-filter',        label: 'Filter facets' },
+    ]},
   { href: 'crm_follow.html',   icon: 'ti-phone-check',       label: 'Follow-up',
     roles: ['admin', 'campaign-user', 'user'] },
   { href: 'crm-bp.html', icon: 'ti-server-2', label: 'CRM discover',
@@ -189,11 +195,9 @@ const NAV_LINKS = [
     roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'daily-admin', icon: 'ti-tool', label: 'Daily Admin',
     roles: ['admin', 'campaign-user', 'user'],
-    match: ['statistics.html', 'filter-facets.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html', 'outreach-settings.html'],
+    match: ['statistics.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html', 'outreach-settings.html'],
     children: [
       { href: 'statistics.html',    icon: 'ti-chart-bar',             label: 'Statistics' },
-      { href: 'campaign_sites.html', icon: 'ti-building',              label: 'Campaign Sites' },
-      { href: 'filter-facets.html', icon: 'ti-filter',                label: 'Filter facets' },
       { divider: true },
       { href: 'gdisk.html',         icon: 'ti-brand-google-drive',    label: 'Drive Folder' },
       { href: 'mailbox.html',       icon: 'ti-inbox',                 label: 'Message Box' },
@@ -209,7 +213,8 @@ const NAV_LINKS = [
       { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user',           label: 'User guide' },
       { href: 'doc-viewer.html?doc=crm-follow-up',       icon: 'ti-phone-check',    label: 'CRM Follow-up' },
       { href: 'doc-viewer.html?doc=followup-page-usage', icon: 'ti-help',           label: 'Follow-up page usage' },
-      { href: 'doc-viewer.html?doc=filter-to-campaign',  icon: 'ti-filter',         label: 'Filter to campaign' },
+      { href: 'doc-viewer.html?doc=filter-to-campaign',        icon: 'ti-filter',         label: 'Filter to campaign' },
+      { href: 'doc-viewer.html?doc=campaign-import-export',    icon: 'ti-table-import',   label: 'Campaign import & export' },
       { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',     label: 'Pipeline config' },
       { href: 'doc-viewer.html?doc=ai-assistance',       icon: 'ti-brain',          label: 'AI assistance' },
       { divider: true },
@@ -334,9 +339,4 @@ const PUBLIC_PAGES = new Set(['login.html', 'register.html', 'index.html', 'doc-
   else go();
 })();
 
-// Back button: go to the previous page if there is history, otherwise let the
-// link's href act as a fallback. Use as: <a href="index.html" onclick="return goBack()">
-function goBack(){
-  if(history.length > 1){ history.back(); return false; }
-  return true;
-}
+// Back button: go to the previous page if there i

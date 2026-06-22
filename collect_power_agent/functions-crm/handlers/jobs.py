@@ -70,23 +70,6 @@ def crm_sync_trigger():
     except Exception as exc:
         return _err(str(exc), 500)
 
-@bp.route("/api/crm/campaign-sync", methods=["GET"])
-def campaign_sync():
-    """Sync campaign data from contact sheet -> Firestore.
-    Required: ?campaign_id=NO_jun
-    Optional: ?force=true
-    """
-    campaign_id = request.args.get("campaign_id", "").strip()
-    if not campaign_id:
-        return _err("campaign_id is required e.g. ?campaign_id=NO_jun", 400)
-    force = request.args.get("force", "").lower() in ("1", "true", "yes")
-    try:
-        job_id = _new_job("campaign-sync", {"campaign_id": campaign_id, "force": force})
-        _enqueue_task("campaign-sync", job_id, {"campaign_id": campaign_id, "force": force})
-        return _accepted(job_id, "campaign-sync")
-    except Exception as exc:
-        return _err(str(exc), 500)
-
 
 @bp.route("/api/crm/campaign-export", methods=["GET"])
 def campaign_export():
@@ -100,6 +83,41 @@ def campaign_export():
         job_id = _new_job("campaign-export", params)
         _enqueue_task("campaign-export", job_id, params)
         return _accepted(job_id, "campaign-export")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/campaign-import", methods=["POST"])
+def campaign_import():
+    """Import leads + contacts from an uploaded Excel file into a campaign.
+
+    Multipart form fields:
+      campaign_id  -- target campaign (created if missing)
+      file         -- .xlsx file with a 'Leads+Contacts' tab
+      dry_run      -- 'true' | '1' to preview counts without writing (default: false)
+    """
+    campaign_id = (request.form.get("campaign_id") or "").strip()
+    if not campaign_id:
+        return _err("campaign_id is required", 400)
+
+    if "file" not in request.files:
+        return _err("file is required (multipart field 'file')", 400)
+
+    uploaded = request.files["file"]
+    if not uploaded.filename or not uploaded.filename.lower().endswith(".xlsx"):
+        return _err("file must be a .xlsx Excel file", 400)
+
+    dry_run = request.form.get("dry_run", "").lower() in ("1", "true", "yes")
+
+    try:
+        from crm.campaign_import_lib import parse_sheet, run_campaign_import
+        file_bytes = uploaded.read()
+        rows, warnings = parse_sheet(file_bytes)
+        db = _get_db()
+        result = run_campaign_import(db, campaign_id, rows, dry_run=dry_run)
+        result["warnings"] = warnings
+        result["rows_parsed"] = len(rows)
+        return jsonify({"status": "ok", **result})
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -268,11 +286,6 @@ def worker(name, job_id):
                 sb.pipeline_coverage()
                 sb.campaign_statistics()
                 result = {"collected": True}
-
-        elif name == "campaign-sync":
-            from crm.campaign_sync_lib import run_campaign_sync
-            result = run_campaign_sync(db=db, svc=svc, gd=_gdisk(),
-                                       campaign_id=body.get("campaign_id", ""))
 
         elif name == "filter-count":
             from crm.filter_count_lib import run_filter_count, run_leads_filter_count
@@ -450,30 +463,17 @@ def list_jobs():
 
     # Compute cutoff time if since parameter given
     since_minutes = request.args.get("since", type=int)
-    cutoff = None
     if since_minutes:
-        from datetime import timedelta
-        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=since_minutes)).isoformat()
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
+        query  = query.where(filter=FieldFilter("queued_at", ">=", cutoff.isoformat()))
 
     if running:
-        queued       = list(_jobs_col().where(filter=FF("status", "==", "queued")).stream())
-        running_docs = list(_jobs_col().where(filter=FF("status", "==", "running")).stream())
-        all_jobs = [d.to_dict() for d in queued + running_docs]
-        # Filter by campaign_id
-        if campaign_id:
-            all_jobs = [j for j in all_jobs if (j.get("params") or {}).get("campaign_id") == campaign_id]
-        # Filter by time window (ignore stale jobs)
-        if cutoff:
-            all_jobs = [j for j in all_jobs if (j.get("queued_at") or "") >= cutoff]
-        # Only truly active statuses
-        all_jobs = [j for j in all_jobs if j.get("status") in ("queued", "running")]
-        all_jobs.sort(key=lambda j: j.get("queued_at", ""), reverse=True)
-        return jsonify({"jobs": all_jobs[:limit], "count": len(all_jobs)})
+        query = query.where(filter=FieldFilter("status", "in", ["queued", "running"]))
 
-    docs = list(query.limit(limit).stream())
-    jobs = [d.to_dict() for d in docs]
+    docs  = list(query.limit(limit).stream())
+    jobs  = [d.to_dict() for d in docs]
+
     if campaign_id:
         jobs = [j for j in jobs if (j.get("params") or {}).get("campaign_id") == campaign_id]
-    if cutoff:
-        jobs = [j for j in jobs if (j.get("queued_at") or "") >= cutoff]
+
     return jsonify({"jobs": jobs, "count": len(jobs)})

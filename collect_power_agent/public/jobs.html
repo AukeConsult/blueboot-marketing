@@ -52,7 +52,7 @@ function jobPill(status){
   return `<span class="bb-badge bb-badge-${({queued:'ready',running:'pending',done:'active',error:'error'})[status]||'ready'}">${status}</span>`;
 }
 
-const JOB_NAMES = {'contact-sync':'Import contacts','push-and-sync':'Push selected to CRM','template-sync':'Sync CRM to Leads Database','campaign-sync':'Campaign sync'};
+const JOB_NAMES = {'contact-sync':'Import contacts','push-and-sync':'Push selected to CRM','template-sync':'Sync CRM to Leads Database','campaign-export':'Export campaign'};
 
 function renderJobs(jobs){
   const el = document.getElementById('jobs-list');

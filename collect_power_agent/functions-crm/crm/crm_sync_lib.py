@@ -181,14 +181,8 @@ def _upsert_campaign_contacts(db, campaign_id: str, records: list[dict]) -> dict
         }
         to_write.append((doc_id, entry))
 
-    to_delete = [
-        did for did, doc in existing_docs.items()
-        if did not in sheet_ids and doc.get("status", "pending") == "pending"
-    ]
-
     added   = sum(1 for did, _ in to_write if did not in existing_docs)
     updated = len(to_write) - added
-    deleted = 0
 
     for i in range(0, len(to_write), BATCH_SIZE):
         batch = db.batch()
@@ -196,16 +190,55 @@ def _upsert_campaign_contacts(db, campaign_id: str, records: list[dict]) -> dict
             batch.set(col.document(doc_id), data, merge=True)
         batch.commit()
 
-    for i in range(0, len(to_delete), BATCH_SIZE):
-        batch = db.batch()
-        for doc_id in to_delete[i:i+BATCH_SIZE]:
-            batch.delete(col.document(doc_id))
-        batch.commit()
-        deleted += len(to_delete[i:i+BATCH_SIZE])
-
     print(f"[crm-sync] campaign_contacts: added={added} updated={updated} "
-          f"skipped={skipped}(non-pending) deleted={deleted}")
-    return {"added": added, "updated": updated, "skipped": skipped, "deleted": deleted}
+          f"skipped={skipped}(non-pending)")
+    return {"added": added, "updated": updated, "skipped": skipped}
+
+
+
+def _upsert_campaign_leads(db, campaign_id: str, records: list[dict]) -> dict:
+    col = db.collection("campaigns").document(campaign_id).collection("campaign_leads")
+    now = datetime.now(timezone.utc).isoformat()
+
+    # One lead doc per unique lead_id — deduplicate rows from the sheet
+    leads: dict[str, dict] = {}
+    for r in records:
+        lead_id = (r.get("lead_id_site") or r.get("lead_id_leads") or "").strip()
+        if not lead_id:
+            website = (r.get("website") or r.get("domain") or "").strip()
+            if website:
+                from crm.campaign_import_lib import lead_id_from_website
+                lead_id = lead_id_from_website(website)
+        if not lead_id:
+            continue
+        if lead_id not in leads:
+            leads[lead_id] = {
+                "lead_id":    lead_id,
+                "website":    r.get("website") or r.get("domain") or "",
+                "country":    r.get("country", ""),
+                "company":    r.get("company", ""),
+                "platform":   r.get("platform", ""),
+                "updated_at": now,
+            }
+
+    existing_ids = {d.id for d in col.stream()}
+    items  = list(leads.items())
+    added  = 0
+    updated = 0
+
+    for i in range(0, len(items), BATCH_SIZE):
+        batch = db.batch()
+        for lead_id, data in items[i:i + BATCH_SIZE]:
+            is_new = lead_id not in existing_ids
+            batch.set(col.document(lead_id), data, merge=True)
+            if is_new:
+                added += 1
+            else:
+                updated += 1
+        batch.commit()
+
+    print(f"[crm-sync] campaign_leads: added={added} updated={updated}", flush=True)
+    return {"added": added, "updated": updated}
 
 
 def run_crm_sync(db, svc, campaign_id: str = "", tab: str = CONTACT_TAB) -> dict:
@@ -234,9 +267,11 @@ def run_crm_sync(db, svc, campaign_id: str = "", tab: str = CONTACT_TAB) -> dict
     count, new_ids  = _upsert_campaigns(db, campaign_stats)
 
     contacts_result = {}
+    leads_result    = {}
     for cid in campaign_stats:
         rows = [r for r in filtered if (r.get("campaign") or "").strip() == cid]
         contacts_result[cid] = _upsert_campaign_contacts(db, cid, rows)
+        leads_result[cid]    = _upsert_campaign_leads(db, cid, rows)
 
     return {
         "contact_select_synced": synced,
@@ -245,4 +280,5 @@ def run_crm_sync(db, svc, campaign_id: str = "", tab: str = CONTACT_TAB) -> dict
         "new_campaign_ids":     new_ids,
         "campaign_ids":         list(campaign_stats.keys()),
         "contacts_by_campaign": contacts_result,
+        "leads_by_campaign":    leads_result,
     }

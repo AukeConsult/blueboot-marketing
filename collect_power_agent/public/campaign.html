@@ -268,9 +268,6 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
            style="pointer-events:none;color:var(--bb-muted)" title="Open connected sheet">
           <i class="ti ti-table-spark me-1"></i>Sheet
         </a>
-        <button class="btn btn-outline-secondary" onclick="syncCampaign()" title="Sync contacts from sheet">
-          <i class="ti ti-refresh me-1"></i>Sync
-        </button>
         <button id="override-btn" class="btn btn-outline-secondary" onclick="confirmFullOverride()" title="Regenerate sheet from database">
           <i class="ti ti-table-export me-1"></i>Full override
         </button>
@@ -1450,8 +1447,6 @@ async function loadCampaign() {
     document.getElementById('cancel-btn').style.display = (st === 'ready' || st === 'active') ? '' : 'none';
     document.getElementById('delete-btn').style.display = (st === 'draft' || st === 'canceled') ? '' : 'none';
     document.getElementById('reset-btn').style.display = (st !== 'draft') ? '' : 'none';
-    const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
-    if (syncBtn) syncBtn.disabled = isLocked;
     allContacts = c.campaign_contacts || [];
     document.getElementById('c-contact-count').textContent = `(${allContacts.length})`;
     renderContacts(allContacts);
@@ -1753,26 +1748,6 @@ async function removeLeadFromCampaign() {
   btn.disabled = false; btn.innerHTML = '<i class="ti ti-user-minus me-1"></i>Remove from campaign';
 }
 
-async function syncCampaign() {
-  const id = document.getElementById('campaign-select').value;
-  if (!id) return;
-  const fb = document.getElementById('sync-feedback');
-  const btn = document.querySelector('[onclick="syncCampaign()"]');
-  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Syncing…';
-  fb.style.display = 'none';
-  try {
-    const r = await fetch(`${BASE}/api/crm/campaign-sync?campaign_id=${encodeURIComponent(id)}`);
-    const d = await r.json();
-    fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
-    fb.textContent = d.status === 'queued' ? `Sync job queued (${d.job_id})` : (d.message || 'Sync triggered');
-    fb.style.display = '';
-    setTimeout(async () => { await loadCampaign(); await loadCampaignList(); }, 3000);
-  } catch(e) {
-    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
-    fb.textContent = e.message; fb.style.display = '';
-  }
-  btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Sync from sheet';
-}
 
 function confirmSend() {
   const id = document.getElementById('campaign-select').value;
@@ -1834,8 +1809,7 @@ async function confirmCancel() {
     document.getElementById('cancel-btn').style.display = 'none';
     document.getElementById('delete-btn').style.display = '';
     document.getElementById('reset-btn').style.display = 'none';
-    const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
-    if (syncBtn) syncBtn.disabled = true;
+
     fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
     fb.textContent = 'Campaign canceled.';
     fb.style.display = '';

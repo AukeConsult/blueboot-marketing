@@ -12,13 +12,13 @@ The top navigation bar gives access to all sections:
 
 | Section | Purpose |
 |---|---|
-| **Campaigns** | Manage and run outreach campaigns |
+| **Campaigns** | Dropdown — Campaign list, Import campaign, Filter facets |
 | **Follow-up** | Cross-campaign follow-up tracker with inline editable status and comments |
 | **CRM discover** | Manual discovery workflow — export contacts, review, push to CRM work sheet |
 | **Daily Admin** | Day-to-day operational tools — see below |
 | **Documentation** | User guides and system docs |
 
-**CRM discover** is a direct link in the top navigation bar. **Follow-up** is a standalone link immediately to the left of it.
+**Campaigns** is a dropdown containing the campaign list, the import tool, and filter facets. **CRM discover** and **Follow-up** are standalone links immediately to the right of it.
 
 ### Daily Admin
 
@@ -27,7 +27,6 @@ The top navigation bar gives access to all sections:
 | Item | Purpose |
 |---|---|
 | **Statistics** | Aggregated pipeline statistics across all leads and sites |
-| **Filter facets** | Configure and test lead filter criteria |
 | **Drive Folder** | Browse files in the connected Google Drive folder |
 | **Message Box** | Read emails from configured outreach mail accounts |
 | **Jobs** *(admin)* | Monitor background job progress |
@@ -39,23 +38,73 @@ Items marked *(admin)* are only visible to administrators.
 
 ---
 
-## Two ways to create a campaign
+## Three ways to fill a campaign
 
-There are two separate routes to building a campaign, and it is important to understand the difference.
+There are three separate routes to building a campaign. Each suits a different situation — pick the one that matches how your data arrives.
 
-### Route 1 — Filter facets (automated)
+| Route | Best for | Speed | Data source |
+|---|---|---|---|
+| **1 — Filter facets** | Audience defined by criteria (country, sector, size…) | Fastest | Internal contact pool |
+| **2 — Excel import** | Pre-built lists, external data, or re-importing exports | Fast | Your own `.xlsx` file |
+| **3 — Discover (master sheet)** | Human-curated contacts reviewed in a shared spreadsheet | Slower | Master CRM Google Sheet |
 
-You define what kind of companies you want using filters (country, sector, company size, etc.), run a count to confirm the numbers, and click **Create campaign**. The system pulls the matching contacts directly from the internal contact pool and fills the campaign automatically. No spreadsheet is involved.
+---
 
-This is the faster route and works well when your target audience can be described by filter criteria. See the [From filter to campaign](filter-to-campaign.html) guide for a full walkthrough.
+### Route 1 — Filter facets
 
-### Route 2 — Master CRM sheet (manual curation)
+**Where:** Campaigns → Filter facets
 
-The master CRM contact sheet is a shared Google Spreadsheet that sits outside the system. It is populated through **CRM discover**, which imports a selection of contacts from the internal pool into the sheet so a person can review them, mark the ones worth pursuing in the **Select** column, and assign a campaign name in the **Campaign** column.
+You define what kind of companies you want using filters (country, sector, platform, etc.), save the criteria as a named facet, and click **Create campaign from filter**. The system pulls all matching leads and contacts directly from the internal pool and fills the campaign automatically. No spreadsheet is involved.
 
-Once the sheet is filled and reviewed, clicking **Discover campaigns** on the Campaigns page reads the Campaign column, finds any campaign names that do not yet exist in the system, and creates those campaigns automatically — pulling in all contacts assigned to that name in the sheet.
+**Steps:**
+1. Go to **Campaigns → Filter facets**.
+2. Adjust filters — each card is one dimension (country, company type, etc.).
+3. Type a facet name and click **Save & count** to see how many contacts match.
+4. Click **Create campaign from filter**, enter a campaign ID, and confirm.
 
-This route gives you full human control over exactly which contacts enter a campaign. It is slower but more precise, and is suited to smaller, high-priority lists where individual review matters.
+This is the fastest route and works well when your target audience can be described by filter criteria. See the [From filter to campaign](doc-viewer.html?doc=filter-to-campaign) guide for a full walkthrough.
+
+---
+
+### Route 2 — Excel import
+
+**Where:** Campaigns → Import campaign
+
+You prepare a `.xlsx` file with the standard column layout (or export an existing campaign and edit it), then upload it. The system creates the campaign if it does not exist and writes all leads and contacts from the file. Existing outreach state is never overwritten.
+
+**Steps:**
+1. Go to **Campaigns → Import campaign**.
+2. Click **Download example file** to get the column template if you are starting from scratch.
+3. Fill in the spreadsheet — at minimum a **Website** or **Email** per row, and a **Campaign** column value.
+4. Enter the campaign ID and drop the file onto the upload area.
+5. Leave **Dry run** checked and click **Import** to preview counts — nothing is written yet.
+6. Click **Confirm and write to Firestore** once the preview looks correct.
+
+**What is safe to re-import:** you can re-import the same file repeatedly. Lead and contact profile fields are updated; outreach state (status, send history, follow-up fields) is never touched on existing contacts.
+
+See [Campaign Import & Export](doc-viewer.html?doc=campaign-import-export) for the full column reference and CLI usage.
+
+---
+
+### Route 3 — Discover (master CRM sheet)
+
+**Where:** Campaigns page → Discover campaigns button
+
+The master CRM contact sheet is a shared Google Spreadsheet that lives outside the system. It is populated through **CRM discover**, where contacts from the internal pool are exported for human review. A person marks which contacts to keep (the **Select** column) and assigns a campaign name (the **Campaign** column).
+
+Once the sheet is ready, clicking **Discover campaigns** reads the Campaign column, creates any campaign IDs that do not yet exist in the system, and immediately queues a sync job that pulls leads and contacts for each new campaign.
+
+**Steps:**
+1. Go to **CRM discover** and run an export to push contacts into the master sheet.
+2. Open the master sheet, review each row, fill in the **Select** and **Campaign** columns.
+3. Return to the **Campaigns** page and click **Discover campaigns**.
+4. New campaigns are created automatically and a sync job is queued for each one.
+5. Monitor progress on the **Jobs** page (admin only).
+
+**What Discover does and does not do:**
+- Creates new campaigns found in the sheet — never modifies existing ones.
+- Writes leads and contacts from the sheet into each new campaign (create or update only — nothing is deleted).
+- Existing outreach state on any contact is never overwritten.
 
 **A campaign card on the list shows a green `master-sheet` badge when it was created through this route.**
 
@@ -113,7 +162,7 @@ The same campaign workspace opens with campaign `X` preselected in the left side
 
 ### Page header
 
-Shows the campaign name. If the campaign has an associated Google Drive spreadsheet, a **Spreadsheet** link appears next to the name. On the right: status badge, source badge (if from master sheet), Sync, Full override, and Activate buttons.
+Shows the campaign name. If the campaign has an associated Google Drive spreadsheet, a **Spreadsheet** link appears next to the name. On the right: status badge, source badge (if from master sheet), Full override, and Activate buttons.
 
 ### Status line
 
@@ -141,23 +190,9 @@ Example: if Follow-up 1 is Day 7, contacts that received Intro on different days
 
 The mail editor supports plain text and HTML, autosaves changes, has an explicit save button, and can preview the rendered body with sample placeholder values.
 
-### Campaign ↔ Sheet synchronisation
-
-The campaign contact list and the Google Drive spreadsheet are kept in sync automatically. The rules are:
-
-**DB is the source of truth for the contact list.** Contacts are only added to a campaign through the app (via Create campaign from facet, or manual API). The sheet never adds new contacts to the DB — it only updates existing ones.
-
-**Sheet wins for editable fields.** When you sync from the sheet, the values in the sheet overwrite the DB for user-editable fields (name, title, last action, last action status, etc.). The DB always controls `status` and `sent_at`. Any new column you add to the sheet is automatically written to the DB as a new field on the contact doc.
-
-**Campaign removals are propagated to the sheet.** When contacts are removed from the campaign via the Exclude + Remove excluded flow, a `campaign-export` job is automatically enqueued, which regenerates the sheet from the current DB state. The contacts disappear from this campaign's sheet, but the underlying contact records remain in the database and can be picked up by another campaign later. Conversely, when you sync from the sheet and a sheet row's Doc ID is no longer in the campaign, the sync detects the discrepancy and re-exports the sheet to remove the orphaned row.
-
-### Sync button
-
-Reads the campaign's Google Drive spreadsheet → updates Firestore for existing contacts only. **Sheet wins for all non-system fields.** `status` and `sent_at` are always DB-controlled. New columns in the sheet are written to the DB. Sheet rows whose Doc ID no longer exists in the DB are cleaned up by triggering a full sheet regeneration. If no sheet exists yet, behaves like Full override (creates the sheet).
-
 ### Full override button
 
-Overwrites the campaign spreadsheet completely from the database. A confirmation popup warns that manual edits (except Last action and Last action status) will be lost.
+Overwrites the campaign spreadsheet completely from the database. Creates the sheet if it does not exist yet. The sheet has two tabs: **Leads+Contacts** (one row per contact, including all lead fields) and **Summary** (campaign metadata, country and platform breakdown). A confirmation popup warns that any manual edits to the sheet will be lost.
 
 ### Mark ready button
 
@@ -190,9 +225,38 @@ This is the manual curation workflow that fills the **master CRM contact sheet**
 | 2 | **Review & select** — open the master sheet, review each row, and mark the contac
 ---
 
+## Campaign Import
+
+**URL:** `campaign-import.html` — accessible via **Campaigns → Import campaign**
+
+The import page loads leads and contacts into a campaign from a standard `.xlsx` file — either one exported from the system or one you have prepared manually.
+
+### Download the example template
+
+Click **Download example file** below the upload area to get an empty `.xlsx` with the correct column layout. It contains two tabs:
+
+- **Leads+Contacts** — the 20 column headers with two sample rows you can delete.
+- **Field guide** — a description, example value, and required/optional label for every column.
+
+### Importing
+
+1. Enter the campaign ID (it will be created as a draft if it does not exist).
+2. Drop the `.xlsx` file onto the upload area or click **Browse file**.
+3. Leave **Dry run** checked and click **Import** to preview counts — nothing is written yet.
+4. Review the preview (leads new, leads updated, contacts new, contacts updated, skipped).
+5. Click **Confirm and write to Firestore** to apply.
+
+Uncheck **Dry run** to skip the preview and write immediately.
+
+**Protected fields:** importing never overwrites outreach state on existing contacts — status, send history, and follow-up fields are always preserved.
+
+See [Campaign Import & Export](doc-viewer.html?doc=campaign-import-export) for the full column reference and CLI usage.
+
+---
+
 ## Filter Facets
 
-**URL:** `filter-facets.html` — accessible via **Daily Admin → Filter facets**
+**URL:** `filter-facets.html` — accessible via **Campaigns → Filter facets**
 
 Filter Facets is where you define and save the audience criteria used to build campaigns automatically. A saved set of criteria is called a **facet**.
 

@@ -161,7 +161,6 @@ API_RULES: tuple[ApiRule, ...] = (
     campaign_work(_m("GET"), "/api/crm/push-and-sync"),
     campaign_work(_m("GET"), "/api/crm/template-sync"),
     campaign_work(_m("GET"), "/api/crm/crm-sync"),
-    campaign_work(_m("GET"), "/api/crm/campaign-sync"),
     campaign_work(_m("GET"), "/api/crm/campaign-export"),
 
     campaign_work(_m("POST"), "/api/crm/inbound-read"),

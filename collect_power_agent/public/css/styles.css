@@ -164,6 +164,8 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 /* Drag-and-drop zone */
 .drop-zone { border: 2px dashed #ced4da; border-radius: 12px; transition: border-color .15s, background .15s; }
 .drop-zone.drag { border-color: #0d6efd; background: #e7f1ff; }
+.bb-drop-zone { border: 1.5px dashed var(--bs-border-color); border-radius: 8px; transition: border-color .15s, background .15s; cursor: pointer; }
+.bb-drop-zone-active { border-color: #0d6efd; background: rgba(13,110,253,.05); }
 
 /* Table section header */
 .bb-thead { background: #f9fafb; }
