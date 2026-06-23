@@ -92,6 +92,16 @@ def get_campaign_contact(campaign_id, doc_id):
             "followup_owner":      d.get("followup_owner", "") or "",
             "comment_history":     _safe_history(d.get("comment_history", [])),
             "new_mail":            bool(d.get("new_mail", False)),
+            "phone":               d.get("phone", "") or "",
+            "linkedin":            d.get("linkedin", "") or "",
+            "twitter":             d.get("twitter", "") or "",
+            "facebook":            d.get("facebook", "") or "",
+            "instagram":           d.get("instagram", "") or "",
+            "whatsapp":            d.get("whatsapp", "") or "",
+            "teams":               d.get("teams", "") or "",
+            "telegram":            d.get("telegram", "") or "",
+            "googlechat":          d.get("googlechat", "") or "",
+            "messenger":           d.get("messenger", "") or "",
         })
     except Exception as exc:
         return _err(str(exc), 500)

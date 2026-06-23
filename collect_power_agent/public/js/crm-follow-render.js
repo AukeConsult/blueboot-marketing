@@ -1,23 +1,7 @@
 'use strict';
 // ── Render ────────────────────────────────────────────────────────────────────
 
-const IMPORTANCE_LEVELS = [
-  { value: '',       label: '— —',    cls: 'imp-none'   },
-  { value: 'low',    label: 'Low',    cls: 'imp-low'    },
-  { value: 'medium', label: 'Medium', cls: 'imp-medium' },
-  { value: 'high',   label: 'High',   cls: 'imp-high'   }
-];
-
-const FU_STATUSES = [
-  { value: '',               label: '— none —' },
-  { value: 'in_work',        label: 'In-work' },
-  { value: 'contacted',      label: 'Contacted' },
-  { value: 'received',       label: 'Received' },
-  { value: 'replied',        label: 'Replied' },
-  { value: 'meeting',        label: 'Meeting' },
-  { value: 'offer',          label: 'Offer' },
-  { value: 'not_interested', label: 'Not-interested' }
-];
+// FU_STATUSES and IMPORTANCE_LEVELS are defined in crm-defs.js (shared).
 
 function currentFollowupStatus(value) {
   const st = String(value || '').trim().toLowerCase();
@@ -82,27 +66,20 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
       <td class="crm-contact-cell">
         <div class="crm-contact-main">
           <div class="crm-contact-name">
-            <input type="text" class="follow-input small fw-500"
-              value="${escapeHtml(r.name || '')}" placeholder="Name"
-              data-gidx="${gidx}" data-field="name"
-              onchange="saveField(this)"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
-            <input type="text" class="follow-input contact-title"
-              value="${escapeHtml(r.title || '')}" placeholder="Title…"
-              data-gidx="${gidx}" data-field="title"
-              onchange="saveField(this)"
-              onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+            <a class="crm-contact-name-link small fw-500"
+              href="crm-contact.html?campaign=${encodeURIComponent(r.campaign_id)}&doc=${encodeURIComponent(r.doc_id)}"
+              title="Open full contact page">${escapeHtml(r.name || '—')}</a>
+            <div class="contact-title small text-muted">${escapeHtml(r.title || '')}</div>
           </div>
           <div class="crm-contact-actions">
             ${statusBadge(r.status)}
-            <button class="sync-btn" onclick="openFollowMailModal(${gidx}, event)" title="Send mail to this contact">
-              <i class="ti ti-send"></i>
-            </button>
-            <button class="detail-btn" onclick="openSidePanelFromButton(${gidx}, event)" title="Open contact details">
+            <a class="btn btn-sm btn-outline-primary crm-open-btn"
+              href="crm-contact.html?campaign=${encodeURIComponent(r.campaign_id)}&doc=${encodeURIComponent(r.doc_id)}"
+              title="Open full contact page">
+              <i class="ti ti-external-link me-1"></i>Open
+            </a>
+            <button class="detail-btn" onclick="openSidePanelFromButton(${gidx}, event)" title="Quick view (side panel)">
               <i class="ti ti-layout-sidebar-right"></i>
-            </button>
-            <button class="sync-btn" onclick="syncContactEmails(${gidx}, this)" title="Sync emails for this contact">
-              <i class="ti ti-mail-bolt"></i>
             </button>
           </div>
         </div>
@@ -130,124 +107,8 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
       </td>`;
 }
 
-function ensureFollowMailEditor() {
-  if (!_followMailEditor) {
-    _followMailEditor = new MailEditorComponent(document.getElementById('follow-mail-editor'), {
-      base: BASE,
-      showMainButton: false,
-      showSaveButton: false,
-      showTestButton: false,
-    });
-  }
-  return _followMailEditor;
-}
-
-function contactFirstName(row) {
-  return (row.name || '').trim().split(/\s+/)[0] || '';
-}
-
-function renderMailTemplateVars(text, row) {
-  const website = row.website || '';
-  const domain = website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-  const values = {
-    name: row.name || '',
-    first_name: contactFirstName(row),
-    title: row.title || '',
-    email: row.email || '',
-    company: row.company || domain || '',
-    website,
-    domain,
-    location: row.location || '',
-    ai_summary: row.ai_summary || ''
-  };
-  return String(text || '').replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => values[key] ?? '');
-}
-
-function openFollowMailModal(gidx, event) {
-  if (event) {
-    event.preventDefault();
-    event.stopPropagation();
-  }
-  const row = allRows[gidx];
-  if (!row || !row.email) return;
-  _followMailGidx = gidx;
-  const from = row.outreach_email || '';
-  const fromLabel = row.outreach_display_name && from
-    ? `${row.outreach_display_name} <${from}>`
-    : from;
-  document.getElementById('follow-mail-from').textContent = fromLabel || '- no campaign mail account -';
-  document.getElementById('follow-mail-to').textContent = row.name ? `${row.name} <${row.email}>` : row.email;
-  document.getElementById('follow-mail-feedback').style.display = 'none';
-  const btn = document.getElementById('follow-mail-send-btn');
-  btn.disabled = false;
-  btn.innerHTML = '<i class="ti ti-send me-1"></i>Send';
-  ensureFollowMailEditor().loadDraft({
-    account: from,
-    accountReadOnly: true,
-    title: 'Mail to contact',
-    subtitle: row.campaign_id || '',
-    mail: {
-      subject: row.company ? `Follow-up - ${row.company}` : 'Follow-up',
-      body: `Hi ${contactFirstName(row) || row.name || ''},\n\n`,
-      type: 'plain'
-    }
-  });
-  new bootstrap.Modal(document.getElementById('followSendMailModal')).show();
-}
-
-async function doSendFollowMail() {
-  const row = allRows[_followMailGidx];
-  const fb  = document.getElementById('follow-mail-feedback');
-  const btn = document.getElementById('follow-mail-send-btn');
-  if (!row) return;
-  const mail = ensureFollowMailEditor().buildPayload().mail;
-  const subject = renderMailTemplateVars(mail.subject || 'Follow-up', row);
-  const body = renderMailTemplateVars(mail.body || '', row);
-  if (!body.trim()) {
-    fb.className = 'alert alert-warning py-2 small mb-0 mt-2';
-    fb.textContent = 'Mail body is required.';
-    fb.style.display = '';
-    return;
-  }
-  btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Sending...';
-  fb.style.display = 'none';
-  try {
-    const isHtml = mail.type === 'html';
-    const css = mail.css || '';
-    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(row.campaign_id)}/contacts/${encodeURIComponent(row.doc_id)}/send-mail`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        to: row.email,
-        subject,
-        body,
-        body_plain: isHtml ? '' : body,
-        body_html: isHtml ? `<style>${css}</style><div class="mail-wrap">${body}</div>` : '',
-        _user: (window._authUser && (window._authUser.email || window._authUser.uid)) || ''
-      })
-    });
-    const d = await r.json();
-    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Send failed');
-    fb.className = 'alert alert-success py-2 small mb-0 mt-2';
-    fb.innerHTML = '<i class="ti ti-circle-check me-1"></i>' + escapeHtml(d.message || 'Mail sent.');
-    fb.style.display = '';
-    await refreshContactHistory(_followMailGidx);
-    row.followup_status = 'contacted';
-    row.new_mail = false;
-    applyFilter();
-    if (_sidePanelGidx === _followMailGidx) {
-      const refreshedIdx = allRows.indexOf(row);
-      if (refreshedIdx >= 0) openSidePanel(refreshedIdx);
-    }
-  } catch(e) {
-    fb.className = 'alert alert-danger py-2 small mb-0 mt-2';
-    fb.textContent = e.message;
-    fb.style.display = '';
-  }
-  btn.disabled = false;
-  btn.innerHTML = '<i class="ti ti-send me-1"></i>Send';
-}
+// Mail sending from the follow-up list / side-panel was removed.
+// Send mail to a contact from the full contact page (crm-contact.html).
 
 function render(list) {
   if (_currentView === 'group') { renderGrouped(list); return; }
@@ -426,8 +287,4 @@ function renderGrouped(list) {
   });
   _syncSelectAllCheckbox({ allowChecked: _selectAllActive });
   _syncGroupCheckboxes();
-  requestAnimationFrame(_relayoutTable);
 }
-
-// ── Save follow-up field via API ──────────────────────────────────────────────
-

@@ -333,38 +333,6 @@
 
 </div>
 
-<!-- Send one-off contact mail modal -->
-<div class="modal fade" id="followSendMailModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered modal-lg">
-    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
-      <div class="modal-header border-0 pb-0">
-        <h6 class="modal-title"><i class="ti ti-send text-primary me-2"></i>Send mail</h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="row g-2 mb-3 small">
-          <div class="col-md-6">
-            <span class="text-muted">From:</span>
-            <strong id="follow-mail-from">-</strong>
-          </div>
-          <div class="col-md-6">
-            <span class="text-muted">To:</span>
-            <strong id="follow-mail-to">-</strong>
-          </div>
-        </div>
-        <div id="follow-mail-editor" class="follow-mail-editor"></div>
-        <div id="follow-mail-feedback" class="alert py-2 small mb-0 mt-2" style="display:none"></div>
-      </div>
-      <div class="modal-footer border-0 pt-0">
-        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn btn-primary btn-sm" id="follow-mail-send-btn" onclick="doSendFollowMail()">
-          <i class="ti ti-send me-1"></i>Send
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
@@ -373,6 +341,7 @@
 <script src="vendor/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
 <script src="js/mail-editor-component.js"></script>
+<script src="js/crm-defs.js"></script>
 <script src="js/crm-follow-data.js"></script>
 <script src="js/crm-follow-render.js"></script>
 <script src="js/crm-follow-side-panel.js"></script>

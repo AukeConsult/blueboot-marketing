@@ -167,6 +167,7 @@ const PAGE_ROLES = {
   'crm-bp.html':        ['admin', 'user'],
   'crm-sync.html':      ['admin', 'user'],
   'crm_follow.html':    ['admin', 'campaign-user', 'user'],
+  'crm-contact.html':   ['admin', 'campaign-user', 'user'],
   'jobs.html':          ['admin'],
   'statistics.html':    ['admin', 'campaign-user', 'user'],
   'filter-facets.html': ['admin', 'campaign-user', 'user'],

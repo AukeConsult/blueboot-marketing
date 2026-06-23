@@ -13,17 +13,7 @@ let _allUsers     = [];   // loaded from /followup-meta (for followup_owner drop
 const selected = new Set();   // doc_path strings
 let _selectAllActive = false;
 let _groupDocPaths = {};              // groupKey -> [doc_path, ...] built by renderGrouped
-const _CHANNEL_HREF = {
-  linkedin:   v => v.startsWith('http') ? v : 'https://linkedin.com/in/' + v,
-  twitter:    v => v.startsWith('http') ? v : 'https://x.com/' + v.replace(/^@/,''),
-  facebook:   v => v.startsWith('http') ? v : 'https://facebook.com/' + v,
-  instagram:  v => v.startsWith('http') ? v : 'https://instagram.com/' + v.replace(/^@/,''),
-  whatsapp:   v => 'https://wa.me/' + v.replace(/[^0-9]/g,''),
-  teams:      v => v.includes('@') ? 'https://teams.microsoft.com/l/chat/0/0?users=' + encodeURIComponent(v) : (v.startsWith('http') ? v : '#'),
-  telegram:   v => v.startsWith('http') ? v : 'https://t.me/' + v.replace(/^@/,''),
-  googlechat: v => v.startsWith('http') ? v : 'https://mail.google.com/chat/u/0/#dm/' + encodeURIComponent(v),
-  messenger:  v => v.startsWith('http') ? v : 'https://m.me/' + v,
-};
+// _CHANNEL_HREF is defined in crm-defs.js (shared).
 let _sideOpen      = false;           // side panel visible
 let _sidePanelGidx = -1;
 let _spChannelsOpen = false;          // channels section collapsed by default             // which contact is shown in side panel
@@ -228,11 +218,30 @@ async function load() {
     }
     _prefsReady = true;
     applyFilter();
+    _focusContactFromQuery();
   } catch (e) {
     setTbody(`<tr><td colspan="3" class="text-center py-5 text-danger small">
       <i class="ti ti-alert-circle me-1"></i>${escapeHtml(e.message)}</td></tr>`);
     console.error('[crm_follow] load error:', e);
   }
+}
+
+// Scroll to + briefly highlight a contact row when returning from the full
+// contact page (crm_follow.html?focus=<doc_path>). No-op if the row is not in
+// the current filtered view.
+function _focusContactFromQuery() {
+  const focus = new URLSearchParams(location.search).get('focus');
+  if (!focus) return;
+  setTimeout(() => {
+    let tr = null;
+    document.querySelectorAll('tr.follow-data-row').forEach(el => {
+      if (el.getAttribute('data-doc') === focus) tr = el;
+    });
+    if (!tr) return;
+    tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    tr.classList.add('row-focus-flash');
+    setTimeout(() => tr.classList.remove('row-focus-flash'), 2500);
+  }, 150);
 }
 
 function populateSelect(id, values, placeholder) {

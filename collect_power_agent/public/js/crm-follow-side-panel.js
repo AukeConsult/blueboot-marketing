@@ -216,9 +216,9 @@ function _renderSidePanel(r) {
       ${_spSectionHeader('next', 'Next action', 'ti-list-check')}
       <div id="sp-next-body" class="sp-section-body" style="display:${_isSpSectionOpen('next') ? 'block' : 'none'}">
         <div class="sp-quick-actions">
-          <button class="btn btn-sm btn-outline-primary" onclick="openFollowMailModal(${gidx}, event)">
-            <i class="ti ti-send me-1"></i>Send mail
-          </button>
+          <a class="btn btn-sm btn-outline-primary" href="crm-contact.html?campaign=${encodeURIComponent(r.campaign_id)}&doc=${encodeURIComponent(r.doc_id)}" title="Open full contact page to send mail">
+            <i class="ti ti-external-link me-1"></i>Open full page
+          </a>
           <button class="btn btn-sm btn-outline-secondary" onclick="quickFollowupAction(${gidx},'tomorrow')">
             <i class="ti ti-calendar-plus me-1"></i>+1 day
           </button>
@@ -281,17 +281,7 @@ function _renderSidePanel(r) {
     <div class="sp-section sp-channels-section">
       ${_spSectionHeader('channels', 'Channels', 'ti-plug-connected')}
       <div id="sp-channels-body" class="sp-section-body sp-channels-body" style="display:${_isSpSectionOpen('channels') ? 'block' : 'none'}">
-      ${[
-        {field:'linkedin',   icon:'ti-brand-linkedin',   ph:'LinkedIn URL or username'},
-        {field:'twitter',    icon:'ti-brand-twitter',    ph:'Twitter / X handle or URL'},
-        {field:'facebook',   icon:'ti-brand-facebook',   ph:'Facebook profile URL'},
-        {field:'instagram',  icon:'ti-brand-instagram',  ph:'Instagram handle or URL'},
-        {field:'whatsapp',   icon:'ti-brand-whatsapp',   ph:'WhatsApp number (with country code)'},
-        {field:'teams',      icon:'ti-brand-teams',      ph:'Teams email or meeting URL'},
-        {field:'telegram',   icon:'ti-brand-telegram',   ph:'Telegram handle or URL'},
-        {field:'googlechat', icon:'ti-brand-google',     ph:'Google Chat email or URL', btnIcon:'ti-messages', btnTitle:'Open Chat', logChat:true},
-        {field:'messenger',  icon:'ti-brand-messenger',  ph:'Messenger username or URL'},
-      ].sort((a, b) => (r[b.field] ? 1 : 0) - (r[a.field] ? 1 : 0)).map(ch => `
+      ${[...CHANNELS].sort((a, b) => (r[b.field] ? 1 : 0) - (r[a.field] ? 1 : 0)).map(ch => `
         <div class="sp-row align-items-center">
           <i class="ti ${ch.icon}" style="font-size:16px;flex-shrink:0"></i>
           <input type="text" class="follow-input small flex-grow-1"
