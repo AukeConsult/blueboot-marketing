@@ -352,5 +352,45 @@ class TestSelfOrSystem(unittest.TestCase):
         self.assertFalse(rm._is_self_or_system("notanemail", self.OWN))
 
 
+class TestAlreadyInHistory(unittest.TestCase):
+    """The rule: do NOT update a contact whose history already has this msg."""
+
+    def _db_with_history(self, msg_id, status="pending", htype="EMAIL_IN"):
+        existing = {"status": status,
+                    "comment_history": [{"type": htype, "message_id": msg_id}]}
+        return FakeDB(docstore={("C", "campaign_contacts", "c1"): dict(existing)})
+
+    def test_reply_already_handled_live(self):
+        db = self._db_with_history("<dup>")
+        out = rm._apply_actions(db, "c1", "C", None, None,
+                                {"message_id": "<dup>", "subject": "x",
+                                 "from_email": "a@b.com"}, "doc_id")
+        self.assertEqual(out, "already_handled")
+        # status untouched
+        self.assertEqual(db.docstore[("C", "campaign_contacts", "c1")]["status"], "pending")
+
+    def test_reply_already_handled_dry_run(self):
+        db = self._db_with_history("<dup>")
+        out = rm._apply_actions(db, "c1", "C", None, None,
+                                {"message_id": "<dup>", "subject": "x",
+                                 "from_email": "a@b.com"}, "doc_id", dry_run=True)
+        self.assertEqual(out, "already_handled")   # not "dry_run"
+
+    def test_bounce_already_handled_dry_run(self):
+        db = self._db_with_history("<b>", htype="BOUNCE")
+        out = rm._apply_bounce_actions(db, "c1", "C", None, None,
+                                       {"message_id": "<b>", "subject": "Undeliverable",
+                                        "received_at": "2026-06-23T00:00:00+00:00"},
+                                       dry_run=True)
+        self.assertEqual(out, "already_handled")
+
+    def test_new_reply_not_blocked(self):
+        db = self._db_with_history("<old>")
+        out = rm._apply_actions(db, "c1", "C", None, None,
+                                {"message_id": "<new>", "subject": "x",
+                                 "from_email": "a@b.com"}, "doc_id")
+        self.assertEqual(out, "updated")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

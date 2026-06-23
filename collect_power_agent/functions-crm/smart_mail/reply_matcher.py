@@ -708,6 +708,25 @@ def _apply_actions(
         "message_id": message_id,
     }
 
+    # Read the contact once — needed for both the idempotency guard and the
+    # status transition.
+    cc_ref = (db.collection(_CAMPAIGNS).document(campaign_id)
+                .collection(_CC).document(contact_doc_id))
+    try:
+        cc_snap = cc_ref.get()
+        cc_data = (cc_snap.to_dict() or {}) if cc_snap.exists else {}
+    except Exception as ex:
+        print(f"[reply_matcher]       action  → ✗ campaign_contacts read failed: {ex}")
+        cc_data = {}
+
+    # Idempotency — NEVER update a contact whose history already records this
+    # reply. Checked before the dry-run preview so the rule is honoured and
+    # visible in both dry-run and live runs.
+    if _already_handled(cc_data, message_id):
+        print(f"[reply_matcher]       action  → ALREADY HANDLED "
+              f"(reply message_id already in comment_history)")
+        return "already_handled"
+
     if dry_run:
         print(f"[reply_matcher]       action  → [dry-run] would set status=active "
               f"followup_status=replied  message_id={message_id!r}")
@@ -716,17 +735,6 @@ def _apply_actions(
         return "dry_run"
 
     try:
-        cc_ref  = (db.collection(_CAMPAIGNS).document(campaign_id)
-                     .collection(_CC).document(contact_doc_id))
-        cc_snap = cc_ref.get()
-        cc_data = (cc_snap.to_dict() or {}) if cc_snap.exists else {}
-
-        # Idempotency — skip if this SMTP message_id is already in comment_history
-        if _already_handled(cc_data, message_id):
-            print(f"[reply_matcher]       action  → ALREADY HANDLED "
-                  f"(message_id already in comment_history)")
-            return "already_handled"
-
         current = cc_data.get("status", "pending")
         update  = {**reply_payload, "comment_history": ArrayUnion([history_entry])}
         if current == "pending":
@@ -795,23 +803,29 @@ def _apply_bounce_actions(
         "message_id": message_id,
     }
 
+    # Read the contact once — for the idempotency guard and the status check.
+    cc_ref = (db.collection(_CAMPAIGNS).document(campaign_id)
+                .collection(_CC).document(contact_doc_id))
+    try:
+        cc_snap = cc_ref.get()
+        cc_data = (cc_snap.to_dict() or {}) if cc_snap.exists else {}
+    except Exception as ex:
+        print(f"[reply_matcher]   ✗ campaign_contacts bounce read failed {campaign_id}/{contact_doc_id}: {ex}")
+        cc_data = {}
+
+    # Idempotency — NEVER update a contact whose history already records this
+    # bounce. Checked before the dry-run preview so the rule is honoured in both.
+    if _already_handled(cc_data, message_id):
+        print(f"[reply_matcher]       action  → ALREADY HANDLED "
+              f"(bounce message_id already in comment_history)")
+        return "already_handled"
+
     if dry_run:
         print(f"[reply_matcher]       action  → [dry-run] would set status=excluded "
               f"bounce_detected=True  message_id={message_id!r}")
         return "dry_run"
 
     try:
-        cc_ref  = (db.collection(_CAMPAIGNS).document(campaign_id)
-                     .collection(_CC).document(contact_doc_id))
-        cc_snap = cc_ref.get()
-        cc_data = (cc_snap.to_dict() or {}) if cc_snap.exists else {}
-
-        # Idempotency — skip if this SMTP message_id is already in comment_history
-        if _already_handled(cc_data, message_id):
-            print(f"[reply_matcher]       action  → ALREADY HANDLED "
-                  f"(message_id already in comment_history)")
-            return "already_handled"
-
         current = cc_data.get("status", "pending")
         update  = {"comment_history": ArrayUnion([history_entry])}
         # Only a still-pending contact is excluded on bounce.
