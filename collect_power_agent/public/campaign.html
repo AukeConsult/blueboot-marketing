@@ -2116,6 +2116,7 @@ function startEdit(span) {
 
 // ── Sites tab ─────────────────────────────────────────────────────────────────
 let _allLeads       = [];
+let _expandedLeadId = '';   // lead_id to restore after re-render
 let _sitesLoaded    = '';   // campaign id last loaded
 let _leadDetailModal = null;
 const _leadContactCache = {};
@@ -2278,6 +2279,13 @@ function applySitesFilter() {
   renderSitesTable(_sortLeads(filtered));
 }
 
+async function _restoreExpanded() {
+  if (!_expandedLeadId) return;
+  const row = document.querySelector(
+    `#sites-body .site-row[data-lead-id="${_expandedLeadId}"]`);
+  if (row) await toggleLeadExpand(row);
+}
+
 function renderSitesTable(leads) {
   const tbody = document.getElementById('sites-body');
   if (!leads.length) {
@@ -2317,6 +2325,7 @@ function renderSitesTable(leads) {
       </td>
     </tr>`;
   }).join('');
+  _restoreExpanded();
 }
 
 async function toggleLeadExclude(btn, leadIdx, newStatus) {
@@ -2344,6 +2353,7 @@ async function toggleLeadExpand(row) {
     row.querySelector('.expand-icon').style.transform = '';
     const next = row.nextElementSibling;
     if (next && next.classList.contains('contacts-sub-row')) next.remove();
+    _expandedLeadId = '';
     return;
   }
   document.querySelectorAll('#sites-body .site-row.expanded').forEach(r => {
@@ -2355,6 +2365,7 @@ async function toggleLeadExpand(row) {
   row.classList.add('expanded');
   row.querySelector('.expand-icon').style.transform = 'rotate(90deg)';
   const leadId = row.dataset.leadId;
+  _expandedLeadId = leadId;
   const sub = document.createElement('tr');
   sub.className = 'contacts-sub-row';
   sub.innerHTML = `<td colspan="7" class="py-2 px-3">
@@ -2808,4 +2819,77 @@ document.addEventListener('shown.bs.tab', e => {
         </ul>
         <p class="small text-danger mb-0"><strong>This cannot be undone.</strong></p>
         <div id="reset-feedback" class="alert py-2 small mt-2 mb-0" style="display:none"></div>
-     
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button id="reset-confirm-btn" class="btn btn-sm btn-danger" onclick="confirmReset()">
+          <i class="ti ti-refresh-alert me-1"></i>Reset campaign
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Campaign reset ────────────────────────────────────────────────────────────
+
+async function openResetModal() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const preview = document.getElementById('reset-preview');
+  const fb      = document.getElementById('reset-feedback');
+  const btn     = document.getElementById('reset-confirm-btn');
+  preview.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Calculating…';
+  preview.className = 'alert alert-secondary py-2 small mb-3';
+  fb.style.display = 'none';
+  btn.disabled = false;
+  new bootstrap.Modal(document.getElementById('resetModal')).show();
+  try {
+    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: true }),
+    });
+    preview.className = 'alert alert-warning py-2 small mb-3';
+    preview.innerHTML = `Will reset: <strong>${d.contacts_reset}</strong> contacts, `
+      + `<strong>${d.leads_reset}</strong> leads, `
+      + `delete <strong>${d.sent_deleted}</strong> send history records.`;
+  } catch(e) {
+    preview.className = 'alert alert-danger py-2 small mb-3';
+    preview.textContent = 'Could not load preview: ' + (e.message || e);
+  }
+}
+
+async function confirmReset() {
+  const id  = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const fb  = document.getElementById('reset-feedback');
+  const btn = document.getElementById('reset-confirm-btn');
+  btn.disabled = true;
+  fb.className = 'alert alert-secondary py-2 small mt-2 mb-0';
+  fb.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Resetting…';
+  fb.style.display = '';
+  try {
+    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: false }),
+    });
+    fb.className = 'alert alert-success py-2 small mt-2 mb-0';
+    fb.innerHTML = `<i class="ti ti-check me-1"></i>Reset complete — `
+      + `${d.contacts_reset} contacts, ${d.leads_reset} leads reset; `
+      + `${d.sent_deleted} send records deleted.`;
+    setTimeout(() => {
+      bootstrap.Modal.getInstance(document.getElementById('resetModal')).hide();
+      loadCampaign(id);
+    }, 1800);
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 small mt-2 mb-0';
+    fb.innerHTML = '<i class="ti ti-circle-x me-1"></i>Reset failed: ' + escapeHtml(e.message || String(e));
+    btn.disabled = false;
+  }
+}
+</script>
+
+</body>
+</html>

@@ -311,4 +311,9 @@ def run_campaign_import(
         print(f"[campaign-import] contacts {written_contacts}/{len(contact_items)}", flush=True)
 
     print(f"[campaign-import] done — {written_leads} leads, {written_contacts} contacts", flush=True)
+
+    # Enrich campaign_leads from site_leads / leads Firestore collections
+    from crm.campaign_leads_lib import populate_campaign_leads
+    populate_campaign_leads(db, campaign_id)
+
     return summary

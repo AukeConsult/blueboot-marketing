@@ -212,6 +212,41 @@ nodes, making every site report `pages=0 (index)`.
 
 ## Verification
 
+### RULE: After editing any HTML file in `public/`, run the HTML integrity check
+
+Large HTML files (`campaign.html`, `campaign-edit.html`, etc.) can be silently truncated
+by Python write operations, leaving null-byte padding at the end. This breaks the page
+completely with no obvious error. Run this check after **every** edit to any `public/*.html`:
+
+```python
+python3 - << 'PY'
+import re
+p = "public/campaign.html"   # change to the file you edited
+s = open(p, encoding="utf-8").read()
+
+print("Null bytes:", s.count("\x00"))                          # must be 0
+print("Ends with </html>:", s.rstrip().endswith("</html>"))   # must be True
+
+for tag in ["script", "html", "body"]:
+    opens  = len(re.findall(f"<{tag}[\\s>]", s))
+    closes = len(re.findall(f"</{tag}>", s))
+    status = "OK" if opens == closes else "MISMATCH"
+    print(f"<{tag}>: {opens} open, {closes} close  {status}")
+
+last_script = s.rfind("</script>")
+tail = s[last_script + 9:]
+net = tail.count("<div") - tail.count("</div>")
+print(f"Tail div balance: {net} (must be 0)")
+PY
+```
+
+If any check fails:
+- `Null bytes > 0` or `Ends with </html>: False` → file is truncated. Strip nulls with
+  `data = open(p,'rb').read().rstrip(b'\x00')`, find the real truncation point, and
+  restore the missing tail from a reference file (e.g. `campaign-edit.html` for shared modal patterns).
+- Tag mismatch → a modal or script block was not closed. Add the missing closing tags.
+- Tail div balance ≠ 0 → a modal's `</div>` stack is incomplete.
+
 ### RULE: `py_compile` is NOT enough — always run `pyflakes` for undefined names
 
 `python -m py_compile` only catches **syntax** errors. It passes on undefined-name bugs

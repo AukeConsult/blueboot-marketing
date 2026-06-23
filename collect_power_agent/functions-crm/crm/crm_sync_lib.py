@@ -153,101 +153,71 @@ def _upsert_campaign_contacts(db, campaign_id: str, records: list[dict]) -> dict
     BATCH_SIZE = 400
     existing_docs = {d.id: d.to_dict() for d in col.stream()}
 
-    sheet_ids = set()
-    to_write  = []
-    skipped   = 0
+    # Lead-ids already represented in this campaign — never add new contacts
+    # to a site that already has contacts (user may have deleted some on purpose).
+    existing_lead_ids = {
+        (v.get("lead_id") or "").strip()
+        for v in existing_docs.values()
+        if (v.get("lead_id") or "").strip()
+    }
+
+    to_write = []
+    skipped  = 0
 
     for r in records:
         doc_id = (r.get("doc_id") or "").strip()
         if not doc_id:
             continue
-        sheet_ids.add(doc_id)
-        existing_status = existing_docs.get(doc_id, {}).get("status", "pending")
-        if doc_id in existing_docs and existing_status != "pending":
+
+        # Skip contacts that already exist in the campaign
+        if doc_id in existing_docs:
             skipped += 1
             continue
-        is_new = doc_id not in existing_docs
+
+        # Derive lead_id for this contact
+        lead_id = (r.get("lead_id_site") or r.get("lead_id_leads") or "").strip()
+        if not lead_id:
+            from crm.campaign_import_lib import lead_id_from_website
+            website = (r.get("website") or r.get("domain") or "").strip()
+            lead_id = lead_id_from_website(website) if website else doc_id
+
+        # Skip if the site already has contacts in this campaign
+        if lead_id in existing_lead_ids:
+            skipped += 1
+            continue
+
         entry = {
-            "doc_id":  doc_id,
-            "email":   r.get("email", ""),
-            "lead_id": r.get("lead_id_site") or r.get("lead_id_leads") or doc_id,
-            "website": r.get("website", ""),
-            "name":    r.get("name", ""),
-            "title":   r.get("title", ""),
-            "status":  "pending",
-            "sent_at": existing_docs.get(doc_id, {}).get("sent_at", None),
-            "created_at": (existing_docs.get(doc_id, {}).get("created_at")
-                           or datetime.now(timezone.utc).isoformat()),
+            "doc_id":     doc_id,
+            "email":      r.get("email", ""),
+            "lead_id":    lead_id,
+            "website":    r.get("website", ""),
+            "name":       r.get("name", ""),
+            "title":      r.get("title", ""),
+            "status":     "pending",
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         to_write.append((doc_id, entry))
 
-    # Cross-campaign dedup: skip new contacts already active in another campaign
-    new_ids  = {did for did, _ in to_write if did not in existing_docs}
+    # Cross-campaign dedup: skip contacts already active in another campaign
+    new_ids  = {did for did, _ in to_write}
     from crm.campaign_import_lib import _contacts_in_other_campaigns
     reserved = _contacts_in_other_campaigns(db, campaign_id, new_ids)
     if reserved:
         print(f"[crm-sync] {len(reserved)} contacts skipped — active in another campaign",
               flush=True)
-    to_write = [(did, d) for did, d in to_write if did in existing_docs or did not in reserved]
+    to_write = [(did, d) for did, d in to_write if did not in reserved]
 
-    added   = sum(1 for did, _ in to_write if did not in existing_docs)
-    updated = len(to_write) - added
-
+    added = len(to_write)
     for i in range(0, len(to_write), BATCH_SIZE):
         batch = db.batch()
         for doc_id, data in to_write[i:i+BATCH_SIZE]:
             batch.set(col.document(doc_id), data, merge=True)
         batch.commit()
 
-    print(f"[crm-sync] campaign_contacts: added={added} updated={updated} "
-          f"skipped={skipped}(non-pending)")
-    return {"added": added, "updated": updated, "skipped": skipped}
+    print(f"[crm-sync] campaign_contacts: added={added} skipped={skipped}",
+          flush=True)
+    return {"added": added, "updated": 0, "skipped": skipped}
 
-
-
-def _upsert_campaign_leads(db, campaign_id: str, records: list[dict]) -> dict:
-    col = db.collection("campaigns").document(campaign_id).collection("campaign_leads")
-    now = datetime.now(timezone.utc).isoformat()
-
-    # One lead doc per unique lead_id — deduplicate rows from the sheet
-    leads: dict[str, dict] = {}
-    for r in records:
-        lead_id = (r.get("lead_id_site") or r.get("lead_id_leads") or "").strip()
-        if not lead_id:
-            website = (r.get("website") or r.get("domain") or "").strip()
-            if website:
-                from crm.campaign_import_lib import lead_id_from_website
-                lead_id = lead_id_from_website(website)
-        if not lead_id:
-            continue
-        if lead_id not in leads:
-            leads[lead_id] = {
-                "lead_id":    lead_id,
-                "website":    r.get("website") or r.get("domain") or "",
-                "country":    r.get("country", ""),
-                "company":    r.get("company", ""),
-                "platform":   r.get("platform", ""),
-                "updated_at": now,
-            }
-
-    existing_ids = {d.id for d in col.stream()}
-    items  = list(leads.items())
-    added  = 0
-    updated = 0
-
-    for i in range(0, len(items), BATCH_SIZE):
-        batch = db.batch()
-        for lead_id, data in items[i:i + BATCH_SIZE]:
-            is_new = lead_id not in existing_ids
-            batch.set(col.document(lead_id), data, merge=True)
-            if is_new:
-                added += 1
-            else:
-                updated += 1
-        batch.commit()
-
-    print(f"[crm-sync] campaign_leads: added={added} updated={updated}", flush=True)
-    return {"added": added, "updated": updated}
 
 
 def run_crm_sync(db, svc, campaign_id: str = "", tab: str = CONTACT_TAB) -> dict:
@@ -275,12 +245,13 @@ def run_crm_sync(db, svc, campaign_id: str = "", tab: str = CONTACT_TAB) -> dict
     campaign_stats  = _build_campaign_stats(filtered)
     count, new_ids  = _upsert_campaigns(db, campaign_stats)
 
+    from crm.campaign_leads_lib import populate_campaign_leads
     contacts_result = {}
     leads_result    = {}
     for cid in campaign_stats:
         rows = [r for r in filtered if (r.get("campaign") or "").strip() == cid]
         contacts_result[cid] = _upsert_campaign_contacts(db, cid, rows)
-        leads_result[cid]    = _upsert_campaign_leads(db, cid, rows)
+        leads_result[cid]    = populate_campaign_leads(db, cid)
 
     return {
         "contact_select_synced": synced,
