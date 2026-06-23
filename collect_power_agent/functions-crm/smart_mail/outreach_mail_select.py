@@ -575,6 +575,8 @@ def confirm_sent(
     mode:           str        = "intro",
     sender_account: str        = "",
     sent_at:        str | None = None,
+    body_text:      str        = "",
+    body_html:      str        = "",
 ) -> SentConfirmation:
     """Record that an outreach email was successfully sent.
 
@@ -621,6 +623,8 @@ def confirm_sent(
             "user": sender_account or "outreach",
             "text": history_text,
             "type": "MAIL_SENT",
+            "body_text": (body_text or "")[:10000],
+            "body_html": (body_html or "")[:30000],
         }]),
     }
 

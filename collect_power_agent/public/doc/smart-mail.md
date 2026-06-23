@@ -268,7 +268,9 @@ After a real mail send succeeds, `outreach_sender.py` calls `confirm_sent()`.
       "date": "2026-06-12T10:15:30.123456+00:00",
       "user": "sales@blueboot.ai",
       "text": "Mail sent: Rendered subject",
-      "type": "MAIL_SENT"
+      "type": "MAIL_SENT",
+      "body_text": "Rendered plain-text body...",
+      "body_html": "<p>Rendered HTML body...</p>"
     }
   ],
   "followup_status": "contacted",
@@ -528,8 +530,11 @@ with:
 and sets `status` to `active` and `followup_status` to `replied` when the
 contact was still `pending` (an already-`active` contact keeps its status; any
 other status is left unchanged). A `comment_history` entry of type `EMAIL_IN`
-is appended. If the contact has a `lead_id`, the matching `campaign_leads`
-document is moved `pending → active`. `email_contacts` is not updated.
+is appended, carrying the reply body in two separate fields — `body_text`
+(plain text) and `body_html` (the HTML alternative, when present) — extracted
+from the inbound message's MIME parts. If the contact has a `lead_id`, the
+matching `campaign_leads` document is moved `pending → active`. `email_contacts`
+is not updated.
 
 `matched_via` is either:
 
@@ -548,6 +553,25 @@ carrying `match_outcome` (`updated` / `already_handled` / `unmatched`),
 `match_campaign_id`, `match_contact_doc_id`, and `match_via`.
 
 After a successful match, campaign outreach stats are refreshed.
+
+#### Mail body in history
+
+Every mail recorded in `comment_history` stores the message body in two
+separate fields so the CRM can show plain-text and HTML versions independently:
+
+| Field | Holds |
+|---|---|
+| `body_text` | the plain-text body (capped at 10000 chars) |
+| `body_html` | the HTML body, when the mail has one (capped at 30000 chars) |
+
+This applies to all three sources:
+
+- **Received replies** (`EMAIL_IN`) — the inbound message's `text/plain` and
+  `text/html` MIME parts.
+- **Outreach sends** (`MAIL_SENT`) — the rendered `text_body` and `html_body`.
+- **Manual mails** (`EMAIL_OUT`) — the plain and HTML body supplied with the send.
+
+Either field may be empty (e.g. a plain-text-only mail has no `body_html`).
 
 #### Skipped and deleted messages
 

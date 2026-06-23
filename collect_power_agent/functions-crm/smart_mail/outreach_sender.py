@@ -464,6 +464,8 @@ def send_outreach(
                             subject        = rendered.subject,
                             mode           = mode,
                             sender_account = account.email,
+                            body_text      = rendered.text_body or "",
+                            body_html      = rendered.html_body or "",
                         )
 
                         sent_batch      += 1

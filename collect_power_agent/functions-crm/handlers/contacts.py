@@ -269,6 +269,8 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
                 "from": outreach_email,
                 "to": to_addr,
                 "subject": subject,
+                "body_text": (body_plain or "")[:10000],
+                "body_html": (body_html or "")[:30000],
             }]),
         })
         if campaign_status == "ready":

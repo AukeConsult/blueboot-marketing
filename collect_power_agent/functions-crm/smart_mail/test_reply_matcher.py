@@ -392,5 +392,93 @@ class TestAlreadyInHistory(unittest.TestCase):
         self.assertEqual(out, "updated")
 
 
+class TestNoMessageIdFingerprint(unittest.TestCase):
+    """Belt-and-suspenders: dedupe replies/bounces that arrive with no Message-ID."""
+
+    def _db(self, history):
+        return FakeDB(docstore={("C", "campaign_contacts", "c1"):
+                                {"status": "pending", "comment_history": history}})
+
+    def test_reply_no_msgid_deduped_by_fingerprint(self):
+        # prior entry has NO message_id, recorded same sender/subject/date
+        hist = [{"type": "EMAIL_IN", "user": "a@b.com", "text": "Reply: Hello",
+                 "message_id": "", "email_date": "Mon, 22 Jun 2026 10:00:00 +0000"}]
+        db = self._db(hist)
+        msg = {"message_id": "", "subject": "Hello", "from_email": "a@b.com",
+               "email_date": "Mon, 22 Jun 2026 10:00:00 +0000"}
+        out = rm._apply_actions(db, "c1", "C", None, None, msg, "doc_id")
+        self.assertEqual(out, "already_handled")
+        self.assertEqual(db.docstore[("C", "campaign_contacts", "c1")]["status"], "pending")
+
+    def test_reply_no_msgid_different_subject_applies(self):
+        hist = [{"type": "EMAIL_IN", "user": "a@b.com", "text": "Reply: Hello",
+                 "message_id": "", "email_date": "Mon, 22 Jun 2026 10:00:00 +0000"}]
+        db = self._db(hist)
+        msg = {"message_id": "", "subject": "Different", "from_email": "a@b.com",
+               "email_date": "Tue, 23 Jun 2026 09:00:00 +0000"}
+        out = rm._apply_actions(db, "c1", "C", None, None, msg, "doc_id")
+        self.assertEqual(out, "updated")
+
+    def test_already_handled_no_id_no_fingerprint_is_false(self):
+        # nothing to match on → not handled
+        self.assertFalse(rm._already_handled({"comment_history": []}, "", None))
+
+    def test_fingerprint_matches_entry_even_if_old_entry_had_id(self):
+        hist = [{"type": "EMAIL_IN", "user": "a@b.com", "text": "Reply: Hi",
+                 "message_id": "<had-one>", "email_date": "d"}]
+        db = self._db(hist)
+        msg = {"message_id": "", "subject": "Hi", "from_email": "a@b.com",
+               "email_date": "d"}
+        out = rm._apply_actions(db, "c1", "C", None, None, msg, "doc_id")
+        self.assertEqual(out, "already_handled")
+
+
+class TestBodyExtraction(unittest.TestCase):
+    def test_multipart_plain_and_html(self):
+        raw = (
+            "From: a@b.com\r\nSubject: Hi\r\nMIME-Version: 1.0\r\n"
+            'Content-Type: multipart/alternative; boundary="B"\r\n\r\n'
+            "--B\r\nContent-Type: text/plain; charset=us-ascii\r\n\r\n"
+            "plain version\r\n\r\n"
+            "--B\r\nContent-Type: text/html; charset=us-ascii\r\n\r\n"
+            "<p>html version</p>\r\n\r\n--B--\r\n"
+        )
+        msg = _emaillib.message_from_bytes(raw.encode())
+        text, html = rm._extract_bodies(msg)
+        self.assertEqual(text.strip(), "plain version")
+        self.assertIn("html version", html)
+
+    def test_plain_only(self):
+        m = EmailMessage()
+        m["From"] = "a@b.com"; m["Subject"] = "x"
+        m.set_content("just plain")
+        text, html = rm._extract_bodies(m)
+        self.assertIn("just plain", text)
+        self.assertEqual(html, "")
+
+    def test_html_only(self):
+        raw = ("From: a@b.com\r\nSubject: x\r\nMIME-Version: 1.0\r\n"
+               "Content-Type: text/html; charset=us-ascii\r\n\r\n"
+               "<b>only html</b>\r\n")
+        msg = _emaillib.message_from_bytes(raw.encode())
+        text, html = rm._extract_bodies(msg)
+        self.assertEqual(text, "")
+        self.assertIn("only html", html)
+
+
+class TestReplyHistoryBody(unittest.TestCase):
+    def test_history_entry_carries_both_bodies(self):
+        db = FakeDB(docstore={("C", "campaign_contacts", "c1"): {"status": "pending"}})
+        msg = {"message_id": "<m>", "subject": "Re: Hi", "from_email": "a@b.com",
+               "body_text": "plain reply", "body_html": "<p>plain reply</p>",
+               "received_at": "2026-06-23T00:00:00+00:00"}
+        out = rm._apply_actions(db, "c1", "C", None, None, msg, "doc_id")
+        self.assertEqual(out, "updated")
+        entry = db.docstore[("C", "campaign_contacts", "c1")]["comment_history"][0]
+        self.assertEqual(entry["type"], "EMAIL_IN")
+        self.assertEqual(entry["body_text"], "plain reply")
+        self.assertEqual(entry["body_html"], "<p>plain reply</p>")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -127,6 +127,42 @@ def _extract_body(msg) -> str:
     return ""
 
 
+# Caps for body text stored in comment_history (Firestore doc stays small)
+_BODY_TEXT_CAP = 10000
+_BODY_HTML_CAP = 30000
+
+
+def _extract_bodies(msg) -> tuple[str, str]:
+    """Return (plain_text, html) bodies from a message. Either may be ''.
+
+    Walks the MIME tree and takes the first non-attachment text/plain part and
+    the first non-attachment text/html part.
+    """
+    text, html = "", ""
+    if msg.is_multipart():
+        for part in msg.walk():
+            ct = part.get_content_type()
+            if "attachment" in str(part.get("Content-Disposition") or ""):
+                continue
+            if ct == "text/plain" and not text:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    text = payload.decode(errors="ignore")
+            elif ct == "text/html" and not html:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    html = payload.decode(errors="ignore")
+    else:
+        payload = msg.get_payload(decode=True)
+        if payload:
+            body = payload.decode(errors="ignore")
+            if msg.get_content_type() == "text/html":
+                html = body
+            else:
+                text = body
+    return text, html
+
+
 def _parse_dmarc_subject(subject: str) -> dict | None:
     """Extract domain, submitter, report_id from a DMARC aggregate report subject.
     Returns None if subject does not match the DMARC pattern.
@@ -374,6 +410,8 @@ def _process_account(
                 from_raw    = _decode_mime(msg.get("From"))
                 to_raw      = _decode_mime(msg.get("To"))
                 from_addr   = _bare(from_raw)
+                email_date  = (msg.get("Date") or "").strip()
+                _body_text, _body_html = _extract_bodies(msg)
                 received_at = datetime.now(timezone.utc).isoformat()
 
                 message_type, orig_rcpt, dmarc_info = _classify_message(
@@ -415,7 +453,8 @@ def _process_account(
                     "from_address":       from_addr,
                     "to_email":           _bare(to_raw),
                     "subject":            subject,
-                    "body_text":          _extract_body(msg)[:2000],
+                    "body_text":          _body_text[:_BODY_TEXT_CAP],
+                    "body_html":          _body_html[:_BODY_HTML_CAP],
                     "received_at":        received_at,
                     "message_id":         message_id,
                     "in_reply_to":        in_reply_to,
@@ -423,6 +462,7 @@ def _process_account(
                     "imap_uid":           eid.decode(),
                     "message_type":       message_type,
                     "original_recipient": orig_rcpt,
+                    "email_date":         email_date,
                 }
 
                 processed += 1
@@ -664,17 +704,38 @@ def _find_bounced_contact(
 
 # ── Step 3a: apply reply actions ──────────────────────────────────────────────
 
-def _already_handled(cc_data: dict, message_id: str) -> bool:
-    """Return True if this SMTP Message-ID is already recorded in comment_history."""
-    if not message_id:
-        return False
-    history = cc_data.get("comment_history") or []
-    handled = {
-        str(e.get("message_id") or "").strip()
-        for e in history
+def _entry_fingerprint(entry: dict) -> str:
+    """Stable fingerprint for an inbound history entry, used to dedupe messages
+    that arrive WITHOUT a Message-ID. Built from fields that are identical
+    across re-fetches of the same email: type, sender, the history text (which
+    embeds the subject), and the email's own Date header."""
+    return "|".join([
+        str(entry.get("type") or ""),
+        str(entry.get("user") or "").strip().lower(),
+        str(entry.get("text") or "").strip(),
+        str(entry.get("email_date") or "").strip(),
+    ])
+
+
+def _already_handled(cc_data: dict, message_id: str,
+                     fingerprint: str | None = None) -> bool:
+    """Return True if this inbound message is already recorded in
+    comment_history, so the contact is not updated twice.
+
+    Primary key is the SMTP Message-ID. When the message has no Message-ID,
+    fall back to a (type|sender|text|email_date) fingerprint so a re-fetched
+    reply/bounce with no Message-ID is still not applied again.
+    """
+    history = [
+        e for e in (cc_data.get("comment_history") or [])
         if e.get("type") in ("EMAIL_IN", "BOUNCE")
-    }
-    return message_id.strip() in handled
+    ]
+    mid = (message_id or "").strip()
+    if mid:
+        return any(str(e.get("message_id") or "").strip() == mid for e in history)
+    if fingerprint:
+        return any(_entry_fingerprint(e) == fingerprint for e in history)
+    return False
 
 
 def _apply_actions(
@@ -706,6 +767,9 @@ def _apply_actions(
         "text":       f"Reply: {subject}" if subject else "Reply received",
         "type":       "EMAIL_IN",
         "message_id": message_id,
+        "email_date": message.get("email_date", ""),
+        "body_text":  (message.get("body_text") or "")[:_BODY_TEXT_CAP],
+        "body_html":  (message.get("body_html") or "")[:_BODY_HTML_CAP],
     }
 
     # Read the contact once — needed for both the idempotency guard and the
@@ -722,9 +786,9 @@ def _apply_actions(
     # Idempotency — NEVER update a contact whose history already records this
     # reply. Checked before the dry-run preview so the rule is honoured and
     # visible in both dry-run and live runs.
-    if _already_handled(cc_data, message_id):
+    if _already_handled(cc_data, message_id, _entry_fingerprint(history_entry)):
         print(f"[reply_matcher]       action  → ALREADY HANDLED "
-              f"(reply message_id already in comment_history)")
+              f"(reply already in comment_history)")
         return "already_handled"
 
     if dry_run:
@@ -801,6 +865,7 @@ def _apply_bounce_actions(
         "text":       f"Bounce: {bounce_reason}",
         "type":       "BOUNCE",
         "message_id": message_id,
+        "email_date": message.get("email_date", ""),
     }
 
     # Read the contact once — for the idempotency guard and the status check.
@@ -815,9 +880,9 @@ def _apply_bounce_actions(
 
     # Idempotency — NEVER update a contact whose history already records this
     # bounce. Checked before the dry-run preview so the rule is honoured in both.
-    if _already_handled(cc_data, message_id):
+    if _already_handled(cc_data, message_id, _entry_fingerprint(history_entry)):
         print(f"[reply_matcher]       action  → ALREADY HANDLED "
-              f"(bounce message_id already in comment_history)")
+              f"(bounce already in comment_history)")
         return "already_handled"
 
     if dry_run:
