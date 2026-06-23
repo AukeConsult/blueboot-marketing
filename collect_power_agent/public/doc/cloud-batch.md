@@ -303,6 +303,7 @@ These scripts are ready to be used as steps in new or extended pipelines:
 | `campaign_name_enrich` | `app/campaign_name_enrich.py` | Enrich missing campaign names via AI |
 | `filter_site_leads` | `app/filter_site_leads.py` | Filter site_leads by criteria into a campaign |
 | `inbound_read` | `app/inbound_read.py` | Sync IMAP replies back to CRM follow-up status |
+| `reply_match` | `app/reply_match.py` | Fetch all IMAP accounts, match replies to contacts, set status=active on campaign_leads |
 | `wp_plugin_leads` | `app/wp_plugin_leads.py` | Discover WordPress plugin leads via Bing |
 | `build_filter_facets` | `app/build_filter_facets.py` | Build facet index for lead filter UI |
 | `facet_campaign` | `app/facet_campaign.py` | Apply facet-based filter to create a campaign |

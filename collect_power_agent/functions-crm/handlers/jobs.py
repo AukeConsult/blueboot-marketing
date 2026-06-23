@@ -188,9 +188,29 @@ def outreach_send():
 @bp.route("/api/crm/reply-match", methods=["GET", "POST"])
 @bp.route("/reply-match", methods=["GET", "POST"])
 def reply_match():
-    """Trigger one reply matching pass through the CRM worker."""
+    """Trigger one reply matching pass through the CRM worker.
+
+    Params:
+      limit=     max messages to process per account (default 200)
+      accounts=  optional comma/space/semicolon/pipe separated account emails
+      campaigns= optional comma/space/semicolon/pipe separated campaign ids
+      days=      how many days back to search IMAP (default 30)
+      dry_run=   true to find matches without writing or deleting anything
+    """
     data = _request_data()
-    params = {"limit": int(_first_param(data, "limit", 200) or 200)}
+    accounts_raw  = data.get("accounts") or data.get("account")
+    campaigns_raw = (
+        data.get("campaigns")
+        or data.get("campaign_ids")
+        or data.get("campaign_id")
+    )
+    params = {
+        "limit":     int(_first_param(data, "limit", 200) or 200),
+        "accounts":  _split_list_param(accounts_raw),
+        "campaigns": _split_list_param(campaigns_raw),
+        "days":      int(_first_param(data, "days", 30) or 30),
+        "dry_run":   str(_first_param(data, "dry_run", "") or "").lower() in ("1", "true", "yes"),
+    }
     try:
         job_id = _new_job("reply-match", params)
         _enqueue_task("reply-match", job_id, params)
@@ -398,7 +418,13 @@ def worker(name, job_id):
 
         elif name == "reply-match":
             from smart_mail.reply_matcher import match_new_replies
-            result = match_new_replies(limit=int(body.get("limit") or 200))
+            result = match_new_replies(
+                limit     = int(body.get("limit") or 200),
+                accounts  = body.get("accounts") or None,
+                campaigns = body.get("campaigns") or None,
+                days      = int(body.get("days") or 30),
+                dry_run   = bool(body.get("dry_run", False)),
+            )
 
         elif name == "campaign-move":
             from crm.campaign_move_lib import run_campaign_move
@@ -455,25 +481,25 @@ def list_jobs():
     ?running=true   only return running or queued jobs
     ?campaign_id=X  only return jobs for a specific campaign
     """
-    limit       = min(int(request.args.get("limit", 20)), 500)
-    running     = request.args.get("running", "").lower() in ("1", "true", "yes")
+    limit = min(int(request.args.get("limit", 20)), 500)
+    running = request.args.get("running", "").lower() in ("1", "true", "yes")
     campaign_id = request.args.get("campaign_id", "").strip()
 
     query = _jobs_col().order_by("queued_at", direction="DESCENDING")
 
-    # Compute cutoff time if since parameter given
     since_minutes = request.args.get("since", type=int)
     if since_minutes:
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=since_minutes)
-        query  = query.where(filter=FieldFilter("queued_at", ">=", cutoff.isoformat()))
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=since_minutes)).isoformat()
+        query = query.where(filter=FieldFilter("queued_at", ">=", cutoff))
 
     if running:
         query = query.where(filter=FieldFilter("status", "in", ["queued", "running"]))
 
-    docs  = list(query.limit(limit).stream())
-    jobs  = [d.to_dict() for d in docs]
-
-    if campaign_id:
-        jobs = [j for j in jobs if (j.get("params") or {}).get("campaign_id") == campaign_id]
-
+    docs = list(query.limit(limit).stream())
+    jobs = []
+    for d in docs:
+        j = d.to_dict()
+        if campaign_id and (j.get("params") or {}).get("campaign_id") != campaign_id:
+            continue
+        jobs.append(j)
     return jsonify({"jobs": jobs, "count": len(jobs)})

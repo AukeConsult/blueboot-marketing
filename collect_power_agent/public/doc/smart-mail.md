@@ -81,7 +81,7 @@ POST https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-matc
 | `functions-crm/smart_mail/outreach_render_mail.py` | Renders campaign mail templates into subject, plain text, and HTML. |
 | `functions-crm/smart_mail/mail_sender.py` | Shared SMTP/Gmail sender. Handles account settings, CSS/image preparation, display names, headers, and actual delivery. |
 | `functions-crm/smart_mail/inbound_read_lib.py` | Reads inbox and sent mail from configured outreach accounts and writes contact history. |
-| `functions-crm/smart_mail/reply_matcher.py` | Matches stored inbound messages to previous outreach sends. |
+| `functions-crm/smart_mail/reply_matcher.py` | Fetches IMAP mail, classifies replies / bounces / DMARC, and matches the sender (or a bounce's recovered recipient) to `campaign_contacts` by email. |
 
 Mail accounts are read from Firestore:
 
@@ -454,11 +454,21 @@ reply_matched == false
 Trigger it through the API:
 
 ```text
-GET  /api/crm/reply-match?limit=200
+GET  /api/crm/reply-match?limit=200&days=7
 POST /api/crm/reply-match
 GET  /api/crm/reply_match?limit=200
 POST /api/crm/reply_match
 ```
+
+Parameters (all optional):
+
+| Param | Default | Meaning |
+|---|---|---|
+| `limit` | 200 | Max messages to process per account |
+| `accounts` | all | Restrict to these account emails (comma / space / semicolon / pipe separated) |
+| `campaigns` | all | Restrict matching to these campaign ids (comma / space / semicolon / pipe separated) |
+| `days` | 30 | How many days back to search the IMAP mailbox |
+| `dry_run` | false | Find matches and log intended changes, but write nothing and delete nothing |
 
 The dedicated Smart Mail function accepts:
 
@@ -466,11 +476,15 @@ The dedicated Smart Mail function accepts:
 https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-match
 ```
 
-POST body:
+POST body (all fields optional):
 
 ```json
 {
-  "limit": 200
+  "limit": 200,
+  "accounts": ["sales@blueboot.ai"],
+  "campaigns": ["NO_jun"],
+  "days": 7,
+  "dry_run": true
 }
 ```
 
@@ -482,20 +496,24 @@ reply-match
 
 ### Match Strategy
 
-Reply matcher tries two match paths:
+Replies and bounces are matched on the **email address**, against
+`campaign_contacts`:
 
-1. Extract message IDs from the inbound message `In-Reply-To` and `References` headers and look for the same `message_id` in `outreach_sent`.
-2. If no message-id match is found, fall back to `from_email` and look up the most recent `outreach_sent` where `to_email` is that sender.
+1. **Replies** — the sender address is normalized to a contact `doc_id` and
+   looked up in the `campaign_contacts` collection group; if that misses, it
+   falls back to the raw `email` field.
+2. **Bounces** — the original failed recipient is recovered from the bounce
+   (the `X-Failed-Recipients` header, the `message/delivery-status`
+   `Final-Recipient` / `Original-Recipient`, the embedded original message's
+   `To:` header, or an Exim / cPanel "following address(es) failed:" block) and
+   then matched the same way.
 
-The fallback lookup requires a Firestore composite index on:
-
-```text
-outreach_sent: to_email ASC, sent_at DESC
-```
+Matching is scoped to the `campaigns` parameter when one is supplied.
 
 ### What Reply Matcher Writes
 
-When matched, it updates the campaign contact and the matching `email_contacts` document with:
+On a matched **reply**, it updates the campaign contact (`campaign_contacts`)
+with:
 
 ```json
 {
@@ -503,52 +521,43 @@ When matched, it updates the campaign contact and the matching `email_contacts` 
   "reply_snippet": "First part of the reply body...",
   "reply_subject": "Re: Subject",
   "reply_from": "person@example.com",
-  "matched_via": "message_id"
+  "matched_via": "doc_id"
 }
 ```
+
+and sets `status` to `active` and `followup_status` to `replied` when the
+contact was still `pending` (an already-`active` contact keeps its status; any
+other status is left unchanged). A `comment_history` entry of type `EMAIL_IN`
+is appended. If the contact has a `lead_id`, the matching `campaign_leads`
+document is moved `pending → active`. `email_contacts` is not updated.
 
 `matched_via` is either:
 
 ```text
-message_id
-from_email
+doc_id        sender email normalized to the contact doc id
+email_field   matched on the raw campaign_contacts email field
 ```
 
-The processed `inbox_messages/{id}` document is then marked:
+On a matched **bounce**, the contact is moved to `excluded` (with
+`bounce_detected`, `bounced_at`, `bounce_reason`) **only if it was still
+`pending`** — an `active` / `replied` contact keeps its status and the bounce
+is recorded in `comment_history` (type `BOUNCE`) only.
 
-```json
-{
-  "reply_matched": true,
-  "match_status": "matched",
-  "matched_via": "message_id",
-  "matched_campaign_id": "NO_jun",
-  "matched_contact_doc_id": "person_example_com",
-  "matched_at": "2026-06-12T10:15:30+00:00"
-}
-```
-
-If no match is found, it is marked:
-
-```json
-{
-  "reply_matched": true,
-  "match_status": "unmatched",
-  "matched_at": "2026-06-12T10:15:30+00:00"
-}
-```
-
-If processing fails, it is marked:
-
-```json
-{
-  "reply_matched": true,
-  "match_status": "error",
-  "match_error": "error text",
-  "matched_at": "2026-06-12T10:15:30+00:00"
-}
-```
+Every processed message is also written to `inbox_messages` as an audit log,
+carrying `match_outcome` (`updated` / `already_handled` / `unmatched`),
+`match_campaign_id`, `match_contact_doc_id`, and `match_via`.
 
 After a successful match, campaign outreach stats are refreshed.
+
+#### Skipped and deleted messages
+
+- **Internal / system mail is skipped.** If a reply's sender — or a bounce's
+  recovered recipient — is on one of your own sending domains, or is a system
+  mailbox (`cpanel@`, `no-reply@`, `mailer-daemon@`), the message is skipped:
+  not matched, not logged as unmatched, and counted under `skipped`.
+- **Bounces are deleted after processing.** Once the contacts are updated, all
+  bounce messages are removed from the IMAP mailbox (DMARC reports are deleted
+  too). Nothing is deleted on a `dry_run`.
 
 ---
 
