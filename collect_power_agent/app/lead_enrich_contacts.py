@@ -85,7 +85,16 @@ async def _bing_search_async(
         ) as resp:
             # bounded read — RSS is small; guards against a huge/hostile body
             # blocking the loop in ET.fromstring (sync parse)
-            raw = await resp.content.read(2_000_001)
+            _chunks: list[bytes] = []
+            _read = 0
+            async for _chunk in resp.content.iter_chunked(65536):
+                _chunks.append(_chunk)
+                _read += len(_chunk)
+                if _read > 2_000_000:
+                    break
+            raw = b"".join(_chunks)
+            if len(raw) > 2_000_000:
+                raw = raw[:2_000_000]
         text = raw[:2_000_000].decode("utf-8", errors="replace")
         root = ET.fromstring(text)
         urls = []

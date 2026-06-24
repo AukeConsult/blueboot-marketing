@@ -127,15 +127,15 @@ def name_enrich_campaign(campaign_id):
         return _err(str(exc), 500)
 
 
-@bp.route("/api/crm/campaigns/<campaign_id>/scrape-emails", methods=["POST"])
+@bp.route("/api/crm/campaigns/<campaign_id>/site-enrich", methods=["POST"])
 def scrape_emails_campaign(campaign_id):
     """Scrape contact emails from all non-excluded campaign_leads websites."""
     try:
         body       = request.get_json(silent=True) or {}
         force      = bool(body.get("force", False))
         job_params = {"campaign_id": campaign_id, "force": force}
-        job_id     = _new_job("scrape-emails", job_params)
-        _enqueue_task("scrape-emails", job_id, job_params)
-        return _accepted(job_id, "scrape-emails")
+        job_id     = _new_job("site-enrich", job_params)
+        _enqueue_task("site-enrich", job_id, job_params)
+        return _accepted(job_id, "site-enrich")
     except Exception as exc:
         return _err(str(exc), 500)

@@ -540,9 +540,20 @@ parse blocked the loop.
 
 ### RULE: always cap response body size — never read/decompress/parse an unbounded body
 
+**Never** use `await resp.content.read(n)` or `await resp.read()` directly.
+`read(n)` may return early if the server sends data slowly across multiple TCP segments;
+`read()` is unbounded. Always drain the stream with `iter_chunked` instead:
+
 ```python
 _MAX_BODY = 8_000_000
-raw = await resp.content.read(_MAX_BODY + 1)     # bounded read, NOT resp.read()
+_chunks: list[bytes] = []
+_read = 0
+async for _chunk in resp.content.iter_chunked(65536):
+    _chunks.append(_chunk)
+    _read += len(_chunk)
+    if _read > _MAX_BODY:
+        break
+raw = b"".join(_chunks)
 if len(raw) > _MAX_BODY:
     raw = raw[:_MAX_BODY]
 if raw[:2] == b"\x1f\x8b":                        # gzip — cap the DECOMPRESSED size too
@@ -551,6 +562,13 @@ if raw[:2] == b"\x1f\x8b":                        # gzip — cap the DECOMPRESSE
         raw = _gz.read(_MAX_BODY)                  # NOT gzip.decompress(raw) — bomb risk
 text = raw.decode("utf-8", errors="replace")[:3_000_000]
 ```
+
+`iter_chunked` drains the stream completely — it never returns early the way
+`read(n)` can, so documents are always fully received before parsing begins.
+
+**Exception:** `urllib.request.urlopen(...).read()` (stdlib sync HTTP, not aiohttp)
+is fine as-is — it always reads the full response and is only used for small OAuth
+token exchanges.
 
 If genuinely heavy parsing is unavoidable, move it off the loop with
 `run_in_executor` (wrapped in `wait_for`) so a slow parse can't block other coroutines.

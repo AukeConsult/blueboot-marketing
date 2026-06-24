@@ -204,7 +204,16 @@ async def _bing_search_name(session, email: str, domain: str) -> dict:
                 params={"q": query, "format": "rss", "count": count},
                 headers={"User-Agent": _BROWSER_UA, "Accept-Language": "en-US,en;q=0.9"},
             ) as resp:
-                raw = await resp.content.read(500_001)
+                _chunks: list[bytes] = []
+                _read = 0
+                async for _chunk in resp.content.iter_chunked(65536):
+                    _chunks.append(_chunk)
+                    _read += len(_chunk)
+                    if _read > 500_000:
+                        break
+                raw = b"".join(_chunks)
+                if len(raw) > 500_000:
+                    raw = raw[:500_000]
             text = raw[:500_000].decode("utf-8", errors="replace")
             root = _ET.fromstring(text)
             items = []

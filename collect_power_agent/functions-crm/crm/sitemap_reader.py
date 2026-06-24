@@ -30,19 +30,22 @@ import aiohttp
 
 _SM_NS = "http://www.sitemaps.org/schemas/sitemap/0.9"
 
-_BROWSER_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-)
+_UA = "BlueBootLeadAgent/1.1 (+https://blueboot.ai)"
+
+# WordPress / Yoast SEO serves raw XML only to crawlers (Googlebot-style UA).
+# With a browser UA they serve an HTML/XSLT view that fails our XML content check.
+# Municipal sites that block Googlebot fall back to the HTML-link path automatically.
 _BOT_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 
 _HTTP_HEADERS = {
-    "User-Agent":      _BROWSER_UA,
+    "User-Agent":      _UA,
     "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
 }
-_XML_HEADERS = {**_HTTP_HEADERS, "User-Agent": _BOT_UA}
+_XML_HEADERS = {
+    **_HTTP_HEADERS,
+    "User-Agent": _BOT_UA,   # Googlebot UA for sitemap XML — needed for WordPress/Yoast raw XML
+}
 
 _MAX_BODY = 8_000_000
 _MAX_TEXT = 3_000_000
@@ -68,8 +71,9 @@ _SITEMAP_PATHS = [
 class _Fetcher:
     """Size-capped, never-raising GET with separate browser/bot UA per request type."""
 
-    def __init__(self, session: aiohttp.ClientSession):
+    def __init__(self, session: aiohttp.ClientSession, *, debug: bool = False):
         self._session = session
+        self._debug   = debug
 
     async def get(self, url: str, *, timeout: float = 15.0, xml: bool = False,
                   return_final_url: bool = False):
@@ -77,6 +81,7 @@ class _Fetcher:
         if xml:
             headers.setdefault("Accept", "application/xml,text/xml,*/*;q=0.8")
         empty = ("", url) if return_final_url else ""
+        dbg   = self._debug
         try:
             async with self._session.get(
                 url, headers=headers,
@@ -84,26 +89,53 @@ class _Fetcher:
                 allow_redirects=True, ssl=False,
             ) as resp:
                 final_url = str(resp.url)
+                ct = resp.headers.get("Content-Type", "")
+                ce = resp.headers.get("Content-Encoding", "")
+                if dbg and xml:
+                    print(f"    [fetch-dbg] {resp.status} ct={ct!r} ce={ce!r}  {url}")
                 if resp.status != 200:
+                    if dbg:
+                        print(f"    [fetch-dbg] SKIP non-200 ({resp.status})  {url}")
                     return empty
-                raw = await resp.content.read(_MAX_BODY + 1)
+                # Read the complete document in chunks — ensures we never get a
+                # partial body even on chunked transfer-encoding or slow servers.
+                _chunks: list[bytes] = []
+                _read = 0
+                async for _chunk in resp.content.iter_chunked(65536):
+                    _chunks.append(_chunk)
+                    _read += len(_chunk)
+                    if _read > _MAX_BODY:
+                        break
+                raw = b"".join(_chunks)
                 if len(raw) > _MAX_BODY:
                     raw = raw[:_MAX_BODY]
-                if raw[:2] == b"\x1f\x8b":
+                gzipped = raw[:2] == b"\x1f\x8b"
+                if dbg and xml:
+                    print(f"    [fetch-dbg] len={len(raw)} gzip={gzipped} hex={raw[:8].hex()}  {url}")
+                if gzipped:
                     try:
                         with _gzip.GzipFile(fileobj=_io.BytesIO(raw)) as gz:
                             raw = gz.read(_MAX_BODY)
-                    except Exception:
+                        if dbg:
+                            print(f"    [fetch-dbg] after gunzip len={len(raw)} hex={raw[:8].hex()}")
+                    except Exception as _gz_exc:
+                        if dbg:
+                            print(f"    [fetch-dbg] gunzip FAILED: {_gz_exc}")
                         return empty
                 text = raw.decode("utf-8", errors="replace")[:_MAX_TEXT]
                 if xml:
-                    stripped = text.lstrip("﻿").lstrip()
-                    if not (stripped.startswith("<?xml")
-                            or stripped.startswith("<sitemapindex")
-                            or stripped.startswith("<urlset")):
+                    stripped = text.lstrip("\ufeff").lstrip()
+                    ok = (stripped.startswith("<?xml")
+                          or stripped.startswith("<sitemapindex")
+                          or stripped.startswith("<urlset"))
+                    if dbg:
+                        print(f"    [fetch-dbg] xml_check={'PASS' if ok else 'FAIL'} peek={stripped[:60]!r}")
+                    if not ok:
                         return empty
                 return (text, final_url) if return_final_url else text
-        except Exception:
+        except Exception as _exc:
+            if dbg:
+                print(f"    [fetch-dbg] EXCEPTION {type(_exc).__name__}: {_exc}  {url}")
             return empty
 
 
@@ -111,21 +143,68 @@ class _Fetcher:
 # XML helpers
 # ---------------------------------------------------------------------------
 
-def _parse_xml_safe(text: str) -> ET.Element | None:
-    text = text.lstrip("﻿").lstrip("﻿")
+def _fix_entities(text: str) -> str:
+    """Escape bare & that are not already part of a valid XML entity reference.
+
+    Norwegian municipal CMS systems (eKommune/ePublish) often generate sitemaps
+    with unescaped & in query-string URLs inside <loc> tags, e.g.:
+        <loc>https://example.no/page?a=1&b=2</loc>
+    ElementTree rejects this as undefined entity.  We fix it before parsing.
+    """
+    return re.sub(r'&(?!(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)', '&amp;', text)
+
+
+def _parse_xml_safe(text: str, debug: bool = False) -> ET.Element | None:
+    text = text.lstrip("﻿").lstrip()
+    text = _fix_entities(text)
     try:
         return ET.fromstring(text)
-    except ET.ParseError:
+    except ET.ParseError as _e1:
+        # Strip processing instructions (<?xml...?>, <?xml-stylesheet...?>) and retry.
         cleaned = re.sub(r"<\?[^>]*?\?>", "", text).strip()
+        cleaned = _fix_entities(cleaned)
         try:
             return ET.fromstring(cleaned)
-        except ET.ParseError:
+        except ET.ParseError as _e2:
+            if debug:
+                print(f"    [parse-dbg] PARSE-FAIL e1={_e1!r} e2={_e2!r}")
+                print(f"    [parse-dbg]   text_len={len(text)}  head={text[:80]!r}")
+                print(f"    [parse-dbg]   tail={text[-80:]!r}")
             return None
 
 
 def _count_urls(root: ET.Element) -> int:
     n = len(root.findall(f"{{{_SM_NS}}}url"))
     return n or len(root.findall("url"))
+
+
+def _count_urls_regex(text: str) -> int:
+    """Count <url> tags with regex — handles truncated/malformed XML."""
+    return len(re.findall(r"<url[\s>]", text, re.IGNORECASE))
+
+
+def _index_entries_regex(text: str) -> list[tuple[str, str]]:
+    """Extract (loc, lastmod) from <sitemap>…</sitemap> blocks using regex."""
+    results = []
+    for block in re.finditer(r"<sitemap[\s>]([\s\S]*?)</sitemap>", text, re.IGNORECASE):
+        inner = block.group(1)
+        loc_m = re.search(r"<loc[^>]*>\s*([\s\S]*?)\s*</loc>",     inner, re.IGNORECASE)
+        lm_m  = re.search(r"<lastmod[^>]*>\s*([\s\S]*?)\s*</lastmod>", inner, re.IGNORECASE)
+        loc   = loc_m.group(1).strip() if loc_m else ""
+        lm    = lm_m.group(1).strip()  if lm_m  else ""
+        if loc:
+            results.append((loc, lm))
+    return results
+
+
+def _urlset_lastmods_regex(text: str) -> list[str]:
+    """Return all <lastmod> date strings found in a urlset via regex."""
+    dates = []
+    for m in re.finditer(r"<lastmod[^>]*>\s*([\s\S]*?)\s*</lastmod>", text, re.IGNORECASE):
+        d = m.group(1).strip()
+        if d:
+            dates.append(d)
+    return dates
 
 
 def _sm_filename(url: str) -> str:
@@ -213,7 +292,7 @@ class SitemapReader:
         _SAMPLE_PER_LEVEL = 30
 
         base    = base_url.rstrip("/")
-        fetcher = _Fetcher(session)
+        fetcher = _Fetcher(session, debug=debug)
         visited:      set[str]  = set()
         budget:       list[int] = [_MAX_FETCHES]
         found_url:    str       = ""
@@ -223,11 +302,15 @@ class SitemapReader:
         # ── Discover from robots.txt ─────────────────────────────────────────
         robots_sitemaps: list[str] = []
         robots_text = await fetcher.get(f"{base}/robots.txt", timeout=10)
+        if debug:
+            print(f"    [sitemap-dbg] robots.txt: {len(robots_text)} chars")
         for line in robots_text.splitlines():
             if line.strip().lower().startswith("sitemap:"):
                 url = line.split(":", 1)[1].strip()
                 if url and url not in robots_sitemaps:
                     robots_sitemaps.append(url)
+        if debug:
+            print(f"    [sitemap-dbg] robots.txt sitemaps: {robots_sitemaps or '(none)'}")
 
         # Probe parent/grandparent dirs of deep robots.txt sitemap entries
         _INDEX_NAMES = ("sitemap_index.xml", "sitemap-index.xml", "sitemap.xml")
@@ -251,6 +334,13 @@ class SitemapReader:
         def _dbg(msg: str) -> None:
             if debug:
                 print(f"    [sitemap-dbg] {msg}")
+
+        if debug:
+            print(f"    [sitemap-dbg] {len(candidates)} candidates to try:")
+            for _c in candidates[:10]:
+                print(f"    [sitemap-dbg]   {_c}")
+            if len(candidates) > 10:
+                print(f"    [sitemap-dbg]   ... and {len(candidates)-10} more")
 
         async def _count_sitemap(url: str, depth: int = 0, parent_lastmod: str = "") -> int:
             nonlocal found_url, found_type
@@ -327,59 +417,59 @@ class SitemapReader:
                 _dbg(f"{indent}EMPTY  {url}")
                 return 0
 
-            root = _parse_xml_safe(text)
-            if root is None:
-                # Non-XML content — try extracting child .xml hrefs
-                child_urls = []
-                for m in re.finditer(
-                    r"""href=["']((?:https?://[^"']*|/[^"']*)\.xml(?:\?[^"']*)?)["']""",
-                    text, re.I
-                ):
-                    child_url = m.group(1)
-                    if not child_url.startswith("http"):
-                        child_url = base + ("" if child_url.startswith("/") else "/") + child_url
-                    if child_url not in visited and child_url not in child_urls:
-                        child_urls.append(child_url)
-                _dbg(f"{indent}HTML-from-xml-fetch: found {len(child_urls)} .xml hrefs")
-                if child_urls:
-                    if not found_url:
-                        found_url, found_type = url, "index"
-                    sample_count = await _count_children([(u, "") for u in child_urls], depth)
-                    all_sitemaps.append({"url": url, "filename": _sm_filename(url),
-                                         "lastmod": "", "lastmod_newest": "",
-                                         "page_count": sample_count})
-                    return sample_count
-                return 0
+            # ── Regex-based processing (mirrors TypeScript sitemap-scanner.ts) ──
+            # Works on truncated/malformed XML without a parser.
+            stripped  = text.lstrip("\ufeff").lstrip()
+            is_index  = "<sitemapindex" in stripped
+            is_urlset = not is_index and "<urlset" in stripped
 
-            tag = root.tag.lower()
-            _dbg(f"{indent}FETCH OK  tag={tag!r}  {url}")
-
-            if "sitemapindex" in tag:
+            if is_index:
                 if not found_url:
                     found_url, found_type = url, "index"
-                entries  = _index_entries(root)
+                entries  = _index_entries_regex(text)
                 children = [(u, lm) for u, lm in entries if u not in visited]
-                _dbg(f"{indent}  index: {len(entries)} entries, {len(children)} unvisited")
+                _dbg(f"{indent}index: {len(entries)} entries, {len(children)} unvisited  {url}")
                 sample_count = await _count_children(children, depth)
                 all_sitemaps.append({"url": url, "filename": _sm_filename(url),
                                      "lastmod": parent_lastmod, "lastmod_newest": parent_lastmod,
                                      "page_count": sample_count})
-                _dbg(f"{indent}  index total={sample_count:,}")
+                _dbg(f"{indent}index total={sample_count:,}")
                 return sample_count
 
-            if "urlset" in tag:
-                olm    = _urlset_oldest_lastmod(root) or parent_lastmod
-                newest = _urlset_newest_lastmod(root) or parent_lastmod
-                count  = _count_urls(root)
+            if is_urlset:
+                count    = _count_urls_regex(text)
+                lm_dates = _urlset_lastmods_regex(text)
+                oldest   = (min(lm_dates) if lm_dates else "") or parent_lastmod
+                newest   = (max(lm_dates) if lm_dates else "") or parent_lastmod
                 all_sitemaps.append({"url": url, "filename": _sm_filename(url),
-                                     "lastmod": olm, "lastmod_newest": newest,
+                                     "lastmod": oldest, "lastmod_newest": newest,
                                      "page_count": count})
                 if not found_url:
                     found_url, found_type = url, "urlset"
                 _dbg(f"{indent}urlset  count={count:,}  {url}")
                 return count
 
-            _dbg(f"{indent}UNKNOWN tag={tag!r}  {url}")
+            # Not recognised XML — try extracting child .xml hrefs from HTML response
+            child_urls = []
+            for m in re.finditer(
+                r"""href=["']((?:https?://[^"']*|/[^"']*)\.xml(?:\?[^"']*)?)["']""",
+                text, re.I
+            ):
+                child_url = m.group(1)
+                if not child_url.startswith("http"):
+                    child_url = base + ("" if child_url.startswith("/") else "/") + child_url
+                if child_url not in visited and child_url not in child_urls:
+                    child_urls.append(child_url)
+            _dbg(f"{indent}HTML-from-xml-fetch: found {len(child_urls)} .xml hrefs")
+            if child_urls:
+                if not found_url:
+                    found_url, found_type = url, "index"
+                sample_count = await _count_children([(u, "") for u in child_urls], depth)
+                all_sitemaps.append({"url": url, "filename": _sm_filename(url),
+                                     "lastmod": "", "lastmod_newest": "",
+                                     "page_count": sample_count})
+                return sample_count
+            _dbg(f"{indent}UNKNOWN content  {url}")
             return 0
 
         async def _count_children(children, depth: int) -> int:
@@ -412,6 +502,15 @@ class SitemapReader:
             if ln and (not newest_date or ln > newest_date):
                 newest_date = ln
 
-        platform = _detect_platform(found_url, all_sitemaps)
+        # Deduplicate by URL while preserving order
+        seen_urls: set[str] = set()
+        deduped = []
+        for s in all_sitemaps:
+            if s["url"] not in seen_urls:
+                seen_urls.add(s["url"])
+                deduped.append(s)
+        oldest_date = min((s["lastmod"]        for s in deduped if s.get("lastmod")),        default="")
+        newest_date = max((s["lastmod_newest"]  for s in deduped if s.get("lastmod_newest")), default="")
+        platform    = _detect_platform(found_url, deduped)
 
-        return total, found_url, found_type, all_sitemaps, oldest_date, newest_date, platform
+        return total, found_url, found_type, deduped, oldest_date, newest_date, platform

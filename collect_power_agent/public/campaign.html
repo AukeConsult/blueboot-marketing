@@ -2907,14 +2907,26 @@ async function confirmReset() {
 async function scrapeEmails() {
   const id = document.getElementById('campaign-select').value;
   if (!id) return;
+
+  // Ask whether to force-re-scrape already-processed sites
+  const modal = new bootstrap.Modal(document.getElementById('scrapeOptionsModal'));
+  const force = await new Promise(resolve => {
+    document.getElementById('scrapeOptNormal').onclick = () => { modal.hide(); resolve(false); };
+    document.getElementById('scrapeOptForce').onclick  = () => { modal.hide(); resolve(true);  };
+    document.getElementById('scrapeOptionsModal').addEventListener('hidden.bs.modal',
+      () => resolve(null), { once: true });
+    modal.show();
+  });
+  if (force === null) return;   // dismissed
+
   const fb  = document.getElementById('sync-feedback');
   const btn = document.getElementById('scrape-btn');
   btn.disabled = true;
   btn.innerHTML = '<i class="ti ti-loader me-1"></i>Scraping…';
   fb.style.display = 'none';
   try {
-    const r = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/scrape-emails`, {
-      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})
+    const r = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/site-enrich`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({force})
     });
     if (r.status === 'error') throw new Error(r.message || 'scrape failed');
     fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
@@ -3018,5 +3030,31 @@ async function pollEnrich(jobId) {
   reset();
 }
 </script>
+
+<!-- Scrape options modal -->
+<div class="modal fade" id="scrapeOptionsModal" tabindex="-1" aria-labelledby="scrapeOptionsLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="scrapeOptionsLabel"><i class="ti ti-world-search me-2"></i>Scrape site</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body small">
+        <p class="mb-3">Choose how to run the site scrape:</p>
+        <div class="d-grid gap-2">
+          <button id="scrapeOptNormal" class="btn btn-outline-primary text-start" data-bs-dismiss="modal">
+            <i class="ti ti-refresh me-2"></i><strong>Normal run</strong>
+            <div class="text-muted" style="font-size:.8rem">Skip sites already scraped. Only process missing emails and page counts.</div>
+          </button>
+          <button id="scrapeOptForce" class="btn btn-outline-warning text-start" data-bs-dismiss="modal">
+            <i class="ti ti-refresh-alert me-2"></i><strong>Force re-scrape</strong>
+            <div class="text-muted" style="font-size:.8rem">Re-scrape all sites, including those already processed.</div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

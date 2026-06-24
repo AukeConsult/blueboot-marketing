@@ -1,6 +1,6 @@
 """campaign_scrape_lib.py -- Scrape contact emails from campaign_leads websites.
 
-Called by the jobs worker (name="scrape-emails").
+Called by the jobs worker (name="site-enrich").
 Self-contained -- no dependency on app/ so it deploys cleanly as a Cloud Function.
 """
 from __future__ import annotations
@@ -31,11 +31,7 @@ FETCH_TIMEOUT = 12.0
 WRITE_TIMEOUT = 12.0
 MAX_BODY      = 4_000_000   # 4 MB cap per page
 
-_BROWSER_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/124.0.0.0 Safari/537.36"
-)
+_BROWSER_UA = "BlueBootLeadAgent/1.1 (+https://blueboot.ai)"
 
 _CONTACT_WORDS = [
     "contact", "about", "team", "people", "staff", "company",
@@ -97,7 +93,16 @@ class BoundedFetcher:
             ) as resp:
                 if resp.status != 200:
                     return ""
-                raw = await resp.content.read(MAX_BODY + 1)
+                _chunks: list[bytes] = []
+                _read = 0
+                async for _chunk in resp.content.iter_chunked(65536):
+                    _chunks.append(_chunk)
+                    _read += len(_chunk)
+                    if _read > MAX_BODY:
+                        break
+                raw = b"".join(_chunks)
+                if len(raw) > MAX_BODY:
+                    raw = raw[:MAX_BODY]
                 if len(raw) > MAX_BODY:
                     raw = raw[:MAX_BODY]
                 if raw[:2] == b"\x1f\x8b":
@@ -206,11 +211,11 @@ def _load_leads(db, campaign_id: str, force: bool) -> list:
         if (d.get("status") or "").lower() == "excluded":
             skipped += 1
             continue
-        if not force and d.get("email_scraped_at"):
+        if not force and d.get("email_scraped_at") and d.get("page_count"):
             skipped += 1
             continue
         results.append((doc.id, d))
-    print(f"[scrape-emails] {len(results)} leads to scrape, {skipped} skipped", flush=True)
+    print(f"[site-enrich] {len(results)} leads to scrape, {skipped} skipped", flush=True)
     return results
 
 
@@ -264,10 +269,12 @@ def _write_contacts(db, campaign_id: str, lead_id: str,
 
 class LeadEmailWorker(Worker):
     def __init__(self, session: aiohttp.ClientSession, fetcher: BoundedFetcher,
-                 lead_id: str, data: dict, *, timeout: float = SITE_TIMEOUT):
+                 lead_id: str, data: dict, *, timeout: float = SITE_TIMEOUT,
+                 debug: bool = False):
         super().__init__(lead_id, timeout=timeout)
         self._session = session
         self._fetcher = fetcher
+        self._debug   = debug
         self.data = data
         self.website = (data.get("website") or "").strip()
         self.found: dict = {}
@@ -281,6 +288,8 @@ class LeadEmailWorker(Worker):
         # Run email scraping and sitemap reading concurrently so neither
         # has to wait for the other — both complete within SITE_TIMEOUT.
         async def _scrape_emails() -> dict:
+            if self.data.get("email_scraped_at"):
+                return {}   # emails already scraped for this lead — skip
             pages: dict = {}
             hp = await self._fetcher.get(url, timeout=FETCH_TIMEOUT)
             if hp:
@@ -293,14 +302,20 @@ class LeadEmailWorker(Worker):
 
         async def _read_page_count() -> int | None:
             if self.data.get("page_count"):
-                return None   # already set — skip
+                return None   # already set -- skip
+            if self._debug:
+                print(f"    [pc-dbg] starting SitemapReader for {url}")
             try:
                 pc, *_ = await asyncio.wait_for(
-                    SitemapReader(self._session, url).read(),
-                    timeout=120.0,  # hard cap: 18 candidate paths × HTML fallback worst case
+                    SitemapReader(self._session, url, debug=self._debug).read(),
+                    timeout=120.0,
                 )
+                if self._debug:
+                    print(f"    [pc-dbg] SitemapReader returned pc={pc}")
                 return pc if pc > 0 else None
-            except Exception:
+            except Exception as _exc:
+                if self._debug:
+                    print(f"    [pc-dbg] SitemapReader EXCEPTION {type(_exc).__name__}: {_exc}")
                 return None
 
         # return_exceptions=True ensures both sub-tasks always run to completion
@@ -313,7 +328,11 @@ class LeadEmailWorker(Worker):
         emails = results[0] if isinstance(results[0], dict) else {}
         pc     = results[1] if isinstance(results[1], int)  else None
 
+        emails_were_skipped = bool(self.data.get("email_scraped_at"))
         if not emails and pc is None:
+            if emails_were_skipped:
+                # Emails already done, sitemap not found — valid, nothing to write
+                return WorkerResult(self.worker_id, "ok")
             err = str(results[0]) if isinstance(results[0], Exception) else "no content fetched"
             return WorkerResult(self.worker_id, "error", error=err)
 
@@ -328,14 +347,14 @@ class LeadEmailWorker(Worker):
 
 async def _run(db, campaign_id: str, leads: list,
                *, dry_run: bool, workers: int) -> dict:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()   # correct inside async def (Python 3.10+)
     now  = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     existing: set = await asyncio.wait_for(
         loop.run_in_executor(None, lambda: _existing_contacts(db, campaign_id)),
         timeout=20.0,
     )
-    print(f"[scrape-emails] {len(existing)} existing contacts", flush=True)
+    print(f"[site-enrich] {len(existing)} existing contacts", flush=True)
 
     connector = aiohttp.TCPConnector(limit=workers * 2, ssl=False)
     headers   = {"User-Agent": _BROWSER_UA, "Accept-Language": "en,da;q=0.9"}
@@ -424,7 +443,7 @@ async def _run(db, campaign_id: str, leads: list,
         await asyncio.gather(*[asyncio.create_task(consumer()) for _ in range(workers)])
 
     suffix = " (DRY RUN)" if dry_run else f", {total_new} new, {total_upd} updated"
-    print(f"\n[scrape-emails] Done -- {done} sites, {errors} errors{suffix}", flush=True)
+    print(f"\n[site-enrich] Done -- {done} sites, {errors} errors{suffix}", flush=True)
     return {"scraped": done, "new_contacts": total_new,
             "updated_contacts": total_upd, "pages_updated": total_pages,
             "errors": errors}
@@ -445,7 +464,7 @@ def run_campaign_scrape(
     """Scrape campaign_leads websites and write found emails to campaign_contacts."""
     leads = _load_leads(db, campaign_id, force)
     if not leads:
-        return {"scraped": 0, "new_contacts": 0, "updated_contacts": 0, "errors": 0}
+        return {"scraped": 0, "new_contacts": 0, "updated_contacts": 0, "pages_updated": 0, "errors": 0}
 
     loop = asyncio.new_event_loop()
     try:

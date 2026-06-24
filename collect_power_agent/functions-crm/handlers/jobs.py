@@ -347,7 +347,7 @@ def worker(name, job_id):
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 })
 
-        elif name == "scrape-emails":
+        elif name == "site-enrich":
             from crm.campaign_scrape_lib import run_campaign_scrape
             dry_run = bool(body.get("dry_run", False))
             result = run_campaign_scrape(

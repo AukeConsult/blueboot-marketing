@@ -1,0 +1,21 @@
+# Auto-generated to keep the upload bundle small
+.gcloudignore
+.git
+.gitignore
+
+# Python env
+venv/
+.venv/
+*.pyc
+**/__pycache__/
+*.pyo
+
+# Dev/test
+.env
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/

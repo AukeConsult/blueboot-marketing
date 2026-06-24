@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
 from google.cloud.firestore_v1.base_query import FieldFilter
+_FF = FieldFilter  # short alias
 from handlers.shared import _get_db, _ok, _err, _accepted
 
 bp = Blueprint("contacts", __name__)
