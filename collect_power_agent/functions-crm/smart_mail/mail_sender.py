@@ -244,6 +244,10 @@ class MailSender:
         msg["To"]         = to
         msg["Date"]       = formatdate(localtime=False)
         msg["Message-ID"] = f"<{uuid.uuid4().hex}@blueboot.ai>"
+        # Tag CRM-originated mail so the SENT-folder sync (run_sent_sync) can
+        # recognise it and NOT re-log it (outreach + manual already log at send
+        # time). Only mail sent from OUTSIDE the CRM lacks this header.
+        msg["X-Blueboot-Sent"] = "crm"
         if in_reply_to:
             msg["In-Reply-To"] = in_reply_to
             msg["References"] = in_reply_to

@@ -76,10 +76,18 @@ def _extract_email(addr: str) -> str:
     return (m.group(1) if m else addr).strip().lower()
 
 
+def email_id_from_message_id(message_id: str) -> str:
+    """Normalize an SMTP Message-ID into the stable email_id used for dedup
+    across send-time history (manual + outreach) and run_sent_sync. Matches the
+    frontend emailMsgKey(). Storing this on send-time history entries lets
+    run_sent_sync recognise CRM-sent mail in the SENT folder and skip it."""
+    return re.sub(r"[/]", "_", (message_id or "").strip().lstrip("<").rstrip(">"))[:500]
+
+
 def _msg_key(message_id: str, folder: str, uid: str) -> str:
     """Stable dedup key — matches frontend emailMsgKey()."""
     if message_id:
-        return re.sub(r"[/]", "_", message_id.strip().lstrip("<").rstrip(">"))[:500]
+        return email_id_from_message_id(message_id)
     return re.sub(r"[/]", "_", f"{folder}__{uid}")
 
 
@@ -180,6 +188,38 @@ def _imap_connect(ma: dict, account_email: str) -> imaplib.IMAP4:
     raise ValueError(f"Unsupported account_type '{account_type}'")
 
 
+# Caps for body text stored in comment_history (keeps Firestore docs small)
+_BODY_TEXT_CAP = 10000
+_BODY_HTML_CAP = 30000
+
+
+def _extract_bodies(msg) -> tuple[str, str]:
+    """Return (plain_text, html) bodies from a parsed message. Either may be ''."""
+    text, html = "", ""
+    if msg.is_multipart():
+        for part in msg.walk():
+            ct = part.get_content_type()
+            if "attachment" in str(part.get("Content-Disposition") or ""):
+                continue
+            if ct == "text/plain" and not text:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    text = payload.decode(errors="ignore")
+            elif ct == "text/html" and not html:
+                payload = part.get_payload(decode=True)
+                if payload:
+                    html = payload.decode(errors="ignore")
+    else:
+        payload = msg.get_payload(decode=True)
+        if payload:
+            body = payload.decode(errors="ignore")
+            if msg.get_content_type() == "text/html":
+                html = body
+            else:
+                text = body
+    return text, html
+
+
 def _fetch_headers(conn: imaplib.IMAP4, folder: str, cutoff: datetime | None, limit: int) -> list[dict]:
     """Fetch message headers from a folder, filtered by SINCE date if given."""
     if folder.lower() in _SKIP_FOLDERS:
@@ -204,7 +244,7 @@ def _fetch_headers(conn: imaplib.IMAP4, folder: str, cutoff: datetime | None, li
         uid_set = b",".join(batch)
         typ, raw = conn.uid(
             "fetch", uid_set,
-            "(UID BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)])"
+            "(UID BODY.PEEK[])"
         )
         if typ != "OK" or not raw:
             return []
@@ -227,9 +267,12 @@ def _fetch_headers(conn: imaplib.IMAP4, folder: str, cutoff: datetime | None, li
                 date_str = parsedate_to_datetime(raw_d).isoformat()
             except Exception:
                 date_str = datetime.now(timezone.utc).isoformat()
+            btext, bhtml = _extract_bodies(parsed)
+            origin = (parsed.get("X-Blueboot-Sent", "") or "").strip().lower()
             msgs.append({
                 "uid": uid, "message_id": mid, "folder": folder,
                 "subject": subj, "from": from_, "to": to_, "date": date_str,
+                "body_text": btext, "body_html": bhtml, "origin": origin,
             })
         return msgs
     except Exception as exc:
@@ -239,7 +282,7 @@ def _fetch_headers(conn: imaplib.IMAP4, folder: str, cutoff: datetime | None, li
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def run_inbound_read(
+def run_sent_sync(
     db,
     campaign_ids:     list[str] | str | None = None,
     contact_doc_id:   str | None = None,
@@ -354,7 +397,7 @@ def run_inbound_read(
 
         try:
             sent_folder = _find_sent_folder(conn)
-            folders_dirs = [("INBOX", False)] + ([(sent_folder, True)] if sent_folder else [])
+            folders_dirs = [(sent_folder, True)] if sent_folder else []   # SENT only — replies are read by reply_matcher
 
             # contact_email → [entry, ...]
             contact_entries: dict[str, list] = {}
@@ -366,14 +409,20 @@ def run_inbound_read(
                     match_e   = to_addrs[0] if is_sent else from_addr
                     if not match_e or match_e not in contact_index:
                         continue
+                    # Skip CRM-originated mail — outreach/manual sends already
+                    # logged it at send time. Only external sends are recorded.
+                    if msg.get("origin") == "crm":
+                        continue
                     entry = {
-                        "email_id": _msg_key(msg["message_id"], folder, msg["uid"]),
-                        "type":     "EMAIL_OUT" if is_sent else "EMAIL_IN",
-                        "text":     msg["subject"],
-                        "date":     msg["date"],
-                        "user":     acc_email,
-                        "from":     msg["from"],
-                        "to":       msg["to"],
+                        "email_id":  _msg_key(msg["message_id"], folder, msg["uid"]),
+                        "type":      "EMAIL_OUT",
+                        "text":      msg["subject"],
+                        "date":      msg["date"],
+                        "user":      acc_email,
+                        "from":      msg["from"],
+                        "to":        msg["to"],
+                        "body_text": (msg.get("body_text") or "")[:_BODY_TEXT_CAP],
+                        "body_html": (msg.get("body_html") or "")[:_BODY_HTML_CAP],
                     }
                     contact_entries.setdefault(match_e, []).append(entry)
         finally:
@@ -399,13 +448,9 @@ def run_inbound_read(
                     print(f"  {match_e}: already synced", flush=True)
                     continue
 
-                update_doc: dict = {"comment_history": firestore.ArrayUnion(new_entries)}
-                # Set new_mail flag if any incoming email was added
-                has_incoming = any(e.get("type") == "EMAIL_IN" for e in new_entries)
-                if has_incoming:
-                    update_doc["new_mail"] = True
-                    update_doc["followup_status"] = "received"
-                ref.update(update_doc)
+                # Sent-only sync writes EMAIL_OUT entries; new_mail / received
+                # flags for incoming mail are handled by reply_matcher.
+                ref.update({"comment_history": firestore.ArrayUnion(new_entries)})
                 total_entries  += len(new_entries)
                 total_contacts += 1
                 updated_contacts += 1
@@ -423,3 +468,6 @@ def run_inbound_read(
         "errors":          errors,
     }
 
+
+# Back-compat alias (sent-only now); reply reading is in reply_matcher.
+run_inbound_read = run_sent_sync

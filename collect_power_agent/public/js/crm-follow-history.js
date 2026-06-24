@@ -58,7 +58,9 @@ function toggleHistEntry(key, el) {
 function renderHistoryContent(history) {
   if (!history.length) return '<span class="small" style="color:var(--bb-muted)">No history yet.</span>';
   return '<div class="hist-list">'
-    + [...history].reverse().map((h, i) => {
+    + [...history]
+        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+        .map((h, i) => {
         const d        = h.date ? new Date(h.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—';
         const isEmailIn  = h.type === 'EMAIL_IN';
         const isEmailOut = h.type === 'EMAIL_OUT';

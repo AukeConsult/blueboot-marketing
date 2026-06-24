@@ -26,7 +26,7 @@ POST https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-matc
 The direct `smartMail` trigger URLs are service-authenticated. The `/api/crm/...`
 compatibility trigger URLs require `campaign-user` or `admin`.
 
-The important rule is that the mail logic is centralized: selection and sent confirmation are in `outreach_mail_select.py`, real sending is in `outreach_sender.py`, inbound mailbox reading is in `inbound_read_lib.py`, and reply matching is in `reply_matcher.py`.
+The important rule is that the mail logic is centralized: selection and sent confirmation are in `outreach_mail_select.py`, real sending is in `outreach_sender.py`, sent-folder reading is in `inbound_read_lib.py` (`run_sent_sync`), and reply reading + matching is in `reply_matcher.py` (`match_new_replies`).
 
 ---
 
@@ -80,7 +80,7 @@ POST https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-matc
 | `functions-crm/smart_mail/outreach_sender.py` | Opens mail accounts, renders messages, sends mail, applies rate limits, and calls `confirm_sent()`. |
 | `functions-crm/smart_mail/outreach_render_mail.py` | Renders campaign mail templates into subject, plain text, and HTML. |
 | `functions-crm/smart_mail/mail_sender.py` | Shared SMTP/Gmail sender. Handles account settings, CSS/image preparation, display names, headers, and actual delivery. |
-| `functions-crm/smart_mail/inbound_read_lib.py` | Reads inbox and sent mail from configured outreach accounts and writes contact history. |
+| `functions-crm/smart_mail/inbound_read_lib.py` | Reads the SENT folder only (`run_sent_sync`) and writes `EMAIL_OUT` history with body. Replies are read by `reply_matcher`. |
 | `functions-crm/smart_mail/reply_matcher.py` | Fetches IMAP mail, classifies replies / bounces / DMARC, and matches the sender (or a bounce's recovered recipient) to `campaign_contacts` by email. |
 
 Mail accounts are read from Firestore:
@@ -322,9 +322,14 @@ The sender calculates a budget from `outreach_sent` for each account. Both succe
 
 ---
 
-## Inbound Read
+## Mailbox Sync (replies + sent)
 
-Inbound read connects to each configured outreach account through IMAP, fetches recent inbox and sent messages, matches them to campaign contacts by email address, and appends contact history entries.
+The mailbox sync runs **two single-purpose readers**, so each direction has exactly one source of truth:
+
+- **Replies** are read only by `reply_matcher.match_new_replies` (INBOX). It classifies reply / bounce / DMARC, matches by sender, writes `EMAIL_IN` with the mail body, updates follow-up status, and deletes bounces. See the Reply Matcher section.
+- **Sent mail** is read only by `inbound_read_lib.run_sent_sync` (the SENT folder). It records mails sent *outside* the CRM as `EMAIL_OUT` with the mail body.
+
+The `inbound-read` job and `app/inbound_read.py` run **both** readers in one pass.
 
 ### Command Line
 
@@ -392,25 +397,9 @@ The API queues a CRM worker job named:
 inbound-read
 ```
 
-### What Inbound Read Writes
+### What the Sent Reader Writes
 
-For each matching message, inbound read appends one entry to `comment_history`.
-
-Incoming mail:
-
-```json
-{
-  "email_id": "stable-message-key",
-  "type": "EMAIL_IN",
-  "text": "Message subject",
-  "date": "2026-06-12T10:15:30+00:00",
-  "user": "sales@blueboot.ai",
-  "from": "Person <person@example.com>",
-  "to": "sales@blueboot.ai"
-}
-```
-
-Sent mail found in the mailbox:
+The sent reader (`run_sent_sync`) appends one `EMAIL_OUT` entry per sent message found in the SENT folder, including the mail body:
 
 ```json
 {
@@ -420,22 +409,32 @@ Sent mail found in the mailbox:
   "date": "2026-06-12T10:15:30+00:00",
   "user": "sales@blueboot.ai",
   "from": "sales@blueboot.ai",
-  "to": "person@example.com"
+  "to": "person@example.com",
+  "body_text": "Plain-text body…",
+  "body_html": "<p>HTML body…</p>"
 }
 ```
 
-The write uses Firestore `ArrayUnion`, and each entry has an `email_id`. Before writing, inbound read checks existing `comment_history` email IDs, so repeat runs do not duplicate the same mailbox message.
+The write uses Firestore `ArrayUnion` keyed by `email_id`, so repeat runs never duplicate a sent message (already-synced mail is skipped).
 
-If any new incoming `EMAIL_IN` entry is added, inbound read also writes:
+Incoming replies (`EMAIL_IN`) are **not** written here — they are written by the reply matcher (which also sets `new_mail` and the follow-up status on a new reply).
 
-```json
-{
-  "new_mail": true,
-  "followup_status": "received"
-}
-```
+### Avoiding duplicate sent entries — the `X-Blueboot-Sent` tag
 
-Outgoing `EMAIL_OUT` history does not set `new_mail` and does not change `followup_status`.
+Outgoing mail reaches the SENT folder from three sources, and only one of them should be logged by the sent reader:
+
+| Case | Source | History written at send time? | Logged by `run_sent_sync`? |
+|---|---|---|---|
+| 1 | Outreach send (`confirm_sent` → `MAIL_SENT`) | yes | **no** |
+| 2 | Manual send (`send-mail` → `EMAIL_OUT`) | yes | **no** |
+| 3 | Sent from outside the CRM (another mail client / system) | no | **yes** |
+
+Cases 1 and 2 already write their own history entry (with body) at send time, so the sent reader must not log them again. This is handled two ways:
+
+- **Primary — header tag.** Every mail sent through the CRM goes through `MailSender`, which stamps the header `X-Blueboot-Sent: crm`. `run_sent_sync` reads this header from each SENT-folder message and **skips anything tagged `crm`**. Mail sent from outside the CRM has no such header, so only case 3 is logged.
+- **Fallback — `email_id` dedup.** Send-time entries (`MAIL_SENT` / `EMAIL_OUT`) also store `email_id`, the normalized SMTP `Message-ID` (`email_id_from_message_id`, the same key `run_sent_sync` computes). If a mail server ever strips the custom header, the matching `email_id` already in history still prevents a duplicate.
+
+Both rely on a stable `Message-ID`: `MailSender` sets it explicitly, and it is preserved in the SENT-folder copy. The tag only applies to mail sent after this is deployed; older CRM-sent mail is protected by the `email_id` fallback.
 
 ---
 
@@ -602,13 +601,13 @@ python app/outreach_send.py --dry-run --mode intro --campaigns NO_jun --preview
 python app/outreach_send.py --send --mode intro --campaigns NO_jun --limit 20
 ```
 
-6. Sync mailbox history:
+6. Sync the mailbox (runs both readers — replies + sent):
 
 ```bash
 python app/inbound_read.py --campaigns NO_jun --days 7
 ```
 
-7. Run reply matching if inbound messages are stored in `inbox_messages`:
+7. Or trigger reply matching on its own:
 
 ```text
 POST /api/crm/reply-match

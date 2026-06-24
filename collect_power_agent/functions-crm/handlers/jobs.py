@@ -380,19 +380,33 @@ def worker(name, job_id):
                 )
 
         elif name == "inbound-read":
-            from smart_mail.inbound_read_lib import run_inbound_read
-            result = run_inbound_read(
+            # One sync runs BOTH single-source readers:
+            #   • reply_matcher.match_new_replies — the ONLY reader of replies (INBOX)
+            #   • inbound_read_lib.run_sent_sync  — the ONLY reader of sent mail (SENT)
+            from smart_mail.reply_matcher import match_new_replies
+            from smart_mail.inbound_read_lib import run_sent_sync
+            _camps = (
+                body.get("campaign_ids")
+                or body.get("campaigns")
+                or body.get("campaign_id")
+                or None
+            )
+            _days = int(body.get("days") or 7)
+            reply_res = match_new_replies(campaigns=_camps, days=_days)
+            sent_res = run_sent_sync(
                 db               = db,
-                campaign_ids     = (
-                    body.get("campaign_ids")
-                    or body.get("campaigns")
-                    or body.get("campaign_id")
-                    or None
-                ),
+                campaign_ids     = _camps,
                 contact_doc_id   = body.get("contact_doc_id")   or None,
                 outreach_account = body.get("outreach_account") or None,
-                days             = int(body.get("days") or 7),
+                days             = _days,
             )
+            _replies = int(reply_res.get("matched", 0)) + int(reply_res.get("bounced", 0))
+            result = {
+                "reply": reply_res,
+                "sent":  sent_res,
+                "synced_entries":   _replies + int(sent_res.get("synced_entries", 0)),
+                "updated_contacts": _replies + int(sent_res.get("updated_contacts", 0)),
+            }
 
         elif name == "outreach-send":
             from smart_mail.outreach_sender import send_outreach

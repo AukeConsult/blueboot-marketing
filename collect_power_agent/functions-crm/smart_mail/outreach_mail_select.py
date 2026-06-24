@@ -592,6 +592,7 @@ def confirm_sent(
     """
     from google.cloud.firestore_v1 import ArrayUnion
     from email.utils import make_msgid
+    from smart_mail.inbound_read_lib import email_id_from_message_id as _email_id_from_message_id
 
     confirmed_at = sent_at or datetime.now(timezone.utc).isoformat()
     # Always guarantee a unique message_id — generate one if caller did not provide it
@@ -623,6 +624,7 @@ def confirm_sent(
             "user": sender_account or "outreach",
             "text": history_text,
             "type": "MAIL_SENT",
+            "email_id": _email_id_from_message_id(message_id),
             "body_text": (body_text or "")[:10000],
             "body_html": (body_html or "")[:30000],
         }]),

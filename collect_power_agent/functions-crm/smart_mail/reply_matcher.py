@@ -801,6 +801,7 @@ def _apply_actions(
     try:
         current = cc_data.get("status", "pending")
         update  = {**reply_payload, "comment_history": ArrayUnion([history_entry])}
+        update["new_mail"] = True   # flag the contact as having new incoming mail
         if current == "pending":
             update["status"]          = "active"
             update["followup_status"] = "replied"

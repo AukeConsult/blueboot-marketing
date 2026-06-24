@@ -302,8 +302,8 @@ These scripts are ready to be used as steps in new or extended pipelines:
 | `campaign_exporter` | `app/campaign_exporter.py` | Export campaign contacts to Excel |
 | `campaign_name_enrich` | `app/campaign_name_enrich.py` | Enrich missing campaign names via AI |
 | `filter_site_leads` | `app/filter_site_leads.py` | Filter site_leads by criteria into a campaign |
-| `inbound_read` | `app/inbound_read.py` | Sync IMAP replies back to CRM follow-up status |
-| `reply_match` | `app/reply_match.py` | Fetch all IMAP accounts, match replies to contacts, set status=active on campaign_leads |
+| `inbound_read` | `app/inbound_read.py` | Mailbox sync — runs reply_matcher (replies, INBOX) + run_sent_sync (sent folder), both with body |
+| `reply_match` | `app/reply_match.py` | The single reply reader — fetch IMAP inboxes, match replies/bounces to contacts, write EMAIL_IN with body, update status |
 | `wp_plugin_leads` | `app/wp_plugin_leads.py` | Discover WordPress plugin leads via Bing |
 | `build_filter_facets` | `app/build_filter_facets.py` | Build facet index for lead filter UI |
 | `facet_campaign` | `app/facet_campaign.py` | Apply facet-based filter to create a campaign |

@@ -266,6 +266,8 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
         if result.get("status") != "ok":
             return jsonify(result)
 
+        from smart_mail.inbound_read_lib import email_id_from_message_id
+        _eid = email_id_from_message_id(result.get("message_id", ""))
         now = datetime.now(timezone.utc).isoformat()
         user = getattr(_g, "user_email", None) or (body.get("_user") or outreach_email or "api").strip()
         contact_ref.update({
@@ -279,6 +281,7 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
                 "from": outreach_email,
                 "to": to_addr,
                 "subject": subject,
+                "email_id": _eid,
                 "body_text": (body_plain or "")[:10000],
                 "body_html": (body_html or "")[:30000],
             }]),

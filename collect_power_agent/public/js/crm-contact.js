@@ -252,7 +252,9 @@ function renderHistory(history) {
   document.getElementById('cc-hist-count').textContent = history.length;
   const wrap = document.getElementById('cc-history');
   if (!history.length) { wrap.innerHTML = '<div class="small text-muted">No history yet.</div>'; return; }
-  wrap.innerHTML = [...history].reverse().map((h, i) => {
+  wrap.innerHTML = [...history]
+    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+    .map((h, i) => {
     const date = h.date ? new Date(h.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—';
     const type = h.type || '';
     const badgeCls = type === 'EMAIL_IN' ? 'bg-info text-dark'
@@ -297,7 +299,7 @@ function bindBackButton() {
   });
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
+// ── Boot ───────────────────────────────────────────────────
 
 requireAuth().then(() => {
   if (typeof requireRole === 'function') requireRole(['admin', 'campaign-user', 'user']);
