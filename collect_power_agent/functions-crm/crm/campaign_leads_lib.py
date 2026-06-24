@@ -126,13 +126,23 @@ def populate_campaign_leads(
     """
     print(f"[campaign-leads] campaign='{campaign_id}'  dry_run={dry_run}", flush=True)
 
-    # ── 1. Collect unique lead_ids from campaign_contacts ────────────────────
+    # ── 1a. Collect lead_ids directly from campaign_leads ────────────────────
+    # This ensures leads imported without an email (website-only rows) are
+    # also enriched from site_leads / leads collections.
+    leads_col = (
+        db.collection(CAMPAIGNS_COLLECTION)
+          .document(campaign_id)
+          .collection(CAMPAIGN_LEADS_SUB)
+    )
+    lead_ids: set[str] = {doc.id for doc in leads_col.select([]).stream()}
+    print(f"[campaign-leads] {len(lead_ids)} lead_ids from campaign_leads", flush=True)
+
+    # ── 1b. Count contacts per lead from campaign_contacts ───────────────────
     contacts_col = (
         db.collection(CAMPAIGNS_COLLECTION)
           .document(campaign_id)
           .collection(CAMPAIGN_CONTACTS_SUB)
     )
-    lead_ids: set[str] = set()
     contacts_per_lead:  dict[str, int] = {}
     pending_per_lead:   dict[str, int] = {}
     excluded_per_lead:  dict[str, int] = {}
@@ -143,14 +153,14 @@ def populate_campaign_leads(
         lid = d.get("lead_id", "").strip()
         st  = (d.get("status") or "pending").strip().lower()
         if lid:
-            lead_ids.add(lid)
+            lead_ids.add(lid)   # also pick up any leads only known via contacts
             contacts_per_lead[lid]  = contacts_per_lead.get(lid, 0) + 1
             if st == "pending":
                 pending_per_lead[lid]  = pending_per_lead.get(lid, 0) + 1
             elif st == "excluded":
                 excluded_per_lead[lid] = excluded_per_lead.get(lid, 0) + 1
 
-    print(f"[campaign-leads] {contact_count} contacts → {len(lead_ids)} unique lead_ids",
+    print(f"[campaign-leads] {contact_count} contacts → {len(lead_ids)} total unique lead_ids",
           flush=True)
 
     if not lead_ids:
@@ -233,11 +243,125 @@ def populate_campaign_leads(
     print(f"[campaign-leads] done. {written} leads written to "
           f"campaigns/{campaign_id}/{CAMPAIGN_LEADS_SUB}", flush=True)
 
+    # ── 4. Enrich campaign_contacts from email_contacts ───────────────────────
+    ec_result = enrich_contacts_from_email_contacts(db, campaign_id, dry_run=dry_run)
+
     return {
-        "campaign_id":   campaign_id,
-        "contacts_read": contact_count,
-        "leads_found":   len(to_write) + skipped,
-        "leads_written": written,
-        "leads_skipped": skipped,
-        "dry_run":       False,
+        "campaign_id":        campaign_id,
+        "contacts_read":      contact_count,
+        "leads_found":        len(to_write) + skipped,
+        "leads_written":      written,
+        "leads_skipped":      skipped,
+        "contacts_enriched":  ec_result.get("enriched", 0),
+        "dry_run":            False,
     }
+
+
+# Fields copied from email_contacts → campaign_contacts (gaps only, never overwrite)
+_EC_FILL_FIELDS = [
+    "name", "title", "occupation", "phone", "linkedin",
+    "email_type", "contact_type", "outreach_priority",
+]
+# Fields that must never be overwritten on existing campaign_contacts docs
+_CONTACT_PROTECTED = {
+    "status", "mail_sent", "next_mail_index", "in_reply_to",
+    "followup_status", "followup_date", "followup_comment",
+    "followup_importance", "followup_owner", "comment_history",
+    "sent_at", "message_id", "sender_account", "created_at",
+}
+
+
+def _ec_doc_id(email: str) -> str:
+    import re as _re
+    return _re.sub(r"[^a-zA-Z0-9_-]", "_", email.strip().lower())
+
+
+def enrich_contacts_from_email_contacts(db, campaign_id: str, dry_run: bool = False) -> dict:
+    """Copy missing fields from email_contacts into campaign_contacts.
+
+    For each contact in campaigns/{campaign_id}/campaign_contacts:
+      - Looks up email_contacts/{doc_id} by email
+      - Copies any _EC_FILL_FIELDS that are empty on the campaign contact
+      - Never touches protected fields (status, mail_sent, etc.)
+
+    Uses db.get_all() in batches of 30 for efficiency.
+    Safe to re-run — only fills gaps, never overwrites existing values.
+    """
+    print(f"[ec-enrich] campaign='{campaign_id}'  dry_run={dry_run}", flush=True)
+
+    contacts_col = (
+        db.collection(CAMPAIGNS_COLLECTION)
+          .document(campaign_id)
+          .collection(CAMPAIGN_CONTACTS_SUB)
+    )
+    ec_col = db.collection("email_contacts")
+
+    # Load all campaign_contacts
+    contacts = []
+    for doc in contacts_col.stream():
+        d = doc.to_dict() or {}
+        email = (d.get("email") or "").strip().lower()
+        if not email:
+            continue
+        contacts.append({"ref": doc.reference, "data": d, "email": email})
+
+    if not contacts:
+        print(f"[ec-enrich] no contacts found", flush=True)
+        return {"enriched": 0, "skipped": 0}
+
+    print(f"[ec-enrich] {len(contacts)} campaign_contacts to check", flush=True)
+
+    # Batch-read email_contacts (30 per call)
+    BATCH_GET = 30
+    ec_refs   = [ec_col.document(_ec_doc_id(c["email"])) for c in contacts]
+    ec_by_id: dict[str, dict] = {}
+    for i in range(0, len(ec_refs), BATCH_GET):
+        for snap in db.get_all(ec_refs[i:i + BATCH_GET]):
+            if snap.exists:
+                ec_by_id[snap.id] = snap.to_dict() or {}
+
+    print(f"[ec-enrich] {len(ec_by_id)} email_contacts found", flush=True)
+
+    enriched = skipped = 0
+    batch = db.batch()
+    batch_count = 0
+
+    for c in contacts:
+        ec_id   = _ec_doc_id(c["email"])
+        ec_data = ec_by_id.get(ec_id)
+        if not ec_data:
+            skipped += 1
+            continue
+
+        update = {}
+        for f in _EC_FILL_FIELDS:
+            if f in _CONTACT_PROTECTED:
+                continue
+            existing = c["data"].get(f)
+            # Only fill if missing or empty
+            if existing is not None and str(existing).strip():
+                continue
+            ec_val = ec_data.get(f)
+            if ec_val is not None and str(ec_val).strip():
+                update[f] = ec_val
+
+        if not update:
+            skipped += 1
+            continue
+
+        if dry_run:
+            print(f"  [DRY] {c['email']}: {list(update.keys())}", flush=True)
+        else:
+            batch.update(c["ref"], update)
+            batch_count += 1
+            if batch_count >= 400:
+                batch.commit()
+                batch = db.batch()
+                batch_count = 0
+        enriched += 1
+
+    if not dry_run and batch_count:
+        batch.commit()
+
+    print(f"[ec-enrich] done — {enriched} contacts enriched, {skipped} skipped", flush=True)
+    return {"enriched": enriched, "skipped": skipped}

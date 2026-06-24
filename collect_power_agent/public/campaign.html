@@ -152,11 +152,11 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
   align-items: center;
 }
 .contacts-toolbar {
-  display: grid;
-  grid-template-columns: minmax(110px, 130px) minmax(120px, 1fr) auto auto;
+  display: flex;
+  flex-wrap: nowrap;
   gap: 6px;
   align-items: center;
-  justify-content: end;
+  justify-content: flex-end;
 }
 .contacts-toolbar .form-select,
 .contacts-toolbar .form-control {
@@ -164,15 +164,13 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
   min-width: 0;
 }
 .contacts-toolbar .btn {
-  min-width: 32px;
   height: 31px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  white-space: nowrap;
 }
-.contacts-toolbar #status-filter { order: 1; }
-.contacts-toolbar #contact-search { order: 2; max-width: none !important; }
-.contacts-toolbar #enrich-btn { order: 3; }
+.contacts-toolbar #status-filter { width: 120px; flex-shrink: 0; }
+.contacts-toolbar #contact-search { width: 200px; flex-shrink: 1; }
 .mail-editor-component .ql-toolbar {
   background: #f9fafb;
   border-radius: 8px 8px 0 0;
@@ -407,9 +405,13 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
             <option value="active">Active</option>
             <option value="excluded">Excluded</option>
           </select>
-          <button id="enrich-btn" class="btn btn-sm btn-outline-secondary" onclick="enrichNames()" title="Fill missing names using Bing + AI">
-            <i class="ti ti-user-search"></i>
+          <button id="enrich-btn" class="btn btn-sm btn-outline-secondary" onclick="enrichNames()" title="Fill missing contact names using Bing + AI">
+            <i class="ti ti-user-search me-1"></i>Enrich names
           </button>
+          <span class="text-muted small" style="cursor:default" data-bs-toggle="tooltip" data-bs-placement="bottom"
+            title="Enrich names: looks up missing names for existing contacts using Bing search + AI.">
+            <i class="ti ti-help-circle"></i>
+          </span>
           <input id="contact-search" class="form-control form-control-sm" style="max-width:180px" placeholder="Search…" oninput="filterContacts()">
         </div>
       </div>
@@ -511,6 +513,9 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
           </select>
           <span id="sites-count-badge" class="badge bg-light text-secondary border ms-1"
                 style="font-size:12px"></span>
+          <button id="scrape-btn" class="btn btn-sm btn-outline-secondary" onclick="scrapeEmails()" title="Scrape each site for emails and update page count">
+            <i class="ti ti-mail-search me-1"></i>Scrape site
+          </button>
           <button class="bb-btn-refresh ms-auto" title="Refresh" onclick="loadSites()">
             <i class="ti ti-refresh"></i>
           </button>
@@ -524,13 +529,14 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
                 <th class="small sites-th" style="width:170px;cursor:pointer" data-col="company">Company <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
                 <th class="small" style="width:180px">Website</th>
                 <th class="small sites-th" style="width:110px;cursor:pointer" data-col="ai_sector">Sector <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+                <th class="small text-center sites-th" style="width:62px;cursor:pointer" data-col="page_count">Pages <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
                 <th class="small">Summary</th>
                 <th class="small text-center sites-th" style="width:90px;cursor:pointer" data-col="contact_count">Contacts <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
                 <th class="small text-center sites-th" style="width:65px;cursor:pointer" data-col="priority">Prio <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
                 <th class="small sites-th" style="width:115px;cursor:pointer" data-col="status">Status <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
               </tr></thead>
               <tbody id="sites-body">
-                <tr><td colspan="7" class="text-center py-5 small" style="color:var(--bb-muted)">
+                <tr><td colspan="8" class="text-center py-5 small" style="color:var(--bb-muted)">
                   Select a campaign to view sites.
                 </td></tr>
               </tbody>
@@ -750,6 +756,13 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
 <script src="js/mail-editor-component.js"></script>
 <script src="vendor/bootstrap.bundle.min.js"></script>
 <script>
+// Activate Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(
+    el => new bootstrap.Tooltip(el, { trigger: 'hover' })
+  );
+});
+
 // BASE + helpers from js/crm-common.js
 let allContacts = [];
 let allCampaigns = [];
@@ -2145,7 +2158,7 @@ async function loadSites() {
   _allLeads = [];
   Object.keys(_leadContactCache).forEach(k => delete _leadContactCache[k]);
   document.getElementById('sites-body').innerHTML =
-    '<tr><td colspan="7" class="text-center py-5 small" style="color:var(--bb-muted)">' +
+    '<tr><td colspan="8" class="text-center py-5 small" style="color:var(--bb-muted)">' +
     '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>';
   try {
     const data = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads`);
@@ -2223,7 +2236,7 @@ function _sortLeads(leads) {
     let av = a[col], bv = b[col];
     if (col === 'company') { av = (a.company || a.domain || '').toLowerCase(); bv = (b.company || b.domain || '').toLowerCase(); }
     if (col === 'priority') { const order = { A:1, B:2, C:3 }; av = order[av] || 99; bv = order[bv] || 99; }
-    if (col === 'contact_count') { av = av ?? -1; bv = bv ?? -1; }
+    if (col === 'contact_count' || col === 'page_count') { av = (av != null && av !== '') ? Number(av) : -1; bv = (bv != null && bv !== '') ? Number(bv) : -1; }
     if (av == null) av = '';
     if (bv == null) bv = '';
     if (av < bv) return -1 * dir;
@@ -2289,7 +2302,7 @@ async function _restoreExpanded() {
 function renderSitesTable(leads) {
   const tbody = document.getElementById('sites-body');
   if (!leads.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-5 small" style="color:var(--bb-muted)">No sites match the filter.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5 small" style="color:var(--bb-muted)">No sites match the filter.</td></tr>';
     return;
   }
   tbody.innerHTML = leads.map(l => {
@@ -2306,6 +2319,7 @@ function renderSitesTable(leads) {
         </a>
       </td>
       <td style="font-size:12px">${escapeHtml(l.ai_sector||'—')}</td>
+      <td class="text-center" style="font-size:12px;color:#475569">${l.page_count!=null&&l.page_count!==''?l.page_count:'—'}</td>
       <td style="font-size:12px;color:#475569">${escapeHtml((l.summary||'').slice(0,120)||'—')}</td>
       <td class="text-center" style="font-size:11px;white-space:nowrap">${_leadCountHtml(l)}</td>
       <td>${priorityBadge(l.priority)}</td>
@@ -2889,7 +2903,120 @@ async function confirmReset() {
     btn.disabled = false;
   }
 }
-</script>
 
+async function scrapeEmails() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const fb  = document.getElementById('sync-feedback');
+  const btn = document.getElementById('scrape-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Scraping…';
+  fb.style.display = 'none';
+  try {
+    const r = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/scrape-emails`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})
+    });
+    if (r.status === 'error') throw new Error(r.message || 'scrape failed');
+    fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
+    fb.innerHTML = `<i class="ti ti-clock me-1"></i>Scraping websites for emails… (job ${r.job_id || ''})`;
+    fb.style.display = '';
+    if (r.job_id) pollScrape(r.job_id);
+    else btnScrapeReset();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = 'Scrape failed: ' + (e.message || e);
+    fb.style.display = '';
+    btnScrapeReset();
+  }
+  function btnScrapeReset() {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-mail-search me-1"></i>Scrape site';
+  }
+}
+
+async function pollScrape(jobId) {
+  const fb  = document.getElementById('sync-feedback');
+  const btn = document.getElementById('scrape-btn');
+  function reset() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-mail-search"></i>'; }
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const j = await fetchJSON(`${BASE}/api/crm/status/${jobId}`);
+      if (j.status === 'done') {
+        const res = j.result || {};
+        fb.className = 'alert alert-success py-1 px-2 small py-2 small mt-2';
+        fb.innerHTML = `<i class="ti ti-check me-1"></i>Scrape done — ${res.scraped||0} sites, ${res.new_contacts||0} new contacts, ${res.pages_updated||0} page counts updated.`;
+        loadSitesAndContacts(document.getElementById('campaign-select').value);
+        reset(); return;
+      }
+      if (j.status === 'error') {
+        fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+        fb.textContent = 'Scrape failed: ' + (j.error || j.message || 'unknown error');
+        reset(); return;
+      }
+    } catch(e) { /* keep polling */ }
+  }
+  fb.className = 'alert alert-warning py-1 px-2 small mt-2 mb-0';
+  fb.textContent = 'Scrape timed out — check job status.';
+  reset();
+}
+
+async function enrichNames() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const fb  = document.getElementById('sync-feedback');
+  const btn = document.getElementById('enrich-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>';
+  fb.style.display = 'none';
+  try {
+    const r = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/name-enrich`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})
+    });
+    if (r.status === 'error') throw new Error(r.message || 'enrich failed');
+    fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
+    fb.innerHTML = `<i class="ti ti-clock me-1"></i>Enriching names… (job ${r.job_id || ''})`;
+    fb.style.display = '';
+    if (r.job_id) pollEnrich(r.job_id);
+    else btnEnrichReset();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = 'Enrich failed: ' + (e.message || e);
+    fb.style.display = '';
+    btnEnrichReset();
+  }
+  function btnEnrichReset() {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-user-search"></i>';
+  }
+}
+
+async function pollEnrich(jobId) {
+  const fb  = document.getElementById('sync-feedback');
+  const btn = document.getElementById('enrich-btn');
+  function reset() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-user-search"></i>'; }
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const j = await fetchJSON(`${BASE}/api/crm/status/${jobId}`);
+      if (j.status === 'done') {
+        const res = j.result || {};
+        fb.className = 'alert alert-success py-1 px-2 small mt-2';
+        fb.innerHTML = `<i class="ti ti-check me-1"></i>Enrich done — ${res.resolved||0} names resolved.`;
+        loadContacts(document.getElementById('campaign-select').value);
+        reset(); return;
+      }
+      if (j.status === 'error') {
+        fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+        fb.textContent = 'Enrich failed: ' + (j.error || j.message || 'unknown error');
+        reset(); return;
+      }
+    } catch(e) { /* keep polling */ }
+  }
+  fb.className = 'alert alert-warning py-1 px-2 small mt-2 mb-0';
+  fb.textContent = 'Enrich timed out — check job status.';
+  reset();
+}
+</script>
 </body>
 </html>

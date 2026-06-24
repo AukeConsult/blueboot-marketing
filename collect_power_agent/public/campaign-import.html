@@ -30,9 +30,9 @@
         <div class="card-body">
 
           <div class="mb-3">
-            <label class="form-label">Campaign ID</label>
+            <label class="form-label">Campaign ID <span class="text-muted">(optional)</span></label>
             <input type="text" id="campaign-id" class="form-control" placeholder="e.g. NO_tech_jul01" />
-            <div class="form-text">Campaign will be created if it does not exist yet.</div>
+            <div class="form-text">Leave blank to use the campaign ID from the Excel file's Campaign column. Campaign will be created if it does not exist yet.</div>
           </div>
 
           <div class="mb-3">
@@ -178,7 +178,6 @@ function setFile(file) {
 
 async function runImport() {
   const campaignId = document.getElementById('campaign-id').value.trim();
-  if (!campaignId) { setFeedback('<i class="ti ti-circle-x me-1"></i>Campaign ID is required.', 'danger'); return; }
   if (!_selectedFile) { setFeedback('<i class="ti ti-circle-x me-1"></i>Please select a file.', 'danger'); return; }
 
   const dryRun  = document.getElementById('dry-run').checked;
@@ -235,21 +234,23 @@ function showResult(d, dryRun) {
     warnBox.style.display = 'none';
   }
 
+  // Show detected campaign if UI field was left blank
+  const campLabel = d.campaign_id ? ` <code>${escapeHtml(d.campaign_id)}</code>` : '';
   const confirmBtn = document.getElementById('confirm-btn');
   if (dryRun) {
     confirmBtn.style.display = '';
-    setFeedback('<i class="ti ti-check me-1"></i>Dry run complete — review counts below then confirm.', 'info');
+    setFeedback(`<i class="ti ti-check me-1"></i>Dry run complete${campLabel} — review counts below then confirm.`, 'info');
   } else {
     confirmBtn.style.display = 'none';
     const total = (d.leads_new + d.leads_updated + d.contacts_new + d.contacts_updated);
-    setFeedback(`<i class="ti ti-check me-1"></i>Import complete — ${total} records written.`, 'success');
+    setFeedback(`<i class="ti ti-check me-1"></i>Import complete${campLabel} — ${total} records written.`, 'success');
   }
   document.getElementById('result-card').style.display = '';
 }
 
 async function confirmImport() {
   const campaignId = document.getElementById('campaign-id').value.trim();
-  if (!_selectedFile || !campaignId) return;
+  if (!_selectedFile) return;
 
   const btn     = document.getElementById('confirm-btn');
   btn.disabled  = true;

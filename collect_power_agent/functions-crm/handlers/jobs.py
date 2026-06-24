@@ -97,8 +97,7 @@ def campaign_import():
       dry_run      -- 'true' | '1' to preview counts without writing (default: false)
     """
     campaign_id = (request.form.get("campaign_id") or "").strip()
-    if not campaign_id:
-        return _err("campaign_id is required", 400)
+    # campaign_id may be empty — the sheet's Campaign column is used as fallback
 
     if "file" not in request.files:
         return _err("file is required (multipart field 'file')", 400)
@@ -112,9 +111,13 @@ def campaign_import():
     try:
         from crm.campaign_import_lib import parse_sheet, run_campaign_import
         file_bytes = uploaded.read()
-        rows, warnings = parse_sheet(file_bytes)
+        rows, warnings, detected_campaign_id = parse_sheet(file_bytes)
         db = _get_db()
-        result = run_campaign_import(db, campaign_id, rows, dry_run=dry_run)
+        result = run_campaign_import(
+            db, campaign_id, rows,
+            dry_run=dry_run,
+            detected_campaign_id=detected_campaign_id,
+        )
         result["warnings"] = warnings
         result["rows_parsed"] = len(rows)
         return jsonify({"status": "ok", **result})
@@ -344,6 +347,17 @@ def worker(name, job_id):
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 })
 
+        elif name == "scrape-emails":
+            from crm.campaign_scrape_lib import run_campaign_scrape
+            dry_run = bool(body.get("dry_run", False))
+            result = run_campaign_scrape(
+                db,
+                campaign_id=body.get("campaign_id", "").strip(),
+                force=bool(body.get("force", False)),
+                workers=int(body.get("workers", 6)),
+                dry_run=dry_run,
+            )
+
         elif name == "name-enrich":
             from crm.name_enrich_lib import enrich_email_list, _enrich, _doc_id_from_email
             import asyncio as _asyncio
@@ -515,5 +529,6 @@ def list_jobs():
         j = d.to_dict()
         if campaign_id and (j.get("params") or {}).get("campaign_id") != campaign_id:
             continue
-        jobs.append(j)
-    return jsonify({"jobs": jobs, "count": len(jobs)})
+        jobs.append({**j, "job_id": d.id})
+
+    return jsonify({"status": "ok", "jobs": jobs})

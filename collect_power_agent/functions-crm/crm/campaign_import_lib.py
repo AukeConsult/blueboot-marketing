@@ -83,11 +83,14 @@ def lead_id_from_website(website: str) -> str:
 # Sheet parsing
 # ---------------------------------------------------------------------------
 
-def parse_sheet(file_bytes: bytes) -> tuple[list[dict], list[str]]:
+def parse_sheet(file_bytes: bytes) -> tuple[list[dict], list[str], str]:
     """Parse the Leads+Contacts tab from xlsx bytes.
 
-    Returns (rows, warnings) where each row is a plain dict keyed by
-    column header (lowercased + spaces→underscores).
+    Returns (rows, warnings, detected_campaign_id) where:
+    - rows: list of dicts keyed by normalised column header
+    - warnings: list of row-level warning strings
+    - detected_campaign_id: campaign_id found in the sheet's Campaign column
+      (empty string if not found — caller decides whether to require it)
     """
     from openpyxl import load_workbook
     wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
@@ -109,7 +112,7 @@ def parse_sheet(file_bytes: bytes) -> tuple[list[dict], list[str]]:
     if not header_row:
         raise ValueError(f"'{TAB_NAME}' tab is empty.")
 
-    # Normalise headers: "Lead ID" -> "lead_id"
+    # Normalise headers: "Lead ID" -> "lead_id", "Campaign" -> "campaign"
     headers = [
         re.sub(r"[^a-z0-9]+", "_", str(h or "").lower()).strip("_")
         for h in header_row
@@ -117,6 +120,7 @@ def parse_sheet(file_bytes: bytes) -> tuple[list[dict], list[str]]:
 
     rows = []
     warnings = []
+    detected_campaign_id = ""
     for i, raw in enumerate(rows_iter, start=2):
         row = {headers[j]: (str(v).strip() if v is not None else "")
                for j, v in enumerate(raw) if j < len(headers)}
@@ -125,9 +129,14 @@ def parse_sheet(file_bytes: bytes) -> tuple[list[dict], list[str]]:
         if not email and not website:
             warnings.append(f"Row {i}: skipped — no email or website")
             continue
+        # Pick up campaign_id from the "Campaign" column on the first valid row
+        if not detected_campaign_id:
+            detected_campaign_id = (
+                row.get("campaign_id") or row.get("campaign") or ""
+            ).strip()
         rows.append(row)
 
-    return rows, warnings
+    return rows, warnings, detected_campaign_id
 
 
 # ---------------------------------------------------------------------------
@@ -174,13 +183,17 @@ def run_campaign_import(
     rows: list[dict],
     *,
     dry_run: bool = False,
+    detected_campaign_id: str = "",
 ) -> dict:
     """Import rows into campaign_leads + campaign_contacts.
 
     Returns a summary dict with counts.
+    campaign_id may be empty when the caller passes detected_campaign_id
+    extracted from the sheet — the detected value is used as fallback.
     """
+    campaign_id = campaign_id.strip() or detected_campaign_id.strip()
     if not campaign_id:
-        raise ValueError("campaign_id is required")
+        raise ValueError("campaign_id is required (not found in form or in the Excel file)")
     if not rows:
         return {
             "campaign_id":      campaign_id,
@@ -201,7 +214,7 @@ def run_campaign_import(
 
     for row in rows:
         # Resolve lead_id
-        lead_id = row.get("lead_id", "").strip()
+        lead_id = re.sub(r"[^a-z0-9_-]+", "_", row.get("lead_id", "").strip().lower()).strip("_")
         website = row.get("website", "").strip()
         if not lead_id:
             if not website:
@@ -209,23 +222,28 @@ def run_campaign_import(
                 continue
             lead_id = lead_id_from_website(website)
 
-        # Resolve contact doc_id
+        # Build lead doc (always — even if email is missing)
+        if lead_id not in leads_by_id:
+            lead: dict = {"lead_id": lead_id, "campaign_id": campaign_id}
+            for f in _LEAD_FIELDS:
+                v = row.get(f, "")
+                if v:
+                    if f == "page_count":
+                        try:
+                            lead[f] = int(float(v))
+                        except (ValueError, TypeError):
+                            pass
+                    else:
+                        lead[f] = v
+            leads_by_id[lead_id] = lead
+
+        # Build contact doc — skip if no email
         email = row.get("email", "").strip()
         if not email:
             skipped += 1
             continue
         doc_id = contact_id_from_email(email)
 
-        # Build lead doc (first occurrence wins for shared fields)
-        if lead_id not in leads_by_id:
-            lead: dict = {"lead_id": lead_id, "campaign_id": campaign_id}
-            for f in _LEAD_FIELDS:
-                v = row.get(f, "")
-                if v:
-                    lead[f] = v
-            leads_by_id[lead_id] = lead
-
-        # Build contact doc
         contact: dict = {"lead_id": lead_id, "campaign_id": campaign_id}
         for f in _CONTACT_FIELDS:
             v = row.get(f, "")

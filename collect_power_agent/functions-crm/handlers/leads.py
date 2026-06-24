@@ -3,7 +3,7 @@ from __future__ import annotations
 import re as _re
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
-from handlers.shared import _get_db, _new_job, _enqueue_task, _ok, _err
+from handlers.shared import _get_db, _new_job, _enqueue_task, _accepted, _ok, _err
 
 bp = Blueprint("leads", __name__)
 
@@ -118,11 +118,24 @@ def name_enrich_campaign(campaign_id):
         body       = request.get_json(silent=True) or {}
         dry_run    = bool(body.get("dry_run", False))
         skip_ai    = bool(body.get("skip_ai", False))
-        job_params = {"campaign_id": campaign_id, "emails": [],
+        job_params = {"campaign_id": campaign_id,
                       "dry_run": dry_run, "skip_ai": skip_ai}
         job_id     = _new_job("name-enrich", job_params)
         _enqueue_task("name-enrich", job_id, job_params)
-        from handlers.shared import _accepted
         return _accepted(job_id, "name-enrich")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/campaigns/<campaign_id>/scrape-emails", methods=["POST"])
+def scrape_emails_campaign(campaign_id):
+    """Scrape contact emails from all non-excluded campaign_leads websites."""
+    try:
+        body       = request.get_json(silent=True) or {}
+        force      = bool(body.get("force", False))
+        job_params = {"campaign_id": campaign_id, "force": force}
+        job_id     = _new_job("scrape-emails", job_params)
+        _enqueue_task("scrape-emails", job_id, job_params)
+        return _accepted(job_id, "scrape-emails")
     except Exception as exc:
         return _err(str(exc), 500)
