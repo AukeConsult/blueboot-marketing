@@ -419,6 +419,8 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
         <table class="table table-sm table-hover mb-0">
           <thead class="bb-thead"><tr>
             <th class="small bb-sortable" data-col="status" onclick="sortBy('status')">Status <span class="sort-icon"></span></th>
+            <th class="small bb-sortable" data-col="followup_status" onclick="sortBy('followup_status')">Follow-up <span class="sort-icon"></span></th>
+            <th class="small bb-sortable" data-col="last_sent" onclick="sortBy('last_sent')">Mail sent <span class="sort-icon"></span></th>
             <th class="small bb-sortable" data-col="name" onclick="sortBy('name')">Name <span class="sort-icon"></span></th>
             <th class="small bb-sortable" data-col="email" onclick="sortBy('email')">Email <span class="sort-icon"></span></th>
             <th class="small bb-sortable" data-col="title" onclick="sortBy('title')">Title <span class="sort-icon"></span></th>
@@ -752,6 +754,7 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
 <script src="firebase-config.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/crm-common.js"></script>
+<script src="js/crm-defs.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
 <script src="js/mail-editor-component.js"></script>
 <script src="vendor/bootstrap.bundle.min.js"></script>
@@ -787,6 +790,33 @@ function campaignStatusLabel(s) {
 function statusBadge(s) {
   const st = campaignStatus(s);
   return `<span class="bb-badge bb-badge-${st}">${campaignStatusLabel(st)}</span>`;
+}
+
+function sentMails(c) {
+  const list = Array.isArray(c.mail_sent) ? c.mail_sent.filter(m => m && m.sent_at) : [];
+  return list.slice().sort((a, b) => String(a.sent_at).localeCompare(String(b.sent_at)));
+}
+
+function lastSentAt(c) {
+  const list = sentMails(c);
+  return list.length ? String(list[list.length - 1].sent_at) : '';
+}
+
+function mailSentCell(c) {
+  const list = sentMails(c);
+  if (!list.length) return '<span class="text-muted">—</span>';
+  const last = list[list.length - 1];
+  const tip = list.map(m => `${m.mail_type || 'mail'}: ${fmt(m.sent_at)}`).join('\n');
+  const more = list.length > 1 ? ` <span class="text-muted">(${list.length} mails)</span>` : '';
+  return `<span title="${escapeHtml(tip)}">${fmt(last.sent_at)}</span>`
+       + `<br><span class="text-muted">${escapeHtml(last.mail_type || 'mail')}${more}</span>`;
+}
+
+function followupStatusBadge(v) {
+  const val = String(v || '').trim().toLowerCase();
+  const def = FU_STATUSES.find(x => x.value === val);
+  if (!val || !def) return '<span class="text-muted">—</span>';
+  return `<span class="bb-badge bb-badge-fu-${val}">${escapeHtml(def.label)}</span>`;
 }
 
 function contactStatusBadge(s) {
@@ -1156,6 +1186,8 @@ function renderContacts(list) {
 
       ${cStatus !== 'pending' && c.sent_at ? `<br><span style="font-size:.72rem;color:var(--bb-muted)">${fmt(c.sent_at)}</span>` : ''}
     </td>
+    <td class="small">${followupStatusBadge(c.followup_status)}</td>
+    <td class="small">${mailSentCell(c)}</td>
     <td class="small"><span class="editable-cell" data-field="name" data-doc="${c.doc_id||(c.email||"").replace(/[^a-zA-Z0-9_-]/g,"_").toLowerCase()}" data-email="${c.email}">${escapeHtml(c.name||'')}<span class="edit-placeholder" style="color:var(--bb-muted)">${c.name?'':'—'}</span></span></td>
     <td class="small"><a href="mailto:${c.email}">${c.email||'—'}</a></td>
     <td class="small"><span class="editable-cell" data-field="title" data-doc="${c.doc_id||(c.email||"").replace(/[^a-zA-Z0-9_-]/g,"_").toLowerCase()}" data-email="${c.email}">${escapeHtml(c.title||'')}<span class="edit-placeholder" style="color:var(--bb-muted)">${c.title?'':'—'}</span></span></td>
@@ -1341,8 +1373,8 @@ function sortBy(col) {
 function _applySort(list) {
   if (!_sortCol) return list;
   return [...list].sort((a, b) => {
-    const va = String(a[_sortCol] || '').toLowerCase();
-    const vb = String(b[_sortCol] || '').toLowerCase();
+    const va = (_sortCol === 'last_sent' ? lastSentAt(a) : String(a[_sortCol] || '')).toLowerCase();
+    const vb = (_sortCol === 'last_sent' ? lastSentAt(b) : String(b[_sortCol] || '')).toLowerCase();
     return _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
   });
 }

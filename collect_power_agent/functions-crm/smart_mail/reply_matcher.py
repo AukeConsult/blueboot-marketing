@@ -490,15 +490,13 @@ def _process_account(
                                 "match_contact_doc_id": contact_doc_id,
                                 "match_outcome":        outcome,
                             })
+                            # Only a MATCHED bounce is queued for deletion
+                            bounce_to_del.append(eid)
                     else:
-                        print(f"[reply_matcher]     ✗ NO MATCH")
+                        print(f"[reply_matcher]     ✗ NO MATCH  (kept in mailbox)")
                         counts["unmatched"] += 1
                         if not dry_run:
                             _audit_log(db, message_id, {**message, "match_outcome": "unmatched"})
-
-                    # Contacts are now updated — queue this bounce for deletion
-                    if not dry_run:
-                        bounce_to_del.append(eid)
 
                 else:  # reply
                     counts["replies"] += 1

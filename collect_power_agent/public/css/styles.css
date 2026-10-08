@@ -224,6 +224,15 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 .comment-row-input:focus { outline: none; box-shadow: none; background: transparent; }
 .comment-row-input::placeholder { color: #9ca3af; }
 
+/* Follow-up status badges (campaign.html contact list) */
+.bb-badge-fu-in_work         { background: #dbeafe; color: #1d4ed8; }
+.bb-badge-fu-contacted       { background: #e0e7ff; color: #4338ca; }
+.bb-badge-fu-received        { background: #ccfbf1; color: #0f766e; }
+.bb-badge-fu-replied         { background: #dcfce7; color: #15803d; }
+.bb-badge-fu-meeting         { background: #f3e8ff; color: #7e22ce; }
+.bb-badge-fu-offer           { background: #d1fae5; color: #047857; }
+.bb-badge-fu-not_interested  { background: #f4f5f7; color: #6b7280; }
+
 /* Discreet icon-only refresh button — used on all page headers */
 .bb-btn-refresh {
   background: none;
