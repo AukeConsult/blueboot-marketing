@@ -240,7 +240,11 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
   color: var(--bb-muted, #9ca3af);
   padding: .25rem .35rem;
   line-height: 1;
-  border-r
+  border-radius: .375rem;
+  cursor: pointer;
+}
+.bb-btn-refresh:hover { color: var(--bb-text, #111827); }
+
 /* ── crm-contact.html (single-contact follow-up page) ───────────────────────── */
 .cc-avatar {
   width: 48px; height: 48px; border-radius: 50%;
