@@ -59,6 +59,22 @@ _ROLE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Phone: optional +, then 7-15 digits with common separators (spaces, dashes, dots, parens).
+# We strip non-digits after match and require 7-15 digits to weed out false positives.
+PHONE_PATTERN = (
+    r"(?<![0-9])"           # not preceded by digit (avoid matching inside longer numbers)
+    r"(\+?[\d][\d\s\-\.\(\)/]{5,20}[\d])"
+    r"(?![0-9])"            # not followed by digit
+)
+_PHONE_RE = re.compile(PHONE_PATTERN)
+
+# Reject date-like strings: DD.MM.YYYY  DD/MM/YYYY  DD-MM-YYYY
+_DATE_RE = re.compile(r"^\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4}$")
+# Reject time / time-range strings: HH.MM  HH:MM  HH.MM-HH.MM  HH.MM HH.MM
+_TIME_RE = re.compile(r"^\d{1,2}[.:]\d{2}(?:[\s\-\u2013]+\d{1,2}[.:]\d{2})?$")
+
+_MAX_CONTACT_PAGES = 10   # fetch up to 10 contact/about pages per site
+
 
 # ---------------------------------------------------------------------------
 # Inline BoundedFetcher / Worker / WorkerResult
@@ -150,9 +166,41 @@ def _contact_id(email: str) -> str:
     return re.sub(r"_+", "_", s).strip("_")
 
 
-def _extract_emails(html: str) -> dict:
-    """Return {email: name} -- name from mailto anchors where available."""
-    names: dict = {}
+def _html_to_text(html: str) -> str:
+    """Strip tags and collapse whitespace — used for AI and phone extraction."""
+    t = re.sub(r"<(script|style)[^>]*>[\s\S]*?</\1>", " ", html, flags=re.IGNORECASE)
+    t = re.sub(r"<[^>]+>", " ", t)
+    t = re.sub(r"&[a-z]+;|&#\d+;", " ", t)
+    return re.sub(r"[ \t]{2,}", " ", t).strip()
+
+
+def _extract_phones(text: str) -> list[str]:
+    """Return de-duplicated list of plausible phone numbers from plain text."""
+    seen: set[str] = set()
+    phones: list[str] = []
+    for m in _PHONE_RE.finditer(text):
+        raw    = m.group(1).strip()
+        digits = re.sub(r"\D", "", raw)
+        if not (7 <= len(digits) <= 15):
+            continue
+        # Reject dates (DD.MM.YYYY) and time ranges (HH.MM-HH.MM / HH.MM HH.MM)
+        if _DATE_RE.match(raw) or _TIME_RE.match(raw):
+            continue
+        if raw not in seen:
+            seen.add(raw)
+            phones.append(raw)
+    return phones
+
+
+def _extract_contacts(html: str) -> dict:
+    """Return {email: {"name": str, "phone": str}} from page HTML.
+
+    - Emails found via regex (role addresses filtered out).
+    - Names from <a href=mailto:...>Name</a> anchors near each email.
+    - Phone from plain text near the email address (within 300 chars).
+    """
+    # ── names from mailto anchors ────────────────────────────────────────────
+    names: dict[str, str] = {}
     for m in _MAILTO_RE.finditer(html):
         addr = m.group(1).strip().lower()
         text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", m.group(2))).strip()
@@ -160,8 +208,11 @@ def _extract_emails(html: str) -> dict:
         if 1 < len(words) <= 5 and all(w[0].isupper() for w in words if w.isalpha()):
             names[addr] = text
 
+    # ── decode JS unicode escapes then find emails ───────────────────────────
     decoded = re.sub(r"""\\u([0-9a-fA-F]{4})""", lambda m: chr(int(m.group(1), 16)), html)
-    emails: dict = {}
+    plain   = _html_to_text(decoded)
+
+    contacts: dict[str, dict] = {}
     for e in _EMAIL_RE.findall(decoded):
         e = e.strip(".,;:()[]<>").lower()
         if not e or "@" not in e:
@@ -171,27 +222,122 @@ def _extract_emails(html: str) -> dict:
             continue
         if len(local) >= 16 and re.fullmatch(r"[0-9a-f\-]+", local):
             continue
-        if e not in emails:
-            emails[e] = names.get(e, "")
-    return emails
+        if e in contacts:
+            continue
+
+        # ── phone: look within ±300 chars of the email in plain text ─────────
+        phone = ""
+        idx = plain.find(e)
+        if idx >= 0:
+            snippet = plain[max(0, idx - 300): idx + 300]
+            phones  = _extract_phones(snippet)
+            if phones:
+                phone = phones[0]
+
+        contacts[e] = {"name": names.get(e, ""), "phone": phone}
+    return contacts
 
 
-def _find_contact_links(html: str, base_url: str, max_links: int = 5) -> list:
+def _find_contact_links(html: str, base_url: str, max_links: int = _MAX_CONTACT_PAGES) -> list:
+    """Return all same-domain URLs whose path contains a contact-related keyword."""
     dom = _domain_of(base_url)
-    links: list = []
+    seen: set[str] = set()
+    links: list[str] = []
     for m in _HREF_RE.finditer(html):
         href = m.group(1).strip()
         if href.startswith(("#", "mailto:", "tel:", "javascript:")):
             continue
         full = urljoin(base_url, href).split("#")[0].split("?")[0]
-        if _domain_of(full) != dom:
+        if _domain_of(full) != dom or full == base_url:
+            continue
+        if full in seen:
             continue
         path = urlparse(full).path.lower()
-        if any(w in path for w in _CONTACT_WORDS) and full not in links:
+        if any(w in path for w in _CONTACT_WORDS):
+            seen.add(full)
             links.append(full)
         if len(links) >= max_links:
             break
     return links
+
+
+# ---------------------------------------------------------------------------
+# AI contact extraction
+# ---------------------------------------------------------------------------
+
+_AI_ENRICH_SYSTEM = (
+    "You are given a list of email addresses, each followed by a short text snippet "
+    "extracted from the web page near that email. "
+    "For EACH email, find the person's name and phone number within its snippet. "
+    "\n\n"
+    "RULES:\n"
+    "- email: copy the address exactly as given — do NOT change, add, or remove any email. "
+    "- name: the person's full name visible in the snippet (same line, line above, or after "
+    "  a label like Navn:, Name:, Kontakt:). Do NOT invent names. Empty string if not found. "
+    "- phone: the phone number visible in the snippet closest to the email. "
+    "  Valid: 7-15 digits, optional + or country code (+47 +46 +45 etc.), "
+    "  groups separated by spaces, dashes, or dots (e.g. 95 91 65 55, +47 22 33 44 55). "
+    "  IGNORE: dates (08.01.2026, 2026-01-08), opening hours (08:00-15:30, 08.00-16.00), "
+    "  times (14:30), postal codes (4-5 standalone digits), org/VAT numbers. "
+    "  Empty string if no valid phone found. "
+    "\n\n"
+    "OUTPUT: a single JSON object, no markdown:\n"
+    '{"contacts": [{"email": "...", "name": "...", "phone": "..."}]}\n'
+    "Return one entry per input email, in the same order. "
+    'If a field is unknown use "".' 
+)
+
+_SNIPPET_WINDOW = 600   # chars on each side of the email address in plain text
+
+
+async def _ai_extract_contacts(
+    html: str,
+    url: str,
+    openai_client,
+    emails: list[str],          # already regex-found, role-filtered emails
+    model: str = "gpt-5.4-nano",
+) -> list[dict]:
+    """Enrich a known list of emails with name + phone using the surrounding page text.
+
+    The AI receives each email and a ~1200-char plain-text window around it.
+    It never decides which emails are valid — that's the regex's job.
+    Falls back to [] on any error so callers never crash.
+    """
+    if not emails or not openai_client:
+        return []
+    plain = _html_to_text(html)[:60000]
+    if not plain.strip():
+        return []
+
+    # Build per-email snippets
+    lines: list[str] = []
+    for email in emails:
+        idx = plain.lower().find(email.lower())
+        if idx >= 0:
+            snippet = plain[max(0, idx - _SNIPPET_WINDOW): idx + _SNIPPET_WINDOW + len(email)]
+        else:
+            snippet = plain[:_SNIPPET_WINDOW * 2]   # fallback: top of page
+        lines.append(f"EMAIL: {email}\nSNIPPET:\n{snippet.strip()}")
+
+    user_msg = f"URL: {url}\n\n" + "\n\n---\n\n".join(lines)
+
+    try:
+        import json as _json
+        resp = await openai_client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": _AI_ENRICH_SYSTEM},
+                {"role": "user",   "content": user_msg},
+            ],
+            temperature=0.0,
+            max_tokens=2000,
+            response_format={"type": "json_object"},
+        )
+        data = _json.loads(resp.choices[0].message.content or "{}")
+        return data.get("contacts") or []
+    except Exception:
+        return []
+
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +381,8 @@ _PROTECTED = {
 
 
 def _write_contacts(db, campaign_id: str, lead_id: str,
-                    emails: dict, existing: set, now: str) -> tuple:
+                    emails: dict, existing: set, now: str,
+                    lead_data: dict | None = None) -> tuple:
     contacts_col = (db.collection(CAMPAIGNS_COLLECTION)
                       .document(campaign_id)
                       .collection(CAMPAIGN_CONTACTS_SUB))
@@ -245,10 +392,22 @@ def _write_contacts(db, campaign_id: str, lead_id: str,
                    .document(lead_id))
     batch = db.batch()
     new_count = upd_count = 0
-    for email, name in emails.items():
+    for email, info in emails.items():
+        # info is {name, phone} dict (new) or bare name string (legacy)
+        if isinstance(info, dict):
+            name  = info.get("name", "")
+            phone = info.get("phone", "")
+        else:
+            name  = info or ""
+            phone = ""
         cid = _contact_id(email)
+        ld  = lead_data or {}
         doc = {"lead_id": lead_id, "campaign_id": campaign_id,
-               "email": email, "name": name, "scraped_at": now}
+               "email": email, "name": name, "phone": phone, "scraped_at": now,
+               "website": ld.get("website", ""),
+               "domain":  ld.get("domain",  ""),
+               "company": ld.get("company_name") or ld.get("company") or ld.get("title", ""),
+               "country": ld.get("country", "")}
         if cid in existing:
             batch.update(contacts_col.document(cid),
                          {k: v for k, v in doc.items() if k not in _PROTECTED})
@@ -298,7 +457,7 @@ class LeadEmailWorker(Worker):
                 html = await self._fetcher.get(cu, timeout=FETCH_TIMEOUT)
                 if html:
                     pages[cu] = html
-            return _extract_emails("\n".join(pages.values())) if pages else {}
+            return _extract_contacts("\n".join(pages.values())) if pages else {}
 
         async def _read_page_count() -> int | None:
             if self.data.get("page_count"):
@@ -412,8 +571,8 @@ async def _run(db, campaign_id: str, leads: list,
                         new_c, upd_c = await asyncio.wait_for(
                             loop.run_in_executor(
                                 None,
-                                lambda _lid=lead_id, _em=dict(worker.found): _write_contacts(
-                                    db, campaign_id, _lid, _em, existing, now
+                                lambda _lid=lead_id, _em=dict(worker.found), _ld=dict(data): _write_contacts(
+                                    db, campaign_id, _lid, _em, existing, now, _ld
                                 ),
                             ),
                             timeout=WRITE_TIMEOUT,

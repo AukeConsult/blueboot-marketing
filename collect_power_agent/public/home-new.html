@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot CRM — Home preview</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+.home-shell{max-width:920px;padding-top:64px;padding-bottom:72px}.home-hero{max-width:620px;margin:0 auto 48px;text-align:center}.home-mark{width:48px;height:48px;margin:0 auto 18px;border-radius:13px;display:grid;place-items:center;color:var(--bb-accent);background:#eef0ff;font-size:1.45rem}.home-hero h1{color:#111827;font-size:2rem;font-weight:700;letter-spacing:-.03em;margin-bottom:.65rem}.home-hero p{color:var(--bb-muted);font-size:1rem;line-height:1.65;margin:0 auto 1.4rem}.home-actions{display:flex;justify-content:center;gap:.65rem;flex-wrap:wrap}.home-actions .btn{min-width:145px;font-weight:600;padding:.6rem 1rem}.section-title{font-size:.78rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.8rem}.workflow{display:grid;grid-template-columns:repeat(4,1fr);background:#fff;border:1px solid var(--bb-border);border-radius:12px;overflow:hidden}.workflow-step{position:relative;padding:1.15rem;min-height:132px;border-right:1px solid var(--bb-border)}.workflow-step:last-child{border-right:0}.workflow-number{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;border-radius:50%;color:#fff;background:var(--bb-accent);font-size:.73rem;font-weight:700;margin-bottom:.7rem}.workflow-step h2{font-size:.95rem;font-weight:650;color:#111827;margin:0 0 .3rem}.workflow-step p{font-size:.82rem;line-height:1.5;color:var(--bb-muted);margin:0}.workflow-arrow{position:absolute;z-index:2;right:-11px;top:50%;transform:translateY(-50%);width:22px;height:22px;display:grid;place-items:center;border:1px solid var(--bb-border);border-radius:50%;background:#fff;color:#9ca3af;font-size:.75rem}.module-card{min-height:94px;border:1px solid var(--bb-border);border-radius:10px;background:#fff;padding:1rem;color:inherit;display:flex;align-items:center;gap:.85rem;text-decoration:none;transition:border-color .15s,box-shadow .15s,transform .15s}.module-card:hover{color:inherit;border-color:#cdd4f9;box-shadow:0 5px 16px rgba(17,24,39,.06);transform:translateY(-1px)}.module-icon{width:40px;height:40px;border-radius:9px;display:grid;place-items:center;flex:0 0 auto;color:var(--bb-accent);background:#f1f3ff;font-size:1.15rem}.module-card h2{font-size:.92rem;font-weight:650;color:#111827;margin:0 0 .2rem}.module-card p{font-size:.8rem;line-height:1.4;color:var(--bb-muted);margin:0}.module-chevron{margin-left:auto;color:#c0c5ce;font-size:.9rem}@media(max-width:767.98px){.home-shell{padding-top:40px}.home-hero{margin-bottom:36px}.home-hero h1{font-size:1.7rem}.workflow{grid-template-columns:1fr 1fr}.workflow-step{border-bottom:1px solid var(--bb-border)}.workflow-step:nth-child(2){border-right:0}.workflow-step:nth-child(3),.workflow-step:nth-child(4){border-bottom:0}.workflow-arrow{display:none}}@media(max-width:449.98px){.workflow{grid-template-columns:1fr}.workflow-step{min-height:auto;border-right:0;border-bottom:1px solid var(--bb-border)!important}.workflow-step:last-child{border-bottom:0!important}.home-actions .btn{width:100%}}
+</style>
+</head>
+<body>
+<div id="nav"></div>
+<main class="container home-shell">
+  <section class="home-hero">
+    <div class="home-mark"><i class="ti ti-bolt"></i></div>
+    <h1>Blueboot CRM</h1>
+    <p>Find the right companies, run focused outreach and manage every follow-up in one place.</p>
+    <div class="home-actions">
+      <a class="btn btn-primary" href="filter-facets.html"><i class="ti ti-plus me-1"></i>Create campaign</a>
+      <a class="btn btn-outline-secondary" href="crm_follow.html">Open follow-up</a>
+    </div>
+  </section>
+  <div class="section-title">How it works</div>
+  <section class="workflow mb-5" aria-label="Campaign workflow">
+    <div class="workflow-step"><span class="workflow-number">1</span><h2>Find leads</h2><p>Filter companies and contacts that match your target.</p><span class="workflow-arrow"><i class="ti ti-chevron-right"></i></span></div>
+    <div class="workflow-step"><span class="workflow-number">2</span><h2>Prepare</h2><p>Review contacts and write your outreach message.</p><span class="workflow-arrow"><i class="ti ti-chevron-right"></i></span></div>
+    <div class="workflow-step"><span class="workflow-number">3</span><h2>Activate</h2><p>Start the campaign and deliver the messages.</p><span class="workflow-arrow"><i class="ti ti-chevron-right"></i></span></div>
+    <div class="workflow-step"><span class="workflow-number">4</span><h2>Follow up</h2><p>Manage replies, dates, notes and next actions.</p></div>
+  </section>
+  <div class="section-title">Your workspace</div>
+  <section class="row g-3">
+    <div class="col-md-6"><a href="campaign.html" class="module-card h-100"><div class="module-icon"><i class="ti ti-speakerphone"></i></div><div><h2>Campaigns</h2><p>Prepare and manage outreach.</p></div><i class="ti ti-chevron-right module-chevron"></i></a></div>
+    <div class="col-md-6"><a href="crm_follow.html" class="module-card h-100"><div class="module-icon"><i class="ti ti-phone-check"></i></div><div><h2>Follow-up</h2><p>Manage contacts and next actions.</p></div><i class="ti ti-chevron-right module-chevron"></i></a></div>
+    <div class="col-md-6"><a href="filter-facets.html" class="module-card h-100"><div class="module-icon"><i class="ti ti-database-search"></i></div><div><h2>Find leads</h2><p>Search and filter your lead pool.</p></div><i class="ti ti-chevron-right module-chevron"></i></a></div>
+    <div class="col-md-6"><a href="mailbox.html" class="module-card h-100"><div class="module-icon"><i class="ti ti-inbox"></i></div><div><h2>Inbox</h2><p>Read replies from outreach accounts.</p></div><i class="ti ti-chevron-right module-chevron"></i></a></div>
+  </section>
+</main>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+</body>
+</html>
