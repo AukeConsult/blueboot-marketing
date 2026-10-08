@@ -2006,17 +2006,15 @@ the `leads_extract` Firestore collection. Used internally by other scripts.
 
 ---
 
-### `send_mail.py` / `mail_sender.py` / `mail_reader.py` — outreach email components
+### `mail_sender.py` / `mail_reader.py` — outreach email components
 
-Three components of the outreach email system:
+Two components of the outreach email system:
 
 | Script | Purpose |
 |---|---|
-| `send_mail.py` | Generates and sends personalised outreach emails via SMTP |
 | `mail_sender.py` | Low-level SMTP sending helper — rate limiting, retries, tracking |
 | `mail_reader.py` | IMAP reply reader — polls inbox, detects replies, updates `status=replied` |
 
-Requires SMTP credentials in `.env` (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `GMAIL_SENDER`).
 
 ---
 

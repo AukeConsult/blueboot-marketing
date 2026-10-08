@@ -40,13 +40,7 @@ class _Config:
     CRAWL_WORKERS: int         = int(os.getenv("CRAWL_WORKERS", "20"))
     LIMIT_PER_HOST: int        = int(os.getenv("LIMIT_PER_HOST", "3"))
 
-    # ── SMTP / mail ────────────────────────────────────────────────────────
-    SMTP_HOST:     str = os.getenv("SMTP_HOST",     "smtp.gmail.com")
-    SMTP_PORT:     int = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USER:     str = os.getenv("SMTP_USER",     "")
-    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
-    MAIL_FROM:     str = os.getenv("MAIL_FROM",     "")
-    MAIL_REPLY_TO: str = os.getenv("MAIL_REPLY_TO", "")
+    # ── Mail ───────────────────────────────────────────────────────────────
     GMAIL_SENDER:  str = os.getenv("GMAIL_SENDER",  "")
 
     # ── Misc ───────────────────────────────────────────────────────────────
@@ -94,7 +88,6 @@ class _Config:
             f"  GITHUB_TOKEN      = {mask(self.GITHUB_TOKEN)}\n"
             f"  MAX_RESULTS={self.MAX_RESULTS}  MIN_SCORE={self.MIN_SCORE}  "
             f"MAX_COUNTRY={self.MAX_COUNTRY}  CRAWL_WORKERS={self.CRAWL_WORKERS}\n"
-            f"  SMTP_HOST={self.SMTP_HOST}  SMTP_USER={self.SMTP_USER}\n"
             f")"
         )
 
