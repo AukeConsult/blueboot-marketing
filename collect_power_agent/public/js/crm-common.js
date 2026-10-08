@@ -216,6 +216,7 @@ const NAV_LINKS = [
       { href: 'doc-viewer.html?doc=followup-page-usage', icon: 'ti-help',           label: 'Follow-up page usage' },
       { href: 'doc-viewer.html?doc=filter-to-campaign',        icon: 'ti-filter',         label: 'Filter to campaign' },
       { href: 'doc-viewer.html?doc=campaign-import-export',    icon: 'ti-table-import',   label: 'Campaign import & export' },
+      { href: 'doc-viewer.html?doc=prospect-catalogue-sync',    icon: 'ti-address-book',   label: 'Prospect catalogue sync' },
       { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',     label: 'Pipeline config' },
       { href: 'doc-viewer.html?doc=ai-assistance',       icon: 'ti-brain',          label: 'AI assistance' },
       { divider: true },

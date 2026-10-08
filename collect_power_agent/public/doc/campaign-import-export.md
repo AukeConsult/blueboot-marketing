@@ -139,6 +139,10 @@ python app/campaign_importer.py NO_tech_jul01 campaign.xlsx
 
 Add `--dry-run` to preview counts without writing. Remove it to apply the import.
 
+To load the BlueSearch prospect spreadsheets (one file per country) and keep
+them up to date, use the prospect catalogue sync instead — see
+[Prospect Catalogue Sync](doc-viewer.html?doc=prospect-catalogue-sync).
+
 ---
 
 ## Column reference

@@ -1986,6 +1986,38 @@ It covers all five stages, every script, the contact schema, and the status life
 
 ---
 
+## `prospects_import.py` — sync the BlueSearch prospect catalogue into campaigns
+
+Reads every `.xlsx` in the shared prospects folder
+(`G:\Shared drives\BlueBoot R&D\marketing\prospects`, or `--dir` / env `PROSPECTS_DIR`),
+groups the rows by country and upserts them into one campaign per country
+(`BS_UK`, `BS_DK`, `BS_FI`, `BS_SE`, `BS_DE`, `BS_US`). New rows are created, changed
+rows are updated field by field, unchanged rows are left alone. Outreach state
+(`status`, `mail_sent`, `followup_*` ...) is never touched and nothing is deleted.
+
+**Dry run by default** — nothing is written until `--apply` is given.
+
+```bat
+run_prospects_import.bat                       :: preview (new / changed / unchanged)
+run_prospects_import.bat --apply               :: write to Firestore
+run_prospects_import.bat --country UK,DK       :: only these countries
+run_prospects_import.bat --file BlueSearch-UK-prospects.xlsx
+run_prospects_import.bat --campaign-only       :: skip site_leads / site_contacts / email_contacts
+```
+
+| Writes | Rule |
+|---|---|
+| `campaigns/{BS_xx}` | created as draft if missing |
+| `campaign_leads/{lead_id}` , `campaign_contacts/{doc_id}` | new / changed fields only |
+| `site_leads/{lead_id}` | created only when missing (existing crawler docs untouched) |
+| `site_leads/*/site_contacts`, `email_contacts/{doc_id}` | created, or empty fields filled |
+
+Logic: `functions-crm/crm/prospect_import_lib.py`. Full guide (column mapping, IDs, skipped
+rows, workflow): `public/doc/prospect-catalogue-sync.md` (also in the app under
+Docs → Prospect catalogue sync).
+
+---
+
 ## Additional Scripts
 
 ### `campaign_importer.py` — import campaign Excel back to Firestore

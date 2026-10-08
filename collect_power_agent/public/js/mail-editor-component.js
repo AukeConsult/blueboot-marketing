@@ -31,6 +31,7 @@
       this.stepIndex = null;
       this.stepNew = false;
       this.saveTimer = null;
+      this._queue = Promise.resolve();   // serialises saves
       this.quill = null;
       this.currentTab = 'wysiwyg';
       this.uid = 'me_' + Math.random().toString(36).slice(2, 9);
@@ -146,6 +147,17 @@
         const el = this.$(name);
         if (el) el.addEventListener('input', () => this.autoSave());
       });
+      // Raw HTML typed or pasted in the HTML tab is saved when the box loses focus,
+      // not only after the 0.9 s debounce.
+      this.$('bodyHtml').addEventListener('blur',   () => this.flush());
+      this.$('bodyHtml').addEventListener('change', () => this.flush());
+      this.$('subject').addEventListener('blur',    () => this.flush());
+      // HTML pasted into the Plain box -> switch to HTML mode so it is not sent as plain text.
+      this.$('bodyPlain').addEventListener('paste', () => setTimeout(() => this.detectPastedHtml(), 0));
+      // Do not lose a pending edit when the tab is hidden or closed.
+      this._onHide = () => { if (document.visibilityState === 'hidden') this.flush(true); };
+      document.addEventListener('visibilitychange', this._onHide);
+      window.addEventListener('pagehide', () => this.flush(true));
       this.$('typePlain').addEventListener('change', () => { this.switchMode(); this.autoSave(); });
       this.$('typeHtml').addEventListener('change', () => { this.switchMode(); this.autoSave(); });
       this.$('mainBtn').addEventListener('click', () => this.editCampaignMail());
@@ -157,6 +169,7 @@
     }
 
     async load({ campaignId, stepIndex = null, stepNew = false, stepName = '', delay = 0 } = {}) {
+      await this.flush();          // save any pending edit to the step we are leaving
       this.campaignId = campaignId || '';
       this.stepIndex = stepIndex != null ? parseInt(stepIndex, 10) : null;
       this.stepNew = !!stepNew;
@@ -223,9 +236,35 @@
       this.switchMode();
       if (type === 'html') {
         this.initQuill();
-        if (this.quill) this.quill.root.innerHTML = mail.body || '';
+        this._setQuillHtml(mail.body || '');
       }
       this.updatePreview();
+    }
+
+    // Show HTML in the Editor tab WITHOUT treating it as an edit.  Quill simplifies
+    // markup it does not know (tables, inline styles ...); the raw HTML in the HTML tab
+    // stays the source of truth until the user actually edits in the Editor.
+    _setQuillHtml(html) {
+      if (!this.quill) return;
+      try {
+        this.quill.setContents(this.quill.clipboard.convert({ html: html || '' }), 'silent');
+      } catch (e) {
+        console.warn('[mail-editor] could not show HTML in the Editor tab:', e.message);
+      }
+    }
+
+    detectPastedHtml() {
+      const v = this.$('bodyPlain').value;
+      if (this.getType() !== 'plain') return;
+      if (!/^\s*(<!doctype|<html|<body|<table|<div|<p[\s>]|<h[1-6][\s>]|<br|<a\s|<img|<span|<center)/i.test(v)) return;
+      if (!/<\/[a-z]+>/i.test(v)) return;
+      this.$('bodyHtml').value = v;
+      this.$('bodyPlain').value = '';
+      this.$('typeHtml').checked = true;
+      this.switchMode();
+      this.showTab('source');
+      this.feedback('HTML detected - switched to HTML mode.', false);
+      this.autoSave();
     }
 
     initQuill() {
@@ -250,7 +289,8 @@
           }
         }
       });
-      this.quill.on('text-change', () => {
+      this.quill.on('text-change', (delta, oldDelta, source) => {
+        if (source === 'silent') return;      // programmatic display only
         this.$('bodyHtml').value = this.quill.root.innerHTML;
         this.autoSave();
       });
@@ -436,15 +476,16 @@
         this.initQuill();
         if (this.quill && !this.$('bodyHtml').value && this.$('bodyPlain').value) {
           this.$('bodyHtml').value = this.$('bodyPlain').value;
-          this.quill.root.innerHTML = this.$('bodyPlain').value;
+          this._setQuillHtml(this.$('bodyPlain').value);
         }
         this.showTab(this.currentTab === 'preview' || this.currentTab === 'source' ? this.currentTab : 'wysiwyg');
       }
     }
 
     showTab(tab) {
-      if (this.currentTab === 'wysiwyg' && this.quill) this.$('bodyHtml').value = this.quill.root.innerHTML;
-      if (this.currentTab === 'source' && this.quill) this.quill.root.innerHTML = this.$('bodyHtml').value;
+      // The HTML tab (textarea) always holds the real HTML; the Editor tab only mirrors it
+      // and writes back when the user edits there (see text-change handler).
+      if (this.currentTab === 'source' && tab !== 'source') this._setQuillHtml(this.$('bodyHtml').value);
       this.currentTab = tab;
       this.$('wysiwygPane').style.display = tab === 'wysiwyg' ? '' : 'none';
       this.$('sourcePane').style.display = tab === 'source' ? '' : 'none';
@@ -459,8 +500,6 @@
 
     getBody() {
       if (this.getType() !== 'html') return this.$('bodyPlain').value;
-      if (this.currentTab === 'wysiwyg' && this.quill) return this.quill.root.innerHTML;
-      if (this.currentTab === 'preview' && this.quill) return this.quill.root.innerHTML;
       return this.$('bodyHtml').value;
     }
 
@@ -492,18 +531,37 @@
 
     autoSave() {
       clearTimeout(this.saveTimer);
-      this.saveTimer = setTimeout(() => this.save(true), 900);
+      this.saveTimer = setTimeout(() => { this.saveTimer = null; this.save(true); }, 900);
       this.updatePreview();
     }
 
-    async save(silent = false) {
-      if (!this.campaignId) return;
+    // Save a pending edit right now (blur, switching step, tab hidden / closed).
+    flush(keepalive = false) {
+      if (!this.saveTimer) return this._queue;
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+      return this.save(true, keepalive);
+    }
+
+    // Saves run one after another so an older save can never overwrite a newer one.
+    save(silent = false, keepalive = false) {
+      // Build the request NOW, so a later step/campaign switch cannot change what is saved.
+      if (!this.campaignId) return this._queue;
+      clearTimeout(this.saveTimer); this.saveTimer = null;   // this save covers any pending edit
+      const campaignId = this.campaignId;
+      const payload    = JSON.stringify(this.buildPayload());
+      this._queue = this._queue.then(() => this._send(campaignId, payload, silent, keepalive));
+      return this._queue;
+    }
+
+    async _send(campaignId, payload, silent, keepalive) {
       if (!silent) this.feedback('Saving...');
       try {
-        const r = await fetch(`${this.base}/api/crm/campaigns/${encodeURIComponent(this.campaignId)}`, {
+        const r = await fetch(`${this.base}/api/crm/campaigns/${encodeURIComponent(campaignId)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.buildPayload())
+          body: payload,
+          keepalive: !!keepalive && payload.length < 60000
         });
         const d = await r.json();
         if (!r.ok || d.status === 'error') throw new Error(d.message || 'Save failed');
