@@ -472,6 +472,16 @@ def list_leads_cross_campaign():
             cdata = camp_doc.to_dict() or {}
             cname = cdata.get("name") or cid
             q2    = db.collection("campaigns").document(cid).collection("campaign_leads")
+            # live contact figures per site (stored counters can be missing / stale)
+            per_lead: dict = {}
+            for cdoc in (db.collection("campaigns").document(cid)
+                           .collection("campaign_contacts").select(["lead_id", "status"]).stream()):
+                cd = cdoc.to_dict() or {}
+                st = per_lead.setdefault(cd.get("lead_id", ""), {"t": 0, "p": 0, "x": 0})
+                st["t"] += 1
+                cs = (cd.get("status") or "pending").lower()
+                if cs == "pending":  st["p"] += 1
+                elif cs == "excluded": st["x"] += 1
             for ldoc in q2.stream():
                 d = ldoc.to_dict() or {}
                 lead_status = (d.get("status") or "pending").strip().lower()
@@ -485,6 +495,8 @@ def list_leads_cross_campaign():
                 d.setdefault("lead_id", ldoc.id)
                 d["campaign_id"]   = cid
                 d["campaign_name"] = cname
+                cnt = per_lead.get(ldoc.id, {"t": 0, "p": 0, "x": 0})
+                d["contact_count"], d["pending_count"], d["excluded_count"] = cnt["t"], cnt["p"], cnt["x"]
                 # ensure followup fields are always present
                 for fk in ("followup_status","followup_date","followup_importance",
                            "followup_comment","followup_owner"):

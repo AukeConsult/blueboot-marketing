@@ -231,7 +231,7 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
       </select>
       <div class="d-flex gap-2 mt-2">
         <a href="filter-facets.html" class="btn btn-sm btn-outline-success flex-fill">
-          <i class="ti ti-filter me-1"></i>Filter new
+          <i class="ti ti-database-search me-1"></i>New from Leads DB
         </a>
         <button class="btn btn-sm btn-outline-primary flex-fill" onclick="discover()" id="discover-btn">
           <i class="ti ti-search me-1"></i>Discover
@@ -271,22 +271,25 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
           <i class="ti ti-table-export me-1"></i>Full override
         </button>
       </div>
-<button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none">
+<button id="scrape-btn" class="btn btn-sm btn-outline-secondary" onclick="scrapeEmails()" title="Update info: scrape each site for emails and page count, then refresh the contact counts">
+        <i class="ti ti-mail-search me-1"></i>Update info
+      </button>
+      <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none" title="Mark the campaign ready. It is then picked up by the outreach send; nothing is sent until you do this.">
         <i class="ti ti-circle-check me-1"></i>Mark ready
       </button>
-      <button class="btn btn-sm btn-outline-warning" onclick="confirmHold()" id="hold-btn" style="display:none" title="Pause sending. Nothing is lost - resume at any time.">
+      <button class="btn btn-sm btn-outline-warning" onclick="confirmHold()" id="hold-btn" style="display:none" title="Pause: no mail (intro or follow-up) is sent while on hold. Contacts, mail text and history are kept. Press Resume to continue.">
         <i class="ti ti-player-pause me-1"></i>Put on hold
       </button>
-      <button class="btn btn-sm btn-success" onclick="resumeCampaign()" id="resume-btn" style="display:none" title="Continue sending">
+      <button class="btn btn-sm btn-success" onclick="resumeCampaign()" id="resume-btn" style="display:none" title="Resume: the campaign goes back to the status it had before the hold and sending continues.">
         <i class="ti ti-player-play me-1"></i>Resume
       </button>
-      <button class="btn btn-sm btn-outline-danger" onclick="confirmCancel()" id="cancel-btn" style="display:none">
+      <button class="btn btn-sm btn-outline-danger" onclick="confirmCancel()" id="cancel-btn" style="display:none" title="Cancel: permanently stops the campaign. Nothing is deleted, but it can never be sent or reopened. To just pause, use Put on hold.">
         <i class="ti ti-ban me-1"></i>Cancel
       </button>
-      <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete()" id="delete-btn" style="display:none">
+      <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete()" id="delete-btn" style="display:none" title="Delete: permanently removes the campaign with all its leads and contacts. Only draft or canceled campaigns can be deleted.">
         <i class="ti ti-trash me-1"></i>Delete
       </button>
-      <button class="btn btn-sm btn-outline-warning" onclick="openResetModal()" id="reset-btn" style="display:none" title="Reset campaign to start">
+      <button class="btn btn-sm btn-outline-warning" onclick="openResetModal()" id="reset-btn" style="display:none" title="Reset: clears all send history and sets every contact and site back to pending, so the campaign can be sent again from the start.">
         <i class="ti ti-refresh-alert me-1"></i>Reset
       </button>
       <button class="btn btn-sm btn-outline-danger" id="delete-excluded-btn" style="display:none" onclick="openRemoveExcludedModal()" title="Remove all excluded contacts and sites from this campaign">
@@ -294,6 +297,8 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
       </button>
     </div>
   </div>
+
+  <div id="status-help" class="small mb-2" style="display:none;color:var(--bb-muted)"></div>
 
   <div id="campaign-empty" class="text-center py-5" style="color:var(--bb-muted)">
     <i class="ti ti-speakerphone" style="font-size:2rem;opacity:.3"></i>
@@ -384,7 +389,7 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
           </div>
           <div class="col-12" id="c-facet-row" style="display:none">
             <label class="mb-1" style="color:var(--bb-muted)">
-              <i class="ti ti-filter me-1"></i>Built from facet filter
+              <i class="ti ti-filter me-1"></i>Built from a Leads DB search
             </label>
             <div class="d-flex flex-wrap align-items-center gap-2 pt-1">
               <a id="c-facet-name" href="#" class="fw-500 small text-decoration-none text-primary"></a>
@@ -522,9 +527,6 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
           </select>
           <span id="sites-count-badge" class="badge bg-light text-secondary border ms-1"
                 style="font-size:12px"></span>
-          <button id="scrape-btn" class="btn btn-sm btn-outline-secondary" onclick="scrapeEmails()" title="Scrape each site for emails and update page count">
-            <i class="ti ti-mail-search me-1"></i>Scrape site
-          </button>
           <button class="bb-btn-refresh ms-auto" title="Refresh" onclick="loadSites()">
             <i class="ti ti-refresh"></i>
           </button>
@@ -678,6 +680,67 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
 </div>
 
 <!-- Send modal -->
+<div class="modal fade" id="holdModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:480px">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title text-warning"><i class="ti ti-player-pause me-2"></i>Put campaign <code id="hold-campaign-id"></code> on hold</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body small">
+        <p class="mb-2">The campaign is now <strong id="hold-status-now"></strong>. Putting it on hold <strong>pauses all sending</strong>.</p>
+        <ul class="mb-2">
+          <li>No mail (intro or follow-up) is sent, automatic or manual, until you resume.</li>
+          <li>Contacts, sites, mail text and history are all kept.</li>
+          <li><strong>Resume</strong> returns the campaign to the status it had and sending continues. Nothing is lost.</li>
+        </ul>
+        <label class="form-label small fw-500 mb-1" for="hold-reason">Reason <span style="color:var(--bb-muted)">(optional, shown to your team)</span></label>
+        <input id="hold-reason" class="form-control form-control-sm" maxlength="500" placeholder="e.g. waiting for new mail text"
+               onkeydown="if(event.key==='Enter'){document.getElementById('hold-confirm-btn').click();}">
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Keep sending</button>
+        <button id="hold-confirm-btn" class="btn btn-sm btn-warning"><i class="ti ti-player-pause me-1"></i>Put on hold</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cancelModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:480px">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title text-danger"><i class="ti ti-ban me-2"></i>Cancel campaign <code id="cancel-campaign-id"></code></h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body small">
+        <p class="mb-2">Canceling <strong>stops this campaign permanently</strong>.</p>
+        <p class="mb-1"><i class="ti ti-circle-check text-success me-1"></i><strong>What happens</strong></p>
+        <ul class="mb-2">
+          <li>No more mail (intro or follow-up) is sent from this campaign.</li>
+          <li>The status becomes <em>canceled</em>. You can then <em>Delete</em> or <em>Reset</em> the campaign.</li>
+        </ul>
+        <p class="mb-1"><i class="ti ti-database text-primary me-1"></i><strong>What is kept</strong></p>
+        <ul class="mb-2">
+          <li>All <strong id="cancel-contact-count">0</strong> contacts, sites, mail text and send history. Nothing is deleted.</li>
+          <li>Contacts keep their own status (pending, sent, replied&hellip;). Contacts still pending or sent here keep blocking the same email from being added to another campaign until the campaign is deleted.</li>
+        </ul>
+        <p class="mb-2 text-danger"><i class="ti ti-alert-triangle me-1"></i><strong>This cannot be undone</strong> &mdash; a canceled campaign cannot be reopened or sent again.</p>
+        <p class="mb-2" style="color:var(--bb-muted)">Only want a break? Use <em>Put on hold</em> instead &mdash; it can be resumed at any time.</p>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="cancel-understand"
+                 onchange="document.getElementById('cancel-confirm-btn').disabled = !this.checked">
+          <label class="form-check-label" for="cancel-understand">I understand the campaign will be canceled permanently</label>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Keep campaign</button>
+        <button id="cancel-confirm-btn" class="btn btn-sm btn-danger" disabled><i class="ti ti-ban me-1"></i>Cancel campaign</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="sendModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
@@ -949,7 +1012,7 @@ async function discover() {
     }
     await loadCampaignList();
     const currentId = document.getElementById('campaign-select').value;
-    if (currentId) await loadCampaign();
+    if (currentId) await refreshCampaignData({ keepView: true });
   } catch(e) {
     bar.className = 'alert alert-danger py-2 px-2 small mt-2 mb-0';
     bar.innerHTML = `<i class="ti ti-circle-x me-1"></i>${escapeHtml(e.message)}`;
@@ -969,7 +1032,16 @@ async function selectCampaign(id, event) {
   url.searchParams.set('campaign_id', id);
   window.history.replaceState({}, '', url);
   filterCampaignList();
-  await loadCampaign();
+  await refreshCampaignData();
+}
+
+// Reload BOTH the contact list (inside the campaign document) and the sites list.
+// Used when a campaign is opened/switched and after anything that changes either list.
+async function refreshCampaignData(opts) {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  _sitesLoaded = '';
+  await Promise.all([loadCampaign(opts), loadSites()]);
 }
 
 document.getElementById('campaign-list').addEventListener('click', event => {
@@ -1343,7 +1415,7 @@ async function deleteExcluded() {
     const sitePart = d.leads_deleted ? `, ${d.leads_deleted} site(s)` : '';
     fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
     fb.textContent = `Removed ${d.deleted} contact(s)${sitePart}. Refreshing…`;
-    await loadCampaign();
+    await refreshCampaignData({ keepView: true });
     await loadCampaignList();
     fb.textContent = `Removed ${d.deleted} contact(s)${sitePart} from this campaign.`;
   } catch(e) {
@@ -1403,17 +1475,21 @@ function filterContacts() {
 }
 
 // ── Bulk selection helpers ────────────────────────────────────────────────
-async function loadCampaign() {
+async function loadCampaign(opts) {
   const id = document.getElementById('campaign-select').value;
-  if (id)
-  document.getElementById('sync-feedback').style.display = 'none';
-  document.getElementById('campaign-detail').style.display = 'none';
-  document.getElementById('campaign-actions').style.display = 'none';
+  const keep = !!(opts && opts.keepView);      // refresh in place: keep message + visible page
+  if (!keep) {
+    document.getElementById('sync-feedback').style.display = 'none';
+    document.getElementById('campaign-detail').style.display = 'none';
+    document.getElementById('campaign-actions').style.display = 'none';
+  }
   document.getElementById('campaign-empty').style.display = id ? 'none' : 'block';
   if (!id) return;
+  allContacts = [];                       // never show the previous campaign's contacts
   try {
-    const r = await fetch(`${BASE}/api/crm/campaigns/${id}`);
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, { cache: 'no-store' });
     const c = await r.json();
+    if (document.getElementById('campaign-select').value !== id) return;   // user switched meanwhile
     if (!r.ok || c.status === 'error') {
       document.getElementById('campaign-empty').textContent = `Error: ${c.message || r.status}`;
       document.getElementById('campaign-empty').style.display = 'block';
@@ -1838,8 +1914,21 @@ async function doSend() {
 }
 
 // Which action buttons are visible for each campaign status.
+function statusHelp(st) { return ({
+  draft:    '<strong>Draft</strong> &mdash; being prepared. Nothing is sent. Add contacts and write the mail, then press <em>Mark ready</em>.',
+  ready:    '<strong>Ready</strong> &mdash; approved for sending. The outreach run sends the first mail to pending contacts and the campaign then becomes <em>Active</em>. <em>Put on hold</em> pauses it; <em>Cancel</em> stops it for good.',
+  active:   '<strong>Active</strong> &mdash; mail has been sent and follow-ups continue. <em>Put on hold</em> pauses all sending and can be resumed; <em>Cancel</em> stops the campaign permanently (history is kept).',
+  on_hold:  '<strong>On hold</strong> &mdash; paused: no mail is sent. Everything is kept. <em>Resume</em> continues where it left off; <em>Cancel</em> stops it for good.',
+  canceled: '<strong>Canceled</strong> &mdash; stopped permanently and cannot be reopened. All data is kept until you <em>Delete</em> the campaign. <em>Reset</em> clears its send history.',
+})[st] || ''; }
+
 function setStatusButtons(st) {
   const show = (id, on) => { document.getElementById(id).style.display = on ? '' : 'none'; };
+  const help = document.getElementById('status-help');
+  if (help) {
+    help.innerHTML = statusHelp(st);
+    help.style.display = statusHelp(st) ? '' : 'none';
+  }
   show('send-btn',   st === 'draft');
   show('hold-btn',   st === 'ready' || st === 'active');
   show('resume-btn', st === 'on_hold');
@@ -1873,15 +1962,29 @@ async function setCampaignStatus(status, extra = {}) {
 async function confirmHold() {
   const id = document.getElementById('campaign-select').value;
   if (!id) return;
-  const reason = prompt(`Put campaign "${id}" on hold?\n\nNo mail (intro or follow-up) is sent while it is on hold. Contacts, mail text and history are kept, and you can resume at any time.\n\nReason (optional):`);
-  if (reason === null) return;          // cancelled the dialog
+  const reason = await new Promise(resolve => {
+    document.getElementById('hold-campaign-id').textContent = id;
+    document.getElementById('hold-status-now').textContent =
+      (document.getElementById('c-status-badge').textContent || '').trim() || 'current status';
+    document.getElementById('hold-reason').value = '';
+    const modalEl = document.getElementById('holdModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    let answer = null;                    // null = dismissed
+    document.getElementById('hold-confirm-btn').onclick = () => {
+      answer = document.getElementById('hold-reason').value.trim();
+      modal.hide();
+    };
+    modalEl.addEventListener('hidden.bs.modal', () => resolve(answer), { once: true });
+    modal.show();
+  });
+  if (reason === null) return;          // dismissed the dialog
   const fb = document.getElementById('sync-feedback');
   try {
     await setCampaignStatus('on_hold', { hold_reason: reason });
     fb.className = 'alert alert-warning py-1 px-2 small mt-2 mb-0';
     fb.textContent = 'Campaign is on hold. No mail will be sent until you resume it.';
     fb.style.display = '';
-    await loadCampaign(id);
+    await loadCampaign({ keepView: true });
     await loadCampaignList();
   } catch(e) {
     fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
@@ -1899,7 +2002,7 @@ async function resumeCampaign() {
     fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
     fb.textContent = 'Campaign resumed.';
     fb.style.display = '';
-    await loadCampaign(id);
+    await loadCampaign({ keepView: true });
     await loadCampaignList();
   } catch(e) {
     fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
@@ -1910,7 +2013,19 @@ async function resumeCampaign() {
 async function confirmCancel() {
   const id = document.getElementById('campaign-select').value;
   if (!id) return;
-  if (!confirm(`Cancel campaign "${id}"? Active campaigns stay locked until canceled, and canceled campaigns can be deleted.`)) return;
+  const ok = await new Promise(resolve => {
+    document.getElementById('cancel-campaign-id').textContent = id;
+    document.getElementById('cancel-understand').checked = false;
+    document.getElementById('cancel-confirm-btn').disabled = true;
+    document.getElementById('cancel-contact-count').textContent = (typeof allContacts !== 'undefined' ? allContacts.length : '?');
+    const modalEl = document.getElementById('cancelModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    let answer = false;
+    document.getElementById('cancel-confirm-btn').onclick = () => { answer = true; modal.hide(); };
+    modalEl.addEventListener('hidden.bs.modal', () => resolve(answer), { once: true });
+    modal.show();
+  });
+  if (!ok) return;
   const fb = document.getElementById('sync-feedback');
   try {
     const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
@@ -2264,7 +2379,8 @@ async function loadSites() {
     '<tr><td colspan="8" class="text-center py-5 small" style="color:var(--bb-muted)">' +
     '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>';
   try {
-    const data = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads`);
+    const data = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads`, { cache: 'no-store' });
+    if (document.getElementById('campaign-select').value !== id) return;   // user switched meanwhile
     _allLeads = data.leads || [];
     _populateSectorFilter(_allLeads);
     applySitesFilter();
@@ -2998,7 +3114,7 @@ async function confirmReset() {
       + `${d.sent_deleted} send records deleted.`;
     setTimeout(() => {
       bootstrap.Modal.getInstance(document.getElementById('resetModal')).hide();
-      loadCampaign(id);
+      refreshCampaignData({ keepView: true });
     }, 1800);
   } catch(e) {
     fb.className = 'alert alert-danger py-2 small mt-2 mb-0';
@@ -3025,7 +3141,7 @@ async function scrapeEmails() {
   const fb  = document.getElementById('sync-feedback');
   const btn = document.getElementById('scrape-btn');
   btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Scraping…';
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Updating…';
   fb.style.display = 'none';
   try {
     const r = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/site-enrich`, {
@@ -3045,14 +3161,14 @@ async function scrapeEmails() {
   }
   function btnScrapeReset() {
     btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-mail-search me-1"></i>Scrape site';
+    btn.innerHTML = '<i class="ti ti-mail-search me-1"></i>Update info';
   }
 }
 
 async function pollScrape(jobId) {
   const fb  = document.getElementById('sync-feedback');
   const btn = document.getElementById('scrape-btn');
-  function reset() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-mail-search"></i>'; }
+  function reset() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-mail-search me-1"></i>Update info'; }
   for (let i = 0; i < 120; i++) {
     await new Promise(r => setTimeout(r, 3000));
     try {
@@ -3060,9 +3176,15 @@ async function pollScrape(jobId) {
       if (j.status === 'done') {
         const res = j.result || {};
         fb.className = 'alert alert-success py-1 px-2 small py-2 small mt-2';
-        fb.innerHTML = `<i class="ti ti-check me-1"></i>Scrape done — ${res.scraped||0} sites, ${res.new_contacts||0} new contacts, ${res.pages_updated||0} page counts updated.`;
-        loadSitesAndContacts(document.getElementById('campaign-select').value);
-        reset(); return;
+        fb.innerHTML = `<i class="ti ti-check me-1"></i>Update done — ${res.scraped||0} sites scraped, ${res.new_contacts||0} new contacts, ${res.pages_updated||0} page counts updated; all ${res.recalc_checked||0} existing contacts re-checked (${res.recalc_names||0} names and ${res.recalc_emails||0} emails cleaned${res.recalc_excluded? ', '+res.recalc_excluded+' deleted (not a proper email)':''})` +
+          (res.contact_count != null ? `, ${res.contact_count} contacts in total.` : '.');
+        if (res.contact_count != null) {
+          document.getElementById('c-contacts').textContent = res.contact_count;
+          if (window._campaignData) window._campaignData.contact_count = res.contact_count;
+        }
+        reset();
+        refreshCampaignData({ keepView: true });
+        return;
       }
       if (j.status === 'error') {
         fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
@@ -3118,8 +3240,9 @@ async function pollEnrich(jobId) {
         const res = j.result || {};
         fb.className = 'alert alert-success py-1 px-2 small mt-2';
         fb.innerHTML = `<i class="ti ti-check me-1"></i>Enrich done — ${res.resolved||0} names resolved.`;
-        loadContacts(document.getElementById('campaign-select').value);
-        reset(); return;
+        reset();
+        refreshCampaignData({ keepView: true });
+        return;
       }
       if (j.status === 'error') {
         fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
@@ -3139,7 +3262,7 @@ async function pollEnrich(jobId) {
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header py-2">
-        <h6 class="modal-title" id="scrapeOptionsLabel"><i class="ti ti-world-search me-2"></i>Scrape site</h6>
+        <h6 class="modal-title" id="scrapeOptionsLabel"><i class="ti ti-world-search me-2"></i>Update site info</h6>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body small">

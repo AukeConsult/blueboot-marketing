@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+
+from crm.contact_clean_lib import clean_email
 from datetime import datetime, timezone
 from io import BytesIO
 
@@ -211,6 +213,7 @@ def run_campaign_import(
     leads_by_id:    dict[str, dict] = {}
     contacts_by_id: dict[str, dict] = {}
     skipped = 0
+    warnings_invalid: list = []
 
     for row in rows:
         # Resolve lead_id
@@ -238,10 +241,14 @@ def run_campaign_import(
             leads_by_id[lead_id] = lead
 
         # Build contact doc — skip if no email
-        email = row.get("email", "").strip()
+        raw_email = row.get("email", "").strip()
+        email = clean_email(raw_email)            # the one shared e-mail check
         if not email:
+            if raw_email:
+                warnings_invalid.append(raw_email)
             skipped += 1
             continue
+        row["email"] = email
         doc_id = contact_id_from_email(email)
 
         contact: dict = {"lead_id": lead_id, "campaign_id": campaign_id}
@@ -277,6 +284,8 @@ def run_campaign_import(
         "contacts_new":     len(contacts_new),
         "contacts_updated": len(contacts_updated),
         "skipped":          skipped + len(reserved),
+        "invalid_emails":   len(warnings_invalid),
+        "invalid_email_examples": warnings_invalid[:10],
         "dry_run":          dry_run,
     }
 
@@ -333,5 +342,9 @@ def run_campaign_import(
     # Enrich campaign_leads from site_leads / leads Firestore collections
     from crm.campaign_leads_lib import populate_campaign_leads
     populate_campaign_leads(db, campaign_id)
+
+    # Every contact must belong to a site of this campaign
+    from crm.site_link_lib import ensure_site_links
+    ensure_site_links(db, campaign_id)
 
     return summary

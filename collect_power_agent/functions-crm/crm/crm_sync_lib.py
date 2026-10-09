@@ -169,6 +169,12 @@ def _upsert_campaign_contacts(db, campaign_id: str, records: list[dict]) -> dict
         if not doc_id:
             continue
 
+        from crm.contact_clean_lib import clean_email
+        r = {**r, "email": clean_email(r.get("email", ""))}
+        if not r["email"]:                    # not a proper e-mail -> never add
+            skipped += 1
+            continue
+
         # Skip contacts that already exist in the campaign
         if doc_id in existing_docs:
             skipped += 1

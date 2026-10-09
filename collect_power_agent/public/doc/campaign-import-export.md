@@ -128,6 +128,23 @@ You do not need to manage IDs manually. The system derives them automatically:
   same contact twice is safe — it updates the existing record rather than creating
   a duplicate.
 
+### Prospect catalogue tab
+
+The import page has two tabs. **Standard (Leads+Contacts)** is the form above.
+**Prospect catalogue** takes a BlueSearch prospect file (`BlueSearch-UK-prospects.xlsx` etc.)
+and runs the same sync as the command line (see *Prospect Catalogue Sync*):
+
+- Rows are grouped by country into one campaign each (`BS_UK`, `BS_DK`, ...). Fill in
+  **Campaign ID** to put everything into one campaign, or change the **Prefix**.
+- **Dry run is on by default.** The preview shows new / changed / unchanged leads and
+  contacts per campaign, contacts skipped (already in another campaign, same email in two
+  campaigns, already contacted) and warnings. Press **Confirm and write to Firestore** to
+  write exactly that.
+- Existing outreach data is never overwritten and nothing is deleted. If the duplicate check
+  against other campaigns cannot run, writing is blocked.
+- *Only campaign leads/contacts* skips `site_leads`, `site_contacts` and `email_contacts`.
+- One file at a time. Sitemap measuring (`--measure`) is command line only.
+
 ### Import via command line
 
 For large files or automated pipelines, the CLI tool accepts the same format:

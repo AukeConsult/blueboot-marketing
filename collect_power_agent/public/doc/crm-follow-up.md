@@ -12,7 +12,7 @@ Blueboot CRM connects two separate stages: building campaigns and working them.
 
 Contacts are not entered manually. They come from the discovery pipelines — automated processes that scan the web for companies and extract contact emails. When a pipeline run completes, the contacts are held in a central pool.
 
-From the **Filter facets** page you define exactly which companies and contacts you want to target (by country, sector, importance, page size, etc.). Once you are satisfied with the filter, you create a campaign from that selection. All matching contacts are pulled into the new campaign automatically.
+From the **Leads DB** page you define exactly which companies and contacts you want to target (by country, sector, importance, page size, etc.). Once you are satisfied with the filter, you create a campaign from that selection. All matching contacts are pulled into the new campaign automatically.
 
 ### Stage 2 — Review and prepare on the Campaign page
 

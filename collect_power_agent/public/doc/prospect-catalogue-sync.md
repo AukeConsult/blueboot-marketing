@@ -152,7 +152,7 @@ flow. All imported documents carry `sources: ["prospect_import"]`.
 |---|---|
 | `site_leads/{lead_id}` | Created only if the site is not there yet. Existing documents (for example from the crawler) are **never touched**. |
 | `site_leads/{lead_id}/site_contacts/{contact_id}` | Created, or empty fields filled in. |
-| `email_contacts/{doc_id}` | Created, or empty fields filled in. This is what the filter facets and the "active in another campaign" check read. |
+| `email_contacts/{doc_id}` | Created, or empty fields filled in. This is the contact pool the Leads DB searches and the "active in another campaign" check read. |
 
 Use `--campaign-only` if you want the prospects to stay out of the crawler
 collections.

@@ -28,7 +28,7 @@ functions-crm/
 │   ├── mail_accounts.py  ← mail account settings (CRUD, ping, test-send)
 │   ├── inbound_read.py ← inbound mail read job trigger
 │   ├── gdisk.py          ← Google Drive folder endpoints
-│   ├── filter_facets.py  ← filter facets + facet-to-campaign
+│   ├── filter_facets.py  ← Leads DB filters ("facets") + saved search to campaign
 │   ├── leads.py          ← lead lookup, exclusion, name-enrich
 │   ├── statistics.py     ← statistics collect + get
 │   └── auth.py           ← user doc management

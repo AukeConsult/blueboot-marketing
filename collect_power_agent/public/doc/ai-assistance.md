@@ -52,7 +52,7 @@ Batch size: 50 contacts per API call.
 
 #### `site_location_enrich.py` — Location resolution
 
-GPT maps `ai_country` to a standardised `"City, Country"` location string used by the filter facets.
+GPT maps `ai_country` to a standardised `"City, Country"` location string used by the Leads DB filters.
 
 ---
 

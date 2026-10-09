@@ -393,7 +393,7 @@ print('OpenAI OK:', r.choices[0].message.content)
 # 3. Run a small site_agent dry run
 python app/site_agent.py --countries NO --max-results 5 --dry-run
 
-# 4. Build filter facets
+# 4. Build the Leads DB filter values ("filter facets")
 python app/build_filter_facets.py --no-write
 
 # 5. Open the dashboard

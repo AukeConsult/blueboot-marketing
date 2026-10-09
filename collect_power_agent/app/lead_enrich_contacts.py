@@ -297,6 +297,12 @@ _PLACEHOLDER_EMAIL_RE = re.compile(
 
 def _is_valid_email(email: str) -> bool:
     """Return True if email looks like a real, reachable address."""
+    try:
+        from crm.contact_clean_lib import clean_email as _shared_clean
+        if not _shared_clean(email):          # the one shared e-mail check
+            return False
+    except ImportError:
+        pass
     # Reject control characters or JSON-artifact chars leaked from bad parsing
     if any(ord(c) < 32 or ord(c) == 127 for c in email):
         return False

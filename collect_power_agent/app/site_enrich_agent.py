@@ -104,6 +104,22 @@ _SYSTEM_PROMPT = (
 )
 
 
+def _clean_ai_contacts(contacts: list) -> list:
+    """Clean names/e-mails returned by the AI (strips Email/Mejla/... and junk addresses)."""
+    try:
+        from crm.contact_clean_lib import clean_email, clean_name
+    except Exception:
+        return contacts
+    out = []
+    for c in contacts:
+        if not isinstance(c, dict):
+            continue
+        em = clean_email(c.get("email", ""))
+        if em:
+            out.append({**c, "email": em, "name": clean_name(c.get("name", ""), em)})
+    return out
+
+
 def _user_prompt(batch: list[dict]) -> str:
     items = [
         {
@@ -438,7 +454,7 @@ async def _process_batch_async(
             "ai_confidence":    float(r.get("confidence", 0.0)),
             "ai_platform":      r.get("platform", "unknown"),
             "ai_hosting":       r.get("hosting", "unknown"),
-            "ai_contacts":      r.get("contacts") or [],
+            "ai_contacts":      _clean_ai_contacts(r.get("contacts") or []),
             "ai_classified_at": now_ts,
             "keywords":         merged_kw,
         }

@@ -16,6 +16,8 @@ from urllib.parse import urljoin, urlparse
 
 import aiohttp
 
+from crm.contact_clean_lib import (clean_email, clean_name, deobfuscate, find_emails,
+                                   names_from_page_blocks)
 from crm.sitemap_reader import SitemapReader
 
 # ---------------------------------------------------------------------------
@@ -43,11 +45,9 @@ _CONTACT_WORDS = [
 ]
 
 HREF_PATTERN  = r"""href=["']([^"']+)["']"""
-EMAIL_PATTERN = r"""[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}"""
 MAILTO_PATTERN = r"""<a[^>]+href=["']mailto:([^"'> \s]+)["'][^>]*>([^<]{1,80})</a>"""
 
 _HREF_RE   = re.compile(HREF_PATTERN, re.IGNORECASE)
-_EMAIL_RE  = re.compile(EMAIL_PATTERN, re.IGNORECASE)
 _MAILTO_RE = re.compile(MAILTO_PATTERN, re.IGNORECASE)
 
 _ROLE_RE = re.compile(
@@ -202,21 +202,22 @@ def _extract_contacts(html: str) -> dict:
     # ── names from mailto anchors ────────────────────────────────────────────
     names: dict[str, str] = {}
     for m in _MAILTO_RE.finditer(html):
-        addr = m.group(1).strip().lower()
+        addr = clean_email(m.group(1))
+        if not addr:
+            continue
         text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", m.group(2))).strip()
-        words = text.split()
-        if 1 < len(words) <= 5 and all(w[0].isupper() for w in words if w.isalpha()):
-            names[addr] = text
+        name = clean_name(text, addr)       # drops "Email ...", "Mejla ...", quotes, labels
+        if len(name.split()) >= 2:
+            names[addr] = name
 
     # ── decode JS unicode escapes then find emails ───────────────────────────
-    decoded = re.sub(r"""\\u([0-9a-fA-F]{4})""", lambda m: chr(int(m.group(1), 16)), html)
+    decoded = deobfuscate(re.sub(r"""\\u([0-9a-fA-F]{4})""", lambda m: chr(int(m.group(1), 16)), html))
     plain   = _html_to_text(decoded)
 
     contacts: dict[str, dict] = {}
-    for e in _EMAIL_RE.findall(decoded):
-        e = e.strip(".,;:()[]<>").lower()
-        if not e or "@" not in e:
-            continue
+    used_phones: set = set()
+    all_emails = set(find_emails(html))
+    for e in find_emails(html):                # the one shared detector
         local = e.split("@")[0]
         if _ROLE_RE.match(local):
             continue
@@ -225,16 +226,28 @@ def _extract_contacts(html: str) -> dict:
         if e in contacts:
             continue
 
-        # ── phone: look within ±300 chars of the email in plain text ─────────
+        # ── phone: first the text AFTER the email (up to the next email), then the text
+        #    before it (back to the previous email); a number is given to one contact only
         phone = ""
         idx = plain.find(e)
         if idx >= 0:
-            snippet = plain[max(0, idx - 300): idx + 300]
-            phones  = _extract_phones(snippet)
-            if phones:
-                phone = phones[0]
+            others = sorted(p for x in all_emails if x != e and (p := plain.find(x)) >= 0)
+            nxt = next((p for p in others if p > idx), len(plain))
+            prv = max([p for p in others if p < idx], default=0)
+            for snippet in (plain[idx: min(nxt, idx + 300)], plain[max(prv, idx - 300): idx]):
+                phones = [x for x in _extract_phones(snippet) if x not in used_phones]
+                if phones:
+                    phone = phones[0]
+                    used_phones.add(phone)
+                    break
 
         contacts[e] = {"name": names.get(e, ""), "phone": phone}
+
+    # ── names for e-mails shown as plain text under a heading (team sections) ──
+    missing = [e for e, c in contacts.items() if not c["name"]]
+    if missing:
+        for e, nm in names_from_page_blocks(decoded, missing).items():
+            contacts[e]["name"] = nm
     return contacts
 
 
@@ -272,8 +285,9 @@ _AI_ENRICH_SYSTEM = (
     "\n\n"
     "RULES:\n"
     "- email: copy the address exactly as given — do NOT change, add, or remove any email. "
-    "- name: the person's full name visible in the snippet (same line, line above, or after "
-    "  a label like Navn:, Name:, Kontakt:). Do NOT invent names. Empty string if not found. "
+    "- name: ONLY the person's full name visible in the snippet (same line, line above, or after "
+    "  a label like Navn:, Name:, Kontakt:). Never include words like Email, Mejla, Contact, "
+    "  Send e-mail to, titles or quotes. Do NOT invent names. Empty string if not found. "
     "- phone: the phone number visible in the snippet closest to the email. "
     "  Valid: 7-15 digits, optional + or country code (+47 +46 +45 etc.), "
     "  groups separated by spaces, dashes, or dots (e.g. 95 91 65 55, +47 22 33 44 55). "
@@ -334,7 +348,12 @@ async def _ai_extract_contacts(
             response_format={"type": "json_object"},
         )
         data = _json.loads(resp.choices[0].message.content or "{}")
-        return data.get("contacts") or []
+        out = []
+        for c in data.get("contacts") or []:
+            em = clean_email(c.get("email", ""))
+            if em:
+                out.append({**c, "email": em, "name": clean_name(c.get("name", ""), em)})
+        return out
     except Exception:
         return []
 
@@ -369,7 +388,13 @@ def _existing_contacts(db, campaign_id: str) -> set:
     col = (db.collection(CAMPAIGNS_COLLECTION)
              .document(campaign_id)
              .collection(CAMPAIGN_CONTACTS_SUB))
-    return {doc.id for doc in col.select([]).stream()}
+    ids = set()
+    for doc in col.select(["email"]).stream():
+        ids.add(doc.id)
+        em = clean_email((doc.to_dict() or {}).get("email") or "")
+        if em:
+            ids.add(_contact_id(em))      # imported/recalculated docs count as existing
+    return ids
 
 
 _PROTECTED = {
@@ -400,6 +425,11 @@ def _write_contacts(db, campaign_id: str, lead_id: str,
         else:
             name  = info or ""
             phone = ""
+        email = clean_email(email)
+        if not email:
+            continue
+        raw_name = name
+        name = clean_name(raw_name, email)           # final guard, whatever the source
         cid = _contact_id(email)
         ld  = lead_data or {}
         doc = {"lead_id": lead_id, "campaign_id": campaign_id,
@@ -408,6 +438,8 @@ def _write_contacts(db, campaign_id: str, lead_id: str,
                "domain":  ld.get("domain",  ""),
                "company": ld.get("company_name") or ld.get("company") or ld.get("title", ""),
                "country": ld.get("country", "")}
+        if raw_name and raw_name != name:
+            doc["name_raw"] = raw_name              # audit trail of what was cleaned
         if cid in existing:
             batch.update(contacts_col.document(cid),
                          {k: v for k, v in doc.items() if k not in _PROTECTED})
@@ -609,6 +641,109 @@ async def _run(db, campaign_id: str, leads: list,
 
 
 # ---------------------------------------------------------------------------
+# Counts (shown in the campaign page header, campaigns list and Sites table)
+# ---------------------------------------------------------------------------
+
+def refresh_campaign_counts(db, campaign_id: str) -> dict:
+    """Recount campaign_contacts and store the figures the pages show:
+    campaign_leads/<lead>.contact_count (Sites table) and campaigns/<id>.contact_count /
+    lead_count (header + list).  Only documents whose figure changed are written."""
+    camp_ref = db.collection(CAMPAIGNS_COLLECTION).document(campaign_id)
+    per_lead: dict[str, int] = {}
+    total = 0
+    for snap in camp_ref.collection(CAMPAIGN_CONTACTS_SUB).select(["lead_id"]).stream():
+        total += 1
+        lid = (snap.to_dict() or {}).get("lead_id", "")
+        if lid:
+            per_lead[lid] = per_lead.get(lid, 0) + 1
+
+    leads_col = camp_ref.collection(CAMPAIGN_LEADS_SUB)
+    batch, pending, changed, lead_total = db.batch(), 0, 0, 0
+    for snap in leads_col.select(["contact_count"]).stream():
+        lead_total += 1
+        want = per_lead.get(snap.id, 0)
+        if (snap.to_dict() or {}).get("contact_count") != want:
+            batch.update(snap.reference, {"contact_count": want})
+            pending += 1
+            changed += 1
+            if pending >= 400:
+                batch.commit()
+                batch, pending = db.batch(), 0
+    if pending:
+        batch.commit()
+
+    camp_ref.set({"contact_count": total, "lead_count": lead_total,
+                  "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
+                 merge=True)
+    print(f"[site-enrich] counts refreshed: {total} contacts, {lead_total} sites "
+          f"({changed} site figure(s) changed)", flush=True)
+    return {"contact_count": total, "lead_count": lead_total, "leads_recounted": changed}
+
+
+_MAILED = {"sent", "replied", "bounced", "converted"}
+
+
+def recalculate_contacts(db, campaign_id: str, dry_run: bool = False) -> dict:
+    """Re-run name/email cleaning over ALL existing contacts of the campaign.
+
+    Runs on every Update info, whatever the scrape mode, so older contacts get the
+    same cleaning as new ones.  Only name / name_raw / email / email_raw (and, for an
+    unusable address -> the contact is deleted) are touched; contacts that were
+    already mailed (sent/replied/bounced/converted) are never deleted."""
+    col = (db.collection(CAMPAIGNS_COLLECTION).document(campaign_id)
+             .collection(CAMPAIGN_CONTACTS_SUB))
+    stats = {"recalc_checked": 0, "recalc_names": 0, "recalc_emails": 0, "recalc_excluded": 0,
+             "recalc_relinked": 0}
+    batch, pending = db.batch(), 0
+    for snap in col.stream():
+        d = snap.to_dict() or {}
+        stats["recalc_checked"] += 1
+        upd: dict = {}
+        email_raw = d.get("email") or ""
+        email = clean_email(email_raw)
+        status = (d.get("status") or "pending").lower()
+        if email and email != email_raw:
+            upd["email"] = email
+            upd["email_raw"] = d.get("email_raw") or email_raw
+            stats["recalc_emails"] += 1
+        elif not email and status not in _MAILED:
+            # not a proper e-mail -> the contact is deleted (mailed contacts are kept as history)
+            stats["recalc_excluded"] += 1
+            if not dry_run:
+                batch.delete(snap.reference)
+                pending += 1
+                if pending >= 400:
+                    batch.commit()
+                    batch, pending = db.batch(), 0
+            continue
+        raw_name = d.get("name_raw") or d.get("name") or ""
+        name_now = d.get("name") or ""
+        new_name = clean_name(name_now, email or email_raw)
+        # imported contacts (never scraped): never blank a name by cleaning
+        if new_name != name_now and (new_name or d.get("scraped_at")):
+            upd["name"] = new_name
+            if not d.get("name_raw"):
+                upd["name_raw"] = name_now
+            stats["recalc_names"] += 1
+        if upd and not dry_run:
+            batch.update(snap.reference, upd)
+            pending += 1
+            if pending >= 400:
+                batch.commit()
+                batch, pending = db.batch(), 0
+    if pending:
+        batch.commit()
+    from crm.site_link_lib import ensure_site_links       # contact -> site of this campaign
+    link = ensure_site_links(db, campaign_id, dry_run=dry_run)
+    stats["recalc_relinked"] = link["links_fixed"]
+    stats["recalc_sites_created"] = link["sites_created"]
+    print(f"[site-enrich] recalculated {stats['recalc_checked']} contacts: "
+          f"{stats['recalc_names']} name(s), {stats['recalc_emails']} email(s) fixed, "
+          f"{stats['recalc_excluded']} deleted (no proper email), {stats['recalc_relinked']} re-linked to a site, {stats['recalc_sites_created']} site(s) created", flush=True)
+    return stats
+
+
+# ---------------------------------------------------------------------------
 # Public entry point (called by jobs worker)
 # ---------------------------------------------------------------------------
 
@@ -622,8 +757,20 @@ def run_campaign_scrape(
 ) -> dict:
     """Scrape campaign_leads websites and write found emails to campaign_contacts."""
     leads = _load_leads(db, campaign_id, force)
+    recalc: dict = {}
+    try:                                   # clean ALL existing contacts first
+        recalc = recalculate_contacts(db, campaign_id, dry_run=dry_run)
+    except Exception as exc:
+        print(f"[site-enrich] WARN recalculation failed: {exc}", flush=True)
     if not leads:
-        return {"scraped": 0, "new_contacts": 0, "updated_contacts": 0, "pages_updated": 0, "errors": 0}
+        empty = {"scraped": 0, "new_contacts": 0, "updated_contacts": 0, "pages_updated": 0, "errors": 0}
+        empty.update(recalc)
+        if not dry_run:
+            try:
+                empty.update(refresh_campaign_counts(db, campaign_id))
+            except Exception as exc:
+                print(f"[site-enrich] WARN could not refresh counts: {exc}", flush=True)
+        return empty
 
     loop = asyncio.new_event_loop()
     try:
@@ -633,5 +780,12 @@ def run_campaign_scrape(
     finally:
         loop.close()
 
-    return result or {"scraped": len(leads), "new_contacts": 0,
-                      "updated_contacts": 0, "pages_updated": 0, "errors": 0}
+    result = result or {"scraped": len(leads), "new_contacts": 0,
+                        "updated_contacts": 0, "pages_updated": 0, "errors": 0}
+    result.update(recalc)
+    if not dry_run:
+        try:
+            result.update(refresh_campaign_counts(db, campaign_id))
+        except Exception as exc:                 # the scrape itself succeeded
+            print(f"[site-enrich] WARN could not refresh counts: {exc}", flush=True)
+    return result

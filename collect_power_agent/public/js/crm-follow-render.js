@@ -87,6 +87,7 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
           ${emailHtml}
           ${phoneHtml}
           ${websiteHtml}
+          <span class="crm-campaign-meta" title="Campaign: ${escapeHtml(r.campaign_id || '')}"><i class="ti ti-speakerphone"></i><a href="campaign.html?campaign_id=${encodeURIComponent(r.campaign_id || '')}" onclick="event.stopPropagation()">${escapeHtml(r.campaign_id || '—')}</a></span>
         </div>
       </td>
       <td class="crm-followup-cell">

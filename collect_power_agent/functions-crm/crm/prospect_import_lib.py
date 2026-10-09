@@ -45,6 +45,8 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+from crm.contact_clean_lib import find_emails
+
 CAMPAIGNS_COLLECTION    = "campaigns"
 CAMPAIGN_LEADS_SUB      = "campaign_leads"
 CAMPAIGN_CONTACTS_SUB   = "campaign_contacts"
@@ -100,7 +102,6 @@ _GENERIC_LOCALS = {
     "firmapost", "kontor", "hej", "hallo", "moin", "ahoi", "hei", "asiakaspalvelu",
     "myynti", "business", "orders", "order", "accessibility", "marketing",
 }
-_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+")
 
 
 # ---------------------------------------------------------------------------
@@ -184,13 +185,20 @@ def _email_type(raw: str, email: str) -> str:
     return "generic" if r else "personal"
 
 
-def parse_catalogue(paths: list[Path]) -> tuple[list[dict], list[str]]:
-    """Read all prospect sheets.  Returns (rows, warnings); rows carry '_src'."""
+def parse_catalogue(paths: list) -> tuple[list[dict], list[str]]:
+    """Read all prospect sheets.  Returns (rows, warnings); rows carry '_src'.
+    Each item is a Path, or a (name, xlsx_bytes) tuple for an uploaded file."""
+    import io
     from openpyxl import load_workbook
     rows: list[dict] = []
     warnings: list[str] = []
     for path in paths:
-        wb = load_workbook(str(path), read_only=True, data_only=True)
+        if isinstance(path, tuple):
+            name, blob = path
+            wb = load_workbook(io.BytesIO(blob), read_only=True, data_only=True)
+            path = Path(name)
+        else:
+            wb = load_workbook(str(path), read_only=True, data_only=True)
         found = False
         for ws in wb.worksheets:
             data = list(ws.iter_rows(values_only=True))
@@ -263,8 +271,11 @@ def build_records(rows: list[dict], *, prefix: str = DEFAULT_PREFIX,
             continue
         campaign = only_campaign or f"{prefix}_{code}"
 
-        m = _EMAIL_RE.search(r.get("email", ""))
-        email = m.group(0).lower() if m else ""
+        raw_email = r.get("email", "")
+        found = find_emails(raw_email)                   # the one shared detector
+        email = found[0] if found else ""
+        if raw_email.strip() and not email:
+            warnings.append(f"{src}: '{raw_email.strip()[:60]}' is not a proper email -- no contact created")
         website = _website(r.get("website", ""), r.get("contact_page", ""))
         if not website and not email:
             warnings.append(f"{src}: no website and no email -- skipped")
@@ -314,7 +325,7 @@ def build_records(rows: list[dict], *, prefix: str = DEFAULT_PREFIX,
         contact = {
             "doc_id": did, "email": email, "lead_id": lead_id, "campaign_id": campaign,
             "name": r.get("name", ""), "title": r.get("title", ""),
-            "phone": r.get("phone", ""), "website": website,
+            "phone": r.get("phone", ""), "website": website, "domain": domain,
             "company": r.get("company", ""),
             "email_type": _email_type(r.get("email_type_raw", ""), email),
             "email_type_raw": r.get("email_type_raw", ""),
@@ -566,6 +577,35 @@ def build_plan(db, records: dict, *, campaign_only: bool = False,
 # Applying
 # ---------------------------------------------------------------------------
 
+def _refresh_counts(db, camp_ref) -> dict:
+    """Recount contacts per site: campaign_leads.contact_count (Sites list) plus the
+    campaign's contact_count / lead_count.  Contacts and sites stay linked by lead_id."""
+    per_lead: dict[str, int] = {}
+    total = 0
+    for snap in camp_ref.collection(CAMPAIGN_CONTACTS_SUB).select(["lead_id"]).stream():
+        total += 1
+        lid = (snap.to_dict() or {}).get("lead_id", "")
+        per_lead[lid] = per_lead.get(lid, 0) + 1
+    batch, pending, leads, lead_ids = db.batch(), 0, 0, set()
+    for snap in camp_ref.collection(CAMPAIGN_LEADS_SUB).select(["contact_count"]).stream():
+        leads += 1
+        lead_ids.add(snap.id)
+        want = per_lead.get(snap.id, 0)
+        if (snap.to_dict() or {}).get("contact_count") != want:
+            batch.update(snap.reference, {"contact_count": want})
+            pending += 1
+            if pending >= 400:
+                batch.commit()
+                batch, pending = db.batch(), 0
+    if pending:
+        batch.commit()
+    orphans = sum(n for lid, n in per_lead.items() if lid not in lead_ids)
+    if orphans:
+        print(f"WARN {camp_ref.id}: {orphans} contact(s) point at a site that is not in the campaign "
+              f"-- run 'Update info' on the campaign to re-link them", flush=True)
+    return {"contact_count": total, "lead_count": leads}
+
+
 def apply_plan(db, plan: dict, *, source_files: list[str]) -> dict:
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -601,10 +641,11 @@ def apply_plan(db, plan: dict, *, source_files: list[str]) -> dict:
         upd = {"updated_at": now, "prospect_import": {
             "last_run": now, "files": source_files}}
         try:
-            upd["contact_count"] = e["camp_ref"].collection(CAMPAIGN_CONTACTS_SUB) \
-                .count().get()[0][0].value
-        except Exception:
-            pass
+            from crm.site_link_lib import ensure_site_links
+            ensure_site_links(db, campaign)          # every contact must belong to a site
+            upd.update(_refresh_counts(db, e["camp_ref"]))
+        except Exception as exc:                     # import itself succeeded
+            print(f"WARN could not refresh counts for {campaign}: {exc}", flush=True)
         e["camp_ref"].set(upd, merge=True)
     return dict(written)
 
@@ -658,3 +699,63 @@ def print_report(plan: dict, warnings: list[str], *, show_changes: int = 10) -> 
                     print(f"   ~ {label} {op.label}: " + "; ".join(parts))
                     shown += 1
         print()
+
+
+# ---------------------------------------------------------------------------
+# Web import (campaign-import.html -> /api/crm/prospect-import)
+# ---------------------------------------------------------------------------
+
+def run_prospect_web_import(db, filename: str, blob: bytes, *, prefix: str = DEFAULT_PREFIX,
+                            campaign: str = "", campaign_only: bool = False,
+                            dry_run: bool = True) -> dict:
+    """Same pipeline as app/prospects_import.py for one uploaded workbook.
+    Returns the summary dict the import page shows.  Never writes when dry_run,
+    and refuses to write when the duplicate check against other campaigns failed."""
+    rows, warnings = parse_catalogue([(filename, blob)])
+    records, w2 = build_records(rows, prefix=(prefix or DEFAULT_PREFIX).strip(),
+                                only_campaign=(campaign or "").strip())
+    warnings += w2
+    if not records:
+        return {"format": "prospect", "dry_run": dry_run, "rows_parsed": len(rows),
+                "campaigns": [], "leads_new": 0, "leads_updated": 0, "contacts_new": 0,
+                "contacts_updated": 0, "skipped": 0, "warnings": warnings or
+                ["No prospect rows found (need a sheet with Company and Email headers)."]}
+    plan = build_plan(db, records, campaign_only=campaign_only)
+
+    failed = [c for c, e in plan.items() if e["dup_check_error"]]
+    if failed and not dry_run:
+        raise ValueError("Duplicate check against other campaigns failed for "
+                         + ", ".join(failed) + " -- nothing was written. Run a dry run for details.")
+
+    camps, tot = [], {"leads_new": 0, "leads_updated": 0, "contacts_new": 0,
+                      "contacts_updated": 0, "skipped": 0}
+    for cid, e in plan.items():
+        skipped = (len(e["reserved"]) + len(e["in_run_dupes"]) + len(e["contacted_skipped"]))
+        camps.append({
+            "campaign_id": cid, "campaign_exists": e["campaign_exists"],
+            "leads": e["lead_stats"], "contacts": e["contact_stats"],
+            "site_leads": e["site_lead_stats"], "site_contacts": e["site_contact_stats"],
+            "email_contacts": e["email_contact_stats"],
+            "no_email": e["no_email"],
+            "skipped_other_campaign": e["reserved"][:50],
+            "skipped_same_run": e["in_run_dupes"][:50],
+            "skipped_contacted": e["contacted_skipped"][:50],
+            "dup_check_error": e["dup_check_error"],
+            "leads_elsewhere": e["leads_elsewhere"],
+            "missing_from_catalogue": len(e["missing_from_catalogue"]),
+        })
+        tot["leads_new"] += e["lead_stats"]["new"]
+        tot["leads_updated"] += e["lead_stats"]["changed"]
+        tot["contacts_new"] += e["contact_stats"]["new"]
+        tot["contacts_updated"] += e["contact_stats"]["changed"]
+        tot["skipped"] += skipped
+        if e["dup_check_error"]:
+            warnings.append(f"{cid}: duplicate check against other campaigns FAILED "
+                            f"({e['dup_check_error']}) -- writing is blocked until it works")
+
+    written = {}
+    if not dry_run:
+        written = apply_plan(db, plan, source_files=[filename])
+    return {"format": "prospect", "dry_run": dry_run, "rows_parsed": len(rows),
+            "campaign_id": ", ".join(plan), "campaigns": camps, "written": written,
+            "warnings": warnings, **tot}

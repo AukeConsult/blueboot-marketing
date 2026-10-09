@@ -125,6 +125,39 @@ def campaign_import():
         return _err(str(exc), 500)
 
 
+@bp.route("/api/crm/prospect-import", methods=["POST"])
+def prospect_import():
+    """Import a BlueSearch prospect catalogue (.xlsx) into campaigns.
+
+    Multipart form fields:
+      file           -- .xlsx prospect catalogue (Company/Email headers)
+      dry_run        -- 'true' | '1' to preview without writing (default: TRUE)
+      campaign_id    -- put all rows into this campaign (default: one per country, <prefix>_<CC>)
+      prefix         -- campaign prefix, default BS
+      campaign_only  -- 'true' to skip site_leads / site_contacts / email_contacts
+    """
+    if "file" not in request.files:
+        return _err("file is required (multipart field 'file')", 400)
+    uploaded = request.files["file"]
+    if not uploaded.filename or not uploaded.filename.lower().endswith(".xlsx"):
+        return _err("file must be a .xlsx Excel file", 400)
+    # Safe default: anything but an explicit false is a dry run
+    dry_run = request.form.get("dry_run", "true").lower() not in ("0", "false", "no")
+    campaign_only = request.form.get("campaign_only", "").lower() in ("1", "true", "yes")
+    try:
+        from crm.prospect_import_lib import run_prospect_web_import
+        result = run_prospect_web_import(
+            _get_db(), uploaded.filename, uploaded.read(),
+            prefix=request.form.get("prefix", "BS"),
+            campaign=request.form.get("campaign_id", ""),
+            campaign_only=campaign_only, dry_run=dry_run)
+        return jsonify({"status": "ok", **result})
+    except ValueError as exc:
+        return _err(str(exc), 409)
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 def _split_list_param(value) -> list[str]:
     if not value:
         return []

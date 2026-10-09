@@ -17,7 +17,7 @@ from .outreach_stats import refresh_campaign_stats
 
 
 _MSGID_RE = re.compile(r"<[^<>\s]+>")
-_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
+from crm.contact_clean_lib import find_emails          # the one e-mail detector
 
 _SETTINGS  = "settings"
 _MAIL_ACCS = "mail_accounts"
@@ -75,8 +75,8 @@ _DMARC_ATTACH_RE = re.compile(r"\.(xml\.gz|xml\.zip|gz|zip)$", re.IGNORECASE)
 def _bare(value: str) -> str:
     if not value:
         return ""
-    m = _EMAIL_RE.search(value)
-    return m.group(0).lower() if m else ""
+    found = find_emails(value)
+    return found[0] if found else ""
 
 
 def _decode_mime(value) -> str:
@@ -287,8 +287,8 @@ def _extract_bounce_recipient(msg, sender_addr: str = "") -> str | None:
             add(1, m.group(1))
 
     # P3 — generic: first plain address that is not a daemon / not the sender
-    for m in _EMAIL_RE.finditer(body):
-        add(3, m.group(0))
+    for addr in find_emails(body):
+        add(3, addr)
 
     if not found:
         return None

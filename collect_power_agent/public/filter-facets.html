@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Blueboot — Filter Facets</title>
+<title>Blueboot — Leads DB</title>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
 <link rel="stylesheet" href="css/styles.css">
@@ -25,7 +25,7 @@
 <div class="container py-4" style="max-width:1200px">
 
   <div class="d-flex align-items-center justify-content-between mb-3">
-    <h5 class="page-title"><i class="ti ti-filter me-2 text-primary"></i>Filter Facets</h5>
+    <h5 class="page-title"><i class="ti ti-database-search me-2 text-primary"></i>Leads DB</h5>
 <span id="meta" class="small" style="color:var(--bb-muted)"></span>
   </div>
 
@@ -42,20 +42,20 @@
         </div>
       </div>
       <button class="btn btn-outline-secondary btn-sm" id="rebuild-btn" onclick="rebuildFacets()"
-              title="Rescan the data and rebuild this pipeline's base facet catalog">
-        <i class="ti ti-refresh me-1"></i>Rebuild <span id="rebuild-pl">site_leads</span> facets
+              title="Rescan the leads database and rebuild the list of filter values for this pipeline">
+        <i class="ti ti-refresh me-1"></i>Rebuild <span id="rebuild-pl">site_leads</span> filter values
       </button>
     </div>
     <div class="row g-2 align-items-end">
       <div class="col-md-5">
-        <label class="form-label small fw-500 mb-1">Load facets</label>
+        <label class="form-label small fw-500 mb-1">Load saved search</label>
         <div class="d-flex align-items-center gap-1">
           <select id="load-select" class="form-select form-select-sm" onchange="localStorage.setItem('selectedFacet', this.value); loadSelected()"></select>
           <button class="bb-btn-refresh" onclick="loadSelected()" title="Refresh"><i class="ti ti-refresh"></i></button>
         </div>
       </div>
       <div class="col-md-7">
-        <label class="form-label small fw-500 mb-1">Facet name — type a new name to create a new facet</label>
+        <label class="form-label small fw-500 mb-1">Search name — type a new name to save a new search</label>
         <div class="input-group input-group-sm">
           <input id="save-name" class="form-control" placeholder="e.g. NO_ecom_targets">
           <button class="btn btn-primary" onclick="save()">
@@ -82,7 +82,7 @@
         </select>
         <button class="btn btn-link btn-sm p-0 text-decoration-none" onclick="clearAll()" style="color:var(--bb-muted)"><i class="ti ti-eraser me-1"></i>clear all</button>
         <button class="btn btn-success btn-sm ms-2" onclick="openCreateCampaign()" id="create-campaign-btn" disabled
-          title="Save &amp; count the preset first, then launch a campaign from these filters">
+          title="Save &amp; count the search first, then launch a campaign from these filters">
           <i class="ti ti-speakerphone me-1"></i>Create campaign from filter
         </button>
       </div>
@@ -102,12 +102,12 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
       <div class="modal-header border-0 pb-0">
-        <h6 class="modal-title"><i class="ti ti-speakerphone text-success me-2"></i>Create campaign from facet</h6>
+        <h6 class="modal-title"><i class="ti ti-speakerphone text-success me-2"></i>Create campaign from saved search</h6>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div class="mb-3">
-          <label class="form-label small fw-500">Facet preset</label>
+          <label class="form-label small fw-500">Saved search</label>
           <div class="form-control form-control-sm bg-light" id="ccm-facet-name" style="color:var(--bb-muted)"></div>
         </div>
         <div class="mb-3">
@@ -196,7 +196,7 @@ function updateRebuildLabel(){
 async function rebuildFacets(){
   const btn = document.getElementById('rebuild-btn');
   btn.disabled = true;
-  setStatus(`<span class="spinner-border spinner-border-sm me-1"></span>Rebuilding ${currentPipeline} facets…`, 'ok', true);
+  setStatus(`<span class="spinner-border spinner-border-sm me-1"></span>Rebuilding ${currentPipeline} filter values…`, 'ok', true);
   try{
     const r = await fetchWithTimeout(BASE + '/api/crm/build-facets?pipeline=' + encodeURIComponent(currentPipeline));
     const d = await r.json();
@@ -421,7 +421,7 @@ function setAll(name, val){
 
 async function save(){
   const name = (document.getElementById('save-name').value || '').trim();
-  if(!name){ setStatus('Enter a preset name to save under.', 'err'); return; }
+  if(!name){ setStatus('Enter a name for this saved search.', 'err'); return; }
   if(!facets){ setStatus('Nothing loaded to save.', 'err'); return; }
   Object.values(facets.filters).forEach(f => {
     if(f.type === 'group') (f.groups||[]).forEach(g => { if(g.selected == null) g.selected = false; });

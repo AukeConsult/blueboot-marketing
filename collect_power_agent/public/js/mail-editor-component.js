@@ -102,7 +102,7 @@
             </div>
           </div>
 
-          <div data-me="stepBar" class="p-2 mb-2 rounded d-flex align-items-center gap-3" style="display:none;background:#eff6ff;border:1px solid #bfdbfe">
+          <div data-me="stepBar" class="p-2 mb-2 rounded align-items-center gap-3" style="display:none;background:#eff6ff;border:1px solid #bfdbfe">
             <label class="form-label small fw-500 mb-0 text-nowrap">Send after days</label>
             <input data-me="stepDelay" class="form-control form-control-sm" type="number" min="0" placeholder="0" style="max-width:90px">
           </div>
@@ -191,7 +191,7 @@
         const badge = this.$('stepBadge');
         badge.textContent = label;
         badge.style.display = '';
-        this.$('stepBar').style.display = '';
+        this.$('stepBar').style.display = 'flex';
         this.$('stepDelay').value = step ? (step.delay_days ?? 0) : (delay || 0);
         if (step) {
           const body = step.body_html || step.body_text || '';

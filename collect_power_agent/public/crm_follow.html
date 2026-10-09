@@ -68,6 +68,11 @@
     <input id="search" class="form-control form-control-sm" style="max-width:240px"
       placeholder="Search name, email, website or title…" oninput="applyFilter(); _maybeFilterSites();">
 
+    <div class="input-group input-group-sm" style="max-width:220px" title="Show only contacts from one site. Click a site in the Sites tab to fill this in.">
+      <span class="input-group-text"><i class="ti ti-building"></i></span>
+      <input id="site-filter" class="form-control" placeholder="Site / domain…" oninput="onSiteFilterInput()">
+      <button class="btn btn-outline-secondary" type="button" title="Clear site filter" onclick="clearSiteFilter()"><i class="ti ti-x"></i></button>
+    </div>
 
     <select id="followup-filter" class="form-select form-select-sm" style="max-width:170px" onchange="applyFilter()">
       <option value="">All follow-up statuses</option>
@@ -192,15 +197,15 @@
   <!-- Tab nav: Contacts | Sites -->
   <ul class="nav nav-tabs mb-0" id="follow-tabs" style="border-bottom:none">
     <li class="nav-item">
-      <button class="nav-link active" id="tab-contacts-btn" data-bs-toggle="tab" data-bs-target="#tab-contacts-pane">
-        <i class="ti ti-users me-1"></i>Contacts
-        <span class="badge bg-secondary ms-1 fw-normal" id="contacts-tab-count" style="font-size:10px"></span>
-      </button>
-    </li>
-    <li class="nav-item">
       <button class="nav-link" id="tab-sites-btn" data-bs-toggle="tab" data-bs-target="#tab-sites-pane">
         <i class="ti ti-building me-1"></i>Sites
         <span class="badge bg-secondary ms-1 fw-normal" id="sites-tab-count" style="font-size:10px"></span>
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link active" id="tab-contacts-btn" data-bs-toggle="tab" data-bs-target="#tab-contacts-pane">
+        <i class="ti ti-users me-1"></i>Contacts
+        <span class="badge bg-secondary ms-1 fw-normal" id="contacts-tab-count" style="font-size:10px"></span>
       </button>
     </li>
   </ul>

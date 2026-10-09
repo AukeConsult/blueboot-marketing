@@ -99,7 +99,7 @@ Reads un-enriched `site_leads` documents and sends batches to OpenAI to classify
 ### 1.3 Location Enrichment — `site_location_enrich.py`
 
 Resolves `ai_country` to a standardised country name and city, writing:
-- `location` — "City, Country" string (top 200 most-used used by filter facets)
+- `location` — "City, Country" string (top 200 most-used, offered as filter values in the Leads DB)
 - `location_country` — ISO country of HQ
 - `location_enriched_at`
 
@@ -346,7 +346,7 @@ Long-running operations run as Cloud Tasks jobs:
 | `campaign-export` | Full override button | Firestore → Drive sheet |
 | `crm-sync` | Discover campaigns | Master sheet → Firestore |
 | `statistics` | Collect statistics button | Run all `StatisticsBuilder` aggregations |
-| `filter-count` | Filter facets page | Count leads matching a filter selection |
+| `filter-count` | Leads DB page | Count leads matching a filter selection |
 
 Jobs are stored in `jobs/{job_id}` in Firestore with fields: `name`, `status`, `params`, `result`, `error`, `queued_at`, `started_at`, `finished_at`.
 
@@ -377,9 +377,23 @@ python app/maint_statistics.py --only site-funnel
 
 ---
 
-## 8. Filter Facets
+## 8. The Leads DB
 
-Precomputed catalog of selectable filter values, stored in `filter_facets/site_leads`. Built by scanning all `site_leads` + `site_contacts` documents:
+The **Leads DB** is the database of every company (lead) and contact the system has discovered or imported. It is where campaigns are built from: you search it on the **Leads DB page** (`filter-facets.html`, *Campaigns → Leads DB*), save the search, and create a campaign from it.
+
+| Part | Collections | Filled by |
+|---|---|---|
+| Site pipeline | `site_leads/{lead_id}` and `site_leads/{lead_id}/site_contacts` | `site_agent`, `site_enrich_agent`, prospect catalogue import |
+| Leads pipeline | `leads` and its contacts | `lead_agent`, `lead_enrich` |
+| Contact pool used for campaigns | `email_contacts` | contact/email steps of the pipelines, prospect catalogue import |
+
+The **Pipeline** switch on the page chooses *Site leads* or *Leads*. Searching the Leads DB never changes it; a campaign gets its own copy of the matching leads and contacts (`campaigns/{id}/campaign_leads` and `campaign_contacts`).
+
+**Naming note.** Older code and documents call this "filter facets". In the user interface it is now *Leads DB*, a saved selection is a *saved search* and the selectable values are *filter values*. The technical names are unchanged: the Firestore collection `filter_facets`, the API `/api/crm/filter-facets`, the page address `filter-facets.html` and the scripts `build_filter_facets.py` / `facet_campaign.py`. In `filter_facets/` the documents `site_leads` and `leads` are the lists of filter values (the real "facets"); every other document is a saved search.
+
+### Filter values (the "facet" catalog)
+
+Precomputed list of selectable filter values, stored in `filter_facets/site_leads` (and `filter_facets/leads`). Built by scanning all `site_leads` + `site_contacts` documents:
 
 - Platform, AI platform, AI sector, AI company type
 - Country, AI country, location, location country
@@ -508,9 +522,9 @@ Setup scripts live in `cloud_batch/setup/` (run once, in order 01→06). See `cl
 
 These scripts are run by a developer from the project root. They are not available from the frontend UI.
 
-### Rebuild the filter facet catalog
+### Rebuild the Leads DB filter values
 
-The filter facet catalog (the selectable values on the Filter Facets page) is built by scanning all contacts in the pipeline and collecting every value that appears. Run this after a large import to refresh the available filter options:
+The filter values (the selectable values on the Leads DB page, stored as "filter facets") are built by scanning all contacts in the pipeline and collecting every value that appears. Run this after a large import to refresh the available filter options:
 
 ```bash
 python app/build_filter_facets.py

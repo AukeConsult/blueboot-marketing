@@ -9,7 +9,7 @@ let CAMPAIGN_ID = '';
 let DOC_ID      = '';
 let contact     = null;
 let users       = [];
-let quill       = null;
+let mailEditor  = null;
 
 // Surface any uncaught error / rejection on-screen instead of leaving the page
 // stuck on "Loading…". Also logs a marker so a stale cached build is obvious.
@@ -142,7 +142,6 @@ function render() {
       ? `${r.outreach_display_name} <${r.outreach_email}>`
       : (r.outreach_email || '— no campaign mail account —');
   document.getElementById('cc-mail-to').value = r.name ? `${r.name} <${r.email}>` : (r.email || '');
-  document.getElementById('cc-mail-subject').value = 'Follow-up';
   initQuill();
 
   // history
@@ -187,20 +186,56 @@ async function patchField(field, value, ackMail) {
 // ── Mail composer ─────────────────────────────────────────────────────────────
 
 function initQuill() {
-  if (quill || !window.Quill) return;
-  quill = new Quill('#cc-mail-editor', {
-    theme: 'snow',
-    placeholder: 'Write your message…',
-    modules: { toolbar: [['bold', 'italic', 'underline'], ['link'], [{ list: 'ordered' }, { list: 'bullet' }], ['clean']] },
-  });
+  // Same editor as the campaign mail: Plain / HTML (Editor | HTML | Preview).
+  if (mailEditor || !window.MailEditorComponent) return;
+  mailEditor = new MailEditorComponent(document.getElementById('cc-mail-editor-host'),
+    { showMainButton: false, showSaveButton: false, showTestButton: false });
+  mailEditor.loadDraft({ title: 'Mail', subtitle: '', mail: { subject: 'Follow-up', body: '', type: 'plain' } });
 }
+
+// ── Mail popup (resizable + draggable) ───────────────────────────────────────
+function openMailPopup() {
+  const body = document.getElementById('cc-mail-body');
+  document.getElementById('cc-mail-pop-content').appendChild(body);
+  document.getElementById('cc-mail-pop').style.display = '';
+}
+function closeMailPopup() {
+  const body = document.getElementById('cc-mail-body');
+  const card = document.getElementById('cc-mail-pop-btn').closest('.card');
+  if (body.parentElement.id === 'cc-mail-pop-content') card.appendChild(body);
+  document.getElementById('cc-mail-pop').style.display = 'none';
+}
+(function () {
+  const head = document.getElementById('cc-mail-pop-head');
+  const win  = document.getElementById('cc-mail-pop-win');
+  if (!head || !win) return;
+  let sx, sy, ox, oy, drag = false;
+  head.addEventListener('mousedown', e => {
+    if (e.target.closest('button')) return;
+    drag = true; sx = e.clientX; sy = e.clientY; ox = win.offsetLeft; oy = win.offsetTop;
+    e.preventDefault();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!drag) return;
+    win.style.left = Math.max(0, ox + e.clientX - sx) + 'px';
+    win.style.top  = Math.max(0, oy + e.clientY - sy) + 'px';
+  });
+  document.addEventListener('mouseup', () => { drag = false; });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('cc-mail-pop').style.display !== 'none') closeMailPopup();
+  });
+})();
 
 async function sendMail() {
   const fb  = document.getElementById('cc-mail-feedback');
   const btn = document.getElementById('cc-mail-send');
-  const subject = (document.getElementById('cc-mail-subject').value || 'Follow-up').trim();
-  const html = quill ? quill.root.innerHTML : '';
-  const text = quill ? quill.getText().trim() : '';
+  const subject = ((mailEditor && mailEditor.$('subject').value) || 'Follow-up').trim();
+  const isHtml = !!mailEditor && mailEditor.getType() === 'html';
+  const rawBody = mailEditor ? mailEditor.getBody() : '';
+  const html = isHtml ? rawBody : '';
+  const text = isHtml
+    ? (new DOMParser().parseFromString(rawBody, 'text/html').body.innerText || '').trim()
+    : rawBody.trim();
   if (!text) {
     fb.className = 'alert alert-warning py-2 px-3 small mb-2'; fb.textContent = 'Mail body is required.'; fb.style.display = '';
     return;
@@ -225,7 +260,7 @@ async function sendMail() {
     fb.className = 'alert alert-success py-2 px-3 small mb-2';
     fb.innerHTML = `<i class="ti ti-circle-check me-1"></i>${esc(r.message || 'Mail sent.')}`;
     fb.style.display = '';
-    if (quill) quill.setText('');
+    if (mailEditor) mailEditor.loadDraft({ title: 'Mail', mail: { subject: 'Follow-up', body: '', type: mailEditor.getType() } });
     await reloadContact();   // refresh history + status
   } catch (e) {
     fb.className = 'alert alert-danger py-2 px-3 small mb-2'; fb.textContent = e.message; fb.style.display = '';

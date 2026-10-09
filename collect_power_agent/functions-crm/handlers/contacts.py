@@ -78,9 +78,17 @@ def get_campaign_contact(campaign_id, doc_id):
         if not doc.exists:
             return _err(f"Contact '{doc_id}' not found in campaign '{campaign_id}'", 404)
         d = doc.to_dict() or {}
+        camp = (db.collection("campaigns").document(campaign_id).get().to_dict()) or {}
+        outreach_email = (camp.get("outreach_email_account") or "").strip()
+        outreach_display_name = ""
+        if outreach_email:
+            from handlers.shared import _get_mail_account
+            outreach_display_name = (_get_mail_account(db, outreach_email) or {}).get("display_name", "")
         return jsonify({
             "campaign_id":         campaign_id,
             "doc_id":              doc_id,
+            "outreach_email":        outreach_email,
+            "outreach_display_name": outreach_display_name,
             "name":                d.get("name", ""),
             "email":               d.get("email", ""),
             "title":               d.get("title", ""),
@@ -484,6 +492,9 @@ def followup_contacts():
                 "email":               d.get("email", ""),
                 "title":               d.get("title", ""),
                 "website":             d.get("website", ""),
+                "lead_id":             d.get("lead_id", "") or "",
+                "domain":              d.get("domain", "") or "",
+                "company":             d.get("company", "") or "",
                 "status":              status,
                 "followup_date":       d.get("followup_date", "") or "",
                 "followup_status":     _followup_status(d.get("followup_status", "")),

@@ -160,7 +160,7 @@ function renderSitesTabTable(leads) {
     const impOpts = IMPORTANCE_LEVELS.map(i =>
       `<option value="${i.value}"${(l.followup_importance||'') === i.value ? ' selected' : ''}>${i.label}</option>`
     ).join('');
-    return `<tr class="site-tab-row" data-idx="${idx}">
+    return `<tr class="site-tab-row" data-idx="${idx}" style="cursor:pointer" title="Show contacts from this site" onclick="onSiteRowClick(event, ${idx})">
       <td class="small fw-semibold">${escapeHtml(l.company||l.domain||'—')}</td>
       <td class="small">${escapeHtml(l.ai_sector||'—')}</td>
       <td class="text-center">${_sitePrioBadge(l.priority)}</td>
@@ -170,6 +170,12 @@ function renderSitesTabTable(leads) {
       <td class="text-center small">${_siteContactCount(l)}</td>
     </tr>`;
   }).join('');
+}
+
+function onSiteRowClick(ev, idx) {
+  if (ev.target.closest('select, button, a, input')) return;
+  const lead = _allSiteLeads[idx];
+  if (lead) filterContactsBySite(lead);
 }
 
 async function saveSiteLeadField(el) {

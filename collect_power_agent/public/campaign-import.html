@@ -25,7 +25,66 @@
 
       <div id="import-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
 
-      <!-- Upload form -->
+      <ul class="nav nav-tabs mb-3" id="mode-tabs">
+        <li class="nav-item"><button type="button" class="nav-link active" id="tab-standard" onclick="setMode('standard')">
+          <i class="ti ti-table me-1"></i>Standard (Leads+Contacts)</button></li>
+        <li class="nav-item"><button type="button" class="nav-link" id="tab-prospect" onclick="setMode('prospect')">
+          <i class="ti ti-binoculars me-1"></i>Prospect catalogue</button></li>
+      </ul>
+
+      <!-- Prospect catalogue form -->
+      <div class="card mb-3" id="prospect-card" style="display:none">
+        <div class="card-body">
+          <p class="small text-muted mb-3">
+            BlueSearch prospect catalogue (one sheet with <strong>Company</strong>, <strong>Site</strong>, <strong>Email</strong>&hellip; columns).
+            Rows are grouped by country into one campaign each (<code>BS_UK</code>, <code>BS_DK</code>&hellip;).
+            New rows are added, changed fields updated, existing outreach data is never overwritten, and contacts
+            that already exist in another campaign are skipped.
+          </p>
+          <div class="row g-2 mb-3">
+            <div class="col-7">
+              <label class="form-label">Campaign ID <span class="text-muted">(optional)</span></label>
+              <input type="text" id="p-campaign-id" class="form-control" placeholder="blank = one campaign per country" />
+            </div>
+            <div class="col-5">
+              <label class="form-label">Prefix</label>
+              <input type="text" id="p-prefix" class="form-control" value="BS" />
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Prospect file</label>
+            <div id="p-drop-zone" class="bb-drop-zone text-center p-4 rounded"
+                 ondragover="pDragOver(event)" ondragleave="pDragLeave(event)" ondrop="pDrop(event)">
+              <i class="ti ti-upload fs-2 text-muted d-block mb-2"></i>
+              <p class="mb-2 small text-muted">Drop a <code>BlueSearch-&hellip;-prospects.xlsx</code> file here</p>
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="document.getElementById('p-file-input').click()">Browse file</button>
+              <input type="file" id="p-file-input" accept=".xlsx" class="d-none" onchange="onProspectFileSelected(event)" />
+            </div>
+            <div id="p-file-name" class="form-text mt-1" style="display:none"></div>
+            <div class="mt-2">
+              <button class="btn btn-sm btn-outline-secondary" type="button" onclick="downloadProspectExample()">
+                <i class="ti ti-download me-1"></i>Download example file
+              </button>
+              <span class="form-text ms-2">Prospect sheet layout with a field guide</span>
+            </div>
+          </div>
+          <div class="mb-2 form-check">
+            <input type="checkbox" class="form-check-input" id="p-campaign-only" />
+            <label class="form-check-label" for="p-campaign-only">
+              Only campaign leads/contacts &mdash; skip site_leads, site_contacts and email_contacts
+            </label>
+          </div>
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" id="p-dry-run" checked />
+            <label class="form-check-label" for="p-dry-run">Dry run &mdash; preview without writing to Firestore</label>
+          </div>
+          <button class="btn btn-primary w-100" id="p-import-btn" onclick="runProspectImport()" disabled>
+            <i class="ti ti-file-import me-1"></i>Import prospects
+          </button>
+        </div>
+      </div>
+
+      <!-- Upload form (standard) -->
       <div class="card mb-3" id="upload-card">
         <div class="card-body">
 
@@ -113,6 +172,13 @@
             </div>
           </div>
 
+          <div id="campaigns-box" style="display:none" class="mb-3">
+            <p class="small text-muted mb-1">Per campaign (new / changed / unchanged):</p>
+            <div class="table-responsive"><table class="table table-sm small mb-0">
+              <thead><tr><th>Campaign</th><th>Leads</th><th>Contacts</th><th>Skipped</th></tr></thead>
+              <tbody id="campaigns-body"></tbody></table></div>
+          </div>
+
           <div id="warnings-box" style="display:none" class="mb-3">
             <p class="small text-muted mb-1">Warnings:</p>
             <ul class="small text-warning mb-0" id="warnings-list"></ul>
@@ -131,7 +197,111 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 let _selectedFile = null;
+let _selectedProspectFile = null;
+let _mode         = 'standard';
 let _lastResult   = null;
+
+function setMode(mode) {
+  _mode = mode;
+  document.getElementById('upload-card').style.display   = mode === 'standard' ? '' : 'none';
+  document.getElementById('prospect-card').style.display = mode === 'prospect' ? '' : 'none';
+  document.getElementById('tab-standard').classList.toggle('active', mode === 'standard');
+  document.getElementById('tab-prospect').classList.toggle('active', mode === 'prospect');
+  document.getElementById('result-card').style.display = 'none';
+  setFeedback(null);
+}
+
+function pDragOver(e) { e.preventDefault(); document.getElementById('p-drop-zone').classList.add('bb-drop-zone-active'); }
+function pDragLeave() { document.getElementById('p-drop-zone').classList.remove('bb-drop-zone-active'); }
+function pDrop(e) {
+  e.preventDefault(); pDragLeave();
+  const f = e.dataTransfer.files[0];
+  if (f) setProspectFile(f);
+}
+function onProspectFileSelected(e) { const f = e.target.files[0]; if (f) setProspectFile(f); }
+function setProspectFile(file) {
+  if (!file.name.toLowerCase().endsWith('.xlsx')) {
+    setFeedback('<i class="ti ti-circle-x me-1"></i>Only .xlsx files are supported.', 'danger');
+    return;
+  }
+  _selectedProspectFile = file;
+  const el = document.getElementById('p-file-name');
+  el.textContent = `Selected: ${file.name} (${(file.size/1024).toFixed(1)} KB)`;
+  el.style.display = '';
+  document.getElementById('p-import-btn').disabled = false;
+  document.getElementById('result-card').style.display = 'none';
+  setFeedback(null);
+}
+
+async function postProspect(dryRun) {
+  const fd = new FormData();
+  fd.append('file', _selectedProspectFile);
+  fd.append('campaign_id', document.getElementById('p-campaign-id').value.trim());
+  fd.append('prefix', document.getElementById('p-prefix').value.trim() || 'BS');
+  fd.append('campaign_only', document.getElementById('p-campaign-only').checked ? 'true' : 'false');
+  fd.append('dry_run', dryRun ? 'true' : 'false');
+  const token = await firebase.auth().currentUser?.getIdToken();
+  const r = await fetch(`${BASE}/api/crm/prospect-import`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: fd,
+  });
+  const d = await r.json();
+  if (d.status === 'error') throw new Error(d.message || 'Import failed');
+  return d;
+}
+
+async function runProspectImport() {
+  if (!_selectedProspectFile) { setFeedback('<i class="ti ti-circle-x me-1"></i>Please select a file.', 'danger'); return; }
+  const dryRun = document.getElementById('p-dry-run').checked;
+  const btn = document.getElementById('p-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Running…';
+  setFeedback(null);
+  document.getElementById('result-card').style.display = 'none';
+  try {
+    const d = await postProspect(dryRun);
+    _lastResult = d;
+    showResult(d, dryRun);
+  } catch (e) {
+    setFeedback(`<i class="ti ti-circle-x me-1"></i>${escapeHtml(e.message)}`, 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-file-import me-1"></i>Import prospects';
+  }
+}
+
+function statCell(st) {
+  return st ? `${st.new} / ${st.changed} / ${st.unchanged}` : '—';
+}
+function showCampaigns(d) {
+  const box = document.getElementById('campaigns-box');
+  const body = document.getElementById('campaigns-body');
+  body.innerHTML = '';
+  const camps = d.campaigns || [];
+  if (!camps.length) { box.style.display = 'none'; return; }
+  camps.forEach(c => {
+    const skipped = (c.skipped_other_campaign || []).length + (c.skipped_same_run || []).length
+                  + (c.skipped_contacted || []).length;
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td><code>${escapeHtml(c.campaign_id)}</code>${c.campaign_exists ? '' : ' <span class="badge text-bg-info">new</span>'}</td>` +
+      `<td>${statCell(c.leads)}</td><td>${statCell(c.contacts)}</td><td>${skipped}</td>`;
+    body.appendChild(tr);
+    const notes = [];
+    if ((c.skipped_other_campaign || []).length) notes.push(`${c.skipped_other_campaign.length} already in another campaign`);
+    if ((c.skipped_same_run || []).length) notes.push(`${c.skipped_same_run.length} same email in another campaign of this file`);
+    if ((c.skipped_contacted || []).length) notes.push(`${c.skipped_contacted.length} already contacted (per catalogue)`);
+    if (c.no_email) notes.push(`${c.no_email} row(s) without email (lead only)`);
+    if (c.leads_elsewhere) notes.push(`${c.leads_elsewhere} site(s) also in other campaigns`);
+    if (notes.length) {
+      const nr = document.createElement('tr');
+      nr.innerHTML = `<td></td><td colspan="3" class="text-muted">${notes.map(escapeHtml).join(' · ')}</td>`;
+      body.appendChild(nr);
+    }
+  });
+  box.style.display = '';
+}
 
 requireAuth().then(() => {
   requireRole(['admin', 'campaign-user']);
@@ -220,6 +390,7 @@ function showResult(d, dryRun) {
   document.getElementById('r-skipped').textContent      = d.skipped ?? 0;
   document.getElementById('r-rows').textContent         = d.rows_parsed ?? 0;
 
+  showCampaigns(d);
   const warnBox  = document.getElementById('warnings-box');
   const warnList = document.getElementById('warnings-list');
   warnList.innerHTML = '';
@@ -236,9 +407,10 @@ function showResult(d, dryRun) {
 
   // Show detected campaign if UI field was left blank
   const campLabel = d.campaign_id ? ` <code>${escapeHtml(d.campaign_id)}</code>` : '';
+  const blocked = (d.campaigns || []).some(c => c.dup_check_error);
   const confirmBtn = document.getElementById('confirm-btn');
   if (dryRun) {
-    confirmBtn.style.display = '';
+    confirmBtn.style.display = blocked ? 'none' : '';
     setFeedback(`<i class="ti ti-check me-1"></i>Dry run complete${campLabel} — review counts below then confirm.`, 'info');
   } else {
     confirmBtn.style.display = 'none';
@@ -249,6 +421,22 @@ function showResult(d, dryRun) {
 }
 
 async function confirmImport() {
+  if (_mode === 'prospect') {
+    if (!_selectedProspectFile) return;
+    const b = document.getElementById('confirm-btn');
+    b.disabled = true;
+    b.innerHTML = '<i class="ti ti-loader me-1"></i>Writing…';
+    setFeedback(null);
+    try {
+      showResult(await postProspect(false), false);
+    } catch (e) {
+      setFeedback(`<i class="ti ti-circle-x me-1"></i>${escapeHtml(e.message)}`, 'danger');
+    } finally {
+      b.disabled = false;
+      b.innerHTML = '<i class="ti ti-database-import me-1"></i>Confirm and write to Firestore';
+    }
+    return;
+  }
   const campaignId = document.getElementById('campaign-id').value.trim();
   if (!_selectedFile) return;
 
@@ -353,6 +541,83 @@ function downloadExampleFile() {
   const a    = document.createElement('a');
   a.href     = url;
   a.download = 'campaign-import-example.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadProspectExample() {
+  if (!window.XLSX) {
+    setFeedback('<i class="ti ti-circle-x me-1"></i>Spreadsheet library not loaded — please refresh the page.', 'danger');
+    return;
+  }
+  const wb = window.XLSX.utils.book_new();
+
+  // ── Sheet 1: prospects (one row per contact; sheet name is free) ───────────
+  const headers = [
+    'Priority','Company','Country','City / state','Prospect type','Contact person','Role to approach',
+    'Email','Email type','Phone','Contact URL','Site','Why BlueSearch could fit (assessment)',
+    'Suggested sales angle','Company or person source','Contact source','Source URLs','Research date',
+    'Status','Last contacted','Next follow-up','Notes','page_count','sitemap_url',
+  ];
+  const rows = [
+    [1,'Example Publishing Ltd','United Kingdom','London','Publisher','Jane Smith','Head of Digital',
+     'jane.smith@example-publishing.co.uk','Named contact','+44 20 0000 0001',
+     'https://www.example-publishing.co.uk/contact','https://www.example-publishing.co.uk',
+     'Large archive of articles that readers struggle to search.','Offer a pilot on the archive search',
+     'Company website','Company website','https://www.example-publishing.co.uk/about','2026-10-01',
+     'Not contacted','','','','12500','https://www.example-publishing.co.uk/sitemap.xml'],
+    [2,'Sample Journals Ltd','UK','Oxford','Academic publisher','','Managing Director',
+     'info@samplejournals.co.uk','Generic','','','https://samplejournals.co.uk',
+     'Journal back-catalogue with heavy full-text content.','Content discovery for researchers',
+     'Industry directory','Company website','','2026-10-01','Not contacted','','','',
+     '',''],
+    ['Medium','No Email Co','United Kingdom','Leeds','Media','','','','','',
+     'https://www.noemail.example.co.uk/contact','https://www.noemail.example.co.uk',
+     'Contact form only, imported as a lead without a contact.','','Company website','','',
+     '2026-10-02','','','','','',''],
+  ];
+  const ws1 = window.XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  ws1['!cols'] = headers.map((h, i) => ({ wch: [8,26,16,14,18,18,18,34,13,16,36,36,44,34,20,20,36,13,14,13,13,24,11,40][i] }));
+  window.XLSX.utils.book_append_sheet(wb, ws1, 'UK prospects');
+
+  // ── Sheet 2: field guide (ignored by the import: no Company/Email headers) ──
+  const guide = [
+    ['Column','Description','Example','Required'],
+    ['Priority','Number (1 = best, ranked as High) or High / Medium / Low','1','optional'],
+    ['Company','Company name','Example Publishing Ltd','required'],
+    ['Country','Decides the campaign: United Kingdom or UK gives BS_UK, Denmark gives BS_DK, ...','United Kingdom','required'],
+    ['City / state','Stored as location','London','optional'],
+    ['Prospect type','Kind of organisation','Publisher','optional'],
+    ['Contact person','Contact name','Jane Smith','optional'],
+    ['Role to approach','Job title','Head of Digital','optional'],
+    ['Email','Contact email. Rows without email become a lead only (no contact)','jane.smith@example-publishing.co.uk','required for a contact'],
+    ['Email type','Named / Generic. Also detected from info@, sales@ ...','Named contact','optional'],
+    ['Phone','Phone number','+44 20 0000 0001','optional'],
+    ['Contact URL','Contact page. Used as the site when Site is empty','https://www.example-publishing.co.uk/contact','optional'],
+    ['Site','Website. Decides the lead (lead id = host with dots as _)','https://www.example-publishing.co.uk','required*'],
+    ['Why BlueSearch could fit (assessment)','Stored as the lead description','...','optional'],
+    ['Suggested sales angle','Stored as angle and added to the summary','...','optional'],
+    ['Company or person source / Contact source / Source URLs','Where the information came from','...','optional'],
+    ['Research date','Newer rows win if the same record appears twice','2026-10-01','optional'],
+    ['Status','Blank or "Not contacted" are imported. Any other value (e.g. Replied) is skipped','Not contacted','optional'],
+    ['Last contacted / Next follow-up / Notes','Stored as prospect info, never overwrites outreach data','','optional'],
+    ['page_count','Number of pages on the site. Only fills empty values; the command line --measure can fill it from the sitemap','12500','optional'],
+    ['sitemap_url','Sitemap address','https://.../sitemap.xml','optional'],
+    ['','','',''],
+    ['* Each row needs a Site, a Contact URL or an Email. The first row must be the header row; the sheet name is free.','','',''],
+  ];
+  const ws2 = window.XLSX.utils.aoa_to_sheet(guide);
+  ws2['!cols'] = [{wch:34},{wch:70},{wch:40},{wch:20}];
+  window.XLSX.utils.book_append_sheet(wb, ws2, 'Field guide');
+
+  const buf  = window.XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'prospect-import-example.xlsx';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

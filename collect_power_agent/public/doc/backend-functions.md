@@ -194,9 +194,9 @@ python app/email_contacts_export.py --mark both    # contacts in both pipelines
 
 ---
 
-### `filter_site_leads.py` — Filter site_leads by facets
+### `filter_site_leads.py` — Filter site_leads (Leads DB) by saved search
 
-Filters `site_leads` and their contacts using the stored filter facets, and exports results.
+Filters `site_leads` and their contacts using a saved Leads DB search (stored in `filter_facets/`), and exports results.
 
 ```bash
 python app/filter_site_leads.py --filter ai_sector=technology,ecommerce
@@ -366,9 +366,9 @@ python app/maint_statistics.py --only campaigns
 
 ---
 
-### `build_filter_facets.py` — Build filter facet catalog 🌐 Frontend triggered
+### `build_filter_facets.py` — Build Leads DB filter values ("facet catalog") 🌐 Frontend triggered
 
-Scans `site_leads` + `site_contacts` and builds the filter facet catalog stored in `filter_facets/site_leads`.
+Scans `site_leads` + `site_contacts` and builds the list of selectable filter values for the Leads DB page, stored in `filter_facets/site_leads` ("facet" is the technical name for a filter value).
 
 ```bash
 python app/build_filter_facets.py

@@ -111,21 +111,20 @@
           <div class="card mb-3">
             <div class="card-header py-2 fw-600 d-flex justify-content-between align-items-center">
               <span><i class="ti ti-send me-1"></i>Send mail</span>
-              <span class="small text-muted" id="cc-mail-from">—</span>
+              <span class="d-flex align-items-center gap-2">
+                <span class="small text-muted" id="cc-mail-from">—</span>
+                <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" id="cc-mail-pop-btn"
+                        title="Open the mail editor in a larger, resizable window" onclick="openMailPopup()">
+                  <i class="ti ti-arrows-maximize"></i>
+                </button>
+              </span>
             </div>
-            <div class="card-body">
+            <div class="card-body" id="cc-mail-body">
               <div class="mb-2">
                 <label class="form-label small mb-1">To</label>
                 <input id="cc-mail-to" type="text" class="form-control form-control-sm" readonly>
               </div>
-              <div class="mb-2">
-                <label class="form-label small mb-1">Subject</label>
-                <input id="cc-mail-subject" type="text" class="form-control form-control-sm" placeholder="Subject">
-              </div>
-              <div class="mb-2">
-                <label class="form-label small mb-1">Body</label>
-                <div id="cc-mail-editor" style="height:200px"></div>
-              </div>
+              <div id="cc-mail-editor-host" class="mb-2"></div>
               <div id="cc-mail-feedback" class="alert py-2 px-3 small mb-2" style="display:none"></div>
               <button id="cc-mail-send" class="btn btn-primary btn-sm">
                 <i class="ti ti-send me-1"></i>Send mail
@@ -146,6 +145,36 @@
     </div>
   </div>
 
+  <!-- Mail popup: the composer body is moved in here (same fields, same Send button) -->
+  <div id="cc-mail-pop" style="display:none;position:fixed;inset:0;z-index:1055;background:rgba(0,0,0,.35)">
+    <div id="cc-mail-pop-win" class="card shadow"
+         style="position:absolute;left:12vw;top:8vh;width:min(900px,76vw);height:80vh;min-width:420px;min-height:340px;
+                max-width:98vw;max-height:98vh;resize:both;overflow:hidden;display:flex;flex-direction:column">
+      <div id="cc-mail-pop-head" class="card-header py-2 fw-600 d-flex justify-content-between align-items-center"
+           style="cursor:move;user-select:none">
+        <span><i class="ti ti-send me-1"></i>Send mail</span>
+        <button type="button" class="btn-close" title="Close" onclick="closeMailPopup()"></button>
+      </div>
+      <div id="cc-mail-pop-content" style="flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column"></div>
+    </div>
+  </div>
+  <style>
+    #cc-mail-pop-content > #cc-mail-body { flex:1; display:flex; flex-direction:column; min-height:0; }
+    #cc-mail-pop-content #cc-mail-editor-host { flex:1; min-height:0; display:flex; flex-direction:column; }
+    #cc-mail-pop-content .mail-editor-component { flex:1; min-height:0; display:flex; flex-direction:column; }
+    #cc-mail-pop-content [data-me="plainPane"], #cc-mail-pop-content [data-me="htmlPane"] { flex:1; min-height:0; display:flex; flex-direction:column; }
+    #cc-mail-pop-content [data-me="plainPane"] textarea { flex:1; font-size:1rem !important; }
+    #cc-mail-pop-content [data-me="wysiwygPane"], #cc-mail-pop-content [data-me="sourcePane"], #cc-mail-pop-content [data-me="previewPane"] { flex:1; min-height:0; overflow:auto; }
+    #cc-mail-pop-content [data-me="wysiwygPane"] { display:flex; flex-direction:column; }
+    #cc-mail-pop-content [data-me="wysiwygPane"] > [data-me="quill"] { flex:1; min-height:0; display:flex; flex-direction:column; border:0; }
+    #cc-mail-pop-content [data-me="wysiwygPane"] .ql-container { flex:1; min-height:0; overflow:auto; font-size:1rem; }
+    #cc-mail-pop-content [data-me="sourcePane"] { display:flex; flex-direction:column; }
+    #cc-mail-pop-content [data-me="sourcePane"] textarea { flex:1; }
+    #cc-mail-pop-content [data-me="wysiwygPane"][style*="none"], #cc-mail-pop-content [data-me="sourcePane"][style*="none"],
+    #cc-mail-pop-content [data-me="previewPane"][style*="none"], #cc-mail-pop-content [data-me="plainPane"][style*="none"],
+    #cc-mail-pop-content [data-me="htmlPane"][style*="none"] { display:none !important; }
+  </style>
+
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
   <script src="firebase-config.js"></script>
@@ -154,6 +183,7 @@
   <script src="vendor/bootstrap.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
   <script src="js/crm-defs.js"></script>
+  <script src="js/mail-editor-component.js"></script>
   <script src="js/crm-contact.js"></script>
 </body>
 </html>

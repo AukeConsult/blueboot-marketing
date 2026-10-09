@@ -12,13 +12,13 @@ The top navigation bar gives access to all sections:
 
 | Section | Purpose |
 |---|---|
-| **Campaigns** | Dropdown — Campaign list, Import campaign, Filter facets |
+| **Campaigns** | Dropdown — Campaign list, Import campaign, Leads DB |
 | **Follow-up** | Cross-campaign follow-up tracker with inline editable status and comments |
 | **CRM discover** | Manual discovery workflow — export contacts, review, push to CRM work sheet |
 | **Daily Admin** | Day-to-day operational tools — see below |
 | **Documentation** | User guides and system docs |
 
-**Campaigns** is a dropdown containing the campaign list, the import tool, and filter facets. **CRM discover** and **Follow-up** are standalone links immediately to the right of it.
+**Campaigns** is a dropdown containing the campaign list, the import tool, and the Leads DB. **CRM discover** and **Follow-up** are standalone links immediately to the right of it.
 
 ### Daily Admin
 
@@ -44,22 +44,22 @@ There are three separate routes to building a campaign. Each suits a different s
 
 | Route | Best for | Speed | Data source |
 |---|---|---|---|
-| **1 — Filter facets** | Audience defined by criteria (country, sector, size…) | Fastest | Internal contact pool |
+| **1 — Leads DB** | Audience defined by criteria (country, sector, size…) | Fastest | The leads database |
 | **2 — Excel import** | Pre-built lists, external data, or re-importing exports | Fast | Your own `.xlsx` file |
 | **3 — Discover (master sheet)** | Human-curated contacts reviewed in a shared spreadsheet | Slower | Master CRM Google Sheet |
 
 ---
 
-### Route 1 — Filter facets
+### Route 1 — Leads DB
 
-**Where:** Campaigns → Filter facets
+**Where:** Campaigns → Leads DB
 
-You define what kind of companies you want using filters (country, sector, platform, etc.), save the criteria as a named facet, and click **Create campaign from filter**. The system pulls all matching leads and contacts directly from the internal pool and fills the campaign automatically. No spreadsheet is involved.
+The **Leads DB** is the database of all discovered companies and their contacts (see *The Leads DB* in the system architecture guide). You define what kind of companies you want using filters (country, sector, platform, etc.), save the criteria as a named **saved search**, and click **Create campaign from filter**. The system pulls all matching leads and contacts directly from the Leads DB and fills the campaign automatically. No spreadsheet is involved.
 
 **Steps:**
-1. Go to **Campaigns → Filter facets**.
+1. Go to **Campaigns → Leads DB**.
 2. Adjust filters — each card is one dimension (country, company type, etc.).
-3. Type a facet name and click **Save & count** to see how many contacts match.
+3. Type a name for the saved search and click **Save & count** to see how many contacts match.
 4. Click **Create campaign from filter**, enter a campaign ID, and confirm.
 
 This is the fastest route and works well when your target audience can be described by filter criteria. See the [From filter to campaign](doc-viewer.html?doc=filter-to-campaign) guide for a full walkthrough.
@@ -174,7 +174,7 @@ A compact one-line summary: **N contacts · N sites · N countries · N active �
 - **Email account** — dropdown of configured mail accounts. Changing this saves immediately and updates which account the campaign uses for outreach. An eye icon opens a read-only popup showing the account's IMAP/Gmail settings.
 - **Owner** — auto-saves 1.2 s after typing.
 - **Active since** — shown once the campaign has sent its first real mail.
-- **Built from facet filter** — shown when the campaign was created from a filter-facets preset. Displays the preset name (linked to `filter-facets.html`), the timestamp it was last built, and each active filter field as a pill badge (e.g. `ai_company_type: b2b`, `email_type: personal`). Updated every time the facet-campaign job runs.
+- **Built from a Leads DB search** — shown when the campaign was created from a saved search. Displays the saved search name (linked to the Leads DB page), the timestamp it was last built, and each active filter field as a pill badge (e.g. `ai_company_type: b2b`, `email_type: personal`). Updated every time the campaign is refreshed from the search.
 
 ### Mail schedule and editor
 
@@ -255,15 +255,15 @@ See [Campaign Import & Export](doc-viewer.html?doc=campaign-import-export) for t
 
 ---
 
-## Filter Facets
+## Leads DB
 
-**URL:** `filter-facets.html` — accessible via **Campaigns → Filter facets**
+**URL:** `filter-facets.html` (the address is unchanged) — accessible via **Campaigns → Leads DB**
 
-Filter Facets is where you define and save the audience criteria used to build campaigns automatically. A saved set of criteria is called a **facet**.
+The Leads DB page is where you search the leads database, define and save the audience criteria used to build campaigns automatically. A saved set of criteria is called a **saved search**. The **Pipeline** switch chooses which part of the database you search (*Site leads* or *Leads*).
 
-### Loading a facet
+### Loading a saved search
 
-Pick an existing facet from the **Load facets** dropdown. The filters update immediately to reflect the saved selection. Use the refresh icon next to the dropdown to reload the list if you have just saved a new facet elsewhere.
+Pick an existing search from the **Load saved search** dropdown. The filters update immediately to reflect the saved selection. Use the refresh icon next to the dropdown to reload the list if you have just saved a new search elsewhere.
 
 ### Adjusting filters
 
@@ -271,12 +271,12 @@ Each card represents one filter dimension (country, sector, company size, etc.).
 
 Use **Show selected only** in the summary bar to focus on what is active. **Clear all** resets every filter in one click.
 
-### Saving a facet
+### Saving a search
 
-Type a name in the **Facet name** field and click **Save & count**. Type a new name to create a new facet — type the name of an existing facet to overwrite it. After saving, the system runs a contact count and shows how many leads and contacts match the current filters.
+Type a name in the **Search name** field and click **Save & count**. Type a new name to save a new search — type the name of an existing one to overwrite it. After saving, the system runs a contact count and shows how many leads and contacts match the current filters.
 
-### Creating a campaign from a facet
+### Creating a campaign from a saved search
 
-Once a facet has been saved and counted, the **Create campaign from filter** button becomes active in the selection summary bar. Click it to open the campaign creation dialog, enter a campaign ID, and confirm. The system pulls all matching contacts into a new campaign automatically. If the campaign ID already exists, its contact list is refreshed instead of creating a new one.
+Once a search has been saved and counted, the **Create campaign from filter** button becomes active in the selection summary bar. Click it to open the campaign creation dialog, enter a campaign ID, and confirm. The system pulls all matching contacts into a new campaign automatically. If the campaign ID already exists, its contact list is refreshed instead of creating a new one.
 
 Tick **Dry run** to see the contact count without writing anything.

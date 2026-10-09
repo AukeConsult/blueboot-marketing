@@ -305,8 +305,8 @@ These scripts are ready to be used as steps in new or extended pipelines:
 | `inbound_read` | `app/inbound_read.py` | Mailbox sync — runs reply_matcher (replies, INBOX) + run_sent_sync (sent folder), both with body |
 | `reply_match` | `app/reply_match.py` | The single reply reader — fetch IMAP inboxes, match replies/bounces to contacts, write EMAIL_IN with body, update status |
 | `wp_plugin_leads` | `app/wp_plugin_leads.py` | Discover WordPress plugin leads via Bing |
-| `build_filter_facets` | `app/build_filter_facets.py` | Build facet index for lead filter UI |
-| `facet_campaign` | `app/facet_campaign.py` | Apply facet-based filter to create a campaign |
+| `build_filter_facets` | `app/build_filter_facets.py` | Build the filter values (facet catalog) for the Leads DB page |
+| `facet_campaign` | `app/facet_campaign.py` | Create a campaign from a saved Leads DB search |
 | `push_to_firebase` | `app/push_to_firebase.py` | Push local data files to Firestore |
 | `sync_auth_users` | `app/sync_auth_users.py` | Sync Firebase Auth users to Firestore settings |
 

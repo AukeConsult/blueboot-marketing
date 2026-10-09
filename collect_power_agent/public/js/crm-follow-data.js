@@ -175,6 +175,9 @@ async function load() {
       followup_owner:     c.followup_owner     || '',
       comment_history:    c.comment_history    || [],
       campaign_id:        c.campaign_id,
+      lead_id:            c.lead_id            || '',
+      domain:             c.domain             || '',
+      company:            c.company            || '',
       doc_id:             c.doc_id,
       doc_path:           c.doc_path,
       owner:              c.owner              || '',
@@ -407,9 +410,28 @@ function toggleAllGroups() {
 
 // ── Filter ────────────────────────────────────────────────────────────────────
 
+// Site filter: set by clicking a row in the Sites tab, or typed (substring match)
+let _siteFilterLead = null;
+function onSiteFilterInput() { _siteFilterLead = null; applyFilter(); }
+function clearSiteFilter() {
+  _siteFilterLead = null;
+  const el = document.getElementById('site-filter');
+  if (el) el.value = '';
+  applyFilter();
+}
+function _hostOf(u) { return (u || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split(/[\/?#]/)[0]; }
+function filterContactsBySite(lead) {
+  _siteFilterLead = { lead_id: lead.lead_id, campaign_id: lead.campaign_id, domain: _hostOf(lead.domain || lead.website) };
+  document.getElementById('site-filter').value = lead.domain || lead.company || lead.lead_id;
+  applyFilter();
+  const btn = document.getElementById('tab-contacts-btn');
+  if (btn && window.bootstrap) bootstrap.Tab.getOrCreateInstance(btn).show();
+}
+
 function applyFilter() {
   if (_prefsReady) _savePrefsDebounced();
   const q   = document.getElementById('search').value.toLowerCase();
+  const sq  = (document.getElementById('site-filter')?.value || '').trim().toLowerCase();
 
   const fu  = document.getElementById('followup-filter').value;
   const imp = document.getElementById('importance-filter').value;
@@ -431,8 +453,21 @@ function applyFilter() {
     if (due === 'overdue' && !(r.followup_date && r.followup_date < today)) return false;
     if (due === 'today'   && r.followup_date !== today) return false;
     if (due === 'week'    && !(r.followup_date && r.followup_date >= today && r.followup_date <= weekEnd)) return false;
+    if (_siteFilterLead) {
+      // linked by lead_id, else by website host, else by e-mail domain
+      const L = _siteFilterLead;
+      const byId = r.lead_id && r.lead_id === L.lead_id;
+      const dom  = L.domain;
+      const byHost = dom && (_hostOf(r.website) === dom || _hostOf(r.domain) === dom ||
+                             ((r.email || '').split('@')[1] || '').toLowerCase() === dom);
+      if (!(byId || byHost)) return false;
+      if (L.campaign_id && r.campaign_id && r.campaign_id !== L.campaign_id) return false;
+    } else if (sq) {
+      const sh = [r.website, r.domain, r.company, r.lead_id].join(' ').toLowerCase();
+      if (!sh.includes(sq)) return false;
+    }
     if (q) {
-      const hay = [r.name, r.email, r.website, r.title].join(' ').toLowerCase();
+      const hay = [r.name, r.email, r.website, r.title, r.campaign_id].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;

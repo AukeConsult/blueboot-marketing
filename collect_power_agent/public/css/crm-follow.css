@@ -420,7 +420,10 @@ body { display: flex; flex-direction: column; }
 .tab-pane { flex: 1; min-height: 0; display: none; flex-direction: column; overflow: hidden; }
 .tab-pane.show.active { display: flex; }
 #follow-layout { flex: 1; min-height: 0; align-items: stretch; overflow: hidden; }
-#sites-tab-layout { flex: 1; min-height: 0; overflow: hidden; }
+#sites-tab-layout { flex: 1; min-height: 0; overflow: hidden; align-items: stretch !important; }
+#sites-tab-layout > .bb-card { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+#sites-tab-layout > .bb-card .table-responsive { flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; scrollbar-gutter: stable; }
+#sites-tab-layout > .bb-card td { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #follow-layout > .bb-card { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 #follow-layout > .bb-card .table-responsive { flex: 1; overflow-y: auto; overflow-x: hidden; min-height: 0; scrollbar-gutter: stable; }
 /* Sticky thead inside the scrolling container */
@@ -662,3 +665,9 @@ body { display: flex; flex-direction: column; }
     border-radius: 0 !important;
   }
 }
+
+/* Campaign chip in the contact list */
+.crm-campaign-meta { display:inline-flex; align-items:center; gap:3px; font-size:.72rem;
+  background:#eef2ff; color:#3730a3; border-radius:10px; padding:0 8px; white-space:nowrap; }
+.crm-campaign-meta a { color:inherit; text-decoration:none; }
+.crm-campaign-meta a:hover { text-decoration:underline; }

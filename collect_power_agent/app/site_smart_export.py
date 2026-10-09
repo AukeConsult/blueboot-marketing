@@ -66,6 +66,12 @@ _NUMERIC_DOMAIN_RE = re.compile(r'@[0-9]+\.')    # block @0., @1., @123. domains
 
 
 def _valid_email(email: str) -> bool:
+    try:
+        from crm.contact_clean_lib import clean_email as _shared_clean
+        if not _shared_clean(email):          # the one shared e-mail check
+            return False
+    except ImportError:
+        pass
     # Reject strings with control chars or JSON-artifact characters
     # e.g. 'partner","slug":"anne-sofie...' leaked from JSON parsing
     if any(ord(c) < 32 or ord(c) == 127 for c in email):

@@ -1,6 +1,6 @@
 # From filter to campaign — a step-by-step guide
 
-This guide explains how to go from a raw pool of discovered contacts to a focused outreach campaign using the Filter Facets page. No technical knowledge is required.
+This guide explains how to go from a raw pool of discovered contacts to a focused outreach campaign using the Leads DB page. No technical knowledge is required.
 
 > **Note:** this is one of two ways to create a campaign. The other is the **master sheet route** — manually curating contacts in the CRM contact sheet and then using Discover campaigns from the campaign workspace. The filter route is faster and fully automated; the master sheet route gives you individual control over every contact. Both are described in the [User guide](../doc-viewer.html?doc=user-guide).
 
@@ -14,11 +14,11 @@ Every site and lead that passes through the Blueboot pipeline ends up with one o
 
 At any given time this list might contain thousands of contacts from many different countries, industries, and company sizes. You do not want to email all of them at once. You want to pick a specific, relevant slice and create a focused campaign from it.
 
-### What are filter facets?
+### What is the Leads DB?
 
-Filter facets are the set of selectable values that describe your contacts — things like country, industry sector, company type, email type, site size, and keywords. The system scans the entire contact pool and builds a catalog of every value that actually appears, along with how many contacts have it.
+The Leads DB is the database of all discovered companies and contacts. Its filters are the set of selectable values that describe your contacts — things like country, industry sector, company type, email type, site size, and keywords. The system scans the entire contact pool and builds a catalog of every value that actually appears, along with how many contacts have it.
 
-The **Filter Facets page** lets you tick the values you want, save that selection as a named preset, and then turn it directly into a campaign.
+The **Leads DB page** (*Campaigns → Leads DB*) lets you tick the values you want, save that selection as a named **saved search**, and then turn it directly into a campaign.
 
 ---
 
@@ -26,7 +26,7 @@ The **Filter Facets page** lets you tick the values you want, save that selectio
 
 ### Step 1 — Load a preset
 
-Open the Filter Facets page. Use the **Load facets** dropdown at the top to select a preset. If you are starting fresh, select `site_leads` (the base catalog built from the full contact pool). If a colleague has saved a preset for a specific market or segment, it will appear in the list too.
+Open the Leads DB page. Use the **Load saved search** dropdown at the top to select a search. If you are starting fresh, select `site_leads` (the base list of filter values built from the full Leads DB). If a colleague has saved a search for a specific market or segment, it will appear in the list too.
 
 Switching the dropdown clears the "Save as" name field so you always start clean.
 
