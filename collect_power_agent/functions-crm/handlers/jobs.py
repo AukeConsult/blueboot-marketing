@@ -184,6 +184,40 @@ def _first_param(data: dict, name: str, default=None):
     return value
 
 
+@bp.route("/api/crm/outreach/send-now", methods=["POST"])
+def outreach_send_now():
+    """Start a REAL outreach send from the Outreach Status page (admin only, see main.py).
+
+    Body: {"mode": "intro"|"followup"|"both", "campaign_ids": [..] (optional)}
+    Same worker job as the scheduled run; send limits and the bounce breaker still apply.
+    Refused while another outreach-send job is queued or running.
+    """
+    from flask import g
+    body = request.get_json(silent=True) or {}
+    mode = str(body.get("mode") or "both").strip().lower()
+    if mode not in {"intro", "followup", "both"}:
+        return _err("mode must be one of: intro, followup, both", 400)
+    try:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()   # older = stale
+        for d in _jobs_col().where(filter=FieldFilter("status", "in", ["queued", "running"])).stream():
+            j = d.to_dict() or {}
+            if j.get("name") == "outreach-send" and str(j.get("queued_at") or "") >= cutoff:
+                return _err(f"An outreach send is already {j.get('status')} (job {d.id}). Wait for it to finish.", 409)
+        params = {
+            "mode": mode,
+            "limit": 500,
+            "campaign_ids": [str(c).strip() for c in (body.get("campaign_ids") or []) if str(c).strip()],
+            "dry_run": False,
+            "preview": False,
+            "started_by": getattr(g, "user_email", ""),
+        }
+        job_id = _new_job("outreach-send", params)
+        _enqueue_task("outreach-send", job_id, params)
+        return _accepted(job_id, "outreach-send")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @bp.route("/api/crm/outreach-send", methods=["GET", "POST"])
 @bp.route("/outreach-send", methods=["GET", "POST"])
 def outreach_send():

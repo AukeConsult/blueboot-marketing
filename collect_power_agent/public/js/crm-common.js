@@ -174,6 +174,7 @@ const PAGE_ROLES = {
   'gdisk.html':         ['admin', 'campaign-user', 'user'],
   'settings.html':          ['admin'],
   'outreach-settings.html': ['admin'],
+  'outreach_status.html':   ['admin', 'campaign-user'],
   'users.html':         ['admin'],
   'cloud-batch.html':    ['admin'],
   // doc-viewer.html and index.html are PUBLIC_PAGES — no role check
@@ -196,9 +197,10 @@ const NAV_LINKS = [
     roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'daily-admin', icon: 'ti-tool', label: 'Daily Admin',
     roles: ['admin', 'campaign-user', 'user'],
-    match: ['statistics.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html', 'outreach-settings.html'],
+    match: ['statistics.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html', 'outreach-settings.html', 'outreach_status.html'],
     children: [
       { href: 'statistics.html',    icon: 'ti-chart-bar',             label: 'Statistics' },
+      { href: 'outreach_status.html', icon: 'ti-send',                label: 'Outreach status', roles: ['admin', 'campaign-user'] },
       { divider: true },
       { href: 'gdisk.html',         icon: 'ti-brand-google-drive',    label: 'Drive Folder' },
       { href: 'mailbox.html',       icon: 'ti-inbox',                 label: 'Message Box' },

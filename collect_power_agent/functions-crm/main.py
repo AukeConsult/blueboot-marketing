@@ -102,6 +102,7 @@ _ADMIN_ENDPOINTS = frozenset({
     "gdisk.gdisk_set_settings",          # POST/PATCH /api/crm/gdisk/settings
     "mail_tags.put_mail_tag_statuses",   # PUT /api/crm/settings/mail-tag-statuses
     "send_limits.put_send_limits",       # PUT /api/crm/settings/send-limits
+    "jobs.outreach_send_now",            # POST /api/crm/outreach/send-now (real mail)
     "campaigns.reset_campaign",          # POST /api/crm/campaigns/{id}/reset
 })
 

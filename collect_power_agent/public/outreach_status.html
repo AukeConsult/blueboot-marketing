@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Outreach Status — Blueboot CRM</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+<style>
+  .os-tile { border:1px solid var(--bb-border,#e2e8f0); border-radius:8px; padding:10px 14px; background:#fff; min-width:140px; flex:1 }
+  .os-tile .v { font-size:1.6rem; font-weight:600; line-height:1.1 }
+  .os-tile .l { font-size:.75rem; color:var(--bb-muted,#64748b) }
+  .os-blockers { font-size:.75rem; color:#b45309 }
+  .os-num-0 { color:var(--bb-muted,#94a3b8) }
+</style>
+</head>
+<body class="bg-alt">
+<div id="nav"></div>
+
+<div class="container-fluid py-4" style="max-width:1300px">
+  <div class="d-flex align-items-center gap-2 mb-1 flex-wrap">
+    <h5 class="page-title mb-0"><i class="ti ti-send me-2"></i>Outreach Status</h5>
+    <button class="btn btn-sm btn-primary ms-auto" onclick="sendNow()" id="send-btn" style="display:none"
+      title="Start a real outreach run now (admin only)"><i class="ti ti-send me-1"></i>Send now</button>
+    <button class="btn btn-sm btn-outline-primary" onclick="checkReplies()" id="reply-btn"
+      title="Read the mail accounts' inbox and sent folders and match replies and bounces to contacts"><i class="ti ti-mail-check me-1"></i>Check replies</button>
+    <button class="btn btn-sm btn-outline-secondary" onclick="load()" id="refresh-btn"><i class="ti ti-refresh me-1"></i>Refresh</button>
+  </div>
+  <p class="small text-muted mb-3">What the next outreach run would do. Read-only: nothing is sent from this page.
+    <span id="calc-at"></span> <span id="reply-last" class="ms-2"></span></p>
+
+  <div id="error" class="alert alert-danger small" style="display:none"></div>
+  <div id="job-box" class="alert alert-info small" style="display:none"></div>
+
+  <div class="d-flex gap-2 flex-wrap mb-3" id="tiles">
+    <div class="text-muted small"><div class="spinner-border spinner-border-sm me-1"></div>Loading…</div>
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header py-2 fw-600 small"><i class="ti ti-battery me-1 text-primary"></i>Send budget per mail account</div>
+    <div class="table-responsive"><table class="table table-sm small mb-0">
+      <thead class="bb-thead"><tr>
+        <th>Account</th><th class="text-end">Sent / hour</th><th class="text-end">Sent / day</th>
+        <th class="text-end">Reserved</th><th class="text-end">Budget now</th>
+        <th class="text-end">Waiting</th><th class="text-end">Next run sends</th><th class="text-end">Left over</th>
+        <th style="min-width:90px">Hour</th><th style="min-width:90px">Day</th><th>State</th>
+      </tr></thead>
+      <tbody id="acc-body"></tbody>
+    </table></div>
+    <div class="px-3 py-2 small text-muted" id="limits-line"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header py-2 d-flex align-items-center gap-2 flex-wrap">
+      <span class="fw-600 small"><i class="ti ti-speakerphone me-1 text-primary"></i>Campaigns</span>
+      <select id="f-ready" class="form-select form-select-sm ms-auto" style="width:150px" onchange="render()">
+        <option value="">All</option><option value="yes">Ready</option><option value="no">Not ready</option>
+      </select>
+      <input id="f-search" class="form-control form-control-sm" style="width:180px" placeholder="Search…" oninput="render()">
+    </div>
+    <div class="table-responsive"><table class="table table-sm table-hover small mb-0">
+      <thead class="bb-thead"><tr>
+        <th>Campaign</th><th>Ready</th><th>Status</th><th>Mail account</th>
+        <th class="text-end" title="Pending contacts without a sent mail">Intro waiting</th>
+        <th class="text-end" title="Held back: not ticked in the Send column">Not confirmed</th>
+        <th class="text-end" title="Held back: the site is excluded or not pending">Site blocked</th>
+        <th class="text-end" title="Intro mails the next run can pick up">Intro to send</th>
+        <th class="text-end" title="Pending contacts that already got a mail">Reminder waiting</th>
+        <th class="text-end" title="Reminders whose delay has passed">Reminder due</th>
+        <th class="text-end">Mailed</th><th class="text-end">Contacts</th>
+      </tr></thead>
+      <tbody id="camp-body"></tbody>
+    </table></div>
+    <div id="camp-empty" class="text-center py-3 small text-muted" style="display:none">No campaigns match.</div>
+  </div>
+</div>
+
+<div class="modal fade" id="send-modal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title"><i class="ti ti-send me-1"></i>Send now — choose campaigns</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-check mb-2 pb-2 border-bottom">
+          <input class="form-check-input" type="checkbox" id="sm-all" onchange="smToggleAll(this.checked)">
+          <label class="form-check-label fw-500" for="sm-all">All ready campaigns</label>
+        </div>
+        <div id="sm-list"></div>
+        <div id="sm-empty" class="small text-muted" style="display:none">No campaign has anything to send right now.</div>
+      </div>
+      <div class="modal-footer py-2 d-flex">
+        <div class="small me-auto" id="sm-summary"></div>
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm btn-primary" id="sm-go" onclick="smGo()"><i class="ti ti-send me-1"></i>Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+<script>
+const esc = escapeHtml;
+let DATA = null;
+
+function num(v) { return v ? `<span>${v}</span>` : `<span class="os-num-0">0</span>`; }
+function numOrDash(v, skipped) { return skipped ? '<span class="os-num-0">—</span>' : num(v); }
+
+function tile(label, value, cls, hint) {
+  return `<div class="os-tile" title="${esc(hint || '')}"><div class="v ${cls || ''}">${value}</div><div class="l">${esc(label)}</div></div>`;
+}
+
+function bar(used, max, depleted) {
+  const pct = max > 0 ? Math.min(100, Math.round(used / max * 100)) : 100;
+  const cls = depleted ? 'bg-danger' : (pct > 80 ? 'bg-warning' : 'bg-primary');
+  return `<div class="progress" style="height:6px;min-width:80px"><div class="progress-bar ${cls}" style="width:${pct}%"></div></div>`;
+}
+
+function fmtDt(iso) {
+  try { return new Date(iso).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' }); } catch { return iso || ''; }
+}
+
+function renderTiles() {
+  const t = DATA.totals;
+  document.getElementById('tiles').innerHTML =
+    tile('Campaigns ready', `${t.ready} / ${t.campaigns}`, t.ready ? 'text-success' : 'text-danger', 'Campaigns the sender can use right now') +
+    tile('Not ready', t.blocked, t.blocked ? 'text-warning' : '', 'Blocked by status, missing intro step or mail account') +
+    tile('Intro mails to send', t.intro_sendable, '', 'Confirmed pending contacts in ready campaigns') +
+    tile('Reminders due', t.followup_due, '', 'Contacts whose next sequence step is due') +
+    tile('Intro not confirmed', t.intro_not_confirmed, t.intro_not_confirmed ? 'text-warning' : '', 'Held back until ticked in the Send column') +
+    tile('Next run sends', t.next_run_sends, 'text-primary', 'Limited by the send budget per account') +
+    tile('Left over', t.left_over, t.left_over ? 'text-warning' : '', 'Waiting, but over the budget: goes in a later run');
+}
+
+function renderAccounts() {
+  const rows = DATA.accounts || [];
+  const body = document.getElementById('acc-body');
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="11" class="text-muted py-2">No campaign has a mail account.</td></tr>'; }
+  else body.innerHTML = rows.map(a => {
+    const state = a.problem
+      ? `<span class="badge bg-danger">${esc(a.problem)}</span>`
+      : a.budget === 0 ? '<span class="badge bg-warning text-dark">budget used up</span>'
+      : '<span class="badge bg-success">ready</span>';
+    const bc = a.budget === 0 ? 'text-danger' : (a.budget < 10 ? 'text-warning' : 'text-success');
+    return `<tr>
+      <td class="text-truncate" style="max-width:200px" title="${esc(a.account)}">${esc(a.account)}
+        <div class="text-muted" style="font-size:.7rem">${a.ready_campaigns}/${a.campaigns} campaigns ready</div></td>
+      <td class="text-end">${a.sent_last_hour}/${a.max_per_hour}</td>
+      <td class="text-end">${a.sent_last_day}/${a.max_per_day}</td>
+      <td class="text-end text-muted">${a.reserved}</td>
+      <td class="text-end fw-500 ${bc}">${a.budget}</td>
+      <td class="text-end" title="intro ${a.intro_sendable} + reminders ${a.followup_sendable}">${num(a.waiting)}</td>
+      <td class="text-end fw-500">${num(a.next_run_sends)}</td>
+      <td class="text-end ${a.left_over ? 'text-warning' : ''}">${num(a.left_over)}</td>
+      <td>${bar(a.sent_last_hour + a.reserved, a.max_per_hour, a.remaining_hour === 0)}</td>
+      <td>${bar(a.sent_last_day + a.reserved, a.max_per_day, a.remaining_day === 0)}</td>
+      <td>${state}</td></tr>`;
+  }).join('');
+  const l = DATA.limits || {};
+  document.getElementById('limits-line').textContent =
+    `Limits: ${l.max_per_hour}/hour, ${l.max_per_day}/day per account, bounce breaker at ${Math.round((l.bounce_threshold || 0) * 100)}% (${l.source}).`;
+}
+
+function render() {
+  if (!DATA) return;
+  const f = document.getElementById('f-ready').value;
+  const q = document.getElementById('f-search').value.toLowerCase();
+  let list = DATA.campaigns || [];
+  if (f === 'yes') list = list.filter(c => c.ready);
+  if (f === 'no') list = list.filter(c => !c.ready);
+  if (q) list = list.filter(c => [c.campaign_id, c.name, c.sender, c.status].some(v => String(v || '').toLowerCase().includes(q)));
+  document.getElementById('camp-empty').style.display = list.length ? 'none' : '';
+  document.getElementById('camp-body').innerHTML = list.map(c => {
+    const badge = c.ready ? '<span class="badge bg-success">ready</span>' : '<span class="badge bg-secondary">not ready</span>';
+    const blockers = (c.blockers || []).length
+      ? `<div class="os-blockers">${(c.blockers || []).map(b => '• ' + esc(b)).join('<br>')}</div>` : '';
+    const conf = c.require_send_confirmation ? '' : '<span class="text-muted" title="Campaign does not require confirmation"> (no tick needed)</span>';
+    return `<tr>
+      <td><a href="campaign.html?campaign_id=${encodeURIComponent(c.campaign_id)}">${esc(c.name || c.campaign_id)}</a>
+        <div class="text-muted" style="font-size:.7rem">${esc(c.campaign_id)}</div>${blockers}</td>
+      <td>${badge}</td>
+      <td>${esc(c.status)}</td>
+      <td class="text-truncate" style="max-width:170px" title="${esc(c.sender || '')}">${esc(c.sender || '—')}</td>
+      <td class="text-end">${num(c.intro_waiting)}</td>
+      <td class="text-end ${c.intro_not_confirmed ? 'text-warning fw-500' : ''}">${num(c.intro_not_confirmed)}${conf}</td>
+      <td class="text-end">${num(c.intro_site_blocked)}</td>
+      <td class="text-end fw-500">${num(c.intro_sendable)}</td>
+      <td class="text-end">${num(c.followup_waiting)}</td>
+      <td class="text-end fw-500">${num(c.followup_sendable)}</td>
+      <td class="text-end">${numOrDash(c.mailed, c.pending === null)}</td>
+      <td class="text-end text-muted">${c.pending === null ? '—' : (c.total || 0)}</td></tr>`;
+  }).join('');
+}
+
+let SENDING = false;
+let CHECKING = false;
+
+function _replyLine(j) {
+  if (!j) return 'Replies: never checked.';
+  const r = j.result || {};
+  const rep = r.reply || {};
+  const when = fmtDt(j.finished_at || j.queued_at);
+  if (j.status === 'error') return `Replies: last check ${when} FAILED.`;
+  if (j.status !== 'done') return `Replies: check ${j.status} (${when}).`;
+  return `Replies: last check ${when} — ${rep.matched ?? 0} replies, ${rep.bounced ?? 0} bounces matched.`;
+}
+
+async function loadReplyInfo() {
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/jobs?limit=50', { cache: 'no-store' });
+    const j = (d.jobs || []).find(x => x.name === 'inbound-read' || x.name === 'reply-match');
+    document.getElementById('reply-last').textContent = _replyLine(j);
+  } catch (e) { /* info only */ }
+}
+
+async function checkReplies() {
+  if (CHECKING) return;
+  const btn = document.getElementById('reply-btn');
+  const box = document.getElementById('job-box');
+  CHECKING = true; btn.disabled = true;
+  box.className = 'alert alert-info small'; box.style.display = ''; box.textContent = 'Checking…';
+  try {
+    const run = await fetchJSON(BASE + '/api/crm/jobs?running=true&limit=50', { cache: 'no-store' });
+    const cutoff = Date.now() - 2 * 3600 * 1000;
+    const busy = (run.jobs || []).find(x => (x.name === 'inbound-read' || x.name === 'reply-match')
+      && new Date(x.queued_at).getTime() > cutoff);
+    if (busy) throw new Error(`A reply check is already ${busy.status} (job ${busy.job_id || busy.id}).`);
+    const r = await fetch(BASE + '/api/crm/inbound-read', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify({ days: 7 })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.message || ('HTTP ' + r.status));
+    await pollJob(d.job_id, res => {
+      const rep = res.reply || {};
+      return `Done: ${rep.matched ?? 0} replies and ${rep.bounced ?? 0} bounces matched, ` +
+             `${res.updated_contacts ?? 0} contacts updated.`;
+    });
+  } catch (e) {
+    box.className = 'alert alert-danger small';
+    box.textContent = prettyError(e.message);
+  }
+  CHECKING = false; btn.disabled = false;
+  loadReplyInfo();
+  load();
+}
+
+let SM_MODAL = null;
+
+function sendNow() {
+  if (SENDING || !DATA) return;
+  const list = (DATA.campaigns || []).filter(c => c.ready && (c.intro_sendable + c.followup_sendable) > 0);
+  const el = document.getElementById('sm-list');
+  document.getElementById('sm-empty').style.display = list.length ? 'none' : '';
+  document.getElementById('sm-all').disabled = !list.length;
+  document.getElementById('sm-go').disabled = !list.length;
+  el.innerHTML = list.map(c => `
+    <div class="form-check py-1">
+      <input class="form-check-input sm-box" type="checkbox" id="sm-${esc(c.campaign_id)}" value="${esc(c.campaign_id)}" checked onchange="smUpdate()">
+      <label class="form-check-label small w-100" for="sm-${esc(c.campaign_id)}">
+        <span class="fw-500">${esc(c.name || c.campaign_id)}</span>
+        <span class="text-muted ms-1">${esc(c.sender || '')}</span>
+        <span class="float-end">${c.intro_sendable} intro · ${c.followup_sendable} reminders</span>
+      </label>
+    </div>`).join('');
+  document.getElementById('sm-all').checked = true;
+  smUpdate();
+  SM_MODAL = SM_MODAL || new bootstrap.Modal(document.getElementById('send-modal'));
+  SM_MODAL.show();
+}
+
+function smBoxes() { return Array.from(document.querySelectorAll('#sm-list .sm-box')); }
+
+function smToggleAll(on) { smBoxes().forEach(b => { b.checked = on; }); smUpdate(); }
+
+function smSelected() { return smBoxes().filter(b => b.checked).map(b => b.value); }
+
+// What the run would send for the chosen campaigns, capped by each account's budget.
+function smEstimate(ids) {
+  const per = {};
+  (DATA.campaigns || []).filter(c => ids.includes(c.campaign_id)).forEach(c => {
+    per[c.sender] = (per[c.sender] || 0) + c.intro_sendable + c.followup_sendable;
+  });
+  let total = 0, waiting = 0;
+  Object.entries(per).forEach(([acc, w]) => {
+    const a = (DATA.accounts || []).find(x => x.account === acc);
+    waiting += w;
+    total += a && !a.problem ? Math.min(a.budget, w) : 0;
+  });
+  return { total, waiting };
+}
+
+function smUpdate() {
+  const boxes = smBoxes();
+  const ids = smSelected();
+  const all = document.getElementById('sm-all');
+  all.checked = boxes.length > 0 && ids.length === boxes.length;
+  all.indeterminate = ids.length > 0 && ids.length < boxes.length;
+  const e = smEstimate(ids);
+  document.getElementById('sm-summary').innerHTML = ids.length
+    ? `<b>${e.total}</b> mail(s) will be sent now` + (e.waiting > e.total ? ` <span class="text-warning">(${e.waiting - e.total} over budget stay waiting)</span>` : '')
+    : 'Select at least one campaign.';
+  document.getElementById('sm-go').disabled = !ids.length || !e.total;
+}
+
+async function smGo() {
+  const ids = smSelected();
+  const allSelected = ids.length === smBoxes().length;
+  const e = smEstimate(ids);
+  if (!ids.length || !e.total) return;
+  SM_MODAL.hide();
+  SENDING = true;
+  const btn = document.getElementById('send-btn');
+  const box = document.getElementById('job-box');
+  btn.disabled = true;
+  box.className = 'alert alert-info small';
+  box.style.display = '';
+  box.textContent = 'Starting…';
+  try {
+    const r = await fetch(BASE + '/api/crm/outreach/send-now', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify({ mode: 'both', campaign_ids: allSelected ? [] : ids })
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.message || ('HTTP ' + r.status));
+    await pollJob(d.job_id);
+  } catch (err) {
+    box.className = 'alert alert-danger small';
+    box.textContent = 'Send failed to start: ' + prettyError(err.message);
+  }
+  SENDING = false;
+  btn.disabled = false;
+  load();
+}
+
+async function authHeaders() {
+  const token = (typeof getAuthToken === 'function') ? await getAuthToken() : '';
+  return token ? { Authorization: 'Bearer ' + token } : {};
+}
+
+async function pollJob(jobId, doneText) {
+  const box = document.getElementById('job-box');
+  const started = Date.now();
+  while (Date.now() - started < 20 * 60 * 1000) {
+    await new Promise(r => setTimeout(r, 3000));
+    let j;
+    try { j = await fetchJSON(BASE + '/api/crm/status/' + encodeURIComponent(jobId), { cache: 'no-store' }); }
+    catch (e) { continue; }                       // transient: keep polling
+    if (j.status === 'done' || j.status === 'completed' || j.status === 'success') {
+      const res = j.result || {};
+      box.className = 'alert alert-success small';
+      box.textContent = doneText ? doneText(res)
+        : `Done: sent ${res.sent ?? 0}, failed ${res.failed ?? 0}, skipped ${res.skipped ?? 0}.`;
+      return;
+    }
+    if (j.status === 'failed' || j.status === 'error') {
+      box.className = 'alert alert-danger small';
+      box.textContent = 'Job failed: ' + (j.error || 'unknown error');
+      return;
+    }
+    box.textContent = `Job ${jobId} ${j.status || 'queued'}… (${Math.round((Date.now() - started) / 1000)}s)`;
+  }
+  box.className = 'alert alert-warning small';
+  box.textContent = `Job ${jobId} is still running. Check the Jobs page; refresh this page later.`;
+}
+
+async function load() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  document.getElementById('error').style.display = 'none';
+  try {
+    DATA = await fetchJSON(BASE + '/api/crm/outreach/status', { cache: 'no-store' });
+    document.getElementById('calc-at').textContent = 'Calculated ' + fmtDt(DATA.calculated_at) + '.';
+    renderTiles(); renderAccounts(); render();
+  } catch (e) {
+    const el = document.getElementById('error');
+    el.textContent = 'Could not load status: ' + prettyError(e.message);
+    el.style.display = '';
+  }
+  btn.disabled = false;
+}
+
+requireAuth().then(() => {
+  requireRole(['admin', 'campaign-user']);
+  if (window._userRole === 'admin') document.getElementById('send-btn').style.display = '';
+  load();
+  loadReplyInfo();
+});
+</script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+</body>
+</html>
