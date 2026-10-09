@@ -204,12 +204,12 @@ tr.row-sp-active + .follow-comment-row > td { background: #eef0ff !important; }
 /* Mobile drawer — overlay on small screens */
 #sp-backdrop {
   display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.35); z-index: 1049;
+  background: rgba(0,0,0,.35); z-index: 10040;
 }
 @media (max-width: 767.98px) {
   .follow-side-panel {
     position: fixed; top: 0; right: 0; bottom: 0;
-    z-index: 1050; margin-left: 0 !important; opacity: 1 !important;
+    z-index: 10050; margin-left: 0 !important; opacity: 1 !important;
   }
   .follow-side-panel.sp-open { width: min(100vw, 420px); }
   .follow-side-panel .bb-card { width: 100%; min-width: 0; border-radius: 0; border-right: none; border-top: none; border-bottom: none; }

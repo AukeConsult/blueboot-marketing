@@ -201,6 +201,15 @@ function render() {
 let SENDING = false;
 let CHECKING = false;
 
+// Run one request and name the step in the error, so "Failed to fetch" says WHERE it failed.
+async function step(label, fn) {
+  try { return await fn(); }
+  catch (e) {
+    const net = (e instanceof TypeError) ? ' (network/CORS: the server did not answer; is the backend deployed?)' : '';
+    throw new Error(`${label}: ${e.message}${net}`);
+  }
+}
+
 function _replyLine(j) {
   if (!j) return 'Replies: never checked.';
   const r = j.result || {};
@@ -226,17 +235,17 @@ async function checkReplies() {
   CHECKING = true; btn.disabled = true;
   box.className = 'alert alert-info small'; box.style.display = ''; box.textContent = 'Checking…';
   try {
-    const run = await fetchJSON(BASE + '/api/crm/jobs?running=true&limit=50', { cache: 'no-store' });
+    // No ?running=true: that query needs a Firestore composite index that does not exist. Filter here instead.
+    const run = await step('job list', () => fetchJSON(BASE + '/api/crm/jobs?limit=50', { cache: 'no-store' }));
     const cutoff = Date.now() - 2 * 3600 * 1000;
     const busy = (run.jobs || []).find(x => (x.name === 'inbound-read' || x.name === 'reply-match')
+      && (x.status === 'queued' || x.status === 'running')
       && new Date(x.queued_at).getTime() > cutoff);
     if (busy) throw new Error(`A reply check is already ${busy.status} (job ${busy.job_id || busy.id}).`);
-    const r = await fetch(BASE + '/api/crm/inbound-read', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+    const d = await step('start reply check', () => fetchJSON(BASE + '/api/crm/inbound-read', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ days: 7 })
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.message || ('HTTP ' + r.status));
+    }));
     await pollJob(d.job_id, res => {
       const rep = res.reply || {};
       return `Done: ${rep.matched ?? 0} replies and ${rep.bounced ?? 0} bounces matched, ` +

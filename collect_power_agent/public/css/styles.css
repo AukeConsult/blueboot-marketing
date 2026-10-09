@@ -276,3 +276,10 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 }
 .crm-contact-name-link:hover { color: var(--bb-primary, #2563eb); text-decoration: underline; }
 .crm-open-btn { white-space: nowrap; }
+
+/* ── Layering: every popup sits above the sticky header (.bb-nav 10000, its dropdowns 10001) ── */
+.modal-backdrop, .offcanvas-backdrop { --bs-backdrop-zindex: 10040; z-index: 10040 !important; }
+.modal, .offcanvas                    { --bs-modal-zindex: 10050; z-index: 10050 !important; }
+.popover                              { z-index: 10060 !important; }
+.tooltip                              { z-index: 10070 !important; }
+.toast-container                      { z-index: 10080 !important; }
