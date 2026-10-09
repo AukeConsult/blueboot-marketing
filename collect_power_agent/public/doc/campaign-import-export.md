@@ -114,8 +114,16 @@ fields) is never overwritten by an import.
 
 ### Skipped rows
 
-A row is skipped if it has neither an email nor a website. Skipped rows are listed
-in the preview under Warnings.
+A row with neither a Lead ID nor a website is skipped. A row with a website but no
+proper email still creates the lead (site), but no contact is created. Every email
+goes through the system's one shared email check, so junk such as `logo@2x.avif`
+is rejected and counted under *invalid emails* in the preview. Prospect catalogue
+files are stricter: a row without a proper email is not imported at all.
+
+After the import, each contact is linked to a site in the same campaign (matched on
+website, domain or email domain, otherwise a new site is created). New campaigns
+start with **Require confirmation** on, so the first mail only goes to contacts you
+tick in the Send column.
 
 ### How IDs are assigned
 

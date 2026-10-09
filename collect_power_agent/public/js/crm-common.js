@@ -4,7 +4,14 @@
  */
 
 // Base URL of the CRM API (crmApi Cloud Function).
-const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
+// Derived from public/firebase-config.js (projectId, optional functionsRegion), so
+// nothing project-specific is hard-coded here. Optional override: apiBase.
+const BASE = (function () {
+  const c = window.FIREBASE_CONFIG || {};
+  if (c.apiBase) return c.apiBase;
+  return 'https://' + (c.functionsRegion || 'us-central1') + '-' + c.projectId +
+         '.cloudfunctions.net/crmApi';
+})();
 
 // ── Auth interceptor ──────────────────────────────────────────────────────────
 // Wraps window.fetch so that every call to the CRM API (any URL starting with
@@ -192,7 +199,7 @@ const NAV_LINKS = [
     ]},
   { href: 'crm_follow.html',   icon: 'ti-phone-check',       label: 'Follow-up',
     roles: ['admin', 'campaign-user', 'user'] },
-  { href: 'crm-bp.html', icon: 'ti-server-2', label: 'CRM discover',
+  { href: 'crm-bp.html', icon: 'ti-server-2', label: 'CRM discover (legacy)',
     match: ['crm-bp.html', 'crm-sync.html'],
     roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'daily-admin', icon: 'ti-tool', label: 'Daily Admin',
@@ -219,6 +226,7 @@ const NAV_LINKS = [
       { href: 'doc-viewer.html?doc=filter-to-campaign',        icon: 'ti-filter',         label: 'Filter to campaign' },
       { href: 'doc-viewer.html?doc=campaign-import-export',    icon: 'ti-table-import',   label: 'Campaign import & export' },
       { href: 'doc-viewer.html?doc=prospect-catalogue-sync',    icon: 'ti-address-book',   label: 'Prospect catalogue sync' },
+      { href: 'doc-viewer.html?doc=send-outreach',           icon: 'ti-send',           label: 'Send outreach mail' },
       { href: 'doc-viewer.html?doc=contact-cleaning',           icon: 'ti-eraser',         label: 'Contact name & email cleaning' },
       { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',     label: 'Pipeline config' },
       { href: 'doc-viewer.html?doc=ai-assistance',       icon: 'ti-brain',          label: 'AI assistance' },

@@ -23,7 +23,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from auth_cache import get_user_role_cached
-from handlers.shared import _err
+from handlers.shared import _err, GCP_PROJECT
 
 # -- Flask app ----------------------------------------------------------------
 app = Flask(__name__)
@@ -239,7 +239,7 @@ def index():
             "GET  /api/crm/status/<job_id>",
             "GET  /api/crm/jobs",
         ],
-        "dashboard": "https://blueboot-market.web.app/",
+        "dashboard": f"https://{GCP_PROJECT}.web.app/",
     })
 
 

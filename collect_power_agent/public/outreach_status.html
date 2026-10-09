@@ -123,7 +123,7 @@ function bar(used, max, depleted) {
 }
 
 function fmtDt(iso) {
-  try { return new Date(iso).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' }); } catch { return iso || ''; }
+  try { return new Date(iso).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'medium' }); } catch { return iso || ''; }
 }
 
 function renderTiles() {
@@ -381,7 +381,11 @@ async function pollJob(jobId, doneText) {
 
 async function load() {
   const btn = document.getElementById('refresh-btn');
+  const label = btn.innerHTML;
   btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading…';
+  document.getElementById('calc-at').textContent = 'Updating…';
+  document.querySelectorAll('#tiles, #acc-body, #camp-body').forEach(el => { el.style.opacity = '.5'; });
   document.getElementById('error').style.display = 'none';
   try {
     DATA = await fetchJSON(BASE + '/api/crm/outreach/status', { cache: 'no-store' });
@@ -391,7 +395,10 @@ async function load() {
     const el = document.getElementById('error');
     el.textContent = 'Could not load status: ' + prettyError(e.message);
     el.style.display = '';
+    document.getElementById('calc-at').textContent = '';
   }
+  document.querySelectorAll('#tiles, #acc-body, #camp-body').forEach(el => { el.style.opacity = ''; });
+  btn.innerHTML = label;
   btn.disabled = false;
 }
 

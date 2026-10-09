@@ -212,7 +212,9 @@ Intro mode selects contacts when all of these are true:
 
 - Contact status is `pending`.
 - Contact has no sent history: `mail_sent` is empty.
-- Campaign status is `ready`.
+- Campaign status is `ready` or `active`.
+- If the campaign has `require_send_confirmation: true`, the contact has `send_confirmation: true` (the Send tick). Reminders ignore this flag.
+- The contact's site (campaign lead) is `pending` or `active`.
 - Campaign has an Intro step in `mail_sequence`.
 - Campaign has a configured outreach account.
 - The optional campaign filter, if supplied, includes this campaign.

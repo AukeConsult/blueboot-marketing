@@ -34,7 +34,7 @@ def _scheduler_job_name(job_name: str, task_id: str) -> str:
 
 def main(argv=None):
     p = argparse.ArgumentParser(description="Create/update Cloud Scheduler jobs for cloud_batch tasks")
-    p.add_argument("--project",          default=os.getenv("GCP_PROJECT", "blueboot-market"))
+    p.add_argument("--project",          default=os.getenv("GCP_PROJECT", ""))
     p.add_argument("--location",         default=os.getenv("GCP_LOCATION", "us-central1"))
     p.add_argument("--runner-url",       default=os.getenv("BATCH_RUNNER_URL", ""),
                    help="Cloud Run service URL, e.g. https://batch-runner-xxx-uc.a.run.app")

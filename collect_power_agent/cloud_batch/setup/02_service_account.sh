@@ -2,7 +2,7 @@
 # 02_service_account.sh — Create service account for cloud_batch runner
 set -euo pipefail
 
-PROJECT="${GCP_PROJECT:-blueboot-market}"
+PROJECT="${GCP_PROJECT:-$(sed -n 's/^GCP_PROJECT=\([^ #]*\).*/\1/p' "$(dirname "$0")/../../.env" 2>/dev/null | head -1)}"
 SA_NAME="batch-runner"
 SA_EMAIL="${SA_NAME}@${PROJECT}.iam.gserviceaccount.com"
 

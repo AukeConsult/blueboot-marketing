@@ -19,7 +19,8 @@ import threading
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-GCP_PROJECT = os.getenv("GCP_PROJECT", "blueboot-market")
+GCP_PROJECT = (os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+               or os.getenv("GCLOUD_PROJECT") or "")
 
 _db = None
 _lock = threading.Lock()
@@ -34,6 +35,6 @@ def get_firestore():
             return _db
         if not firebase_admin._apps:
             cred = credentials.ApplicationDefault()
-            firebase_admin.initialize_app(cred, {"projectId": GCP_PROJECT})
+            firebase_admin.initialize_app(cred, ({"projectId": GCP_PROJECT} if GCP_PROJECT else None))
         _db = firestore.client()
     return _db

@@ -2,7 +2,7 @@
 # 04_deploy_cloudrun.sh — Deploy the batch runner as a Cloud Run service
 set -euo pipefail
 
-PROJECT="${GCP_PROJECT:-blueboot-market}"
+PROJECT="${GCP_PROJECT:-$(sed -n 's/^GCP_PROJECT=\([^ #]*\).*/\1/p' "$(dirname "$0")/../../.env" 2>/dev/null | head -1)}"
 LOCATION="${GCP_LOCATION:-us-central1}"
 REPO="batch-runner"
 SERVICE_NAME="batch-runner"
