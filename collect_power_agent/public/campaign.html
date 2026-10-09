@@ -222,6 +222,7 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
           <option value="draft">Draft</option>
           <option value="ready">Ready</option>
           <option value="active">Active</option>
+          <option value="on_hold">On hold</option>
           <option value="canceled">Canceled</option>
         </select>
       </div>
@@ -272,6 +273,12 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
       </div>
 <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none">
         <i class="ti ti-circle-check me-1"></i>Mark ready
+      </button>
+      <button class="btn btn-sm btn-outline-warning" onclick="confirmHold()" id="hold-btn" style="display:none" title="Pause sending. Nothing is lost - resume at any time.">
+        <i class="ti ti-player-pause me-1"></i>Put on hold
+      </button>
+      <button class="btn btn-sm btn-success" onclick="resumeCampaign()" id="resume-btn" style="display:none" title="Continue sending">
+        <i class="ti ti-player-play me-1"></i>Resume
       </button>
       <button class="btn btn-sm btn-outline-danger" onclick="confirmCancel()" id="cancel-btn" style="display:none">
         <i class="ti ti-ban me-1"></i>Cancel
@@ -779,12 +786,12 @@ function contactStatus(s) {
 
 function campaignStatus(s) {
   const st = String(s || 'draft').toLowerCase();
-  return ['draft', 'ready', 'active', 'canceled'].includes(st) ? st : 'draft';
+  return ['draft', 'ready', 'active', 'on_hold', 'canceled'].includes(st) ? st : 'draft';
 }
 
 function campaignStatusLabel(s) {
   const st = campaignStatus(s);
-  return ({ draft: 'draft', ready: 'ready', active: 'active', canceled: 'canceled' }[st]) || 'draft';
+  return ({ draft: 'draft', ready: 'ready', active: 'active', on_hold: 'on hold', canceled: 'canceled' }[st]) || 'draft';
 }
 
 function statusBadge(s) {
@@ -1429,6 +1436,7 @@ async function loadCampaign() {
     c.status = st;
     const badge = document.getElementById('c-status-badge');
     badge.className = `bb-badge bb-badge-${st}`; badge.textContent = campaignStatusLabel(st);
+    badge.title = holdTooltip(c);
     document.getElementById('c-contacts').textContent = c.contact_count || 0;
     document.getElementById('c-sites').textContent    = c.sites_count || 0;
     document.getElementById('c-countries').textContent = (c.countries||[]).length || '—';
@@ -1486,12 +1494,7 @@ async function loadCampaign() {
       facetRow.style.display = 'none';
     }
 
-    const isLocked = st === 'active' || st === 'canceled';
-    const sendBtn = document.getElementById('send-btn');
-    sendBtn.style.display = st === 'draft' ? '' : 'none';
-    document.getElementById('cancel-btn').style.display = (st === 'ready' || st === 'active') ? '' : 'none';
-    document.getElementById('delete-btn').style.display = (st === 'draft' || st === 'canceled') ? '' : 'none';
-    document.getElementById('reset-btn').style.display = (st !== 'draft') ? '' : 'none';
+    setStatusButtons(st);
     allContacts = c.campaign_contacts || [];
     document.getElementById('c-contact-count').textContent = `(${allContacts.length})`;
     renderContacts(allContacts);
@@ -1834,6 +1837,76 @@ async function doSend() {
   }
 }
 
+// Which action buttons are visible for each campaign status.
+function setStatusButtons(st) {
+  const show = (id, on) => { document.getElementById(id).style.display = on ? '' : 'none'; };
+  show('send-btn',   st === 'draft');
+  show('hold-btn',   st === 'ready' || st === 'active');
+  show('resume-btn', st === 'on_hold');
+  show('cancel-btn', st === 'ready' || st === 'active' || st === 'on_hold');
+  show('delete-btn', st === 'draft' || st === 'canceled');
+  show('reset-btn',  st !== 'draft');
+}
+
+function holdTooltip(c) {
+  if (campaignStatus(c.status) !== 'on_hold') return '';
+  const parts = ['On hold'];
+  if (c.held_at) parts[0] += ' since ' + fmt(c.held_at);
+  if (c.held_by) parts.push('by ' + c.held_by);
+  if (c.held_reason) parts.push('- ' + c.held_reason);
+  return parts.join(' ');
+}
+
+async function setCampaignStatus(status, extra = {}) {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return null;
+  const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status, ...extra})
+  });
+  const d = await r.json();
+  if (!r.ok || d.status !== 'ok') throw new Error(d.message || 'Status change failed');
+  return d;
+}
+
+async function confirmHold() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const reason = prompt(`Put campaign "${id}" on hold?\n\nNo mail (intro or follow-up) is sent while it is on hold. Contacts, mail text and history are kept, and you can resume at any time.\n\nReason (optional):`);
+  if (reason === null) return;          // cancelled the dialog
+  const fb = document.getElementById('sync-feedback');
+  try {
+    await setCampaignStatus('on_hold', { hold_reason: reason });
+    fb.className = 'alert alert-warning py-1 px-2 small mt-2 mb-0';
+    fb.textContent = 'Campaign is on hold. No mail will be sent until you resume it.';
+    fb.style.display = '';
+    await loadCampaign(id);
+    await loadCampaignList();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = e.message; fb.style.display = '';
+  }
+}
+
+async function resumeCampaign() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const fb = document.getElementById('sync-feedback');
+  try {
+    const held = (window._campaignData || {}).held_from;
+    await setCampaignStatus(held === 'ready' || held === 'active' ? held : 'ready');
+    fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
+    fb.textContent = 'Campaign resumed.';
+    fb.style.display = '';
+    await loadCampaign(id);
+    await loadCampaignList();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = e.message; fb.style.display = '';
+  }
+}
+
 async function confirmCancel() {
   const id = document.getElementById('campaign-select').value;
   if (!id) return;
@@ -1850,9 +1923,7 @@ async function confirmCancel() {
     const badge = document.getElementById('c-status-badge');
     badge.className = 'bb-badge bb-badge-canceled';
     badge.textContent = 'canceled';
-    document.getElementById('send-btn').style.display = 'none';
-    document.getElementById('cancel-btn').style.display = 'none';
-    document.getElementById('delete-btn').style.display = '';
+    setStatusButtons('canceled');
     document.getElementById('reset-btn').style.display = 'none';
 
     fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';

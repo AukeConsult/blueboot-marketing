@@ -249,7 +249,7 @@ Campaign documents can also be created directly via the API (`POST /api/crm/camp
 | Field | Description |
 |---|---|
 | `campaign_id` | Unique string (e.g. `NO_jun`) |
-| `status` | `draft` / `ready` / `active` / `canceled` |
+| `status` | `draft` / `ready` / `active` / `on_hold` / `canceled` |
 | `source` | `master-sheet` or `manual` |
 | `outreach_email_account` | Email address of sending account |
 | `owner` | Responsible person name |
@@ -293,7 +293,7 @@ Campaign documents can also be created directly via the API (`POST /api/crm/camp
 
 ### 4.4 Activation
 
-Campaigns move `draft` -> `ready` -> `active` -> `canceled`. The campaign is marked `ready` by the workspace, then becomes `active` when the first real outreach mail is sent and `sent_at` is timestamped. Active/canceled campaigns cannot be synced.
+Campaigns move `draft` -> `ready` -> `active` -> `canceled`; `ready`/`active` can be paused to `on_hold` and resumed to where they were (`held_from`). The campaign is marked `ready` by the workspace, then becomes `active` when the first real outreach mail is sent and `sent_at` is timestamped. Active/canceled campaigns cannot be synced.
 
 ### Campaign mail sequence timing
 

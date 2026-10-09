@@ -150,6 +150,7 @@ When a campaign is created — whether from a filter preset, via Discover campai
 | `draft` | Being prepared, not ready to send |
 | `ready` | Reviewed and ready to send |
 | `active` | First real mail has been sent; campaign remains active until canceled |
+| `on_hold` | Paused with **Put on hold** on the campaign page. No mail is sent (automatic or manual) until you press **Resume**, which returns it to `ready` or `active`, whichever it was. A hold can also be canceled |
 | `canceled` | Stopped; can be deleted |
 
 ---

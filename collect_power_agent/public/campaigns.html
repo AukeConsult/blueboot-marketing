@@ -45,6 +45,7 @@
       <option value="draft">Draft</option>
       <option value="ready">Ready</option>
       <option value="active">Active</option>
+      <option value="on_hold">On hold</option>
       <option value="canceled">Canceled</option>
     </select>
     <select id="owner-filter" class="form-select form-select-sm" style="max-width:160px" onchange="filter()">
@@ -75,12 +76,12 @@ const fmt = fmtDateMedium;      // shared
 
 function statusBadge(s) {
   const st = campaignStatus(s);
-  return `<span class="bb-badge bb-badge-${st}">${st}</span>`;
+  return `<span class="bb-badge bb-badge-${st}">${st.replace('_', ' ')}</span>`;
 }
 
 function campaignStatus(s) {
   const st = String(s || 'draft').toLowerCase();
-  return ['draft', 'ready', 'active', 'canceled'].includes(st) ? st : 'draft';
+  return ['draft', 'ready', 'active', 'on_hold', 'canceled'].includes(st) ? st : 'draft';
 }
 
 function render(list) {

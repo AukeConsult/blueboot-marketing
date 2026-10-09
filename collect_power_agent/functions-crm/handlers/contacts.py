@@ -251,6 +251,8 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
             return _err(f"No mail account found for '{outreach_email}'.", 400)
 
         campaign_status = str(camp.get("status") or "draft").strip().lower()
+        if campaign_status == "on_hold":
+            return _err("Campaign is on hold — resume it before sending mail.", 409)
         if campaign_status not in {"ready", "active"}:
             return _err(
                 f"Campaign status is '{campaign_status}' — mark it ready before sending mail.",

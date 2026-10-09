@@ -12,7 +12,17 @@ from handlers.shared import (
 bp = Blueprint("campaigns", __name__)
 
 _CONTACT_STATUSES = {"pending", "active", "excluded"}
-_CAMPAIGN_STATUSES = {"draft", "ready", "active", "canceled"}
+_CAMPAIGN_STATUSES = {"draft", "ready", "active", "on_hold", "canceled"}
+
+# Allowed status changes.  on_hold is a pause: only ready/active campaigns can be held,
+# and a held campaign resumes to the status it was held from (held_from) or is canceled.
+_STATUS_TRANSITIONS = {
+    "draft":    {"ready", "canceled"},
+    "ready":    {"active", "on_hold", "canceled"},
+    "active":   {"on_hold", "canceled"},
+    "on_hold":  {"canceled"},          # + held_from, added in _status_update()
+    "canceled": set(),
+}
 
 
 def _contact_status(value) -> str:
@@ -23,8 +33,43 @@ def _contact_status(value) -> str:
 
 
 def _campaign_status(value) -> str:
-    status = str(value or "draft").strip().lower()
+    status = str(value or "draft").strip().lower().replace(" ", "_").replace("-", "_")
     return status if status in _CAMPAIGN_STATUSES else "draft"
+
+
+def _status_update(current: str, requested: str, camp: dict, body: dict, user: str):
+    """Work out the Firestore fields for a status change.
+
+    Returns (update_dict, error_message).  error_message is None when allowed.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    if requested == current:
+        return {"status": requested}, None
+
+    allowed = set(_STATUS_TRANSITIONS.get(current, set()))
+    if current == "on_hold":
+        held_from = camp.get("held_from")
+        if held_from in ("ready", "active"):
+            allowed.add(held_from)            # resume exactly where it was paused
+        else:
+            allowed |= {"ready", "active"}
+    if requested not in allowed:
+        return {}, f"Invalid campaign status transition: {current} -> {requested}."
+
+    update = {"status": requested}
+    if requested == "on_hold":
+        update.update({
+            "held_from":   current,
+            "held_at":     now,
+            "held_by":     user,
+            "held_reason": str(body.get("hold_reason") or "").strip()[:500],
+        })
+    elif current == "on_hold":
+        update.update({"held_from": None, "held_at": None, "held_by": None,
+                       "held_reason": None, "resumed_at": now})
+    if requested == "active" and current != "on_hold" and not body.get("sent_at"):
+        update["sent_at"] = now
+    return update, None
 
 
 @bp.route("/api/crm/campaigns", methods=["GET"])
@@ -126,28 +171,18 @@ def update_campaign(campaign_id):
         update = {}
 
         if "status" in body:
-            raw_status = str(body["status"] or "").strip().lower()
+            raw_status = str(body["status"] or "").strip().lower().replace(" ", "_").replace("-", "_")
             if raw_status not in _CAMPAIGN_STATUSES:
                 return _err(f"Invalid status. Must be one of: {', '.join(sorted(_CAMPAIGN_STATUSES))}", 400)
-            requested_status = _campaign_status(body["status"])
-            current_status = _campaign_status((doc.to_dict() or {}).get("status", "draft"))
-            allowed_next = {
-                "draft":    {"ready", "canceled"},
-                "ready":    {"active", "canceled"},
-                "active":   {"canceled"},
-                "canceled": set(),
-            }
-            if requested_status == current_status:
-                update["status"] = requested_status
-            elif requested_status in allowed_next.get(current_status, set()):
-                update["status"] = requested_status
-                if requested_status == "active" and not body.get("sent_at"):
-                    update["sent_at"] = datetime.now(timezone.utc).isoformat()
-            else:
-                return _err(
-                    f"Invalid campaign status transition: {current_status} -> {requested_status}.",
-                    409,
-                )
+            camp_data = doc.to_dict() or {}
+            from flask import g as _g
+            status_fields, status_err = _status_update(
+                _campaign_status(camp_data.get("status", "draft")),
+                _campaign_status(raw_status), camp_data, body,
+                getattr(_g, "user_email", "") or str(body.get("_user") or ""))
+            if status_err:
+                return _err(status_err, 409)
+            update.update(status_fields)
 
         if "sent_at"                in body: update["sent_at"]                = body["sent_at"]
         if "outreach_email_account" in body: update["outreach_email_account"] = body["outreach_email_account"]
