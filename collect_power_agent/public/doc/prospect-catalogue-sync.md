@@ -75,7 +75,7 @@ run_prospects_import.bat --show-changes 50    list more field-level changes
 | Option | Meaning |
 |---|---|
 | `--apply` | Write to Firestore. Without it nothing is changed. |
-| `--dir PATH` | Folder with the `.xlsx` files. Default: the G: drive folder above, or env `PROSPECTS_DIR`. Use this when working from a local copy. |
+| `--dir PATH` | Folder with the `.xlsx` files. **Required** (no built-in default) unless `--file` gets full paths; can also be set once as `PROSPECTS_DIR` in `.env`/environment, e.g. `PROSPECTS_DIR=G:\Shared drives\BlueBoot R&D\marketing\prospects`. |
 | `--file NAME` | Only this file (name inside `--dir`, or a full path). Can be repeated. |
 | `--country CC,CC` | Only these country codes, for example `UK,DK`. |
 | `--prefix BS` | Campaign prefix. Campaigns are named `<prefix>_<CC>`. Default `BS`. |
@@ -192,10 +192,38 @@ To clear a value, edit it in the CRM.
 | Status is anything other than "Not contacted" | The contact is **not** imported, and the report lists it. |
 | Country not recognised | Row skipped, with a warning. |
 | No website and no email | Row skipped, with a warning. |
-| New contact is already active in another campaign | Skipped, and listed in the report. |
+| New contact is already in another campaign (status pending, active, sent, replied, bounced or converted; excluded/rejected free the email) | Skipped, and listed in the report. Contacts already in *this* campaign are updated as usual. |
+| Same email appears in two campaigns of the same run (e.g. UK and international sheets) | The first campaign (alphabetical) gets it, the others skip it and the report says where it went. |
+| The duplicate check against other campaigns cannot run (e.g. missing Firestore index) | The report shows `!! duplicate check ... FAILED` and `--apply` **aborts without writing**, unless you pass `--skip-dup-check`. |
+| Same site is a lead in another campaign | Allowed (leads are per campaign); the report notes how many, since only contacts are protected from duplicates. |
 | Contact imported earlier but no longer in the catalogue | Kept, and listed in the report as "no longer in the catalogue". |
 
 ---
+
+## Site size (sitemap page count) — `--measure`
+
+Optional pre-step that fills two extra sheet columns, **`page_count`** and **`sitemap_url`**
+(appended after the last used column if missing; the headers `site size`, `sitesize` and
+`sitesie` are also read as `page_count`).
+
+```
+run_prospects_import.bat --measure                 :: preview: read sitemaps, show what would be written
+run_prospects_import.bat --measure --apply         :: write the sheet (keeps a .xlsx.bak) and import
+run_prospects_import.bat --measure-only --apply    :: only update the sheets
+run_prospects_import.bat --measure --force --apply :: re-measure and OVERWRITE existing values
+```
+
+1. Rows with an empty `page_count` are grouped by site; each site is read once with
+   `crm.sitemap_reader.SitemapReader` (same reader the campaign scraper uses, 8 in parallel,
+   120 s per site, `--workers N`).
+2. The result is written to the sheet columns; sites without a readable sitemap stay empty
+   and are retried next run.
+3. The import stores it as **`campaigns/{id}/campaign_leads/{lead_id}.page_count`** and
+   `.sitemap_url` (shown as *Pages* on the campaign's Sites table), and on new `site_leads`.
+
+Without `--force`, existing sheet cells and existing `campaign_leads.page_count` /
+`sitemap_url` values are only **filled when empty**, never replaced. Close the workbooks in
+Excel before using `--apply`.
 
 ## Typical workflow
 

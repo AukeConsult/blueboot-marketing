@@ -1989,7 +1989,7 @@ It covers all five stages, every script, the contact schema, and the status life
 ## `prospects_import.py` — sync the BlueSearch prospect catalogue into campaigns
 
 Reads every `.xlsx` in the shared prospects folder
-(`G:\Shared drives\BlueBoot R&D\marketing\prospects`, or `--dir` / env `PROSPECTS_DIR`),
+(given with `--dir "<folder>"`, or env / `.env` `PROSPECTS_DIR`; there is no built-in default),
 groups the rows by country and upserts them into one campaign per country
 (`BS_UK`, `BS_DK`, `BS_FI`, `BS_SE`, `BS_DE`, `BS_US`). New rows are created, changed
 rows are updated field by field, unchanged rows are left alone. Outreach state
@@ -1998,11 +1998,12 @@ rows are updated field by field, unchanged rows are left alone. Outreach state
 **Dry run by default** — nothing is written until `--apply` is given.
 
 ```bat
-run_prospects_import.bat                       :: preview (new / changed / unchanged)
-run_prospects_import.bat --apply               :: write to Firestore
+run_prospects_import.bat --dir "G:\path\to\prospects"           :: preview (new / changed / unchanged); source folder is required
+run_prospects_import.bat --dir "G:\path\to\prospects" --apply   :: write to Firestore
 run_prospects_import.bat --country UK,DK       :: only these countries
 run_prospects_import.bat --file BlueSearch-UK-prospects.xlsx
 run_prospects_import.bat --campaign-only       :: skip site_leads / site_contacts / email_contacts
+run_prospects_import.bat --measure --apply     :: first read sitemaps -> sheet columns page_count + sitemap_url (empty ones only; --force overwrites)
 ```
 
 | Writes | Rule |

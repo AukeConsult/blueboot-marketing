@@ -89,6 +89,9 @@ _HEADERS = {
     "source_urls": "source_urls", "research_date": "researched_at",
     "status": "prospect_status", "last_contacted": "prospect_last_contacted",
     "next_follow_up": "prospect_next_followup", "notes": "notes",
+    # written by the --measure pre-step (site_size_lib); "site_size"/"sitesize"/"sitesie" accepted
+    "page_count": "page_count", "site_size": "page_count", "sitesize": "page_count",
+    "sitesie": "page_count", "sitemap_url": "sitemap_url",
 }
 
 _GENERIC_LOCALS = {
@@ -215,6 +218,23 @@ def parse_catalogue(paths: list[Path]) -> tuple[list[dict], list[str]]:
 # Normalising rows -> lead / contact dicts, grouped by campaign
 # ---------------------------------------------------------------------------
 
+def country_code(cname: str) -> str:
+    """'United Kingdom' / 'UK' / 'US and Canada' -> 'UK' / 'UK' / 'US'; '' when unknown."""
+    cname = (cname or "").strip()
+    code = COUNTRY_CODES.get(cname.lower())
+    if not code:        # "US and Canada", "Sweden / Norway" -> first country named
+        first = re.split(r"\s+and\s+|[/,;&]", cname, maxsplit=1)[0].strip().lower()
+        code = COUNTRY_CODES.get(first)
+    if not code and re.fullmatch(r"[A-Za-z]{2}", cname):
+        code = cname.upper()
+    return code or ""
+
+
+def _page_count(raw: str):
+    digits = re.sub(r"[^\d]", "", str(raw or "").split(".")[0])
+    return int(digits) if digits else None
+
+
 def _merge_into(dst: dict, src: dict) -> None:
     for k, v in src.items():
         if v not in ("", None):
@@ -235,12 +255,7 @@ def build_records(rows: list[dict], *, prefix: str = DEFAULT_PREFIX,
     for r in ordered:
         src = r["_src"]
         cname = (r.get("country") or "").strip()
-        code = COUNTRY_CODES.get(cname.lower())
-        if not code:        # "US and Canada", "Sweden / Norway" -> first country named
-            first = re.split(r"\s+and\s+|[/,;&]", cname, maxsplit=1)[0].strip().lower()
-            code = COUNTRY_CODES.get(first)
-        if not code and re.fullmatch(r"[A-Za-z]{2}", cname):
-            code = cname.upper()
+        code = country_code(cname)
         if not code:
             warnings.append(f"{src}: unknown country '{cname}' -- skipped")
             continue
@@ -279,6 +294,11 @@ def build_records(rows: list[dict], *, prefix: str = DEFAULT_PREFIX,
         }
         if rank is not None:
             lead["priority_rank"] = rank
+        pc = _page_count(r.get("page_count", ""))
+        if pc:
+            lead["page_count"] = pc
+        if r.get("sitemap_url"):
+            lead["sitemap_url"] = r["sitemap_url"]
         camp = out.setdefault(campaign, {"leads": {}, "contacts": {},
                                          "contacted_skipped": [], "no_email": 0})
         _merge_into(camp["leads"].setdefault(lead_id, {}), lead)
@@ -381,7 +401,26 @@ def _plan_docs(col, docs: dict[str, dict], existing: dict[str, dict], *,
     return ops, stats
 
 
-def build_plan(db, records: dict, *, campaign_only: bool = False) -> dict:
+def _leads_in_other_campaigns(db, campaign_id: str, lead_ids: set) -> int:
+    """How many of these sites are also leads in another campaign (information only)."""
+    if not lead_ids:
+        return 0
+    try:
+        from google.cloud.firestore_v1.base_query import FieldFilter
+        ids, found = list(lead_ids), set()
+        for i in range(0, len(ids), 30):
+            for d in (db.collection_group(CAMPAIGN_LEADS_SUB)
+                      .where(filter=FieldFilter("lead_id", "in", ids[i:i + 30])).stream()):
+                parts = d.reference.path.split("/")
+                if len(parts) >= 4 and parts[1] != campaign_id:
+                    found.add(d.id)
+        return len(found)
+    except Exception:
+        return 0
+
+
+def build_plan(db, records: dict, *, campaign_only: bool = False,
+               force_size: bool = False) -> dict:
     """Compare records with Firestore.  Returns {campaign: {...ops + stats}}."""
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     plan: dict[str, dict] = {}
@@ -390,6 +429,7 @@ def build_plan(db, records: dict, *, campaign_only: bool = False) -> dict:
     except Exception:                                    # pragma: no cover
         _contacts_in_other_campaigns = None
 
+    claimed: dict[str, str] = {}     # doc_id -> campaign that takes it in this run
     for campaign, rec in sorted(records.items()):
         camp_ref = db.collection(CAMPAIGNS_COLLECTION).document(campaign)
         camp_exists = camp_ref.get().exists
@@ -399,19 +439,36 @@ def build_plan(db, records: dict, *, campaign_only: bool = False) -> dict:
         ex_leads = _fetch(db, leads_col, list(rec["leads"]))
         ex_contacts = _fetch(db, contacts_col, list(rec["contacts"]))
 
+        if not force_size:      # page_count / sitemap_url: only fill empty, never overwrite
+            for lid, doc in rec["leads"].items():
+                for f in ("page_count", "sitemap_url"):
+                    if ex_leads.get(lid, {}).get(f) not in ("", None):
+                        doc.pop(f, None)
         lead_ops, lead_stats = _plan_docs(
             leads_col, rec["leads"], ex_leads, mode="managed",
             new_extra={"status": "pending", "synced_at": now},
             repair={"status": "pending"})   # send filter skips leads without a status
-        # Reserved: new contacts already active in another campaign are skipped.
+        # Duplicate protection for NEW contacts:
+        #  1. already active in another campaign in Firestore -> skipped ("reserved")
+        #  2. already claimed by another campaign planned in this same run -> skipped
+        #  If the Firestore check cannot run, the plan is flagged and --apply refuses.
         new_ids = {d for d in rec["contacts"] if d not in ex_contacts}
         reserved: set = set()
-        if new_ids and _contacts_in_other_campaigns:
-            try:
-                reserved = _contacts_in_other_campaigns(db, campaign, new_ids)
-            except Exception as exc:
-                print(f"[prospects] WARN cross-campaign check failed: {exc}", flush=True)
-        contacts = {d: c for d, c in rec["contacts"].items() if d not in reserved}
+        dup_check_error = ""
+        if new_ids:
+            if _contacts_in_other_campaigns is None:
+                dup_check_error = "duplicate check unavailable (crm.campaign_import_lib)"
+            else:
+                try:
+                    reserved = _contacts_in_other_campaigns(db, campaign, new_ids)
+                except Exception as exc:
+                    dup_check_error = f"{type(exc).__name__}: {exc}"
+        in_run = {d: claimed[d] for d in new_ids if d in claimed}
+        contacts = {d: c for d, c in rec["contacts"].items()
+                    if d not in reserved and d not in in_run}
+        for d in contacts:
+            claimed.setdefault(d, campaign)
+        leads_elsewhere = _leads_in_other_campaigns(db, campaign, set(rec["leads"]))
         contact_ops, contact_stats = _plan_docs(
             contacts_col, contacts, ex_contacts, mode="managed",
             new_extra={"status": "pending", "sent_at": None, "last_action": "",
@@ -423,6 +480,8 @@ def build_plan(db, records: dict, *, campaign_only: bool = False) -> dict:
             "lead_ops": lead_ops, "lead_stats": lead_stats,
             "contact_ops": contact_ops, "contact_stats": contact_stats,
             "reserved": sorted(reserved), "no_email": rec["no_email"],
+            "in_run_dupes": sorted(f"{d} (already in {c})" for d, c in in_run.items()),
+            "dup_check_error": dup_check_error, "leads_elsewhere": leads_elsewhere,
             "contacted_skipped": rec["contacted_skipped"],
             "site_lead_ops": [], "site_contact_ops": [], "email_contact_ops": [],
             "site_lead_stats": None, "site_contact_stats": None,
@@ -448,8 +507,14 @@ def build_plan(db, records: dict, *, campaign_only: bool = False) -> dict:
                       "company": l["company"], "title": "", "description": l.get("description", ""),
                       "location": l.get("location", ""), "source_query": SOURCE,
                       "query_category": "prospect", "crawled_at": now,
-                      "prospect_type": l.get("prospect_type", "")}
+                      "prospect_type": l.get("prospect_type", ""),
+                      "page_count": l.get("page_count"), "sitemap_url": l.get("sitemap_url", "")}
                 for lid, l in rec["leads"].items()}
+            for d in site_leads.values():
+                if d.get("page_count") is None:
+                    d.pop("page_count", None)
+                if not d.get("sitemap_url"):
+                    d.pop("sitemap_url", None)
             ex_sl = _fetch(db, sl_col, list(site_leads))
             # existing site_leads belong to the crawler -> create only, never modify
             entry["site_lead_ops"], entry["site_lead_stats"] = _plan_docs(
@@ -573,6 +638,14 @@ def print_report(plan: dict, warnings: list[str], *, show_changes: int = 10) -> 
         if e["reserved"]:
             print(f"   {len(e['reserved'])} contact(s) skipped -- active in another campaign: "
                   + ", ".join(e["reserved"][:5]))
+        if e["in_run_dupes"]:
+            print(f"   {len(e['in_run_dupes'])} contact(s) skipped -- same email in another campaign "
+                  f"of this run: " + ", ".join(e["in_run_dupes"][:5]))
+        if e["leads_elsewhere"]:
+            print(f"   note: {e['leads_elsewhere']} site(s) are also leads in other campaigns "
+                  f"(contacts are protected from duplicates, sites are not)")
+        if e["dup_check_error"]:
+            print(f"   !! duplicate check against other campaigns FAILED: {e['dup_check_error']}")
         if e["missing_from_catalogue"]:
             print(f"   {len(e['missing_from_catalogue'])} contact(s) in Firestore but no longer in the catalogue "
                   f"(kept): " + ", ".join(e["missing_from_catalogue"][:5]))
