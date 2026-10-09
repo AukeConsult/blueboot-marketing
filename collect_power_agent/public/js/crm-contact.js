@@ -100,6 +100,19 @@ function render() {
   document.getElementById('cc-avatar').textContent = initials;
   document.getElementById('cc-status-badge').innerHTML = statusBadgeHtml(r.status);
   document.getElementById('f-name').value  = r.name  || '';
+
+  // send confirmation (first mail only)
+  const cb = document.getElementById('f-send_confirmation');
+  if (cb) {
+    const sent = !!r.intro_sent || (Array.isArray(r.mail_sent) && r.mail_sent.some(m => m && m.sent_at));
+    const can = (r.status || 'pending') === 'pending' && !sent;
+    cb.checked = !!r.send_confirmation;
+    cb.disabled = !can;
+    document.getElementById('cc-confirm-info').textContent = !can
+      ? (sent ? 'first mail already sent' : 'only pending contacts')
+      : (r.send_confirmed_by ? `by ${r.send_confirmed_by}` : '');
+    if (!cb._bound) { cb._bound = true; cb.addEventListener('change', () => patchField('send_confirmation', cb.checked)); }
+  }
   document.getElementById('f-title').value = r.title || '';
 
   // new mail

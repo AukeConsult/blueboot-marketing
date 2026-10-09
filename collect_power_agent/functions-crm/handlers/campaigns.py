@@ -135,6 +135,7 @@ def create_campaign(campaign_id):
             "sent_at":                None,
             "outreach_email_account": body.get("outreach_email_account", ""),
             "mail":                   {"subject": "", "body": "", "type": "plain"},
+            "require_send_confirmation": True,   # intro mail only to contacts ticked "Send"
             "contact_count":          0,
             "sites_count":            0,
             "countries":              [],
@@ -187,6 +188,8 @@ def update_campaign(campaign_id):
         if "sent_at"                in body: update["sent_at"]                = body["sent_at"]
         if "outreach_email_account" in body: update["outreach_email_account"] = body["outreach_email_account"]
         if "owner"                  in body: update["owner"]                  = body["owner"]
+        if "require_send_confirmation" in body:
+            update["require_send_confirmation"] = bool(body["require_send_confirmation"])
 
         if "mail" in body:
             existing_mail = (doc.to_dict() or {}).get("mail", {})

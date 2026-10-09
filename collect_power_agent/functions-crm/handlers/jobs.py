@@ -387,7 +387,7 @@ def worker(name, job_id):
                 db,
                 campaign_id=body.get("campaign_id", "").strip(),
                 force=bool(body.get("force", False)),
-                workers=int(body.get("workers", 6)),
+                workers=int(body.get("workers", 20)),
                 dry_run=dry_run,
             )
 

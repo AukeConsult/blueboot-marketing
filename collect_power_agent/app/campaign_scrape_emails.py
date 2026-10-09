@@ -17,7 +17,7 @@ Usage:
 
 Options:
     --campaign   Campaign ID (required)
-    --workers N  Parallel async workers  (default: 6)
+    --workers N  Parallel async workers  (default: 20)
     --force      Re-scrape leads already scraped
     --dry-run    Print found emails without writing to Firestore
 """
@@ -51,7 +51,7 @@ CAMPAIGNS_COLLECTION  = "campaigns"
 CAMPAIGN_LEADS_SUB    = "campaign_leads"
 CAMPAIGN_CONTACTS_SUB = "campaign_contacts"
 
-WORKERS_DEFAULT = 6
+WORKERS_DEFAULT = 20
 SITE_TIMEOUT    = 30.0   # hard ceiling per lead (homepage + contact page)
 FETCH_TIMEOUT   = 12.0   # per individual HTTP fetch
 WRITE_TIMEOUT   = 12.0   # Firestore write timeout

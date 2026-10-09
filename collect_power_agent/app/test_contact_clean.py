@@ -109,6 +109,17 @@ class CleanEmail(unittest.TestCase):
         self.assertEqual(find_emails(t), ["adam@x.com", "anna@firma.se", "bs@adtention.dk",
                                           "info@foo.com", "jk@a.dk"])
 
+    def test_linkedin_profiles(self):
+        from crm.contact_clean_lib import find_linkedin_profiles
+        html = ('<h3>Rasmus Kjærgaard Rossen</h3><h4>Ejer</h4><p>Rasmus er ejer.</p>'
+                '<a href="https://www.linkedin.com/in/rasmus-kjaergaard-rossen-1a2b/"></a>'
+                '<h3>Steffen Rasmussen</h3><h4>Konsulent</h4><p>Steffen sælger.</p>'
+                '<a href="https://dk.linkedin.com/in/sr77x?x=1">Forbind med Steffen på LinkedIn</a>'
+                '<a href="https://www.linkedin.com/company/hh">Firma</a>')
+        got = [(p["name"], p["url"]) for p in find_linkedin_profiles(html)]
+        self.assertEqual(got, [("Rasmus Kjærgaard Rossen", "https://www.linkedin.com/in/rasmus-kjaergaard-rossen-1a2b"),
+                               ("Steffen Rasmussen", "https://www.linkedin.com/in/sr77x")])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

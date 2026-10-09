@@ -17,7 +17,7 @@ from urllib.parse import urljoin, urlparse
 import aiohttp
 
 from crm.contact_clean_lib import (clean_email, clean_name, deobfuscate, find_emails,
-                                   names_from_page_blocks)
+                                   find_linkedin_profiles, name_fits_email, names_from_page_blocks)
 from crm.sitemap_reader import SitemapReader
 
 # ---------------------------------------------------------------------------
@@ -28,7 +28,7 @@ CAMPAIGNS_COLLECTION  = "campaigns"
 CAMPAIGN_LEADS_SUB    = "campaign_leads"
 CAMPAIGN_CONTACTS_SUB = "campaign_contacts"
 
-SITE_TIMEOUT  = 180.0  # per-site budget: email scraping + sitemap reading run concurrently
+SITE_TIMEOUT  = 420.0  # per-site budget: every lookup of ONE site runs in series (20 sites run in parallel)
 FETCH_TIMEOUT = 12.0
 WRITE_TIMEOUT = 12.0
 MAX_BODY      = 4_000_000   # 4 MB cap per page
@@ -42,7 +42,14 @@ _CONTACT_WORDS = [
     "support", "hello", "hire-us", "work-with-us",
     "kontakt", "kontakta", "om-oss", "om oss", "ansatte", "selskapet",
     "sampark", "hamare", "humse",
+    # people directories: list page -> one page per person (consultants, experts, staff ...)
+    "consultant", "expert", "specialist", "colleague", "leadership", "management",
+    "medarbejder", "medarbeider", "ledelse", "kollegor", "mitarbeiter", "our-people",
 ]
+_MAX_PROFILE_PAGES = 40    # per-person pages fetched per site (second hop from a list page)
+_PERSON_SLUG_RE = re.compile(r"^[^\W\d_]+(?:[-_][^\W\d_]+){1,3}$", re.UNICODE)
+_NOT_PERSON_SLUG = {"privacy-policy", "cookie-policy", "terms-conditions", "case-study", "read-more",
+                    "contact-us", "about-us", "our-team", "meet-the-team", "get-in-touch"}
 
 HREF_PATTERN  = r"""href=["']([^"']+)["']"""
 MAILTO_PATTERN = r"""<a[^>]+href=["']mailto:([^"'> \s]+)["'][^>]*>([^<]{1,80})</a>"""
@@ -248,7 +255,22 @@ def _extract_contacts(html: str) -> dict:
     if missing:
         for e, nm in names_from_page_blocks(decoded, missing).items():
             contacts[e]["name"] = nm
+
+    # ── LinkedIn profile of the same person, when the page carries one ──────────
+    profiles = find_linkedin_profiles(html)
+    for e, c in contacts.items():
+        for pr in profiles:
+            if pr["name"] and c["name"] and (
+                    _fold_name(pr["name"]) == _fold_name(c["name"]) or name_fits_email(pr["name"], e)):
+                c["linkedin"] = pr["url"]
+                break
     return contacts
+
+
+def _fold_name(s: str) -> str:
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFD", s.casefold())
+                   if unicodedata.category(ch) != "Mn").strip()
 
 
 def _find_contact_links(html: str, base_url: str, max_links: int = _MAX_CONTACT_PAGES) -> list:
@@ -272,6 +294,58 @@ def _find_contact_links(html: str, base_url: str, max_links: int = _MAX_CONTACT_
         if len(links) >= max_links:
             break
     return links
+
+
+def _find_profile_links(pages: dict, limit: int = _MAX_PROFILE_PAGES) -> list:
+    """Second hop: list pages ("our consultants") -> one page per person.
+
+    A profile link is a same-site link under the list page's own path whose last segment looks
+    like a person's name (hans-hansen, fenix_bretz).  Only list pages with >= 3 such links count."""
+    found: list = []
+    seen: set = set(pages)
+    for page_url, html in pages.items():
+        base_path = urlparse(page_url).path.rstrip("/").lower()
+        if not base_path or not html:
+            continue
+        dom = _domain_of(page_url)
+        cands: list = []
+        for m in _HREF_RE.finditer(html):
+            href = m.group(1).strip()
+            if href.startswith(("#", "mailto:", "tel:", "javascript:")):
+                continue
+            full = urljoin(page_url, href).split("#")[0].split("?")[0]
+            if _domain_of(full) != dom or full in seen or full in cands:
+                continue
+            path = urlparse(full).path.rstrip("/").lower()
+            if not path.startswith(base_path + "/"):
+                continue
+            slug = path.rsplit("/", 1)[-1]
+            if _PERSON_SLUG_RE.match(slug) and slug not in _NOT_PERSON_SLUG:
+                cands.append(full)
+        if len(cands) >= 3:
+            found.extend(c for c in cands if c not in found)
+        if len(found) >= limit:
+            break
+    return found[:limit]
+
+
+def _extract_profile_page(html: str) -> dict:
+    """Contacts from a single person's page: the page is about ONE person, so its h1 is the
+    name and its (single) personal LinkedIn link is theirs."""
+    contacts = _extract_contacts(html)
+    if len(contacts) != 1:
+        return contacts
+    (email, c), = contacts.items()
+    if not c.get("name"):
+        h1 = re.search(r"<h1\b[^>]*>(.*?)</h1>", html, re.I | re.S)
+        nm = clean_name(re.sub(r"<[^>]+>", " ", h1.group(1)), email) if h1 else ""
+        if len(nm.split()) >= 2:
+            c["name"] = nm
+    if not c.get("linkedin"):
+        profs = find_linkedin_profiles(html)
+        if len(profs) == 1:
+            c["linkedin"] = profs[0]["url"]
+    return contacts
 
 
 # ---------------------------------------------------------------------------
@@ -402,12 +476,13 @@ _PROTECTED = {
     "followup_status", "followup_date", "followup_comment",
     "followup_importance", "followup_owner", "comment_history",
     "sent_at", "message_id", "sender_account", "created_at",
+    "send_confirmation", "send_confirmed_by", "send_confirmed_at", "send_confirm_note",
 }
 
 
 def _write_contacts(db, campaign_id: str, lead_id: str,
                     emails: dict, existing: set, now: str,
-                    lead_data: dict | None = None) -> tuple:
+                    lead_data: dict | None = None, people: list | None = None) -> tuple:
     contacts_col = (db.collection(CAMPAIGNS_COLLECTION)
                       .document(campaign_id)
                       .collection(CAMPAIGN_CONTACTS_SUB))
@@ -438,6 +513,8 @@ def _write_contacts(db, campaign_id: str, lead_id: str,
                "domain":  ld.get("domain",  ""),
                "company": ld.get("company_name") or ld.get("company") or ld.get("title", ""),
                "country": ld.get("country", "")}
+        if isinstance(info, dict) and info.get("linkedin"):
+            doc["linkedin"] = info["linkedin"]
         if raw_name and raw_name != name:
             doc["name_raw"] = raw_name              # audit trail of what was cleaned
         if cid in existing:
@@ -449,7 +526,10 @@ def _write_contacts(db, campaign_id: str, lead_id: str,
             batch.set(contacts_col.document(cid), doc)
             existing.add(cid)
             new_count += 1
-    batch.update(leads_ref, {"email_scraped_at": now})
+    lead_upd = {"email_scraped_at": now}
+    if people:
+        lead_upd["people"] = people
+    batch.update(leads_ref, lead_upd)
     batch.commit()
     return new_count, upd_count
 
@@ -461,14 +541,19 @@ def _write_contacts(db, campaign_id: str, lead_id: str,
 class LeadEmailWorker(Worker):
     def __init__(self, session: aiohttp.ClientSession, fetcher: BoundedFetcher,
                  lead_id: str, data: dict, *, timeout: float = SITE_TIMEOUT,
-                 debug: bool = False):
+                 debug: bool = False, force: bool = False):
         super().__init__(lead_id, timeout=timeout)
         self._session = session
         self._fetcher = fetcher
         self._debug   = debug
+        self._force   = force          # force = redo e-mails AND page count even if already done
+        self.pages_fetched = 0
+        self.profile_pages = 0
+        self.skipped_note  = ""
         self.data = data
         self.website = (data.get("website") or "").strip()
         self.found: dict = {}
+        self.people: list = []          # [{name, title, linkedin}] with or without an e-mail
         self.page_count: int | None = None
 
     async def process(self) -> WorkerResult:
@@ -479,7 +564,8 @@ class LeadEmailWorker(Worker):
         # Run email scraping and sitemap reading concurrently so neither
         # has to wait for the other — both complete within SITE_TIMEOUT.
         async def _scrape_emails() -> dict:
-            if self.data.get("email_scraped_at"):
+            if self.data.get("email_scraped_at") and not self._force:
+                self.skipped_note = "e-mails already scraped (use force to redo)"
                 return {}   # emails already scraped for this lead — skip
             pages: dict = {}
             hp = await self._fetcher.get(url, timeout=FETCH_TIMEOUT)
@@ -489,10 +575,30 @@ class LeadEmailWorker(Worker):
                 html = await self._fetcher.get(cu, timeout=FETCH_TIMEOUT)
                 if html:
                     pages[cu] = html
-            return _extract_contacts("\n".join(pages.values())) if pages else {}
+            # second hop: a people list page links to one page per person
+            self.pages_fetched = len(pages)
+            profile_urls = _find_profile_links(pages)
+            profiles: dict = {}
+            if profile_urls:
+                for u in profile_urls:                 # one after another, never in parallel
+                    h = await self._fetcher.get(u, timeout=FETCH_TIMEOUT)
+                    if h:
+                        profiles[u] = h
+                self.profile_pages = len(profiles)
+            joined = "\n".join(list(pages.values()) + list(profiles.values()))
+            self.people = [{"name": p["name"], "title": p["title"], "linkedin": p["url"]}
+                           for p in find_linkedin_profiles(joined)]
+            found = _extract_contacts("\n".join(pages.values())) if pages else {}
+            for h in profiles.values():
+                for em, c in _extract_profile_page(h).items():
+                    cur = found.setdefault(em, {"name": "", "phone": ""})
+                    for k, v in c.items():
+                        if v and not cur.get(k):
+                            cur[k] = v
+            return found
 
         async def _read_page_count() -> int | None:
-            if self.data.get("page_count"):
+            if self.data.get("page_count") and not self._force:
                 return None   # already set -- skip
             if self._debug:
                 print(f"    [pc-dbg] starting SitemapReader for {url}")
@@ -509,18 +615,20 @@ class LeadEmailWorker(Worker):
                     print(f"    [pc-dbg] SitemapReader EXCEPTION {type(_exc).__name__}: {_exc}")
                 return None
 
-        # return_exceptions=True ensures both sub-tasks always run to completion
-        # independently — if one fails the other is NOT cancelled.
-        results = await asyncio.gather(
-            _scrape_emails(), _read_page_count(),
-            return_exceptions=True,
-        )
+        # All lookups of one site run in series (e-mail pages first, then the sitemap); a failure
+        # in one step does not stop the next.  Parallelism is across sites only (workers).
+        results = []
+        for step in (_scrape_emails, _read_page_count):
+            try:
+                results.append(await step())
+            except Exception as exc:
+                results.append(exc)
 
         emails = results[0] if isinstance(results[0], dict) else {}
         pc     = results[1] if isinstance(results[1], int)  else None
 
         emails_were_skipped = bool(self.data.get("email_scraped_at"))
-        if not emails and pc is None:
+        if not emails and pc is None and not self.people:
             if emails_were_skipped:
                 # Emails already done, sitemap not found — valid, nothing to write
                 return WorkerResult(self.worker_id, "ok")
@@ -537,7 +645,7 @@ class LeadEmailWorker(Worker):
 # ---------------------------------------------------------------------------
 
 async def _run(db, campaign_id: str, leads: list,
-               *, dry_run: bool, workers: int) -> dict:
+               *, dry_run: bool, workers: int, force: bool = False) -> dict:
     loop = asyncio.get_running_loop()   # correct inside async def (Python 3.10+)
     now  = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -569,7 +677,7 @@ async def _run(db, campaign_id: str, leads: list,
                     if item is SENTINEL:
                         break
                     lead_id, data = item
-                    worker = LeadEmailWorker(session, fetcher, lead_id, data)
+                    worker = LeadEmailWorker(session, fetcher, lead_id, data, force=force)
                     result = await worker.run()
                     done += 1
                     site = (data.get("website") or "")[:55]
@@ -577,7 +685,10 @@ async def _run(db, campaign_id: str, leads: list,
                         errors += 1
                         print(f"  [{done}/{len(leads)}] {site:<55}  x {result.error}", flush=True)
                     else:
-                        print(f"  [{done}/{len(leads)}] {site:<55}  ok {len(worker.found)} email(s)", flush=True)
+                        print(f"  [{done}/{len(leads)}] {site:<55}  ok {len(worker.found)} email(s), "
+                              f"{len(worker.people)} LinkedIn profile(s), {worker.pages_fetched} page(s) "
+                              f"+ {worker.profile_pages} person page(s)"
+                              + (f"  [{worker.skipped_note}]" if worker.skipped_note else ""), flush=True)
                         for e in worker.found:
                             tag = "exists" if _contact_id(e) in existing else "NEW"
                             print(f"      -> {e}  [{tag}]", flush=True)
@@ -603,8 +714,8 @@ async def _run(db, campaign_id: str, leads: list,
                         new_c, upd_c = await asyncio.wait_for(
                             loop.run_in_executor(
                                 None,
-                                lambda _lid=lead_id, _em=dict(worker.found), _ld=dict(data): _write_contacts(
-                                    db, campaign_id, _lid, _em, existing, now, _ld
+                                lambda _lid=lead_id, _em=dict(worker.found), _ld=dict(data), _pp=list(worker.people): _write_contacts(
+                                    db, campaign_id, _lid, _em, existing, now, _ld, _pp
                                 ),
                             ),
                             timeout=WRITE_TIMEOUT,
@@ -615,12 +726,12 @@ async def _run(db, campaign_id: str, leads: list,
                         await asyncio.wait_for(
                             loop.run_in_executor(
                                 None,
-                                lambda _lid=lead_id: (
+                                lambda _lid=lead_id, _pp=list(worker.people): (
                                     db.collection(CAMPAIGNS_COLLECTION)
                                       .document(campaign_id)
                                       .collection(CAMPAIGN_LEADS_SUB)
                                       .document(_lid)
-                                      .update({"email_scraped_at": now})
+                                      .update({"email_scraped_at": now, **({"people": _pp} if _pp else {})})
                                 ),
                             ),
                             timeout=WRITE_TIMEOUT,
@@ -752,7 +863,7 @@ def run_campaign_scrape(
     campaign_id: str,
     *,
     force: bool = False,
-    workers: int = 6,
+    workers: int = 20,
     dry_run: bool = False,
 ) -> dict:
     """Scrape campaign_leads websites and write found emails to campaign_contacts."""
@@ -775,7 +886,7 @@ def run_campaign_scrape(
     loop = asyncio.new_event_loop()
     try:
         result = loop.run_until_complete(
-            _run(db, campaign_id, leads, dry_run=dry_run, workers=workers)
+            _run(db, campaign_id, leads, dry_run=dry_run, workers=workers, force=force)
         )
     finally:
         loop.close()

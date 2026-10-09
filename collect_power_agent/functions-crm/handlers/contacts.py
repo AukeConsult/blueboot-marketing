@@ -101,6 +101,11 @@ def get_campaign_contact(campaign_id, doc_id):
             "followup_owner":      d.get("followup_owner", "") or "",
             "comment_history":     _safe_history(d.get("comment_history", [])),
             "new_mail":            bool(d.get("new_mail", False)),
+            "send_confirmation":   bool(d.get("send_confirmation", False)),
+            "send_confirmed_by":   d.get("send_confirmed_by", "") or "",
+            "send_confirmed_at":   d.get("send_confirmed_at", "") or "",
+            "send_confirm_note":   d.get("send_confirm_note", "") or "",
+            "intro_sent":          bool(d.get("mail_sent")),
             "phone":               d.get("phone", "") or "",
             "linkedin":            d.get("linkedin", "") or "",
             "twitter":             d.get("twitter", "") or "",
@@ -146,6 +151,14 @@ def update_campaign_contact(campaign_id, doc_id):
         # Boolean fields — handled separately (must not be coerced to str)
         if "new_mail" in body:
             update["new_mail"] = bool(body["new_mail"])
+        if "send_confirmation" in body:
+            from flask import g as _g0
+            update["send_confirmation"] = bool(body["send_confirmation"])
+            update["send_confirmed_by"] = (getattr(_g0, "user_email", None)
+                                           or str(body.get("_user") or "api")).strip()
+            update["send_confirmed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if "send_confirm_note" in body:
+            update["send_confirm_note"] = str(body["send_confirm_note"]).strip()[:300]
         has_entry = bool((request.get_json(silent=True) or {}).get("_history_entry"))
         if not update and not has_entry:
             return _err("No editable fields provided.", 400)
@@ -322,6 +335,59 @@ def excluded_counts(campaign_id):
         excl_contacts = sum(1 for _ in contacts_col.where(filter=FieldFilter("status", "==", "excluded")).stream())
         excl_sites    = sum(1 for _ in leads_col.where(filter=FieldFilter("status", "==", "excluded")).stream())
         return jsonify({"status": "ok", "excluded_contacts": excl_contacts, "excluded_sites": excl_sites})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/campaigns/<campaign_id>/contacts/confirm", methods=["POST"])
+def confirm_campaign_contacts(campaign_id):
+    """Set send_confirmation on many contacts at once.
+
+    Body: { "value": true|false,
+            "doc_ids": [...]            -- these contacts, or
+            "scope":   "all_unsent" }   -- every pending contact whose intro mail is not sent yet
+    Only pending contacts with no mail sent yet are changed (the flag only decides the intro).
+    """
+    try:
+        from flask import g as _g
+        db   = _get_db()
+        body = request.get_json(silent=True) or {}
+        value = bool(body.get("value", True))
+        doc_ids = body.get("doc_ids")
+        scope = str(body.get("scope") or "")
+        if not doc_ids and scope != "all_unsent":
+            return _err("Provide 'doc_ids' or scope 'all_unsent'", 400)
+        camp = db.collection("campaigns").document(campaign_id)
+        if not camp.get().exists:
+            return _err(f"Campaign '{campaign_id}' not found", 404)
+        col = camp.collection("campaign_contacts")
+        if doc_ids:
+            if not isinstance(doc_ids, list):
+                return _err("'doc_ids' must be a list", 400)
+            snaps = [s for s in db.get_all([col.document(str(i)) for i in doc_ids]) if s.exists]
+        else:
+            snaps = list(col.stream())
+        user = (getattr(_g, "user_email", None) or str(body.get("_user") or "api")).strip()
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        changed = skipped = 0
+        batch, n = db.batch(), 0
+        for s in snaps:
+            d = s.to_dict() or {}
+            if _contact_status(d.get("status")) != "pending" or d.get("mail_sent"):
+                skipped += 1
+                continue
+            if bool(d.get("send_confirmation", False)) == value:
+                continue
+            batch.update(s.reference, {"send_confirmation": value, "send_confirmed_by": user,
+                                       "send_confirmed_at": now})
+            changed += 1
+            n += 1
+            if n >= 400:
+                batch.commit()
+                batch, n = db.batch(), 0
+        if n:
+            batch.commit()
+        return jsonify({"status": "ok", "changed": changed, "skipped": skipped, "value": value})
     except Exception as exc:
         return _err(str(exc), 500)
 

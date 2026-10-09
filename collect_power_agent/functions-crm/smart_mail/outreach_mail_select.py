@@ -153,6 +153,7 @@ class SentConfirmation:
 # ---------------------------------------------------------------------------
 
 _CONTACT_KNOWN = {
+    "send_confirmation", "send_confirmed_by", "send_confirmed_at", "send_confirm_note",
     "email", "contact_name", "company", "domain", "country",
     "status", "followup_status", "mail_sent", "created_at", "sent_at", "message_id", "sender_account",
     "lead_id",
@@ -424,6 +425,19 @@ def read_outreach(
     # campaigns/{campaign_id}/campaign_contacts/{doc_id})
     by_campaign: dict[str, list[ContactRow]] = defaultdict(list)
     total = 0
+    unconfirmed_skipped = 0
+    _require_cache: dict[str, bool] = {}
+
+    def _requires_confirmation(cid: str) -> bool:
+        """Campaign setting; campaigns without the setting keep the old behaviour."""
+        if cid not in _require_cache:
+            try:
+                cd = db.collection("campaigns").document(cid).get().to_dict() or {}
+            except Exception:
+                cd = {}
+            _require_cache[cid] = bool(cd.get("require_send_confirmation", False))
+        return _require_cache[cid]
+
     for query in queries:
         for doc in query.stream():
             if total >= limit:
@@ -442,6 +456,11 @@ def read_outreach(
             doc_campaign_id = doc.reference.parent.parent.id
             if campaign_filter and doc_campaign_id not in campaign_filter:
                 continue
+            # The tick "Send" decides the INTRO only; reminders follow the intro that was sent.
+            if (mode != "followup" and not d.get("send_confirmation")
+                    and _requires_confirmation(doc_campaign_id)):
+                unconfirmed_skipped += 1
+                continue
             by_campaign[doc_campaign_id].append(ContactRow(
                 contact_doc_id = doc.id,
                 campaign_id    = doc_campaign_id,
@@ -459,6 +478,9 @@ def read_outreach(
         if total >= limit:
             break
 
+    if unconfirmed_skipped:
+        print(f"[outreach_mail_select] {unconfirmed_skipped} intro contact(s) skipped -- "
+              f"not confirmed to send", flush=True)
     if not by_campaign:
         return []
 

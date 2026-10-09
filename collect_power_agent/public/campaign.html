@@ -417,6 +417,18 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
             <option value="active">Active</option>
             <option value="excluded">Excluded</option>
           </select>
+          <select id="confirm-filter" class="form-select form-select-sm" style="width:150px;flex-shrink:0" onchange="filterContacts()" title="Filter on send confirmation (first mail only)">
+            <option value="">Send: all</option>
+            <option value="yes">Confirmed to send</option>
+            <option value="no">Not confirmed</option>
+          </select>
+          <button class="btn btn-sm btn-outline-success" onclick="confirmShown(true)" title="Confirm all shown contacts that have not been mailed yet"><i class="ti ti-checks me-1"></i>Confirm shown</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="confirmShown(false)" title="Remove confirmation from all shown unsent contacts"><i class="ti ti-square-off me-1"></i>Unconfirm</button>
+          <span id="confirm-counter" class="small" style="color:var(--bb-muted);white-space:nowrap"></span>
+          <div class="form-check form-switch mb-0" title="When on, the first (intro) mail is only sent to contacts you have ticked. Reminders are not affected.">
+            <input class="form-check-input" type="checkbox" id="require-confirm-switch" onchange="toggleRequireConfirm(this)">
+            <label class="form-check-label small" for="require-confirm-switch">Require confirmation</label>
+          </div>
           <button id="enrich-btn" class="btn btn-sm btn-outline-secondary" onclick="enrichNames()" title="Fill missing contact names using Bing + AI">
             <i class="ti ti-user-search me-1"></i>Enrich names
           </button>
@@ -430,6 +442,7 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
           <thead class="bb-thead"><tr>
+            <th class="small text-center" style="width:34px" title="Confirm to send first mail"><input type="checkbox" id="confirm-all-box" onclick="confirmAllHeader(this)"></th>
             <th class="small bb-sortable" data-col="status" onclick="sortBy('status')">Status <span class="sort-icon"></span></th>
             <th class="small bb-sortable" data-col="followup_status" onclick="sortBy('followup_status')">Follow-up <span class="sort-icon"></span></th>
             <th class="small bb-sortable" data-col="last_sent" onclick="sortBy('last_sent')">Mail sent <span class="sort-icon"></span></th>
@@ -1252,14 +1265,18 @@ function openCampaignTestMailStep(stepIndex) {
 function renderContacts(list) {
   const tbody = document.getElementById('contacts-body');
   const empty = document.getElementById('contacts-empty');
-  if (!list.length) { tbody.innerHTML = ''; empty.style.display = ''; updateRemoveExcludedBtn(); return; }
+  if (!list.length) { tbody.innerHTML = ''; empty.style.display = ''; updateRemoveExcludedBtn(); updateConfirmUi(); return; }
   empty.style.display = 'none';
   const campaignId = document.getElementById('campaign-select').value;
   tbody.innerHTML = list.map(c => {
     const cStatus = contactStatus(c.status);
     const isExcluded = cStatus === 'excluded';
     const docId = contactDocId(c);
+    const canConfirm = cStatus === 'pending' && !sentMails(c).length;
     return `<tr data-email="${c.email}">
+    <td class="text-center"><input type="checkbox" class="confirm-box" ${c.send_confirmation ? 'checked' : ''} ${canConfirm ? '' : 'disabled'}
+        title="${canConfirm ? 'Confirm: send first mail to this contact' : 'Only unsent, pending contacts can be confirmed'}"
+        data-email="${escapeHtml(c.email || '')}" data-doc="${escapeHtml(docId)}" onchange="toggleConfirmBox(this)"></td>
     <td>
       ${contactStatusBadge(cStatus)}
 
@@ -1289,6 +1306,142 @@ function renderContacts(list) {
   </tr>`;
   }).join('');
   updateRemoveExcludedBtn();
+  updateConfirmUi();
+}
+
+// ── Send confirmation (first mail only) ───────────────────────────────────
+function _eligibleConfirm(c) { return contactStatus(c.status) === 'pending' && !sentMails(c).length; }
+
+function _shownContacts() {
+  const q  = document.getElementById('contact-search').value.toLowerCase();
+  const st = document.getElementById('status-filter').value;
+  const cf = document.getElementById('confirm-filter').value;
+  let list = allContacts;
+  if (st) list = list.filter(c => contactStatus(c.status) === st);
+  if (cf === 'yes') list = list.filter(c => c.send_confirmation && _eligibleConfirm(c));
+  if (cf === 'no')  list = list.filter(c => !c.send_confirmation && _eligibleConfirm(c));
+  if (q)  list = list.filter(c =>
+    [(c.name||''),(c.email||''),(c.website||''),(c.title||'')].some(v => v.toLowerCase().includes(q)));
+  return list;
+}
+
+function updateConfirmUi() {
+  const el = document.getElementById('confirm-counter');
+  if (!el) return;
+  const unsent = allContacts.filter(_eligibleConfirm);
+  const yes = unsent.filter(c => c.send_confirmation).length;
+  el.textContent = `${yes} confirmed / ${unsent.length - yes} not confirmed`;
+  const sw = document.getElementById('require-confirm-switch');
+  if (sw) sw.checked = !!(window._campaignData || {}).require_send_confirmation;
+  const box = document.getElementById('confirm-all-box');
+  if (box) {
+    const shown = _shownContacts().filter(_eligibleConfirm);
+    const n = shown.filter(c => c.send_confirmation).length;
+    box.checked = shown.length > 0 && n === shown.length;
+    box.indeterminate = n > 0 && n < shown.length;
+  }
+}
+
+async function _postConfirm(body) {
+  const id = document.getElementById('campaign-select').value;
+  const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/contacts/confirm`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  if (!r.ok || d.status === 'error') throw new Error(d.message || 'Confirm failed');
+  return d;
+}
+
+function _leadCacheContact(doc) {
+  for (const k in _leadContactCache) {
+    const c = (_leadContactCache[k] || []).find(x => (x.doc_id || '') === doc);
+    if (c) return c;
+  }
+  return null;
+}
+
+// Optimistic set of send_confirmation from any view; rolls back on failure.
+function setContactConfirm(doc, email, value, onRollback) {
+  const id = document.getElementById('campaign-select').value;
+  const targets = [
+    allContacts.find(x => x.email === email || contactDocId(x) === doc),
+    _leadCacheContact(doc)
+  ].filter(Boolean);
+  targets.forEach(c => { c.send_confirmation = value; });
+  updateConfirmUi();
+  fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/contacts/${encodeURIComponent(doc)}`, {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({send_confirmation: value})
+  }).then(async r => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Save failed');
+  }).catch(e => {
+    console.warn('[confirm] save failed, rolled back:', e.message);
+    targets.forEach(c => { c.send_confirmation = !value; });
+    updateConfirmUi();
+    if (document.getElementById('campaign-select').value === id) filterContacts();
+    if (onRollback) onRollback();
+  });
+}
+
+function toggleLeadConfirm(box) {
+  setContactConfirm(box.dataset.doc, box.dataset.email, box.checked, () => { box.checked = !box.checked; });
+}
+
+function toggleConfirmBox(box) {
+  // Optimistic: update UI at once, save in the background, roll back on failure.
+  const id = document.getElementById('campaign-select').value;
+  const doc = box.dataset.doc, email = box.dataset.email, value = box.checked;
+  const c = allContacts.find(x => x.email === email || contactDocId(x) === doc);
+  if (c) c.send_confirmation = value;
+  updateConfirmUi();
+  fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/contacts/${encodeURIComponent(doc)}`, {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({send_confirmation: value})
+  }).then(async r => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Save failed');
+  }).catch(e => {
+    console.warn('[confirm] save failed, rolled back:', e.message);
+    if (c) c.send_confirmation = !value;
+    if (document.getElementById('campaign-select').value === id) filterContacts();
+  });
+}
+
+function confirmShown(value) {
+  const list = _shownContacts().filter(c => _eligibleConfirm(c) && !!c.send_confirmation !== value);
+  if (!list.length) { alert('Nothing to change in the shown list.'); return; }
+  const msg = value
+    ? `Confirm ${list.length} contact(s) to receive the FIRST mail?`
+    : `Remove confirmation from ${list.length} contact(s)?`;
+  if (!confirm(msg)) return;
+  const id = document.getElementById('campaign-select').value;
+  list.forEach(c => { c.send_confirmation = value; });
+  filterContacts();                       // instant UI; save runs in the background
+  _postConfirm({value, doc_ids: list.map(contactDocId)}).catch(e => {
+    list.forEach(c => { c.send_confirmation = !value; });
+    if (document.getElementById('campaign-select').value === id) filterContacts();
+    alert('Could not save, change rolled back: ' + e.message);
+  });
+}
+
+function confirmAllHeader(box) {
+  const value = box.checked;
+  box.checked = !value;          // restored by updateConfirmUi after the action
+  confirmShown(value);
+}
+
+async function toggleRequireConfirm(sw) {
+  const id = document.getElementById('campaign-select').value;
+  const value = sw.checked;
+  if (!value && !confirm('Turn OFF confirmation? The first mail will then go to ALL pending contacts without a tick.')) { sw.checked = true; return; }
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({require_send_confirmation: value})
+    });
+    const d = await r.json();
+    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Save failed');
+    if (window._campaignData) window._campaignData.require_send_confirmation = value;
+  } catch (e) { alert(e.message); sw.checked = !value; }
+  updateConfirmUi();
 }
 
 async function patchContactStatus(email, doc, status) {
@@ -1305,25 +1458,27 @@ async function patchContactStatus(email, doc, status) {
   if (c) c.status = status;
 }
 
-async function toggleContactStatusBtn(btn, status) {
-  const oldHtml = btn.innerHTML;
+function toggleContactStatusBtn(btn, status) {
+  // Optimistic: update list and counts at once, save in the background, roll back on failure.
   const email = btn.dataset.email || '';
   const doc = btn.dataset.doc || '';
+  const campaignId = document.getElementById('campaign-select').value;
   const row = allContacts.find(x => x.email === email || contactDocId(x) === doc);
-  const currentStatus = contactStatus(row?.status);
-  const nextStatus = currentStatus === status ? 'pending' : status;
-  btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader"></i>';
-  try {
-    await patchContactStatus(email, doc, nextStatus);
-    filterContacts();
-    updateCampaignCountsFromContacts();
-    _refreshBothLists(document.getElementById('campaign-select').value);
-  } catch(e) {
-    console.warn('[contact-status] save failed:', e.message);
-    btn.disabled = false;
-    btn.innerHTML = oldHtml;
-  }
+  const prevStatus = row ? row.status : undefined;
+  const nextStatus = contactStatus(prevStatus) === status ? 'pending' : status;
+  if (row) row.status = nextStatus;
+  filterContacts();
+  updateCampaignCountsFromContacts();
+  patchContactStatus(email, doc, nextStatus).then(() => {
+    _refreshBothLists(campaignId);
+  }).catch(e => {
+    console.warn('[contact-status] save failed, rolled back:', e.message);
+    if (row) row.status = prevStatus;
+    if (document.getElementById('campaign-select').value === campaignId) {
+      filterContacts();
+      updateCampaignCountsFromContacts();
+    }
+  });
 }
 
 function updateCampaignCountsFromContacts() {
@@ -1467,11 +1622,7 @@ document.addEventListener('click', function(e) {
 function filterContacts() {
   const q  = document.getElementById('contact-search').value.toLowerCase();
   const st = document.getElementById('status-filter').value;
-  let list = allContacts;
-  if (st)  list = list.filter(c => contactStatus(c.status) === st);
-  if (q)   list = list.filter(c =>
-    [(c.name||''),(c.email||''),(c.website||''),(c.title||'')].some(v => v.toLowerCase().includes(q)));
-  renderContacts(_applySort(list));
+  renderContacts(_applySort(_shownContacts()));
 }
 
 // ── Bulk selection helpers ────────────────────────────────────────────────
@@ -2627,7 +2778,11 @@ function renderLeadContacts(cell, leadId, contacts) {
     ? contacts.map((c, ci) => {
         const isExcl = (c.status||'pending') === 'excluded';
         const docId  = escapeHtml(c.doc_id||'');
+        const canConf = (c.status||'pending') === 'pending' && !sentMails(c).length;
         return `<tr>
+          <td class="text-center" style="width:34px"><input type="checkbox" ${c.send_confirmation ? 'checked' : ''} ${canConf ? '' : 'disabled'}
+            title="${canConf ? 'Confirm: send first mail to this contact' : 'Only unsent, pending contacts can be confirmed'}"
+            data-doc="${docId}" data-email="${escapeHtml(c.email||'')}" onchange="toggleLeadConfirm(this)"></td>
           <td class="small">
             <span class="lc-editable" data-lead="${lid}" data-ci="${ci}" data-field="name"
               data-doc="${docId}" contenteditable="true" spellcheck="false"
@@ -2655,11 +2810,12 @@ function renderLeadContacts(cell, leadId, contacts) {
           </td>
         </tr>`;
       }).join('')
-    : `<tr><td colspan="4" class="text-muted small py-2">No contacts.</td></tr>`;
+    : `<tr><td colspan="5" class="text-muted small py-2">No contacts.</td></tr>`;
 
   cell.innerHTML = `
     <table class="table table-sm mb-0" style="font-size:12px">
       <thead><tr style="background:#f1f5f9">
+        <th style="width:34px" class="small text-center" title="Confirm to send first mail">Send</th>
         <th style="width:180px" class="small">Name</th>
         <th style="width:200px" class="small">Email</th>
         <th class="small">Title / Role</th>
@@ -2913,7 +3069,15 @@ async function openContactDetail(docId, email) {
 
   const hasFu = d.followup_status || d.followup_date || d.followup_owner || d.followup_importance;
 
+  const _canConf = contactStatus(d.status) === 'pending' && !d.intro_sent && !sentMails(d).length;
   document.getElementById('contact-detail-body').innerHTML = `
+    <div style="padding:10px 20px;border-bottom:0.5px solid var(--bb-border)">
+      <label class="d-flex align-items-center gap-2 mb-0" style="font-size:13px" title="First (intro) mail is only sent when ticked, if the campaign requires confirmation. Reminders are not affected.">
+        <input type="checkbox" id="cd-confirm" ${d.send_confirmation ? 'checked' : ''} ${_canConf ? '' : 'disabled'}>
+        Confirmed to send first mail
+        <span class="text-muted" style="font-size:11px">${_canConf ? '' : (d.intro_sent ? 'first mail already sent' : 'only pending contacts')}</span>
+      </label>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:0.5px solid var(--bb-border)">
       <div style="padding:14px 20px;border-right:0.5px solid var(--bb-border)">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">Contact</div>
@@ -2943,6 +3107,9 @@ async function openContactDetail(docId, email) {
       ${histHtml}
     </div>
   `;
+  const cdBox = document.getElementById('cd-confirm');
+  if (cdBox) cdBox.onchange = () =>
+    setContactConfirm(docId, d.email || email, cdBox.checked, () => { cdBox.checked = !cdBox.checked; });
 }
 
 // Load sites when tab shown (if campaign changed since last load)

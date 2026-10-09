@@ -65,6 +65,7 @@ PROTECTED_CONTACT_FIELDS = {
     "followup_importance", "followup_owner", "comment_history",
     "sent_at", "message_id", "sender_account", "created_at", "added_at",
     "last_action", "last_action_status",
+    "send_confirmation", "send_confirmed_by", "send_confirmed_at", "send_confirm_note",
 }
 
 COUNTRY_CODES = {
@@ -624,6 +625,7 @@ def apply_plan(db, plan: dict, *, source_files: list[str]) -> dict:
         if not e["campaign_exists"]:
             e["camp_ref"].set({
                 "campaign_id": campaign, "status": "draft", "sent_at": None,
+                "require_send_confirmation": True,
                 "outreach_email_account": "",
                 "mail": {"subject": "", "body": "", "type": "plain"},
                 "countries": sorted({op.payload.get("country") for op in e["lead_ops"]

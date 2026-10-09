@@ -240,6 +240,8 @@ def name_fits_email(name: str, email: str) -> bool:
         return True                                           # initials
     if len(first) >= 3 and (l2 == first or l2.startswith(first) or first in l2):
         return True
+    if len(l2) >= 3 and (first.startswith(l2) or last.startswith(l2)):
+        return True                                           # stu@ = Stuart Turnbull
     if len(last) >= 3 and (l2 == last or l2.endswith(last) or last in l2):
         return True
     return l2 in (first[0] + last, first + last[0])
@@ -381,4 +383,67 @@ def find_emails(*texts) -> list:
             if e and e not in seen:
                 seen.add(e)
                 out.append(e)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# LinkedIn profiles (team pages: name + title + "Connect on LinkedIn")
+# ---------------------------------------------------------------------------
+
+_LI_ANCHOR = re.compile(r"<a\b[^>]*?href=[\"']([^\"']*linkedin\.com/in/[^\"'?#\s]+)[^\"']*[\"'][^>]*>(.*?)</a>",
+                        re.I | re.S)
+_CONNECT_HINT = re.compile(r"(?:forbind med|connect with|følg|follow|kontakt|connect to|"
+                           r"förbind med|koppla upp med)\s+([^\W\d_][\w'’\-]+)", re.I | re.U)
+
+
+def normalize_linkedin(url: str) -> str:
+    m = re.search(r"linkedin\.com/in/([^/?#\s\"']+)", url or "", re.I)
+    return f"https://www.linkedin.com/in/{m.group(1).strip('/').lower()}" if m else ""
+
+
+def find_linkedin_profiles(html: str) -> list:
+    """[{url, name, title}] for personal LinkedIn links (/in/...) on a page.  The name is the
+    nearest line above the link that looks like a person's name AND fits the profile slug or
+    the "Connect with <first name>" link text; the title is the line right after that name."""
+    if not html or "linkedin.com/in/" not in html.lower():
+        return []
+    groups: dict = {}
+    for m in _LI_ANCHOR.finditer(html):
+        url = normalize_linkedin(m.group(1))
+        if not url:
+            continue
+        g = groups.setdefault(url, {"start": m.start(), "end": m.end(), "text": []})
+        g["end"] = m.end()
+        g["text"].append(re.sub(r"<[^>]+>", " ", m.group(2)))
+    out, last_end = [], 0
+    for url, g in sorted(groups.items(), key=lambda kv: kv[1]["start"]):
+        start, last_end_prev = g["start"], last_end
+        last_end = g["end"]
+        chunk = html[max(last_end_prev, start - 3000):start]
+        chunk = re.sub(r"<(script|style|noscript)[^>]*>[\s\S]*?</\1>", " ", chunk, flags=re.I)
+        chunk = _BLOCK_BREAK.sub("\n", chunk)
+        chunk = re.sub(r"<[^>]+>", " ", chunk)
+        lines = [l for l in (_norm_text(x) for x in chunk.split("\n")) if l]
+        slug = _fold(url.rsplit("/", 1)[-1])
+        toks = [t for t in re.split(r"[^a-z]+", slug) if len(t) >= 3]
+        hint = ""
+        near = _norm_text(" ".join(g["text"]))
+        hm = _CONNECT_HINT.search(near) or _CONNECT_HINT.search(" ".join(lines[-2:]))
+        lines = lines + [near]                     # the link text itself can be the name
+        if hm:
+            hint = _fold(hm.group(1))
+        name = title = ""
+        for i in range(len(lines) - 1, -1, -1):
+            nm = clean_name(lines[i])
+            if not nm or len(nm.split()) < 2 or len(nm.split()) > 4:
+                continue
+            if any(not (w[:1].isupper() or _fold(w) in PARTICLES) for w in nm.split()):
+                continue                            # "Steffen sælger" is a sentence, not a name
+            f = [_fold(w).strip(".'") for w in nm.split()]
+            if any(t in w or w in t for t in toks for w in f if len(w) >= 3) or (hint and f[0] == hint):
+                name = nm
+                if i + 1 < len(lines) - 1 and len(lines[i + 1]) <= 80:
+                    title = lines[i + 1]
+                break
+        out.append({"url": url, "name": name, "title": title})
     return out

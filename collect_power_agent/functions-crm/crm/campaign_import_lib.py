@@ -52,6 +52,7 @@ _PROTECTED_CONTACT_FIELDS = {
     "followup_status", "followup_date", "followup_comment",
     "followup_importance", "followup_owner", "comment_history",
     "sent_at", "message_id", "sender_account", "created_at",
+    "send_confirmation", "send_confirmed_by", "send_confirmed_at", "send_confirm_note",
 }
 
 BATCH_SIZE = 400
@@ -298,6 +299,7 @@ def run_campaign_import(
         camp_ref.set({
             "campaign_id": campaign_id,
             "status":      "draft",
+            "require_send_confirmation": True,
             "created_at":  now,
             "updated_at":  now,
         })

@@ -86,3 +86,34 @@ validators and Update info. Imports skip a row/contact whose email fails it (rep
   Used by the campaign scrape, the site/lead agents (`app/functions/utils.extract_contacts`), the
   prospect import and the reply matcher.
 - **Judging** a single address: `clean_email()` (used by `find_emails`, the imports, exports and audits).
+
+## LinkedIn profiles
+
+`find_linkedin_profiles()` (contact_clean_lib) collects personal LinkedIn links (`linkedin.com/in/...`,
+company pages are ignored) from the scraped pages, together with the person's name and title taken from
+the block above the link (the name must fit the profile slug or the "Forbind med <first name>" link text).
+- A contact with the same name / matching email gets `linkedin` set.
+- Every profile found, with or without an email, is stored on the site as `campaign_leads.people`
+  (`[{name, title, linkedin}]`), so people on pages without personal emails are not lost.
+
+## People directories (list page -> one page per person)
+
+The scrape follows pages whose address suggests a people list (team, people, staff, consultants, experts,
+management, ledelse, medarbejder ...). On such a list page, links below the page's own path whose last
+part looks like a person's name (`.../meet/stuart-turnbull`) are fetched too (second hop, max 40 per site,
+only when the list has at least 3 of them). On a person's page the h1 is the name, and the page's single
+personal LinkedIn link and email/phone belong to that person.
+
+## Send confirmation (first mail only)
+
+Each contact has a `send_confirmation` flag. When the campaign has `require_send_confirmation: true`
+(default for new campaigns), the first (intro) mail is only sent to pending contacts that are ticked.
+Reminders/follow-ups ignore the flag because they already depend on a sent intro mail.
+
+- Campaign page → Contacts: first column tick, header tick (shown contacts), "Confirm shown / Unconfirm",
+  filter "Confirmed / Not confirmed", counter, and the "Require confirmation" switch. Turning the switch on
+  never confirms anyone automatically: contacts are only sent to when you tick them.
+- Single contact page: tick "Confirmed to send first mail".
+- API: `PATCH .../contacts/<id>` `{send_confirmation}`; `POST .../contacts/confirm` `{value, doc_ids | scope:"all_unsent"}`.
+- Only pending contacts with no `mail_sent` can be changed. Import/scrape never overwrite the flag.
+- Campaigns without the setting keep the old behaviour (no gate).
