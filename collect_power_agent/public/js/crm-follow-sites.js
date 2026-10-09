@@ -48,6 +48,7 @@ const _SITE_FU_STATUSES = [
   {value:'',              label:'— no status —'},
   {value:'to_contact',    label:'To contact'},
   {value:'contacted',     label:'Contacted'},
+  {value:'received',      label:'Received'},
   {value:'in_work',       label:'In work'},
   {value:'not_interested',label:'Not interested'},
   {value:'deal',          label:'Deal'},

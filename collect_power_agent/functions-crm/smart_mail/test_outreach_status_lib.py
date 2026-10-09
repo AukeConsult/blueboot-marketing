@@ -127,3 +127,43 @@ class T(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SiteContactedTest(unittest.TestCase):
+    def test_marks_only_empty_followup(self):
+        from smart_mail.outreach_mail_select import _mark_site_contacted
+        base = "campaigns/c/campaign_leads/"
+        db = FakeDB({base + "a": {"followup_status": ""}, base + "b": {"followup_status": "interested"},
+                     base + "c": {}})
+        updates = {}
+
+        def update(self, data):
+            updates[self.path] = data
+        DocRef.update = update
+        try:
+            self.assertTrue(_mark_site_contacted(db, "c", "a", "T"))
+            self.assertFalse(_mark_site_contacted(db, "c", "b", "T"))
+            self.assertTrue(_mark_site_contacted(db, "c", "c", "T"))
+            self.assertFalse(_mark_site_contacted(db, "c", "missing", "T"))
+            self.assertFalse(_mark_site_contacted(db, "c", "", "T"))
+        finally:
+            del DocRef.update
+        self.assertEqual(updates[base + "a"]["followup_status"], "contacted")
+        self.assertNotIn(base + "b", updates)
+
+
+class SiteReceivedTest(unittest.TestCase):
+    def test_received_only_over_empty_or_contacted(self):
+        from smart_mail.site_followup import set_site_followup
+        base = "campaigns/c/campaign_leads/"
+        db = FakeDB({base + "a": {}, base + "b": {"followup_status": "contacted"},
+                     base + "c": {"followup_status": "meeting"}, base + "d": {"followup_status": "Contacted"}})
+        updates = {}
+        DocRef.update = lambda self, data: updates.__setitem__(self.path, data)
+        try:
+            ok = {k: set_site_followup(db, "c", k, "received", ("", "contacted")) for k in "abcd"}
+        finally:
+            del DocRef.update
+        self.assertEqual(ok, {"a": True, "b": True, "c": False, "d": True})
+        self.assertEqual(updates[base + "b"]["followup_status"], "received")
+        self.assertNotIn(base + "c", updates)

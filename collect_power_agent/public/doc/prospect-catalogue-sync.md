@@ -51,7 +51,7 @@ files, compares them with Firestore and prints a report:
    site_leads          1 new   0 chg  29 same
    site_contacts       1 new   1 chg  21 same
    email_contacts      1 new   1 chg  21 same
-   7 row(s) without email -> lead only, no contact
+   7 row(s) without email -> not imported
    ~ contact piers_atomicsmash_co_uk: title: 'Managing director' -> 'CEO'
 ```
 
@@ -191,7 +191,7 @@ To clear a value, edit it in the CRM.
 | No email (contact form only) | The **lead** is imported, no contact is created. It shows in the campaign's sites list but cannot be mailed. |
 | Status is anything other than "Not contacted" | The contact is **not** imported, and the report lists it. |
 | Country not recognised | Row skipped, with a warning. |
-| No website and no email | Row skipped, with a warning. |
+| No proper email address | Row is not imported at all (no site, no contact); counted in the warnings. Sites already imported earlier are kept. |
 | New contact is already in another campaign (status pending, active, sent, replied, bounced or converted; excluded/rejected free the email) | Skipped, and listed in the report. Contacts already in *this* campaign are updated as usual. |
 | Same email appears in two campaigns of the same run (e.g. UK and international sheets) | The first campaign (alphabetical) gets it, the others skip it and the report says where it went. |
 | The duplicate check against other campaigns cannot run (e.g. missing Firestore index) | The report shows `!! duplicate check ... FAILED` and `--apply` **aborts without writing**, unless you pass `--skip-dup-check`. |

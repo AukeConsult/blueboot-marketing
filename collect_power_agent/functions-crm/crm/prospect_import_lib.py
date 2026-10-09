@@ -260,6 +260,7 @@ def build_records(rows: list[dict], *, prefix: str = DEFAULT_PREFIX,
 
     # Older research first, so newer rows win when the same record appears twice.
     ordered = sorted(rows, key=lambda r: r.get("researched_at", ""))
+    no_email_rows: dict[str, int] = {}
 
     for r in ordered:
         src = r["_src"]
@@ -276,11 +277,12 @@ def build_records(rows: list[dict], *, prefix: str = DEFAULT_PREFIX,
         found = find_emails(raw_email)                   # the one shared detector
         email = found[0] if found else ""
         if raw_email.strip() and not email:
-            warnings.append(f"{src}: '{raw_email.strip()[:60]}' is not a proper email -- no contact created")
-        website = _website(r.get("website", ""), r.get("contact_page", ""))
-        if not website and not email:
-            warnings.append(f"{src}: no website and no email -- skipped")
+            warnings.append(f"{src}: '{raw_email.strip()[:60]}' is not a proper email -- row not imported")
+        if not email:
+            # A prospect without a proper email is not imported at all: no site, no contact.
+            no_email_rows[campaign] = no_email_rows.get(campaign, 0) + 1
             continue
+        website = _website(r.get("website", ""), r.get("contact_page", ""))
         lead_id = lead_id_from_url(website) if website else \
             re.sub(r"[^a-z0-9]+", "_", email.split("@")[1].lower()).strip("_")
         domain = domain_from_url(website) if website else email.split("@")[1]
@@ -315,9 +317,6 @@ def build_records(rows: list[dict], *, prefix: str = DEFAULT_PREFIX,
                                          "contacted_skipped": [], "no_email": 0})
         _merge_into(camp["leads"].setdefault(lead_id, {}), lead)
 
-        if not email:
-            camp["no_email"] += 1
-            continue
         status = (r.get("prospect_status", "") or "").strip()
         if status and status.lower() != "not contacted":
             camp["contacted_skipped"].append(f"{email} ({status})")
@@ -338,6 +337,13 @@ def build_records(rows: list[dict], *, prefix: str = DEFAULT_PREFIX,
             "prospect_next_followup": r.get("prospect_next_followup", ""),
         }
         _merge_into(camp["contacts"].setdefault(did, {}), contact)
+
+    for campaign, n in no_email_rows.items():
+        if campaign in out:
+            out[campaign]["no_email"] = n
+    if no_email_rows:
+        total = sum(no_email_rows.values())
+        warnings.append(f"{total} row(s) without a proper email address were NOT imported (no site, no contact)")
     return out, warnings
 
 
@@ -674,7 +680,7 @@ def print_report(plan: dict, warnings: list[str], *, show_changes: int = 10) -> 
             print(f"   site_contacts     {_fmt_stats(e['site_contact_stats'])}")
             print(f"   email_contacts    {_fmt_stats(e['email_contact_stats'])}")
         if e["no_email"]:
-            print(f"   {e['no_email']} row(s) without email -> lead only, no contact")
+            print(f"   {e['no_email']} row(s) without email -> not imported")
         if e["contacted_skipped"]:
             print(f"   {len(e['contacted_skipped'])} contact(s) skipped (catalogue says already contacted): "
                   + ", ".join(e["contacted_skipped"][:5]))

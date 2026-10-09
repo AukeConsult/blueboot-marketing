@@ -794,6 +794,7 @@ def _apply_actions(
               f"followup_status=replied  message_id={message_id!r}")
         if lead_id:
             print(f"[reply_matcher]       lead    → [dry-run] campaign_leads/{lead_id}: status=active")
+            print(f"[reply_matcher]       lead    → [dry-run] site followup_status=received if empty/contacted")
         return "dry_run"
 
     try:
@@ -814,6 +815,12 @@ def _apply_actions(
               f"campaign_contacts status={status_change}  followup_status=replied")
     except Exception as ex:
         print(f"[reply_matcher]       action  → ✗ campaign_contacts failed: {ex}")
+
+    # Site follow-up: a mail came in -> "received", but only over an empty / "contacted" status.
+    if lead_id:
+        from smart_mail.site_followup import set_site_followup
+        if set_site_followup(db, campaign_id, lead_id, "received", ("", "contacted"), received_at):
+            print(f"[reply_matcher]       lead    → followup_status=received  campaign_leads/{lead_id}")
 
     if lead_id:
         try:

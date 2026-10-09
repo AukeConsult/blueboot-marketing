@@ -292,7 +292,7 @@ function showCampaigns(d) {
     if ((c.skipped_other_campaign || []).length) notes.push(`${c.skipped_other_campaign.length} already in another campaign`);
     if ((c.skipped_same_run || []).length) notes.push(`${c.skipped_same_run.length} same email in another campaign of this file`);
     if ((c.skipped_contacted || []).length) notes.push(`${c.skipped_contacted.length} already contacted (per catalogue)`);
-    if (c.no_email) notes.push(`${c.no_email} row(s) without email (lead only)`);
+    if (c.no_email) notes.push(`${c.no_email} row(s) without email (not imported)`);
     if (c.leads_elsewhere) notes.push(`${c.leads_elsewhere} site(s) also in other campaigns`);
     if (notes.length) {
       const nr = document.createElement('tr');
@@ -592,7 +592,7 @@ function downloadProspectExample() {
     ['Prospect type','Kind of organisation','Publisher','optional'],
     ['Contact person','Contact name','Jane Smith','optional'],
     ['Role to approach','Job title','Head of Digital','optional'],
-    ['Email','Contact email. Rows without email become a lead only (no contact)','jane.smith@example-publishing.co.uk','required for a contact'],
+    ['Email','Contact email. Rows without a proper email are not imported','jane.smith@example-publishing.co.uk','required'],
     ['Email type','Named / Generic. Also detected from info@, sales@ ...','Named contact','optional'],
     ['Phone','Phone number','+44 20 0000 0001','optional'],
     ['Contact URL','Contact page. Used as the site when Site is empty','https://www.example-publishing.co.uk/contact','optional'],

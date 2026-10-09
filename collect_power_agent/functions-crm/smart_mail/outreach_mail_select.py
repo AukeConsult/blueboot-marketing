@@ -584,6 +584,12 @@ def read_outreach(
     return batches
 
 
+def _mark_site_contacted(db, campaign_id: str, lead_id: str, when_iso: str) -> bool:
+    """Site follow-up -> "contacted" when it has none yet (see site_followup)."""
+    from smart_mail.site_followup import set_site_followup
+    return set_site_followup(db, campaign_id, lead_id, "contacted", ("",), when_iso)
+
+
 # ---------------------------------------------------------------------------
 # confirm_sent
 # ---------------------------------------------------------------------------
@@ -658,6 +664,9 @@ def confirm_sent(
 
     # 1 - write contact row
     contact_ref.update(update)
+
+    # The site the contact belongs to: "contacted" unless it already has a follow-up status.
+    _mark_site_contacted(db, campaign_id, (contact_data or {}).get("lead_id"), confirmed_at)
 
     camp_ref = db.collection("campaigns").document(campaign_id)
     camp_doc = camp_ref.get()
