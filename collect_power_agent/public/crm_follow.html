@@ -80,6 +80,7 @@
       <option value="in_work">In-work</option>
       <option value="contacted">Contacted</option>
       <option value="received">Received</option>
+      <option value="auto_replied">Auto-replied</option>
       <option value="replied">Replied</option>
       <option value="meeting">Meeting</option>
       <option value="offer">Offer</option>
@@ -208,6 +209,12 @@
         <span class="badge bg-secondary ms-1 fw-normal" id="contacts-tab-count" style="font-size:10px"></span>
       </button>
     </li>
+    <li class="nav-item">
+      <button class="nav-link" id="tab-activity-btn" data-bs-toggle="tab" data-bs-target="#tab-activity-pane">
+        <i class="ti ti-message-circle me-1"></i>Activity
+        <span class="badge bg-secondary ms-1 fw-normal" id="act-tab-count" style="font-size:10px"></span>
+      </button>
+    </li>
   </ul>
 
   <div class="tab-content">
@@ -243,6 +250,7 @@
             <i class="ti ti-arrows-minimize"></i>
           </button>
         </div>
+        <button id="contacts-refresh" class="header-action-btn" title="Reload contacts" onclick="refreshWith('contacts-refresh', load)"><i class="ti ti-refresh"></i></button>
         <div class="view-toggle">
           <button id="focus-queue-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleFocusQueue()" title="Today / overdue focus queue">
             <i class="ti ti-target-arrow"></i>
@@ -309,7 +317,7 @@
       <div class="px-3 py-2 d-flex align-items-center gap-2 border-bottom bb-card-header">
         <span class="fw-500 small"><i class="ti ti-building me-1 text-primary"></i>Sites</span>
         <span id="sites-tab-count-label" class="small ms-auto" style="color:var(--bb-muted)"></span>
-        <button class="header-action-btn" title="Refresh sites" onclick="loadSitesTab(true)"><i class="ti ti-refresh"></i></button>
+        <button id="sites-refresh" class="header-action-btn" title="Reload sites" onclick="refreshWith('sites-refresh', () => loadSitesTab(true))"><i class="ti ti-refresh"></i></button>
       </div>
       <!-- Sites table -->
       <div class="table-responsive">
@@ -334,6 +342,30 @@
     </div><!-- /#sites-tab-layout -->
   </div><!-- /tab-pane#tab-sites-pane -->
 
+  <!-- ── Activity tab ──────────────────────────────────────────────────────── -->
+  <div class="tab-pane fade" id="tab-activity-pane">
+    <div class="bb-card">
+      <div class="px-3 py-2 d-flex align-items-center gap-2 flex-wrap border-bottom bb-card-header">
+        <span class="fw-500 small"><i class="ti ti-message-circle me-1 text-primary"></i>Latest activity per contact</span>
+        <div class="form-check form-check-inline small mb-0 ms-2">
+          <input class="form-check-input" type="checkbox" id="act-hide-empty" checked onchange="actReset()">
+          <label class="form-check-label" for="act-hide-empty">Only contacts with activity</label>
+        </div>
+        <span id="act-count-label" class="small ms-auto" style="color:var(--bb-muted)"></span>
+        <label class="small mb-0" for="act-page-size" style="color:var(--bb-muted)">Show</label>
+        <select id="act-page-size" class="form-select form-select-sm" style="width:auto" onchange="actReset()">
+          <option value="5">5</option><option value="10" selected>10</option><option value="25">25</option>
+          <option value="50">50</option><option value="100">100</option>
+        </select>
+        <button id="act-refresh" class="header-action-btn" title="Reload contacts and activity" onclick="actRefresh()"><i class="ti ti-refresh"></i></button>
+        <button id="act-prev" class="btn btn-sm btn-outline-secondary py-0" onclick="actPage(-1)"><i class="ti ti-chevron-left"></i></button>
+        <span id="act-page-label" class="small"></span>
+        <button id="act-next" class="btn btn-sm btn-outline-secondary py-0" onclick="actPage(1)"><i class="ti ti-chevron-right"></i></button>
+      </div>
+      <div id="act-list"><div class="text-center py-4 small text-muted">Loading…</div></div>
+    </div>
+  </div><!-- /tab-pane#tab-activity-pane -->
+
   </div><!-- /tab-content -->
 
 </div>
@@ -354,5 +386,6 @@
 <script src="js/crm-follow-history.js"></script>
 <script src="js/crm-follow-prefs.js"></script>
 <script src="js/crm-follow-sites.js"></script>
+<script src="js/crm-follow-activity.js"></script>
 </body>
 </html>

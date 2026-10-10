@@ -509,6 +509,7 @@ def worker(name, job_id):
                 "failed": sum(int(p.get("failed", 0)) for p in passes),
                 "skipped": sum(int(p.get("skipped", 0)) for p in passes),
                 "would_send": sum(int(p.get("would_send", 0)) for p in passes),
+                "notes": [n for p in passes for n in (p.get("notes") or [])],
             }
 
         elif name == "reply-match":
@@ -575,10 +576,12 @@ def list_jobs():
     ?limit=20       max results (default 20, max 500)
     ?running=true   only return running or queued jobs
     ?campaign_id=X  only return jobs for a specific campaign
+    ?name=outreach-send  only return jobs with this name (looks at the 200 newest)
     """
     limit = min(int(request.args.get("limit", 20)), 500)
     running = request.args.get("running", "").lower() in ("1", "true", "yes")
     campaign_id = request.args.get("campaign_id", "").strip()
+    name = request.args.get("name", "").strip()
 
     query = _jobs_col().order_by("queued_at", direction="DESCENDING")
 
@@ -590,10 +593,14 @@ def list_jobs():
     if running:
         query = query.where(filter=FieldFilter("status", "in", ["queued", "running"]))
 
-    docs = list(query.limit(limit).stream())
+    docs = list(query.limit(200 if name else limit).stream())
     jobs = []
     for d in docs:
         j = d.to_dict()
+        if name and j.get("name") != name:
+            continue
+        if len(jobs) >= limit:
+            break
         if campaign_id and (j.get("params") or {}).get("campaign_id") != campaign_id:
             continue
         jobs.append({**j, "job_id": d.id})

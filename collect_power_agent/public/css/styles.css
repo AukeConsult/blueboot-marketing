@@ -229,6 +229,7 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 .bb-badge-fu-in_work         { background: #dbeafe; color: #1d4ed8; }
 .bb-badge-fu-contacted       { background: #e0e7ff; color: #4338ca; }
 .bb-badge-fu-received        { background: #ccfbf1; color: #0f766e; }
+.bb-badge-fu-auto_replied    { background: #f1f5f9; color: #64748b; }
 .bb-badge-fu-replied         { background: #dcfce7; color: #15803d; }
 .bb-badge-fu-meeting         { background: #f3e8ff; color: #7e22ce; }
 .bb-badge-fu-offer           { background: #d1fae5; color: #047857; }

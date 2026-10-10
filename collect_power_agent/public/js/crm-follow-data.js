@@ -428,8 +428,9 @@ function filterContactsBySite(lead) {
   if (btn && window.bootstrap) bootstrap.Tab.getOrCreateInstance(btn).show();
 }
 
-function applyFilter() {
-  if (_prefsReady) _savePrefsDebounced();
+// Contacts that pass the header filters. `ignoreSite` skips the site box / site click
+// filter (the Sites tab uses it so that its own selection does not hide other sites).
+function _filterContactRows(ignoreSite) {
   const q   = document.getElementById('search').value.toLowerCase();
   const sq  = (document.getElementById('site-filter')?.value || '').trim().toLowerCase();
 
@@ -437,7 +438,6 @@ function applyFilter() {
   const imp = document.getElementById('importance-filter').value;
   const cst = document.getElementById('contact-status-filter').value;
   const due = document.getElementById('due-filter').value;
-  const includePending = !!document.getElementById('include-pending')?.checked;
 
   const today   = _today();
   const weekEnd = _weekEnd();
@@ -448,12 +448,11 @@ function applyFilter() {
     if (imp === '__none__') { if (r.followup_importance) return false; }
     else if (imp && r.followup_importance !== imp) return false;
     if (cst && r.status !== cst) return false;
-    if (cst && r.status !== cst) return false;
     if (due === 'none'    && r.followup_date) return false;
     if (due === 'overdue' && !(r.followup_date && r.followup_date < today)) return false;
     if (due === 'today'   && r.followup_date !== today) return false;
     if (due === 'week'    && !(r.followup_date && r.followup_date >= today && r.followup_date <= weekEnd)) return false;
-    if (_siteFilterLead) {
+    if (!ignoreSite && _siteFilterLead) {
       // linked by lead_id, else by website host, else by e-mail domain
       const L = _siteFilterLead;
       const byId = r.lead_id && r.lead_id === L.lead_id;
@@ -462,31 +461,37 @@ function applyFilter() {
                              ((r.email || '').split('@')[1] || '').toLowerCase() === dom);
       if (!(byId || byHost)) return false;
       if (L.campaign_id && r.campaign_id && r.campaign_id !== L.campaign_id) return false;
-    } else if (sq) {
+    } else if (!ignoreSite && sq) {
       const sh = [r.website, r.domain, r.company, r.lead_id].join(' ').toLowerCase();
       if (!sh.includes(sq)) return false;
     }
     if (q) {
-      const hay = [r.name, r.email, r.website, r.title, r.campaign_id].join(' ').toLowerCase();
+      const hay = [r.name, r.email, r.website, r.company, r.title, r.campaign_id].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
   });
 
   if (_focusQueue) {
-    list = _focusQueueSort(list.filter(r => {
+    const weekEnd2 = weekEnd;
+    list = list.filter(r => {
       const status = currentFollowupStatus(r.followup_status || '');
-      return r.followup_date
-        && r.followup_date <= weekEnd
-        && !['not_interested'].includes(status);
-    }));
-  } else {
-    list = applySort(list);
+      return r.followup_date && r.followup_date <= weekEnd2 && !['not_interested'].includes(status);
+    });
   }
+  return list;
+}
+
+function applyFilter() {
+  if (_prefsReady) _savePrefsDebounced();
+  let list = _filterContactRows(false);
+  list = _focusQueue ? _focusQueueSort(list) : applySort(list);
   document.getElementById('count-badge').textContent =
     `${list.length} contact${list.length === 1 ? '' : 's'}`;
   _visibleRows = list;
   render(list);
+  if (typeof renderActivity === 'function') renderActivity();
+  if (typeof _scheduleSitesReload === 'function') _scheduleSitesReload();
   if (_focusQueue) _openFirstFocusContact(list);
 }
 

@@ -329,12 +329,14 @@ def send_outreach(
         "failed": 0,
         "skipped": 0,
         "would_send": 0,
+        "notes": [],          # human-readable reasons shown on the Outreach Status page
     }
     campaign_filter = _coerce_id_set(campaign_ids)
 
     batches = read_outreach(mode=mode, limit=limit, campaign_ids=sorted(campaign_filter))
     if not batches:
         print(f"[sender] no outreach candidates for mode={mode!r}")
+        summary["notes"].append(f"{mode}: nothing waiting to send")
         return summary
 
     for batch in batches:
@@ -351,6 +353,7 @@ def send_outreach(
             skipped = sum(len(cwc.contacts) for cwc in campaigns)
             summary["skipped"] += skipped
             print(f"[sender] {reason} for {account.email} -- skipping {skipped} contact(s)")
+            summary["notes"].append(f"{account.email}: {reason} ({skipped} skipped)")
             continue
 
         budget, run_id, threshold = _claim_send_budget(db, account.email)
@@ -358,6 +361,7 @@ def send_outreach(
             skipped = sum(len(cwc.contacts) for cwc in campaigns)
             summary["skipped"] += skipped
             print(f"[sender] {account.email} budget exhausted -- skipping {skipped} contact(s)")
+            summary["notes"].append(f"{account.email}: send budget reached ({skipped} left for later)")
             continue
 
         sender = None
@@ -371,6 +375,8 @@ def send_outreach(
                     f"[sender] cannot open sender for {account.email}: "
                     f"{open_result.get('message', 'unknown error')} -- skipping {skipped} contact(s)"
                 )
+                summary["notes"].append(
+                    f"{account.email}: cannot open mail connection: {open_result.get('message', 'unknown error')}")
                 continue
 
         print(
@@ -485,6 +491,8 @@ def send_outreach(
                             f"{failed_batch}/{sent_batch + failed_batch} exceeded "
                             f"{threshold:.0%} -- stopping batch"
                         )
+                        summary["notes"].append(
+                            f"{account.email}: stopped by bounce guard ({failed_batch} failed of {sent_batch + failed_batch})")
                         break
 
                     if not dry_run:

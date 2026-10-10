@@ -49,6 +49,7 @@ const _SITE_FU_STATUSES = [
   {value:'to_contact',    label:'To contact'},
   {value:'contacted',     label:'Contacted'},
   {value:'received',      label:'Received'},
+  {value:'auto_replied',  label:'Auto-replied'},
   {value:'in_work',       label:'In work'},
   {value:'not_interested',label:'Not interested'},
   {value:'deal',          label:'Deal'},
@@ -60,11 +61,32 @@ const _SITE_IMPORTANCE = [
   {value:'high',  label:'High'},
 ];
 
-function _sitesTabKey() {
-  const c = document.getElementById('campaign-filter')?.value || '';
-  const o = document.getElementById('owner-header')?.value    || '';
-  const p = document.getElementById('include-pending')?.checked ? '1' : '0';
-  return c + '|' + o + '|' + p;
+// Contact-list criteria sent to the server so it only returns sites that have a matching
+// contact (same rules as the Contacts tab; the site box / site click filter is not sent).
+function _siteQueryParams() {
+  const v = id => document.getElementById(id)?.value || '';
+  const params = new URLSearchParams();
+  const camp = v('campaign-filter'), owner = v('owner-header');
+  if (camp) params.set('campaign_id', camp);
+  if (owner) params.set('owner', owner);
+  if (document.getElementById('include-pending')?.checked) params.set('include_pending', 'true');
+  params.set('by_contacts', '1');
+  const map = { followup_status: 'followup-filter', importance: 'importance-filter',
+                contact_status: 'contact-status-filter', due: 'due-filter', q: 'search' };
+  for (const [k, id] of Object.entries(map)) { const x = v(id).trim(); if (x) params.set(k, x); }
+  if (typeof _focusQueue !== 'undefined' && _focusQueue) params.set('focus', '1');
+  return params;
+}
+function _sitesTabKey() { return _siteQueryParams().toString(); }
+
+let _sitesReloadTimer = null;
+// Called when a filter changes: while the Sites tab is open, refetch (debounced);
+// otherwise the changed key makes the tab reload when it is opened.
+function _scheduleSitesReload() {
+  const active = document.querySelector('#follow-tabs .nav-link.active');
+  if (!active || active.id !== 'tab-sites-btn') return;
+  clearTimeout(_sitesReloadTimer);
+  _sitesReloadTimer = setTimeout(() => loadSitesTab(false), 350);
 }
 
 async function loadSitesTab(force) {
@@ -78,16 +100,10 @@ async function loadSitesTab(force) {
     + '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>';
   document.getElementById('sites-tab-count-label').textContent = '';
 
-  const camp    = document.getElementById('campaign-filter')?.value || '';
-  const owner   = document.getElementById('owner-header')?.value    || '';
-  const pending = !!document.getElementById('include-pending')?.checked;
-  const params  = new URLSearchParams();
-  if (camp)    params.set('campaign_id', camp);
-  else if (owner) params.set('owner', owner);
-  if (pending) params.set('include_pending', 'true');
-
+  const params = _siteQueryParams();
   try {
     const data = await fetchJSON(BASE + '/api/crm/leads?' + params.toString());
+    if (key !== _sitesTabLoaded) return;          // a newer request superseded this one
     _allSiteLeads = data.leads || [];
     _updateSitesSortIndicators();
     applySitesTabFilter();
@@ -97,18 +113,8 @@ async function loadSitesTab(force) {
 }
 
 function applySitesTabFilter() {
-  const q   = (document.getElementById('search')?.value          || '').trim().toLowerCase();
-  const imp = document.getElementById('importance-filter')?.value || '';
-
-  const filtered = _allSiteLeads.filter(l => {
-    if (imp && l.followup_importance !== imp) return false;
-    if (q) {
-      const hay = [l.company, l.domain, l.website, l.ai_sector, l.campaign_name]
-        .filter(Boolean).join(' ').toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
+  // The server already returned only sites with a matching contact.
+  const filtered = _allSiteLeads;
 
   const sorted = _sortSiteLeads(filtered);
   const total = _allSiteLeads.length;
@@ -208,7 +214,4 @@ function _maybeReloadSites() {
   if (active && active.id === 'tab-sites-btn') loadSitesTab(true);
   else _sitesTabLoaded = '';
 }
-function _maybeFilterSites() {
-  const active = document.querySelector('#follow-tabs .nav-link.active');
-  if (active && active.id === 'tab-sites-btn') applySitesTabFilter();
-}
+function _maybeFilterSites() { _scheduleSitesReload(); }

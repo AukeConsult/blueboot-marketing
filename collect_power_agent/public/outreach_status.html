@@ -74,6 +74,22 @@
     </table></div>
     <div id="camp-empty" class="text-center py-3 small text-muted" style="display:none">No campaigns match.</div>
   </div>
+
+  <div class="card mt-3">
+    <div class="card-header py-2 d-flex align-items-center gap-2">
+      <span class="fw-600 small"><i class="ti ti-history me-1 text-primary"></i>Latest send runs</span>
+      <span class="small text-muted ms-auto">last 5</span>
+    </div>
+    <div class="table-responsive"><table class="table table-sm table-hover small mb-0">
+      <thead class="bb-thead"><tr>
+        <th>Started</th><th>Status</th><th>Started by</th><th>Mode</th><th>Campaigns</th>
+        <th class="text-end">Sent</th><th class="text-end">Failed</th><th class="text-end">Skipped</th>
+        <th>Result</th>
+      </tr></thead>
+      <tbody id="runs-body"></tbody>
+    </table></div>
+    <div id="runs-empty" class="text-center py-3 small text-muted" style="display:none">No send runs yet.</div>
+  </div>
 </div>
 
 <div class="modal fade" id="send-modal" tabindex="-1">
@@ -363,6 +379,7 @@ async function pollJob(jobId, doneText) {
     catch (e) { continue; }                       // transient: keep polling
     if (j.status === 'done' || j.status === 'completed' || j.status === 'success') {
       const res = j.result || {};
+      loadRuns();
       box.className = 'alert alert-success small';
       box.textContent = doneText ? doneText(res)
         : `Done: sent ${res.sent ?? 0}, failed ${res.failed ?? 0}, skipped ${res.skipped ?? 0}.`;
@@ -379,6 +396,48 @@ async function pollJob(jobId, doneText) {
   box.textContent = `Job ${jobId} is still running. Check the Jobs page; refresh this page later.`;
 }
 
+// ── Latest send runs ──────────────────────────────────────────────────────
+const RUNS_LIMIT = 5;
+function runStatusBadge(st) {
+  const m = { done: 'success', completed: 'success', success: 'success', running: 'primary',
+              queued: 'secondary', failed: 'danger', error: 'danger' };
+  return `<span class="badge bg-${m[st] || 'secondary'}">${esc(st || '?')}</span>`;
+}
+function runDuration(j) {
+  if (!j.finished_at || !j.queued_at) return '';
+  const s = Math.round((new Date(j.finished_at) - new Date(j.queued_at)) / 1000);
+  return isNaN(s) ? '' : (s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);
+}
+function renderRuns(jobs) {
+  const body = document.getElementById('runs-body');
+  document.getElementById('runs-empty').style.display = jobs.length ? 'none' : '';
+  body.innerHTML = jobs.map(j => {
+    const p = j.params || {}, r = j.result || {};
+    const camps = (p.campaign_ids || []).length ? `${p.campaign_ids.length} selected` : 'all';
+    const note = j.error ? esc(j.error)
+      : (r.notes || []).map(esc).join('<br>') || (r.dry_run ? 'dry run' : '');
+    const failed = j.status === 'failed' || j.status === 'error';
+    return `<tr class="${failed ? 'table-danger' : ''}">
+      <td title="${esc(j.job_id)}">${fmtDt(j.queued_at)}<div class="text-muted">${runDuration(j)}</div></td>
+      <td>${runStatusBadge(j.status)}</td>
+      <td>${esc(p.started_by || 'scheduler / API')}</td>
+      <td>${esc(p.mode || '')}${p.dry_run ? ' (dry)' : ''}</td>
+      <td>${camps}</td>
+      <td class="text-end">${num(r.sent)}</td><td class="text-end">${num(r.failed)}</td>
+      <td class="text-end">${num(r.skipped)}</td>
+      <td>${note}</td></tr>`;
+  }).join('');
+}
+async function loadRuns() {
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/jobs?name=outreach-send&limit=' + RUNS_LIMIT, { cache: 'no-store' });
+    renderRuns(d.jobs || []);
+  } catch (e) {
+    document.getElementById('runs-body').innerHTML =
+      `<tr><td colspan="9" class="text-danger">Could not load runs: ${esc(prettyError(e.message))}</td></tr>`;
+  }
+}
+
 async function load() {
   const btn = document.getElementById('refresh-btn');
   const label = btn.innerHTML;
@@ -391,6 +450,7 @@ async function load() {
     DATA = await fetchJSON(BASE + '/api/crm/outreach/status', { cache: 'no-store' });
     document.getElementById('calc-at').textContent = 'Calculated ' + fmtDt(DATA.calculated_at) + '.';
     renderTiles(); renderAccounts(); render();
+    loadRuns();
   } catch (e) {
     const el = document.getElementById('error');
     el.textContent = 'Could not load status: ' + prettyError(e.message);

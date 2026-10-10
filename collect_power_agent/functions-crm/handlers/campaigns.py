@@ -433,6 +433,82 @@ def discover_campaigns():
 
 
 
+def _host_of(u) -> str:
+    u = str(u or "").lower().strip()
+    for pre in ("https://", "http://"):
+        if u.startswith(pre):
+            u = u[len(pre):]
+    if u.startswith("www."):
+        u = u[4:]
+    return u.split("/")[0].split("?")[0].split("#")[0]
+
+
+def _contact_filter_from_args(args):
+    """Contact-list criteria sent by the follow-up page (same meaning as its header filters)."""
+    from datetime import timedelta
+    today = datetime.now(timezone.utc).date()
+    return {
+        "fu":      args.get("followup_status", "").strip().lower(),
+        "imp":     args.get("importance", "").strip().lower(),
+        "cst":     args.get("contact_status", "").strip().lower(),
+        "due":     args.get("due", "").strip().lower(),
+        "q":       args.get("q", "").strip().lower(),
+        "focus":   args.get("focus", "").strip().lower() in {"1", "true", "yes", "on"},
+        "owner":   args.get("owner", "").strip(),
+        "today":   today.isoformat(),
+        "week":    (today + timedelta(days=7)).isoformat(),
+    }
+
+
+def _contact_passes(d: dict, cid: str, camp_owner: str, f: dict, include_pending: bool) -> bool:
+    """Same rules as /followup-contacts + the follow-up page filters, for one contact doc."""
+    status = _contact_status(d.get("status"))
+    if status == "excluded" or (status == "pending" and not include_pending):
+        return False
+    owner = f["owner"]
+    if owner:
+        fu_owner = d.get("followup_owner", "") or ""
+        if owner == "__none__":
+            if fu_owner or camp_owner:
+                return False
+        elif fu_owner:
+            if fu_owner != owner:
+                return False
+        elif camp_owner != owner:
+            return False
+    if f["cst"] and status != f["cst"]:
+        return False
+    fstat = str(d.get("followup_status") or "").strip().lower()
+    if f["fu"] == "__none__":
+        if fstat:
+            return False
+    elif f["fu"] and fstat != f["fu"]:
+        return False
+    imp = str(d.get("followup_importance") or "").strip().lower()
+    if f["imp"] == "__none__":
+        if imp:
+            return False
+    elif f["imp"] and imp != f["imp"]:
+        return False
+    date = d.get("followup_date", "") or ""
+    due = f["due"]
+    if due == "none" and date:
+        return False
+    if due == "overdue" and not (date and date < f["today"]):
+        return False
+    if due == "today" and date != f["today"]:
+        return False
+    if due == "week" and not (date and f["today"] <= date <= f["week"]):
+        return False
+    if f["focus"] and not (date and date <= f["week"] and fstat != "not_interested"):
+        return False
+    if f["q"]:
+        hay = " ".join(str(d.get(k) or "") for k in ("name", "email", "website", "company", "title")) + " " + cid
+        if f["q"] not in hay.lower():
+            return False
+    return True
+
+
 @bp.route("/api/crm/leads", methods=["GET"])
 def list_leads_cross_campaign():
     """Return campaign_leads across all campaigns, optionally filtered by campaign_id or owner.
@@ -441,6 +517,12 @@ def list_leads_cross_campaign():
     - Default: only status == "active" leads are returned.
     - include_pending=true : return all statuses (active + pending + excluded).
     - status=<value>       : override with an explicit status filter.
+
+    by_contacts=1 switches to "sites that have a contact in the follow-up contact list":
+    a site is returned only when at least one of its contacts passes the same criteria as the
+    contact list (followup_status, importance, contact_status, due, q, focus, owner), so the
+    client does not have to download every site and filter it. In this mode `owner` is the
+    contact-level owner, exactly as on /followup-contacts.
     """
     try:
         db          = _get_db()
@@ -457,6 +539,9 @@ def list_leads_cross_campaign():
         else:
             filter_status = ""                  # post-filter below
 
+        by_contacts = request.args.get("by_contacts", "").strip().lower() in {"1", "true", "yes", "on"}
+        cfilter = _contact_filter_from_args(request.args) if by_contacts else None
+
         # Collect campaigns to query
         camp_docs = []
         if campaign_id:
@@ -465,7 +550,7 @@ def list_leads_cross_campaign():
                 camp_docs = [doc]
         else:
             q = db.collection("campaigns")
-            if owner:
+            if owner and not by_contacts:
                 q = q.where(filter=FieldFilter("owner", "==", owner))
             camp_docs = list(q.stream())
 
@@ -477,9 +562,23 @@ def list_leads_cross_campaign():
             q2    = db.collection("campaigns").document(cid).collection("campaign_leads")
             # live contact figures per site (stored counters can be missing / stale)
             per_lead: dict = {}
+            match_ids: set = set()
+            match_hosts: set = set()
+            fields = ["lead_id", "status"]
+            if by_contacts:
+                fields += ["name", "email", "website", "domain", "company", "title", "followup_status",
+                           "followup_importance", "followup_date", "followup_owner"]
+            camp_owner = cdata.get("owner", "") or ""
             for cdoc in (db.collection("campaigns").document(cid)
-                           .collection("campaign_contacts").select(["lead_id", "status"]).stream()):
+                           .collection("campaign_contacts").select(fields).stream()):
                 cd = cdoc.to_dict() or {}
+                if by_contacts and _contact_passes(cd, cid, camp_owner, cfilter, include_all):
+                    if cd.get("lead_id"):
+                        match_ids.add(cd["lead_id"])
+                    for h in (_host_of(cd.get("website")), _host_of(cd.get("domain")),
+                              str(cd.get("email") or "").lower().split("@")[-1] if "@" in str(cd.get("email") or "") else ""):
+                        if h:
+                            match_hosts.add(h)
                 st = per_lead.setdefault(cd.get("lead_id", ""), {"t": 0, "p": 0, "x": 0})
                 st["t"] += 1
                 cs = (cd.get("status") or "pending").lower()
@@ -496,6 +595,10 @@ def list_leads_cross_campaign():
                 if not filter_status and not include_all and lead_status != "active":
                     continue
                 d.setdefault("lead_id", ldoc.id)
+                if by_contacts:
+                    lh = _host_of(d.get("domain") or d.get("website"))
+                    if not (d["lead_id"] in match_ids or (lh and lh in match_hosts)):
+                        continue
                 d["campaign_id"]   = cid
                 d["campaign_name"] = cname
                 cnt = per_lead.get(ldoc.id, {"t": 0, "p": 0, "x": 0})
