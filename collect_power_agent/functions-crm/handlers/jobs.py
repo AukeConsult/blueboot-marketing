@@ -35,10 +35,23 @@ def contact_sync():
 
 @bp.route("/api/crm/push-and-sync", methods=["GET"])
 def push_and_sync():
+    """Job: move the selected contact-sheet rows into their campaigns (name kept for the job history)."""
     try:
-        job_id = _new_job("push-and-sync", {})
-        _enqueue_task("push-and-sync", job_id, {})
+        params = {"campaign": (request.args.get("campaign") or "").strip()}
+        job_id = _new_job("push-and-sync", params)
+        _enqueue_task("push-and-sync", job_id, params)
         return _accepted(job_id, "push-and-sync")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/push-preview", methods=["GET"])
+def push_preview():
+    """Read-only report of what Push to CRM would do (writes nothing)."""
+    try:
+        from crm.push_to_campaign_lib import preview_push
+        return jsonify({"status": "ok", **preview_push(_get_db(), _sheets_service(),
+                                                campaign=request.args.get("campaign", ""))})
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -309,6 +322,37 @@ def build_facets_trigger():
         return _err(str(exc), 500)
 
 
+def _enrich_campaign_names(db, campaign_id: str, dry_run: bool = False, skip_ai: bool = False) -> dict:
+    """Fill missing contact names of one campaign (rule based, then search + AI).
+
+    Used by the name-enrich job and as the last step of Update info (site-enrich)."""
+    import asyncio as _asyncio
+    from crm.name_enrich_lib import _enrich, _doc_id_from_email
+    contacts = []
+    for doc in db.collection("campaigns").document(campaign_id).collection("campaign_contacts").stream():
+        data = doc.to_dict() or {}
+        if (data.get("name") or "").strip():
+            continue
+        email = (data.get("email") or "").strip()
+        if not email:
+            continue
+        contacts.append({
+            "doc_id":       doc.id,
+            "email":        email,
+            "domain":       email.split("@")[1] if "@" in email else "",
+            "campaign_ref": doc.reference,
+            "ec_doc_id":    _doc_id_from_email(email),
+        })
+    if not contacts:
+        return {"total": 0, "ec_resolved": 0, "rule_resolved": 0, "ai_resolved": 0}
+    return _asyncio.run(_enrich(
+        db, contacts,
+        dry_run=dry_run, skip_ai=skip_ai,
+        model="gpt-4o-mini", batch_size=5,
+        skip_ec_lookup=False, propagate_to_campaigns=False,
+    ))
+
+
 @bp.route("/api/crm/worker/<name>/<job_id>", methods=["POST"])
 def worker(name, job_id):
     try:
@@ -333,8 +377,8 @@ def worker(name, job_id):
             result = {"added": added, "countries": body.get("countries", ["NO"])}
 
         elif name == "push-and-sync":
-            from crm.push_and_sync_lib import run_push_and_sync
-            result = run_push_and_sync(db=db, svc=svc)
+            from crm.push_to_campaign_lib import run_push_to_campaign
+            result = run_push_to_campaign(db=db, svc=svc, campaign=body.get("campaign") or "")
 
         elif name == "template-sync":
             from crm.crm_template_sync_lib import run_template_sync
@@ -423,38 +467,30 @@ def worker(name, job_id):
                 force=bool(body.get("force", False)),
                 workers=int(body.get("workers", 20)),
                 dry_run=dry_run,
+                scrape=bool(body.get("scrape", True)),
+                clean=bool(body.get("clean", True)),
             )
+            # Update info also fills missing contact names (opt out with enrich_names=false).
+            # A failure here must not fail the scrape that already finished.
+            if body.get("enrich_names", True) and body.get("campaign_id", "").strip():
+                try:
+                    _ne_res = _enrich_campaign_names(
+                        db, body["campaign_id"].strip(),
+                        dry_run=dry_run, skip_ai=bool(body.get("skip_ai", False)))
+                    # keep the job record small: counts only, not the per-email map
+                    result["name_enrich"] = {k: v for k, v in _ne_res.items() if k != "resolved"}
+                except Exception as _ne:
+                    print(f"[site-enrich] name enrichment failed: {_ne}", flush=True)
+                    result["name_enrich"] = {"error": str(_ne)}
 
         elif name == "name-enrich":
-            from crm.name_enrich_lib import enrich_email_list, _enrich, _doc_id_from_email
-            import asyncio as _asyncio
+            from crm.name_enrich_lib import enrich_email_list
             campaign_id = body.get("campaign_id", "").strip()
             emails      = body.get("emails") or []
             dry_run     = bool(body.get("dry_run", False))
             skip_ai     = bool(body.get("skip_ai", False))
             if campaign_id:
-                camp_ref = db.collection("campaigns").document(campaign_id)
-                contacts = []
-                for doc in camp_ref.collection("campaign_contacts").stream():
-                    data = doc.to_dict() or {}
-                    if data.get("name", "").strip():
-                        continue
-                    email = (data.get("email") or "").strip()
-                    if not email:
-                        continue
-                    contacts.append({
-                        "doc_id":       doc.id,
-                        "email":        email,
-                        "domain":       email.split("@")[1] if "@" in email else "",
-                        "campaign_ref": doc.reference,
-                        "ec_doc_id":    _doc_id_from_email(email),
-                    })
-                result = _asyncio.run(_enrich(
-                    db, contacts,
-                    dry_run=dry_run, skip_ai=skip_ai,
-                    model="gpt-4o-mini", batch_size=5,
-                    skip_ec_lookup=False, propagate_to_campaigns=False,
-                ))
+                result = _enrich_campaign_names(db, campaign_id, dry_run=dry_run, skip_ai=skip_ai)
             else:
                 result = enrich_email_list(
                     emails, db=db, dry_run=dry_run, skip_ai=skip_ai,

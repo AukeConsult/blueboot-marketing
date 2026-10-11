@@ -46,7 +46,7 @@ functions-crm/
     ├── gdisk_interface.py
     ├── mail_sender.py
     ├── name_enrich_lib.py
-    ├── push_and_sync_lib.py
+    ├── push_to_campaign_lib.py
     ├── sheets_config.py
     └── statistics_builder.py
 ```

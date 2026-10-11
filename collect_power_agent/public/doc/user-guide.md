@@ -14,7 +14,7 @@ The top navigation bar gives access to all sections:
 |---|---|
 | **Campaigns** | Dropdown — Campaign list, Import campaign, Leads DB |
 | **Follow-up** | Cross-campaign follow-up tracker with inline editable status and comments |
-| **CRM discover** | Manual discovery workflow — export contacts, review, push to CRM work sheet |
+| **CRM discover** | Manual discovery workflow — export contacts, review, push selected contacts to campaigns |
 | **Daily Admin** | Day-to-day operational tools — see below |
 | **Documentation** | User guides and system docs |
 
@@ -88,7 +88,7 @@ See [Campaign Import & Export](doc-viewer.html?doc=campaign-import-export) for t
 
 ### Route 3 — Discover (master CRM sheet)
 
-**Where:** Campaigns page → Discover campaigns button
+**Where:** CRM discover (legacy) page → step 6, **Discover campaigns** (moved there from the Campaigns page)
 
 The master CRM contact sheet is a shared Google Spreadsheet that lives outside the system. It is populated through **CRM discover**, where contacts from the internal pool are exported for human review. A person marks which contacts to keep (the **Select** column) and assigns a campaign name (the **Campaign** column).
 
@@ -97,7 +97,7 @@ Once the sheet is ready, clicking **Discover campaigns** reads the Campaign colu
 **Steps:**
 1. Go to **CRM discover** and run an export to push contacts into the master sheet.
 2. Open the master sheet, review each row, fill in the **Select** and **Campaign** columns.
-3. Return to the **Campaigns** page and click **Discover campaigns**.
+3. On the same **CRM discover** page, click **Discover campaigns** (step 6).
 4. New campaigns are created automatically and a sync job is queued for each one.
 5. Monitor progress on the **Jobs** page (admin only).
 
@@ -120,7 +120,7 @@ The campaign workspace uses a full-page split layout. The left sidebar lists cam
 
 - **Campaign sidebar** — search by name, filter by status (Draft / Ready / Active / Canceled) and owner, then select a campaign to edit it on the right.
 - **Refresh** — reloads the sidebar list.
-- **Discover campaigns** — scans the master CRM contact sheet for any campaign IDs that do not yet exist in the system, creates them, and immediately kicks off a contact sync for each one. Before using this route, make sure you have updated and selected the contacts you want in **CRM Discover**.
+- **Discover campaigns** (now on the legacy **CRM discover** page, not on this page) — scans the master CRM contact sheet for any campaign IDs that do not yet exist in the system, creates them, and immediately kicks off a contact sync for each one. Before using this route, make sure you have updated and selected the contacts you want in **CRM Discover**.
 
 ### How Discover campaigns works
 

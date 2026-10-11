@@ -230,7 +230,7 @@ Two Google Sheets are used by the **CRM Discover / CRM sync** pages. Those pages
 
 ### 4.2 CRM work sheet
 - Create a second Google Sheet and name the first tab **Outreach**
-- The columns are written on the first run of `crm/push_and_sync.py`
+- Used by the legacy `template-sync` job (CRM work sheet → Leads DB); the contact push no longer writes to it
 - Set its ID as `TEMPLATE_SHEET_ID`
 
 > The defaults in `sheets_config.py` point to the original sheets. Change them to your own IDs.

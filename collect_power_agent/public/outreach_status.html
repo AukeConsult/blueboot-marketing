@@ -55,7 +55,7 @@
     <div class="card-header py-2 d-flex align-items-center gap-2 flex-wrap">
       <span class="fw-600 small"><i class="ti ti-speakerphone me-1 text-primary"></i>Campaigns</span>
       <select id="f-ready" class="form-select form-select-sm ms-auto" style="width:150px" onchange="render()">
-        <option value="">All</option><option value="yes">Ready</option><option value="no">Not ready</option>
+        <option value="">All</option><option value="mine">My campaigns</option><option value="yes">Ready</option><option value="no">Not ready</option>
       </select>
       <input id="f-search" class="form-control form-control-sm" style="width:180px" placeholder="Search…" oninput="render()">
     </div>
@@ -105,7 +105,7 @@
           <label class="form-check-label fw-500" for="sm-all">All ready campaigns</label>
         </div>
         <div id="sm-list"></div>
-        <div id="sm-empty" class="small text-muted" style="display:none">No campaign has anything to send right now.</div>
+        <div id="sm-empty" class="small text-muted" style="display:none">No ready campaign has anything to send right now.</div>
       </div>
       <div class="modal-footer py-2 d-flex">
         <div class="small me-auto" id="sm-summary"></div>
@@ -124,6 +124,11 @@
 <script>
 const esc = escapeHtml;
 let DATA = null;
+
+// "Mine" = the campaign's owner is the person logged on.
+const myEmail = () => String(window._authUser?.email || '').toLowerCase().trim();
+const isMine = c => !!c.owner && c.owner.toLowerCase().trim() === myEmail();
+const mineBadge = c => isMine(c) ? ' <span class="badge text-bg-primary" title="You are the owner of this campaign">mine</span>' : '';
 
 function num(v) { return v ? `<span>${v}</span>` : `<span class="os-num-0">0</span>`; }
 function numOrDash(v, skipped) { return skipped ? '<span class="os-num-0">—</span>' : num(v); }
@@ -151,6 +156,7 @@ function renderTiles() {
     tile('Reminders due', t.followup_due, '', 'Contacts whose next sequence step is due') +
     tile('Intro not confirmed', t.intro_not_confirmed, t.intro_not_confirmed ? 'text-warning' : '', 'Held back until ticked in the Send column') +
     tile('Next run sends', t.next_run_sends, 'text-primary', 'Limited by the send budget per account') +
+    tile('Mails sent', t.mails_sent ?? 0, 'text-success', `Total mails sent in all campaigns (intro + reminders) to ${t.contacts_mailed ?? 0} contacts`) +
     tile('Left over', t.left_over, t.left_over ? 'text-warning' : '', 'Waiting, but over the budget: goes in a later run');
 }
 
@@ -188,6 +194,7 @@ function render() {
   const f = document.getElementById('f-ready').value;
   const q = document.getElementById('f-search').value.toLowerCase();
   let list = DATA.campaigns || [];
+  if (f === 'mine') list = list.filter(isMine);
   if (f === 'yes') list = list.filter(c => c.ready);
   if (f === 'no') list = list.filter(c => !c.ready);
   if (q) list = list.filter(c => [c.campaign_id, c.name, c.sender, c.status].some(v => String(v || '').toLowerCase().includes(q)));
@@ -198,7 +205,7 @@ function render() {
       ? `<div class="os-blockers">${(c.blockers || []).map(b => '• ' + esc(b)).join('<br>')}</div>` : '';
     const conf = c.require_send_confirmation ? '' : '<span class="text-muted" title="Campaign does not require confirmation"> (no tick needed)</span>';
     return `<tr>
-      <td><a href="campaign.html?campaign_id=${encodeURIComponent(c.campaign_id)}">${esc(c.name || c.campaign_id)}</a>
+      <td><a href="campaign.html?campaign_id=${encodeURIComponent(c.campaign_id)}">${esc(c.name || c.campaign_id)}</a>${mineBadge(c)}
         <div class="text-muted" style="font-size:.7rem">${esc(c.campaign_id)}</div>${blockers}</td>
       <td>${badge}</td>
       <td>${esc(c.status)}</td>
@@ -280,27 +287,35 @@ let SM_MODAL = null;
 
 function sendNow() {
   if (SENDING || !DATA) return;
-  const list = (DATA.campaigns || []).filter(c => c.ready && (c.intro_sendable + c.followup_sendable) > 0);
+  // only ready campaigns that have something to send
+  const list = (DATA.campaigns || []).filter(c => c.ready && ((c.intro_sendable || 0) + (c.followup_sendable || 0)) > 0)
+    .sort((a, b) => isMine(b) - isMine(a));   // my campaigns first
+  const nReady = list.filter(c => c.ready).length;
   const el = document.getElementById('sm-list');
-  document.getElementById('sm-empty').style.display = list.length ? 'none' : '';
-  document.getElementById('sm-all').disabled = !list.length;
-  document.getElementById('sm-go').disabled = !list.length;
-  el.innerHTML = list.map(c => `
-    <div class="form-check py-1">
-      <input class="form-check-input sm-box" type="checkbox" id="sm-${esc(c.campaign_id)}" value="${esc(c.campaign_id)}" checked onchange="smUpdate()">
+  document.getElementById('sm-empty').style.display = nReady ? 'none' : '';
+  document.getElementById('sm-all').disabled = !nReady;
+  document.getElementById('sm-go').disabled = !nReady;
+  el.innerHTML = list.map(c => {
+    const n = (c.intro_sendable || 0) + (c.followup_sendable || 0);
+    const why = c.ready ? '' : ((c.blockers || [])[0] || 'not ready');
+    return `
+    <div class="form-check py-1${c.ready ? '' : ' text-muted'}">
+      <input class="form-check-input sm-box" type="checkbox" id="sm-${esc(c.campaign_id)}" value="${esc(c.campaign_id)}"${c.ready ? (isMine(c) ? ' checked' : '') : ' disabled'} onchange="smUpdate()">
       <label class="form-check-label small w-100" for="sm-${esc(c.campaign_id)}">
-        <span class="fw-500">${esc(c.name || c.campaign_id)}</span>
+        <span class="fw-500">${esc(c.name || c.campaign_id)}</span>${mineBadge(c)}${isMine(c) || !c.owner ? '' : ` <span class="text-muted">(${esc(c.owner)})</span>`}
         <span class="text-muted ms-1">${esc(c.sender || '')}</span>
-        <span class="float-end">${c.intro_sendable} intro · ${c.followup_sendable} reminders</span>
+        ${c.ready
+          ? `<span class="float-end">${c.intro_sendable || 0} intro · ${c.followup_sendable || 0} reminders${n ? '' : ' · nothing waiting'}</span>`
+          : `<span class="float-end text-warning">${esc(why)}</span>`}
       </label>
-    </div>`).join('');
-  document.getElementById('sm-all').checked = true;
+    </div>`;
+  }).join('');
   smUpdate();
   SM_MODAL = SM_MODAL || new bootstrap.Modal(document.getElementById('send-modal'));
   SM_MODAL.show();
 }
 
-function smBoxes() { return Array.from(document.querySelectorAll('#sm-list .sm-box')); }
+function smBoxes() { return Array.from(document.querySelectorAll('#sm-list .sm-box:not(:disabled)')); }
 
 function smToggleAll(on) { smBoxes().forEach(b => { b.checked = on; }); smUpdate(); }
 

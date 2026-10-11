@@ -19,7 +19,12 @@ are saved. The rules live in one module, `functions-crm/crm/contact_clean_lib.py
 - Call-to-action words are removed from the front or end in English, Swedish, Danish,
   Norwegian, German, French, Spanish, Italian, Dutch, Finnish, Portuguese and Polish
   (for example *Email, Mejla, Skicka e-post till, Send e-mail til, E-Mail an, Contactez,
-  Escribir a, Scrivi a, Mail naar, Lähetä sähköpostia, Napisz do*).
+  Escribir a, Scrivi a, Mail naar, Stuur een mailtje, Lähetä sähköpostia, Napisz do*).
+- Greetings and self-introductions in front of a name are removed in the same languages
+  (*Hoi, ik ben Remco* gives `Remco`; *Hi I'm John Smith*, *Hej jag heter Lars*, *Hei jeg heter Ola*,
+  *Hallo ich bin Hans*, *Bonjour je suis Marie*, *Hola soy José*, *Ciao sono Giulia*, *Moi olen Matti*,
+  *Olá eu sou Ana*, *Cześć jestem Jan*). They live in `GREETING_PHRASES` in `contact_clean_lib.py`.
+  Single words that are also real names (Im, Moin, Olen, Sono, Soy) are deliberately not removed.
 - If the language is not known but the e-mail address is, the words that match the address are
   kept (`anna.lindqvist@` keeps "Anna Lindqvist").
 - Titles are removed (Mr, Dr, Herr, Frau, ... and ", PhD").

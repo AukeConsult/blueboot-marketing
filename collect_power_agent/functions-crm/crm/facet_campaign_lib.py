@@ -9,7 +9,9 @@ Algorithm
    (collection_group query on campaign_contacts) — these are excluded.
 4. Stream email_contacts; keep contacts that:
      a. match the filter, AND
-     b. are NOT already in another campaign.
+     b. are NOT already in another campaign (by e-mail), AND
+     c. whose site is NOT already in another campaign (campaign_leads) -- a site lives in
+        ONE campaign; the size cap counts whole sites, a site is never split.
 5. Create / overwrite the campaign document in campaigns/{campaign_id}.
 6. Batch-write matching contacts to
    campaigns/{campaign_id}/campaign_contacts/{doc_id}.
@@ -45,7 +47,8 @@ EMAIL_CONTACTS_COLLECTION = "email_contacts"
 
 LEADS_COLLECTION = "leads"
 BATCH_SIZE = 400
-MAX_CONTACTS_PER_COPY = 200  # hard cap: contacts written per copy-to-campaign
+MAX_SITES_PER_COPY = 50  # hard cap: whole sites (with all their contacts) per copy-to-campaign
+CAMPAIGN_LEADS_SUB = "campaign_leads"
 
 # ── Leads pipeline field spec (facet field → leads collection field) ──────────
 # Fields that exist on the 'leads' collection docs directly.
@@ -279,6 +282,35 @@ def _collect_existing_campaign_emails(
     return taken, dict(per_campaign)
 
 
+def _sites_in_other_campaigns(db, exclude_campaign_id: str) -> set[str]:
+    """Lead ids that already sit in campaigns/{other}/campaign_leads (a site lives in ONE campaign)."""
+    taken: set[str] = set()
+    for doc in db.collection_group(CAMPAIGN_LEADS_SUB).select([]).stream():
+        parent = doc.reference.parent.parent
+        if parent and parent.id != exclude_campaign_id:
+            taken.add(doc.id)
+    return taken
+
+
+def _keep_whole_sites(matched: list, site_of, taken_sites: set, max_sites: int) -> tuple[list, int, int]:
+    """Apply the one-campaign-per-site rule to the matched contacts.
+
+    Drops every contact whose site is already in another campaign, then keeps at most
+    max_sites sites WITH ALL their matched contacts (a site is never split by the cap).
+    Returns (kept contacts, contacts dropped for site-in-other-campaign, sites before cap if capped else 0).
+    """
+    groups: dict[str, list] = {}
+    dropped = 0
+    for ec in matched:
+        sid = site_of(ec) or "email:" + str(ec.get("email") or "").lower()
+        if sid in taken_sites:
+            dropped += 1
+            continue
+        groups.setdefault(sid, []).append(ec)
+    kept = [ec for g in list(groups.values())[:max_sites] for ec in g]
+    return kept, dropped, len(groups) if len(groups) > max_sites else 0
+
+
 def _run_facet_campaign_site_leads(
     db,
     facet_name: str,
@@ -365,14 +397,15 @@ def _run_facet_campaign_site_leads(
             "— campaign not created. Adjust the filter selections and try again."
         )
 
-    # ── 4. Compute campaign-level stats ─────────────────────────────────────
-    # Hard cap: never copy more than MAX_CONTACTS_PER_COPY contacts per copy.
-    capped_from = 0
-    if len(matched) > MAX_CONTACTS_PER_COPY:
-        capped_from = len(matched)
-        matched = matched[:MAX_CONTACTS_PER_COPY]
-        print(f"[facet-campaign] hard cap applied: {capped_from} -> "
-              f"{MAX_CONTACTS_PER_COPY} contacts", flush=True)
+    # ── 4. One campaign per site; cap on whole sites ────────────────────────
+    matched, skipped_site, capped_from = _keep_whole_sites(
+        matched, lambda ec: ec.get("lead_id_site") or ec.get("lead_id_leads") or "",
+        _sites_in_other_campaigns(db, campaign_id), MAX_SITES_PER_COPY)
+    print(f"[facet-campaign] {skipped_site} contacts skipped (site already in another campaign); "
+          f"{len(matched)} contacts kept" + (f"; site cap applied ({capped_from} sites)" if capped_from else ""),
+          flush=True)
+    if not matched:
+        raise ValueError("All matching sites are already in other campaigns — campaign not created.")
 
     sites: set[str] = set()
     country_counter: Counter = Counter()
@@ -402,7 +435,8 @@ def _run_facet_campaign_site_leads(
             "dedup_by_campaign":         dedup_by_campaign,
             "sites_count":               len(sites),
             "countries":                 countries_list,
-            "contacts_capped_from": capped_from,
+            "sites_capped_from": capped_from,
+            "contacts_skipped_site_in_other": skipped_site,
             "dry_run":                   True,
         }
 
@@ -579,7 +613,8 @@ def _run_facet_campaign_site_leads(
         "sites_count":               len(sites),
         "countries":                 countries_list,
         "leads_written":             leads_summary.get("leads_written", 0),
-        "contacts_capped_from": capped_from,
+        "sites_capped_from": capped_from,
+            "contacts_skipped_site_in_other": skipped_site,
         "dry_run":                   False,
     }
 
@@ -662,14 +697,15 @@ def run_facet_campaign_leads(
             "— campaign not created."
         )
 
-    # ── 4. Campaign-level stats ───────────────────────────────────────────────
-    # Hard cap: never copy more than MAX_CONTACTS_PER_COPY contacts per copy.
-    capped_from = 0
-    if len(matched) > MAX_CONTACTS_PER_COPY:
-        capped_from = len(matched)
-        matched = matched[:MAX_CONTACTS_PER_COPY]
-        print(f"[facet-campaign-leads] hard cap applied: {capped_from} -> "
-              f"{MAX_CONTACTS_PER_COPY} contacts", flush=True)
+    # ── 4. One campaign per site; cap on whole sites ──────────────────────────
+    matched, skipped_site, capped_from = _keep_whole_sites(
+        matched, lambda ec: ec.get("lead_id_leads") or "",
+        _sites_in_other_campaigns(db, campaign_id), MAX_SITES_PER_COPY)
+    print(f"[facet-campaign-leads] {skipped_site} contacts skipped (site already in another campaign); "
+          f"{len(matched)} contacts kept" + (f"; site cap applied ({capped_from} sites)" if capped_from else ""),
+          flush=True)
+    if not matched:
+        raise ValueError("All matching sites are already in other campaigns — campaign not created.")
 
     sites: set[str] = set()
     country_counter: Counter = Counter()
@@ -697,7 +733,8 @@ def run_facet_campaign_leads(
             "dedup_by_campaign":         dedup_by_campaign,
             "sites_count":               len(sites),
             "countries":                 countries_list,
-            "contacts_capped_from": capped_from,
+            "sites_capped_from": capped_from,
+            "contacts_skipped_site_in_other": skipped_site,
             "dry_run":                   True,
         }
 
@@ -802,7 +839,8 @@ def run_facet_campaign_leads(
         "contacts_removed": removed, "contacts_protected": protected,
         "dedup_by_campaign": dedup_by_campaign,
         "sites_count": len(sites), "countries": countries_list,
-        "contacts_capped_from": capped_from,
+        "sites_capped_from": capped_from,
+            "contacts_skipped_site_in_other": skipped_site,
         "leads_written": leads_summary.get("leads_written", 0), "dry_run": False,
     }
 

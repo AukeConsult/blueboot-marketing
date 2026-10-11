@@ -28,11 +28,11 @@ from urllib.parse import unquote
 
 # Words/phrases that tell the reader to write to someone.  Lower case.
 CTA_PHRASES: dict[str, list[str]] = {
-    "en": ["send an email to", "send an e-mail to", "send email to", "send e-mail to",
+    "en": ["mail to", "email to", "e-mail to", "send an email to", "send an e-mail to", "send email to", "send e-mail to",
            "send a message to", "send mail to", "email us at", "email", "e-mail", "mailto",
            "mail", "write to", "contact", "contact us", "get in touch with", "message",
            "reach out to", "reach"],
-    "sv": ["skicka e-post till", "skicka epost till", "skicka mail till", "skicka e-brev till",
+    "sv": ["mail till", "e-post till", "epost till", "email till", "skicka e-post till", "skicka epost till", "skicka mail till", "skicka e-brev till",
            "skicka ett mejl till", "mejla", "maila", "e-post", "epost", "e-posta", "mejl",
            "skriv till", "kontakta"],
     "da": ["send en e-mail til", "send e-mail til", "send email til", "send mail til",
@@ -52,14 +52,43 @@ CTA_PHRASES: dict[str, list[str]] = {
     "it": ["invia una email a", "invia una e-mail a", "invia email a", "invia una mail a",
            "invia un'email a", "scrivere a", "scrivi a", "contattare", "contatta",
            "email a", "e-mail a", "mail a"],
-    "nl": ["stuur een e-mail naar", "stuur een mail naar", "e-mail naar", "email naar",
+    "nl": ["neem contact met ons op", "neem contact met mij op", "neem contact op", "neem contact",
+           "contact opnemen", "contacteer ons", "mail ons", "mail mij", "e-mail ons", "email ons",
+           "stuur ons een bericht", "stuur ons een berichtje", "stuur een berichtje", "stuur bericht",
+           "stuur mail", "stuur ons een mail", "stuur een mail", "schrijf ons", "bel ons", "bel mij",
+           "vraag een offerte aan", "offerte aanvragen", "plan een afspraak", "afspraak maken",
+           "klik hier om te mailen", "klik hier", "lees meer", "meer informatie", "meer info",
+           "stuur ons een mailtje naar", "stuur een mailtje naar", "stuur ons een mailtje", "stuur een mailtje", "stuur een e-mailtje", "stuur ons een e-mail",
+           "stuur een bericht", "stuur een e-mail", "stuur een mail", "stuur een e-mail naar",
+           "stuur een mail naar", "mailtje", "e-mailtje", "e-mail naar", "email naar",
            "mail naar", "mailen naar", "schrijf naar", "contacteer", "neem contact op met"],
     "fi": ["lähetä sähköpostia", "lähetä sähköposti", "lähetä viesti", "sähköpostia",
            "sähköposti", "ota yhteyttä"],
-    "pt": ["enviar e-mail para", "enviar email para", "escrever para", "e-mail para",
+    "pt": ["mail para", "enviar e-mail para", "enviar email para", "escrever para", "e-mail para",
            "email para", "contactar", "contatar"],
     "pl": ["wyślij e-mail do", "wyślij email do", "wyślij mail do", "napisz e-mail do",
            "napisz do", "e-mail do", "email do", "skontaktuj się z"],
+}
+
+# Greetings and self-introductions that end up in front of a name ("Hoi Ik ben Remco").
+# Removed from the front only; the name that follows is kept.  Lower case.
+GREETING_PHRASES: dict[str, list[str]] = {
+    "en": ["hi", "hello", "hey", "dear", "i am", "i'm", "my name is", "this is", "name is",
+           "hi i am", "hi i'm", "hello i am", "hello i'm", "hey i am", "hey i'm"],
+    "nl": ["hoi", "hallo", "goedendag", "goedemorgen", "goedemiddag", "beste", "ik ben", "mijn naam is",
+           "ik heet", "dit is", "hoi ik ben", "hallo ik ben"],
+    "sv": ["hej", "hejsan", "hallå", "jag heter", "jag är", "mitt namn är", "hej jag heter", "hej jag är"],
+    "da": ["hej", "goddag", "jeg hedder", "jeg er", "mit navn er", "hej jeg hedder", "hej jeg er"],
+    "no": ["hei", "hallo", "god dag", "jeg heter", "jeg er", "mitt navn er", "hei jeg heter", "hei jeg er"],
+    "de": ["hallo", "guten tag", "servus", "ich bin", "ich heiße", "ich heisse", "mein name ist",
+           "hallo ich bin", "hallo, mein name ist"],
+    "fr": ["bonjour", "salut", "bonsoir", "je suis", "je m'appelle", "je me nomme", "mon nom est",
+           "bonjour je suis", "salut je suis"],
+    "es": ["hola", "buenos días", "buenas tardes", "me llamo", "mi nombre es", "hola soy", "hola me llamo"],
+    "it": ["ciao", "buongiorno", "buonasera", "mi chiamo", "il mio nome è", "ciao sono", "salve sono"],
+    "fi": ["moi", "hei", "terve", "hyvää päivää", "nimeni on", "moi olen", "hei olen"],
+    "pt": ["olá", "oi", "bom dia", "boa tarde", "eu sou", "meu nome é", "me chamo", "olá eu sou"],
+    "pl": ["cześć", "dzień dobry", "witam", "nazywam się", "mam na imię", "cześć jestem", "witam jestem"],
 }
 
 # Titles / honorifics removed from the front of a name.
@@ -83,6 +112,11 @@ GENERIC_WORDS = {
     "name", "navn", "namn", "nombre", "nom", "naam", "nome", "imię", "nimi", "phone", "tel",
     "telefon", "tlf", "fax", "mobile", "mobil", "linkedin", "twitter", "facebook",
     "instagram", "undefined", "null", "none", "n/a", "unknown",
+    # Dutch labels / buttons / roles
+    "mailtje", "e-mailtje", "mailen", "bericht", "berichtje", "ons", "mij", "stuur", "neem", "op",
+    "met", "bel", "reageer", "reageren", "contactpersoon", "contactformulier", "klantenservice",
+    "secretariaat", "administratie", "receptie", "directie", "verkoop", "inkoop", "offerte",
+    "afspraak", "informatie", "meer", "lees", "algemeen", "aanvragen", "aanvraag",
 }
 # Name particles that stay lower case inside a name.
 PARTICLES = {"van", "von", "de", "der", "den", "ter", "ten", "af", "av", "da", "di", "du",
@@ -131,7 +165,8 @@ def _phrase_regex(phrases) -> re.Pattern:
     return re.compile(r"(?<!\w)(?:" + alts + r")(?!\w)", re.I)
 
 
-_ALL_CTA = [p for plist in CTA_PHRASES.values() for p in plist]
+_ALL_CTA = [p for plist in CTA_PHRASES.values() for p in plist] + \
+           [p for plist in GREETING_PHRASES.values() for p in plist]
 _CTA_LEAD = re.compile(r"^(?:" + _phrase_regex(_ALL_CTA).pattern + r")[\s:,\-–—]*", re.I)
 _CTA_TAIL_WORDS = ["email", "e-mail", "mail", "e-post", "epost", "sähköposti", "courriel",
                    "correo", "contact", "kontakt", "mejla", "maila", "mejl"]
@@ -220,6 +255,26 @@ def clean_name(raw, email: str = "") -> str:
     if len(words) == 1 and len(words[0].strip(".")) < 2:
         return ""
     return _title_case(" ".join(words))
+
+
+def is_junk_name(raw) -> bool:
+    """True when the text is only call-to-action / label words ("Stuur een mailtje",
+    "Contact us", "Kontakta oss"): safe to blank even on an imported contact."""
+    s = _norm_text(raw)
+    if not s:
+        return False
+    s = re.sub(r"^mailto:", "", s, flags=re.I).replace("’", "'")
+    for _ in range(4):
+        before = s
+        s = _strip_edges(s)
+        s = _LABEL_RE.sub("", s)
+        s = _CTA_LEAD.sub("", s)
+        s = _CTA_TAIL.sub("", s)
+        if s == before:
+            break
+    words = [w.strip(_EDGE.replace("'", "").replace(".", "")) for w in _strip_edges(s).split()]
+    words = [w for w in words if w]
+    return not words or all(_fold(w).strip(".") in GENERIC_WORDS for w in words)
 
 
 def name_fits_email(name: str, email: str) -> bool:

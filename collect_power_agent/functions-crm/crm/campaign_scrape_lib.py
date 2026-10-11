@@ -16,7 +16,7 @@ from urllib.parse import urljoin, urlparse
 
 import aiohttp
 
-from crm.contact_clean_lib import (clean_email, clean_name, deobfuscate, find_emails,
+from crm.contact_clean_lib import (clean_email, clean_name, is_junk_name, deobfuscate, find_emails,
                                    find_linkedin_profiles, name_fits_email, names_from_page_blocks)
 from crm.sitemap_reader import SitemapReader
 
@@ -830,8 +830,9 @@ def recalculate_contacts(db, campaign_id: str, dry_run: bool = False) -> dict:
         raw_name = d.get("name_raw") or d.get("name") or ""
         name_now = d.get("name") or ""
         new_name = clean_name(name_now, email or email_raw)
-        # imported contacts (never scraped): never blank a name by cleaning
-        if new_name != name_now and (new_name or d.get("scraped_at")):
+        # imported contacts (never scraped): never blank a name by cleaning, unless the text
+        # is only a call-to-action / label such as "Stuur een mailtje"
+        if new_name != name_now and (new_name or d.get("scraped_at") or is_junk_name(name_now)):
             upd["name"] = new_name
             if not d.get("name_raw"):
                 upd["name_raw"] = name_now
@@ -865,14 +866,20 @@ def run_campaign_scrape(
     force: bool = False,
     workers: int = 20,
     dry_run: bool = False,
+    scrape: bool = True,
+    clean: bool = True,
 ) -> dict:
-    """Scrape campaign_leads websites and write found emails to campaign_contacts."""
-    leads = _load_leads(db, campaign_id, force)
+    """Scrape campaign_leads websites and write found emails to campaign_contacts.
+
+    scrape=False skips the website scrape; clean=False skips re-cleaning existing contacts
+    (the contact counts are always refreshed)."""
+    leads = _load_leads(db, campaign_id, force) if scrape else []
     recalc: dict = {}
-    try:                                   # clean ALL existing contacts first
-        recalc = recalculate_contacts(db, campaign_id, dry_run=dry_run)
-    except Exception as exc:
-        print(f"[site-enrich] WARN recalculation failed: {exc}", flush=True)
+    if clean:
+        try:                               # clean ALL existing contacts first
+            recalc = recalculate_contacts(db, campaign_id, dry_run=dry_run)
+        except Exception as exc:
+            print(f"[site-enrich] WARN recalculation failed: {exc}", flush=True)
     if not leads:
         empty = {"scraped": 0, "new_contacts": 0, "updated_contacts": 0, "pages_updated": 0, "errors": 0}
         empty.update(recalc)

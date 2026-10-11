@@ -150,7 +150,7 @@ If you created a campaign by mistake or want to start over, open the campaign pa
 
 ## Name enrichment — filling in missing contact names
 
-Many contacts in the pool have an email address but no name. The **Enrich names** function attempts to find and verify the real person behind each email using a three-pass search pipeline.
+Many contacts in the pool have an email address but no name. The **Fill missing names** step of **Update info** attempts to find and verify the real person behind each email using a three-pass search pipeline.
 
 ### How it works
 
@@ -163,7 +163,7 @@ Only contacts without an existing name are processed. Names are written to both 
 
 ### Running name enrichment
 
-**From the campaign page:** click **Enrich names** in the top toolbar. The job runs in the background (Bing + Brave + AI per contact). A progress bar updates while it runs and shows the final count — how many names were written, how many came from rules vs AI, and how many were skipped. Click **Reload contacts** in the result bar to refresh the table.
+**From the campaign page:** click **Update info** and keep **Fill missing names** ticked. The job runs in the background (Bing + Brave + AI per contact). A progress bar updates while it runs and shows the final count — how many names were written, how many came from rules vs AI, and how many were skipped. Click **Reload contacts** in the result bar to refresh the table.
 
 The enrichment can also be run from the command line by a developer for bulk processing across all campaigns or for a specific list of email addresses. See the [System Architecture](system-architecture.md) document for the technical CLI reference.
 

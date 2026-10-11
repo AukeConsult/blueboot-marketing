@@ -340,7 +340,7 @@ Long-running operations run as Cloud Tasks jobs:
 | Job name | Triggered by | What it does |
 |---|---|---|
 | `contact-sync` | CRM discover step 1 | Export contacts from Leads DB to contact sheet |
-| `push-and-sync` | CRM discover step 3 | Push selected contacts to CRM work sheet |
+| `push-and-sync` | CRM discover step 3 | Move selected contacts into their campaigns (analysis popup first) |
 | `template-sync` | CRM discover step 5 | Sync CRM work sheet back to Leads DB |
 | `campaign-sync` | Campaign Sync button | Drive sheet → Firestore sync |
 | `campaign-export` | Full override button | Firestore → Drive sheet |
@@ -534,7 +534,7 @@ python app/build_filter_facets.py --no-write           # preview without saving
 
 ### Name enrichment (bulk)
 
-The Enrich names function on the campaign page handles individual campaigns. For bulk runs across all campaigns, or to enrich a specific list of email addresses, use the CLI directly:
+The Fill missing names step of Update info on the campaign page handles individual campaigns. For bulk runs across all campaigns, or to enrich a specific list of email addresses, use the CLI directly:
 
 ```bash
 python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID

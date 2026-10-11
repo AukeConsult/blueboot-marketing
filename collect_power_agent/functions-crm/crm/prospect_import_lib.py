@@ -74,12 +74,14 @@ COUNTRY_CODES = {
     "gb": "UK", "england": "UK", "united states": "US", "usa": "US", "us": "US",
     "netherlands": "NL", "france": "FR", "spain": "ES", "italy": "IT",
     "ireland": "IE", "poland": "PL", "canada": "CA", "australia": "AU",
+    "china": "CN", "mainland china": "CN", "prc": "CN", "peoples republic of china": "CN",
+    "people's republic of china": "CN",
 }
 COUNTRY_NAMES = {
     "DK": "Denmark", "FI": "Finland", "DE": "Germany", "SE": "Sweden",
     "NO": "Norway", "UK": "United Kingdom", "US": "United States",
     "NL": "Netherlands", "FR": "France", "ES": "Spain", "IT": "Italy",
-    "IE": "Ireland", "PL": "Poland", "CA": "Canada", "AU": "Australia",
+    "IE": "Ireland", "PL": "Poland", "CA": "Canada", "AU": "Australia", "CN": "China",
 }
 
 _HEADERS = {

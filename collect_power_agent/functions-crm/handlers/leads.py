@@ -133,7 +133,12 @@ def scrape_emails_campaign(campaign_id):
     try:
         body       = request.get_json(silent=True) or {}
         force      = bool(body.get("force", False))
-        job_params = {"campaign_id": campaign_id, "force": force}
+        # what to run: scrape sites / clean existing contacts / fill missing names
+        job_params = {"campaign_id": campaign_id, "force": force,
+                      "scrape":       bool(body.get("scrape", True)),
+                      "clean":        bool(body.get("clean", True)),
+                      "enrich_names": bool(body.get("enrich_names", True)),
+                      "skip_ai":      bool(body.get("skip_ai", False))}
         job_id     = _new_job("site-enrich", job_params)
         _enqueue_task("site-enrich", job_id, job_params)
         return _accepted(job_id, "site-enrich")

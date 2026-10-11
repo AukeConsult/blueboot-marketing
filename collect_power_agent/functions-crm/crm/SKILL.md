@@ -95,14 +95,15 @@ fake `site_leads`/`site_contacts`/`email_contacts`, and assert
 
 ---
 
-## RULE: Hard cap of `MAX_CONTACTS_PER_COPY` (200) contacts per copy-to-campaign
+## RULE: One campaign per site; the cap counts whole sites
 
-Each copy-to-campaign run writes at most `MAX_CONTACTS_PER_COPY` contacts
-(defined in `facet_campaign_lib.py`). The cap is applied to the `matched` list
-**after** dedup and **before** the campaign stats and writes, in BOTH pipelines,
-so `contacts`, `sites_count`, `countries`, and the batch writes all reflect the
-capped set. `contacts_capped_from` is returned (0 when no cap was hit, else the
-pre-cap size). The count job is NOT capped — only the copy is.
+A site lives in ONE campaign. Both pipelines (after the e-mail dedup, before the stats and
+writes) run `_keep_whole_sites`: contacts whose site is already in another campaign's
+`campaign_leads` are dropped (`contacts_skipped_site_in_other`), then at most
+`MAX_SITES_PER_COPY` (50) sites are kept **with all their matched contacts** — a site is never
+split by the cap, so its remaining contacts cannot end up in a second campaign later.
+`sites_capped_from` is returned (0 when no cap was hit, else the site count before the cap).
+The count job is NOT capped — only the copy is. Never cap on a number of contacts.
 
 ---
 

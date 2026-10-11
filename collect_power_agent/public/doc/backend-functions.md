@@ -240,7 +240,7 @@ python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --debug
 
 **Requires:** `OPENAI_API_KEY` and `BRAVE_API_KEY` in `.env`
 
-**Frontend trigger:** Campaign page → **Enrich names** button
+**Frontend trigger:** Campaign page → **Update info** (option "Fill missing names")
 → API: `POST /api/crm/campaigns/<id>/name-enrich`
 → Cloud Tasks job: `name-enrich`
 
@@ -295,12 +295,15 @@ Exports selected `email_contacts` to the master CRM contact sheet.
 
 ---
 
-### `crm/push_and_sync.py` — Push selected to CRM work sheet 🌐 Frontend triggered
+### `crm/push_to_campaign_lib.py` — Push selected contacts into campaigns 🌐 Frontend triggered
 
-Takes contacts marked in the contact sheet and pushes them to the CRM work sheet, grouped by site.
+Moves the contacts marked (Select) in the contact sheet into the campaign named in their **Campaign** column. The sheet is only read; nothing is written to the CRM work sheet.
 
-**Frontend trigger:** CRM page → Step 3 "Push to CRM"
-→ API: `GET /api/crm/push-and-sync`
+A row is **ignored** when its site is already in another campaign (`campaign_leads` of any other campaign) or its e-mail is already in another campaign (`campaign_contacts` of any other campaign). A row already in its own campaign is left as it is. Rows without Campaign, site reference or valid e-mail cannot be pushed. Everything else is added through the normal campaign import (`run_campaign_import`): the campaign is created as a draft when missing, the `campaign_leads` and `campaign_contacts` entries are created, and existing entries are never overwritten.
+
+**Frontend trigger:** legacy CRM page → Step 3 "Push selected to campaign" (optional Campaign field narrows the selection)
+→ Analysis first (read-only, writes nothing): `GET /api/crm/push-preview[?campaign=X]` — shown in a popup with a **Push to campaign** button
+→ API: `GET /api/crm/push-and-sync[?campaign=X]` (the job keeps its old name so job history stays readable)
 → Cloud Tasks job: `push-and-sync`
 
 ---
@@ -319,7 +322,7 @@ Reads `crm_status`, `crm_sales_person`, and `crm_date` from the CRM work sheet a
 
 Reads the master CRM contact sheet and syncs contacts into the correct campaign in Firestore.
 
-**Frontend trigger:** CRM page → Step 6 "Sync campaigns" / Discover campaigns button
+**Frontend trigger:** CRM discover (legacy) page → step 6 Discover campaigns button
 → API: `GET /api/crm/crm-sync`
 → Cloud Tasks job: `crm-sync`
 
@@ -333,12 +336,12 @@ These operations have no standalone CLI — they run as Cloud Tasks jobs trigger
 |---|---|---|---|
 | Campaign sync (Drive sheet → DB) | Campaign page → Sync | `GET /api/crm/campaign-sync` | `campaign-sync` |
 | Full override (DB → Drive sheet) | Campaign page → Full override | `GET /api/crm/campaign-export` | `campaign-export` |
-| Discover campaigns | Campaign workspace → Discover campaigns | `GET /api/crm/discover-campaigns` | — (sync jobs spawned) |
+| Discover campaigns | CRM discover (legacy) → step 6 Discover campaigns | `GET /api/crm/discover-campaigns` | — (sync jobs spawned) |
 | Collect statistics | Statistics page → Collect statistics | `POST /api/crm/statistics/collect` | `statistics` |
 | Load all follow-up contacts | CRM Follow-up page load | `GET /api/crm/followup-contacts` | — (direct read) |
 | Update follow-up field | CRM Follow-up inline edit | `PATCH /api/crm/campaigns/<id>/contacts/<doc>` | — (direct write) |
 | Read inbound/sent mail | CRM Follow-up → Sync messages | `POST /api/crm/inbound-read` | `inbound-read` |
-| Enrich contact names | Campaign page → Enrich names | `POST /api/crm/campaigns/<id>/name-enrich` | `name-enrich` |
+| Enrich contact names | Campaign page → Update info → Fill missing names | `POST /api/crm/campaigns/<id>/name-enrich` | `name-enrich` |
 
 ---
 

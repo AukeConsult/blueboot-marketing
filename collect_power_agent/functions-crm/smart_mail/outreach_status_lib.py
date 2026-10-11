@@ -132,14 +132,14 @@ def _campaign_status_row(db, cdoc, now, account_cache) -> dict:
 
     row = {
         "campaign_id": cid, "name": d.get("name") or cid, "status": status,
-        "sender": sender, "require_send_confirmation": require,
+        "sender": sender, "owner": str(d.get("owner") or ""), "require_send_confirmation": require,
         "has_intro_step": bool(seq), "steps": len(seq),
         "ready": not blockers, "blockers": blockers,
         "followup_enabled": status in _FOLLOWUP_OK and bool(seq) and account is not None,
         "pending": None, "intro_waiting": 0, "intro_not_confirmed": 0,
         "intro_site_blocked": 0, "intro_to_send": 0,
         "followup_waiting": 0, "followup_due": 0, "followup_not_due": 0,
-        "mailed": 0, "excluded": 0, "total": 0,
+        "mailed": 0, "mails_sent": 0, "excluded": 0, "total": 0,
     }
     if status not in _INTRO_OK:
         return row                       # draft / on hold / canceled: the sender ignores it, no need to read contacts
@@ -165,7 +165,8 @@ def _campaign_status_row(db, cdoc, now, account_cache) -> dict:
         if not isinstance(sent, list):
             sent = []
         if sent:
-            row["mailed"] += 1
+            row["mailed"] += 1             # contacts that got at least one mail
+            row["mails_sent"] += len(sent)  # every mail sent (intro + reminders)
         if st == "excluded":
             row["excluded"] += 1
         if st != "pending":
@@ -259,6 +260,8 @@ def compute_outreach_status(db, campaign_ids: list[str] | None = None) -> dict:
         "followup_due": sum(c.get("followup_sendable", 0) for c in campaigns),
         "next_run_sends": sum(a["next_run_sends"] for a in accounts.values()),
         "left_over": sum(a["left_over"] for a in accounts.values()),
+        "mails_sent": sum(c.get("mails_sent", 0) for c in campaigns),
+        "contacts_mailed": sum(c.get("mailed", 0) for c in campaigns),
     }
     campaigns.sort(key=lambda c: (not c.get("ready"), -(c.get("intro_sendable", 0) + c.get("followup_sendable", 0)),
                                   c.get("campaign_id", "")))
