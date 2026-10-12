@@ -54,7 +54,10 @@
   <div class="card">
     <div class="card-header py-2 d-flex align-items-center gap-2 flex-wrap">
       <span class="fw-600 small"><i class="ti ti-speakerphone me-1 text-primary"></i>Campaigns</span>
-      <select id="f-ready" class="form-select form-select-sm ms-auto" style="width:150px" onchange="render()">
+      <select id="f-intro" class="form-select form-select-sm ms-auto" style="width:150px" onchange="render()" title="Filter on the Intro to send column">
+        <option value="">Intro: all</option><option value="gt">Intro to send &gt; 0</option><option value="zero">Intro to send = 0</option>
+      </select>
+      <select id="f-ready" class="form-select form-select-sm" style="width:150px" onchange="render()">
         <option value="">All</option><option value="mine">My campaigns</option><option value="yes">Ready</option><option value="no">Not ready</option>
       </select>
       <input id="f-search" class="form-control form-control-sm" style="width:180px" placeholder="Search…" oninput="render()">
@@ -105,6 +108,7 @@
           <label class="form-check-label fw-500" for="sm-all">All ready campaigns</label>
         </div>
         <div id="sm-list"></div>
+        <div id="sm-budget" class="mt-3"></div>
         <div id="sm-empty" class="small text-muted" style="display:none">No ready campaign has anything to send right now.</div>
       </div>
       <div class="modal-footer py-2 d-flex">
@@ -137,10 +141,16 @@ function tile(label, value, cls, hint) {
   return `<div class="os-tile" title="${esc(hint || '')}"><div class="v ${cls || ''}">${value}</div><div class="l">${esc(label)}</div></div>`;
 }
 
-function bar(used, max, depleted) {
-  const pct = max > 0 ? Math.min(100, Math.round(used / max * 100)) : 100;
-  const cls = depleted ? 'bg-danger' : (pct > 80 ? 'bg-warning' : 'bg-primary');
-  return `<div class="progress" style="height:6px;min-width:80px"><div class="progress-bar ${cls}" style="width:${pct}%"></div></div>`;
+// Bar = what was actually SENT in the window (sent / limit). Mails reserved by a running or
+// unfinished run are drawn after it in grey, only as far as they still fit in the limit.
+function bar(sent, reserved, max) {
+  const pct = v => max > 0 ? Math.max(0, Math.min(100, v / max * 100)) : 100;
+  const sentPct = pct(sent);
+  const resPct = Math.min(pct(reserved), 100 - sentPct);
+  const cls = sent >= max ? 'bg-danger' : (sentPct > 80 ? 'bg-warning' : 'bg-primary');
+  return `<div class="progress" style="height:6px;min-width:80px" title="sent ${sent} / ${max}, reserved ${reserved}">` +
+    `<div class="progress-bar ${cls}" style="width:${sentPct}%"></div>` +
+    `<div class="progress-bar bg-secondary" style="width:${resPct}%;opacity:.45"></div></div>`;
 }
 
 function fmtDt(iso) {
@@ -180,8 +190,8 @@ function renderAccounts() {
       <td class="text-end" title="intro ${a.intro_sendable} + reminders ${a.followup_sendable}">${num(a.waiting)}</td>
       <td class="text-end fw-500">${num(a.next_run_sends)}</td>
       <td class="text-end ${a.left_over ? 'text-warning' : ''}">${num(a.left_over)}</td>
-      <td>${bar(a.sent_last_hour + a.reserved, a.max_per_hour, a.remaining_hour === 0)}</td>
-      <td>${bar(a.sent_last_day + a.reserved, a.max_per_day, a.remaining_day === 0)}</td>
+      <td>${bar(a.sent_last_hour, a.reserved, a.max_per_hour)}</td>
+      <td>${bar(a.sent_last_day, a.reserved, a.max_per_day)}</td>
       <td>${state}</td></tr>`;
   }).join('');
   const l = DATA.limits || {};
@@ -192,8 +202,11 @@ function renderAccounts() {
 function render() {
   if (!DATA) return;
   const f = document.getElementById('f-ready').value;
+  const fi = document.getElementById('f-intro').value;
   const q = document.getElementById('f-search').value.toLowerCase();
   let list = DATA.campaigns || [];
+  if (fi === 'gt') list = list.filter(c => (c.intro_sendable || 0) > 0);
+  if (fi === 'zero') list = list.filter(c => !(c.intro_sendable || 0));
   if (f === 'mine') list = list.filter(isMine);
   if (f === 'yes') list = list.filter(c => c.ready);
   if (f === 'no') list = list.filter(c => !c.ready);
@@ -325,15 +338,17 @@ function smSelected() { return smBoxes().filter(b => b.checked).map(b => b.value
 function smEstimate(ids) {
   const per = {};
   (DATA.campaigns || []).filter(c => ids.includes(c.campaign_id)).forEach(c => {
-    per[c.sender] = (per[c.sender] || 0) + c.intro_sendable + c.followup_sendable;
+    const w = (c.intro_sendable || 0) + (c.followup_sendable || 0);
+    per[c.sender] = per[c.sender] || { account: c.sender, waiting: 0, campaigns: 0 };
+    per[c.sender].waiting += w;
+    per[c.sender].campaigns += 1;
   });
-  let total = 0, waiting = 0;
-  Object.entries(per).forEach(([acc, w]) => {
-    const a = (DATA.accounts || []).find(x => x.account === acc);
-    waiting += w;
-    total += a && !a.problem ? Math.min(a.budget, w) : 0;
+  const rows = Object.values(per).map(r => {
+    const a = (DATA.accounts || []).find(x => x.account === r.account);
+    const send = a && !a.problem ? Math.min(a.budget, r.waiting) : 0;
+    return { ...r, budget: a ? a.budget : 0, problem: a ? a.problem : 'no mail account', send, over: r.waiting - send };
   });
-  return { total, waiting };
+  return { rows, total: rows.reduce((n, r) => n + r.send, 0), waiting: rows.reduce((n, r) => n + r.waiting, 0) };
 }
 
 function smUpdate() {
@@ -343,17 +358,27 @@ function smUpdate() {
   all.checked = boxes.length > 0 && ids.length === boxes.length;
   all.indeterminate = ids.length > 0 && ids.length < boxes.length;
   const e = smEstimate(ids);
+  document.getElementById('sm-budget').innerHTML = e.rows.length ? `
+    <div class="small fw-500 mb-1"><i class="ti ti-battery me-1"></i>Budget check per mail account</div>
+    <table class="table table-sm small mb-0"><thead class="bb-thead"><tr>
+      <th>Account</th><th class="text-end">Waiting</th><th class="text-end">Budget now</th>
+      <th class="text-end">Sends now</th><th class="text-end">Stays waiting</th></tr></thead><tbody>` +
+    e.rows.map(r => `<tr class="${r.problem || r.over ? 'table-warning' : ''}">
+      <td class="text-truncate" style="max-width:220px" title="${esc(r.account || '')}">${esc(r.account || '—')}
+        <span class="text-muted">· ${r.campaigns} campaign(s)</span>${r.problem ? ` <span class="badge bg-danger">${esc(r.problem)}</span>` : ''}</td>
+      <td class="text-end">${r.waiting}</td><td class="text-end">${r.budget}</td>
+      <td class="text-end fw-500">${r.send}</td><td class="text-end">${r.over}</td></tr>`).join('') +
+    '</tbody></table>' : '';
   document.getElementById('sm-summary').innerHTML = ids.length
-    ? `<b>${e.total}</b> mail(s) will be sent now` + (e.waiting > e.total ? ` <span class="text-warning">(${e.waiting - e.total} over budget stay waiting)</span>` : '')
+    ? `<b>${e.total}</b> mail(s) will be sent now` + (e.waiting > e.total ? ` <span class="text-warning">(${e.waiting - e.total} over budget stay waiting for a later run)</span>` : '')
     : 'Select at least one campaign.';
-  document.getElementById('sm-go').disabled = !ids.length || !e.total;
+  document.getElementById('sm-go').disabled = !ids.length;   // the budget check is information only, it never blocks
 }
 
 async function smGo() {
   const ids = smSelected();
   const allSelected = ids.length === smBoxes().length;
-  const e = smEstimate(ids);
-  if (!ids.length || !e.total) return;
+  if (!ids.length) return;
   SM_MODAL.hide();
   SENDING = true;
   const btn = document.getElementById('send-btn');

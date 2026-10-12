@@ -349,4 +349,8 @@ def run_campaign_import(
     from crm.site_link_lib import ensure_site_links
     ensure_site_links(db, campaign_id)
 
+    # Header + list figures (contacts, sites) of the campaign
+    from crm.campaign_scrape_lib import refresh_campaign_counts
+    refresh_campaign_counts(db, campaign_id)
+
     return summary

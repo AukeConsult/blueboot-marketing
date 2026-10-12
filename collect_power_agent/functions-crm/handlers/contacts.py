@@ -425,7 +425,7 @@ def remove_campaign_contacts(campaign_id):
         remaining_leads    = sum(1 for _ in leads_col.stream())
         doc_ref.update({
             "contact_count": remaining_contacts,
-            "lead_count":    remaining_leads,
+            "sites_count":   remaining_leads,
             "updated_at":    datetime.now(timezone.utc).isoformat(),
         })
 
@@ -435,7 +435,7 @@ def remove_campaign_contacts(campaign_id):
         _enqueue_task("campaign-export", export_job_id, export_params)
 
         return jsonify({"status": "ok", "deleted": deleted, "leads_deleted": leads_deleted,
-                        "contact_count": remaining_contacts, "lead_count": remaining_leads,
+                        "contact_count": remaining_contacts, "sites_count": remaining_leads,
                         "export_job_id": export_job_id})
     except Exception as exc:
         return _err(str(exc), 500)

@@ -758,7 +758,7 @@ async def _run(db, campaign_id: str, leads: list,
 def refresh_campaign_counts(db, campaign_id: str) -> dict:
     """Recount campaign_contacts and store the figures the pages show:
     campaign_leads/<lead>.contact_count (Sites table) and campaigns/<id>.contact_count /
-    lead_count (header + list).  Only documents whose figure changed are written."""
+    sites_count (header + list).  Only documents whose figure changed are written."""
     camp_ref = db.collection(CAMPAIGNS_COLLECTION).document(campaign_id)
     per_lead: dict[str, int] = {}
     total = 0
@@ -783,12 +783,12 @@ def refresh_campaign_counts(db, campaign_id: str) -> dict:
     if pending:
         batch.commit()
 
-    camp_ref.set({"contact_count": total, "lead_count": lead_total,
+    camp_ref.set({"contact_count": total, "sites_count": lead_total,
                   "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")},
                  merge=True)
     print(f"[site-enrich] counts refreshed: {total} contacts, {lead_total} sites "
           f"({changed} site figure(s) changed)", flush=True)
-    return {"contact_count": total, "lead_count": lead_total, "leads_recounted": changed}
+    return {"contact_count": total, "sites_count": lead_total, "leads_recounted": changed}
 
 
 _MAILED = {"sent", "replied", "bounced", "converted"}

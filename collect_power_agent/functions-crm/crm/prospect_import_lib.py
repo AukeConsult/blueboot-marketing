@@ -588,7 +588,7 @@ def build_plan(db, records: dict, *, campaign_only: bool = False,
 
 def _refresh_counts(db, camp_ref) -> dict:
     """Recount contacts per site: campaign_leads.contact_count (Sites list) plus the
-    campaign's contact_count / lead_count.  Contacts and sites stay linked by lead_id."""
+    campaign's contact_count / sites_count.  Contacts and sites stay linked by lead_id."""
     per_lead: dict[str, int] = {}
     total = 0
     for snap in camp_ref.collection(CAMPAIGN_CONTACTS_SUB).select(["lead_id"]).stream():
@@ -612,7 +612,7 @@ def _refresh_counts(db, camp_ref) -> dict:
     if orphans:
         print(f"WARN {camp_ref.id}: {orphans} contact(s) point at a site that is not in the campaign "
               f"-- run 'Update info' on the campaign to re-link them", flush=True)
-    return {"contact_count": total, "lead_count": leads}
+    return {"contact_count": total, "sites_count": leads}
 
 
 def apply_plan(db, plan: dict, *, source_files: list[str]) -> dict:
