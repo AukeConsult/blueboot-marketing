@@ -2,7 +2,7 @@
 # teardown.sh — Remove Cloud Run service and Cloud Scheduler jobs (keeps Firestore data)
 set -euo pipefail
 
-PROJECT="${GCP_PROJECT:-blueboot-market}"
+PROJECT="${GCP_PROJECT:-$(sed -n 's/^GCP_PROJECT=\([^ #]*\).*/\1/p' "$(dirname "$0")/../../.env" 2>/dev/null | head -1)}"
 LOCATION="${GCP_LOCATION:-us-central1}"
 
 echo "WARNING: This will delete the batch-runner Cloud Run service and all"

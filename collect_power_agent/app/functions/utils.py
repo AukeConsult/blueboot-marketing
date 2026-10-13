@@ -21,7 +21,12 @@ from functions.config import cfg
 
 USER_AGENT      = "BlueBootLeadAgent/1.1 (+https://blueboot.ai)"
 BROWSER_UA      = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-EMAIL_RE        = re.compile(r"[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+")
+try:
+    from crm.contact_clean_lib import find_emails            # the ONE e-mail detector
+except ImportError:                                          # script started without _pathsetup
+    import sys as _sys
+    _sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "functions-crm"))
+    from crm.contact_clean_lib import find_emails
 
 # Characters that signal a JSON-artifact or label suffix in a title/name field
 # Straight quote, curly/smart quotes (“”‘’), JSON chars, operator chars
@@ -412,37 +417,10 @@ def visible_text(soup: BeautifulSoup) -> str:
 
 def extract_contacts(html: str, text: str) -> dict[str, str]:
     """Return {email: title} — title is best-effort from surrounding text."""
-    # Decode \uXXXX escapes (e.g. \u003e → >) before email extraction.
-    # These appear when Next.js JSON-escapes angle brackets for XSS safety.
-    def _decode_unicode_escapes(s: str) -> str:
-        return re.sub(r'\\u([0-9a-fA-F]{4})',
-                      lambda m: chr(int(m.group(1), 16)), s)
-    combined = _decode_unicode_escapes(html) + " " + _decode_unicode_escapes(text)
-    raw_emails = EMAIL_RE.findall(combined)
+    combined = html + " " + text
     contacts: dict[str, str] = {}
     _strip_tags = re.compile(r"<[^>]+>")
-    for e in raw_emails:
-        e = e.strip(".,;:()[]<>").lower()
-        e = _strip_tags.sub("", e).strip()
-        if not e or "@" not in e:
-            continue
-        if any(e.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"]):
-            continue
-        domain_part = e.split("@", 1)[-1]
-        if all(seg.isdigit() for seg in domain_part.split(".")):
-            continue
-        tld = domain_part.rsplit(".", 1)[-1]
-        if tld.isdigit():
-            continue
-        # Reject hash/UUID local parts — automated addresses like
-        # bfb679c754744c58a7374ee6e25cfc13@sentry.wixpress.com
-        local_part = e.split("@", 1)[0]
-        if len(local_part) >= 16 and re.fullmatch(r"[0-9a-f\-]+", local_part):
-            continue
-        # Reject unicode-escape artifacts: "u003e", "u003c", "u0026" etc.
-        # These leak in when \uXXXX sequences lose their backslash.
-        if re.search(r'u00[0-9a-f]{2}', local_part, re.IGNORECASE):
-            continue
+    for e in find_emails(html, text):          # the one shared detector (crm.contact_clean_lib)
         if e in contacts:
             continue
         title = ""
@@ -549,7 +527,7 @@ def pair_phones_to_contacts(
                 lo = min(phone_pos, email_pos_in_w)
                 hi = max(phone_pos, email_pos_in_w)
                 snippet = window_l[lo:hi]
-                other_emails = [e for e in EMAIL_RE.findall(snippet)
+                other_emails = [e for e in find_emails(snippet)
                                 if e.lower() != email_l]
                 if other_emails:
                     continue
@@ -582,7 +560,7 @@ def pair_phones_to_contacts(
                         if j >= len(lines):
                             break
                         neighbour = lines[j]
-                        if EMAIL_RE.search(neighbour) and email_l not in neighbour.lower():
+                        if find_emails(neighbour) and email_l not in neighbour.lower():
                             break
                         for m in GENERIC_PHONE_RE.findall(neighbour):
                             parsed = _parse_phone(m, country)
@@ -599,7 +577,7 @@ def pair_phones_to_contacts(
                         if j < 0:
                             break
                         neighbour = lines[j]
-                        if EMAIL_RE.search(neighbour) and email_l not in neighbour.lower():
+                        if find_emails(neighbour) and email_l not in neighbour.lower():
                             break
                         for m in GENERIC_PHONE_RE.findall(neighbour):
                             parsed = _parse_phone(m, country)
@@ -731,7 +709,7 @@ def pair_names_to_contacts(
             if not candidate:
                 for j in range(i - 1, max(i - 7, -1), -1):
                     above = lines[j]
-                    if EMAIL_RE.search(above) and email_l not in above.lower():
+                    if find_emails(above) and email_l not in above.lower():
                         break
                     candidate = _pick_name(_NAME_RE.findall(above))
                     if candidate:
@@ -741,7 +719,7 @@ def pair_names_to_contacts(
             if not candidate:
                 for j in range(i + 1, min(i + 4, len(lines))):
                     below = lines[j]
-                    if EMAIL_RE.search(below) and email_l not in below.lower():
+                    if find_emails(below) and email_l not in below.lower():
                         break
                     candidate = _pick_name(_NAME_RE.findall(below))
                     if candidate:
@@ -869,6 +847,23 @@ def email_matches_name(email: str, name: str) -> bool:
 
 
 
+def _deep_clean_name(name: str, email: str) -> str:
+    """crm.contact_clean_lib.clean_name when available (strips Email/Mejla/... in all languages)."""
+    try:
+        from crm.contact_clean_lib import clean_name
+    except Exception:                       # crm package not on the path -> old behaviour
+        return name
+    return clean_name(name, email)
+
+
+def _deep_clean_email(addr: str) -> str:
+    try:
+        from crm.contact_clean_lib import clean_email
+    except Exception:
+        return addr
+    return clean_email(addr)
+
+
 def clean_contact_name(name: str, email: str) -> str:
     """Return a sanitised contact name, or "" if the name looks wrong.
 
@@ -883,7 +878,7 @@ def clean_contact_name(name: str, email: str) -> str:
        check that at least one name token (≥3 chars) appears as a
        substring of the local part or vice-versa.  If no overlap → ""
     """
-    name = name.strip()
+    name = _deep_clean_name((name or "").strip(), email)
     if not name or len(name) < 2:
         return ""
     if "@" in name:

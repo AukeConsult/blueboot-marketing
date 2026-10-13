@@ -138,6 +138,7 @@ body.bg-alt { background: var(--bb-bg-alt); }
 .bb-badge-draft     { background: #f1f1f1; color: #555; }
 .bb-badge-ready     { background: #dbeafe; color: #1d4ed8; }
 .bb-badge-canceled  { background: #fee2e2; color: #b91c1c; }
+.bb-badge-on_hold   { background: #fef3c7; color: #92400e; }
 .bb-badge-pending   { background: #fef9c3; color: #854d0e; }
 .bb-badge-active    { background: #dcfce7; color: #15803d; }
 .bb-badge-error     { background: #fee2e2; color: #b91c1c; }
@@ -164,6 +165,8 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 /* Drag-and-drop zone */
 .drop-zone { border: 2px dashed #ced4da; border-radius: 12px; transition: border-color .15s, background .15s; }
 .drop-zone.drag { border-color: #0d6efd; background: #e7f1ff; }
+.bb-drop-zone { border: 1.5px dashed var(--bs-border-color); border-radius: 8px; transition: border-color .15s, background .15s; cursor: pointer; }
+.bb-drop-zone-active { border-color: #0d6efd; background: rgba(13,110,253,.05); }
 
 /* Table section header */
 .bb-thead { background: #f9fafb; }
@@ -222,6 +225,16 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 .comment-row-input:focus { outline: none; box-shadow: none; background: transparent; }
 .comment-row-input::placeholder { color: #9ca3af; }
 
+/* Follow-up status badges (campaign.html contact list) */
+.bb-badge-fu-in_work         { background: #dbeafe; color: #1d4ed8; }
+.bb-badge-fu-contacted       { background: #e0e7ff; color: #4338ca; }
+.bb-badge-fu-received        { background: #ccfbf1; color: #0f766e; }
+.bb-badge-fu-auto_replied    { background: #f1f5f9; color: #64748b; }
+.bb-badge-fu-replied         { background: #dcfce7; color: #15803d; }
+.bb-badge-fu-meeting         { background: #f3e8ff; color: #7e22ce; }
+.bb-badge-fu-offer           { background: #d1fae5; color: #047857; }
+.bb-badge-fu-not_interested  { background: #f4f5f7; color: #6b7280; }
+
 /* Discreet icon-only refresh button — used on all page headers */
 .bb-btn-refresh {
   background: none;
@@ -229,9 +242,45 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
   color: var(--bb-muted, #9ca3af);
   padding: .25rem .35rem;
   line-height: 1;
-  border-radius: 4px;
-  font-size: 1rem;
-  transition: color .15s, background .15s;
+  border-radius: .375rem;
+  cursor: pointer;
 }
-.bb-btn-refresh:hover { color: var(--bb-accent, #2563eb); background: rgba(37,99,235,.07); }
-.bb-btn-refresh:active { color: var(--bb-accent, #2563eb); }
+.bb-btn-refresh:hover { color: var(--bb-text, #111827); }
+
+/* ── crm-contact.html (single-contact follow-up page) ───────────────────────── */
+.cc-avatar {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--bb-primary, #2563eb); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 600; font-size: 1.1rem; flex-shrink: 0;
+}
+.cc-hist-body {
+  white-space: pre-wrap; word-break: break-word;
+  background: #f8fafc; border-radius: 6px; padding: 8px;
+  margin: 6px 0 0; font-size: .8rem; max-height: 260px; overflow: auto;
+}
+.cc-hist-entry { background: #fff; }
+.fw-600 { font-weight: 600; }
+
+/* Brief highlight when a contact row is focused via ?focus= on return */
+.row-focus-flash > td { animation: rowFocusFlash 2.5s ease-out; }
+@keyframes rowFocusFlash {
+  0%, 25% { background: #fef9c3; }
+  100%    { background: transparent; }
+}
+
+/* Follow-up list: read-only name as a link to the full contact page */
+.crm-contact-name-link {
+  color: var(--bb-text, #111827);
+  text-decoration: none;
+  cursor: pointer;
+}
+.crm-contact-name-link:hover { color: var(--bb-primary, #2563eb); text-decoration: underline; }
+.crm-open-btn { white-space: nowrap; }
+
+/* ── Layering: every popup sits above the sticky header (.bb-nav 10000, its dropdowns 10001) ── */
+.modal-backdrop, .offcanvas-backdrop { --bs-backdrop-zindex: 10040; z-index: 10040 !important; }
+.modal, .offcanvas                    { --bs-modal-zindex: 10050; z-index: 10050 !important; }
+.popover                              { z-index: 10060 !important; }
+.tooltip                              { z-index: 10070 !important; }
+.toast-container                      { z-index: 10080 !important; }

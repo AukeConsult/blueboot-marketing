@@ -286,3 +286,28 @@ Channel selector (Telegram / Teams / WhatsApp) shown only when more than one cha
 ### Suggested first step
 
 Start with **Telegram** — cleanest API, zero cost, fastest to validate the end-to-end loop (webhook → Firestore → side panel thread → send). Once the message subcollection schema and side panel UX are proven, extending to Teams or a Chatwoot aggregator is straightforward.
+
+---
+
+## Scraping JavaScript-rendered pages (Playwright fallback)
+
+*Status: idea, not scheduled.*
+
+**Problem.** The contact scraper (`functions-crm/crm/campaign_scrape_lib.py`) fetches pages with aiohttp and
+reads the raw HTML. Sites that build their team / people / contact lists with JavaScript after load
+(single-page apps, JS-assembled email addresses, "load more" directories) look empty to it, so no names or
+emails are found.
+
+**Idea.** Keep plain HTML as the default (fast, cheap, 20 sites in parallel). Add a fallback: when a page
+has almost no visible text but a lot of script (or a people-list page yields no profile links), re-fetch
+that single page with Playwright, take the rendered HTML, and run it through the same extractors
+(`find_emails`, `_extract_contacts`, `find_linkedin_profiles`, `_find_profile_links`).
+
+**Open points**
+- Needs a browser wherever the job runs. Chromium/Playwright are available in the dev container, but not in
+  the Cloud Function -- would need a container (Cloud Run job / Cloud Build image) or a separate worker.
+- Much slower and heavier per page: use only for sites flagged by the "looks empty" check, run with a small
+  concurrency limit, keep the per-site time budget in mind (`SITE_TIMEOUT`).
+- Respect robots / politeness limits; keep all lookups of one site in series (current rule).
+- Record on the site (`campaign_leads`) that it needed rendering, so it is not re-tested every run.
+- Verify first with a few real examples (e.g. the Mannaz people list) whether rendering is actually needed.

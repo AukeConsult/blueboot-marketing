@@ -97,7 +97,7 @@ async function getAuthToken() {
 // Fetch the user's role from the Firestore user doc via the REST API.
 // Returns 'guest' if the doc is missing or the role field is empty/unrecognised.
 async function _fetchRole(user) {
-  const projectId = (window.FIREBASE_CONFIG || {}).projectId || 'blueboot-market';
+  const projectId = (window.FIREBASE_CONFIG || {}).projectId;
   const email     = (user.email || '').toLowerCase().trim();
   if (!email) { console.warn('[auth] _fetchRole: no email on user'); return 'guest'; }
 

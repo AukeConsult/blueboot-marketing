@@ -59,7 +59,16 @@ class BoundedFetcher:
                 final_url = str(resp.url)
                 if resp.status != 200:
                     return empty
-                raw = await resp.content.read(self._max_body + 1)   # bounded read
+                _chunks: list[bytes] = []
+                _read = 0
+                async for _chunk in resp.content.iter_chunked(65536):
+                    _chunks.append(_chunk)
+                    _read += len(_chunk)
+                    if _read > self._max_body:
+                        break
+                raw = b"".join(_chunks)
+                if len(raw) > self._max_body:
+                    raw = raw[:self._max_body]
                 if len(raw) > self._max_body:
                     raw = raw[:self._max_body]
                 if raw[:2] == b"\x1f\x8b":                          # gzip — cap output too

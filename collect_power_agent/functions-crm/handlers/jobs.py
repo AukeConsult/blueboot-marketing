@@ -1,7 +1,9 @@
 """handlers/jobs.py — Job trigger endpoints, worker dispatcher, status/list."""
 from __future__ import annotations
+import os
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify
+from google.cloud.firestore_v1.base_query import FieldFilter
 from handlers.shared import (
     _get_db, _sheets_service, _gdisk, _jobs_col,
     _new_job, _update_job, _enqueue_task,
@@ -34,10 +36,23 @@ def contact_sync():
 
 @bp.route("/api/crm/push-and-sync", methods=["GET"])
 def push_and_sync():
+    """Job: move the selected contact-sheet rows into their campaigns (name kept for the job history)."""
     try:
-        job_id = _new_job("push-and-sync", {})
-        _enqueue_task("push-and-sync", job_id, {})
+        params = {"campaign": (request.args.get("campaign") or "").strip()}
+        job_id = _new_job("push-and-sync", params)
+        _enqueue_task("push-and-sync", job_id, params)
         return _accepted(job_id, "push-and-sync")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/push-preview", methods=["GET"])
+def push_preview():
+    """Read-only report of what Push to CRM would do (writes nothing)."""
+    try:
+        from crm.push_to_campaign_lib import preview_push
+        return jsonify({"status": "ok", **preview_push(_get_db(), _sheets_service(),
+                                                campaign=request.args.get("campaign", ""))})
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -69,23 +84,6 @@ def crm_sync_trigger():
     except Exception as exc:
         return _err(str(exc), 500)
 
-@bp.route("/api/crm/campaign-sync", methods=["GET"])
-def campaign_sync():
-    """Sync campaign data from contact sheet -> Firestore.
-    Required: ?campaign_id=NO_jun
-    Optional: ?force=true
-    """
-    campaign_id = request.args.get("campaign_id", "").strip()
-    if not campaign_id:
-        return _err("campaign_id is required e.g. ?campaign_id=NO_jun", 400)
-    force = request.args.get("force", "").lower() in ("1", "true", "yes")
-    try:
-        job_id = _new_job("campaign-sync", {"campaign_id": campaign_id, "force": force})
-        _enqueue_task("campaign-sync", job_id, {"campaign_id": campaign_id, "force": force})
-        return _accepted(job_id, "campaign-sync")
-    except Exception as exc:
-        return _err(str(exc), 500)
-
 
 @bp.route("/api/crm/campaign-export", methods=["GET"])
 def campaign_export():
@@ -99,6 +97,77 @@ def campaign_export():
         job_id = _new_job("campaign-export", params)
         _enqueue_task("campaign-export", job_id, params)
         return _accepted(job_id, "campaign-export")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/campaign-import", methods=["POST"])
+def campaign_import():
+    """Import leads + contacts from an uploaded Excel file into a campaign.
+
+    Multipart form fields:
+      campaign_id  -- target campaign (created if missing)
+      file         -- .xlsx file with a 'Leads+Contacts' tab
+      dry_run      -- 'true' | '1' to preview counts without writing (default: false)
+    """
+    campaign_id = (request.form.get("campaign_id") or "").strip()
+    # campaign_id may be empty — the sheet's Campaign column is used as fallback
+
+    if "file" not in request.files:
+        return _err("file is required (multipart field 'file')", 400)
+
+    uploaded = request.files["file"]
+    if not uploaded.filename or not uploaded.filename.lower().endswith(".xlsx"):
+        return _err("file must be a .xlsx Excel file", 400)
+
+    dry_run = request.form.get("dry_run", "").lower() in ("1", "true", "yes")
+
+    try:
+        from crm.campaign_import_lib import parse_sheet, run_campaign_import
+        file_bytes = uploaded.read()
+        rows, warnings, detected_campaign_id = parse_sheet(file_bytes)
+        db = _get_db()
+        result = run_campaign_import(
+            db, campaign_id, rows,
+            dry_run=dry_run,
+            detected_campaign_id=detected_campaign_id,
+        )
+        result["warnings"] = warnings
+        result["rows_parsed"] = len(rows)
+        return jsonify({"status": "ok", **result})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/prospect-import", methods=["POST"])
+def prospect_import():
+    """Import a BlueSearch prospect catalogue (.xlsx) into campaigns.
+
+    Multipart form fields:
+      file           -- .xlsx prospect catalogue (Company/Email headers)
+      dry_run        -- 'true' | '1' to preview without writing (default: TRUE)
+      campaign_id    -- put all rows into this campaign (default: one per country, <prefix>_<CC>)
+      prefix         -- campaign prefix, default BS
+      campaign_only  -- 'true' to skip site_leads / site_contacts / email_contacts
+    """
+    if "file" not in request.files:
+        return _err("file is required (multipart field 'file')", 400)
+    uploaded = request.files["file"]
+    if not uploaded.filename or not uploaded.filename.lower().endswith(".xlsx"):
+        return _err("file must be a .xlsx Excel file", 400)
+    # Safe default: anything but an explicit false is a dry run
+    dry_run = request.form.get("dry_run", "true").lower() not in ("0", "false", "no")
+    campaign_only = request.form.get("campaign_only", "").lower() in ("1", "true", "yes")
+    try:
+        from crm.prospect_import_lib import run_prospect_web_import
+        result = run_prospect_web_import(
+            _get_db(), uploaded.filename, uploaded.read(),
+            prefix=request.form.get("prefix", "BS"),
+            campaign=request.form.get("campaign_id", ""),
+            campaign_only=campaign_only, dry_run=dry_run)
+        return jsonify({"status": "ok", **result})
+    except ValueError as exc:
+        return _err(str(exc), 409)
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -127,6 +196,48 @@ def _first_param(data: dict, name: str, default=None):
     if isinstance(value, list):
         return value[0] if value else default
     return value
+
+
+def _start_outreach_send(params: dict):
+    """Queue one outreach-send job. Shared by Send now and the smartMail scheduler route.
+
+    Refused (409) while another outreach-send job is queued or running, so two runs
+    can never spend the same send budget at once. Jobs older than 20 minutes count as stale (a worker run is killed after 15).
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+    for d in _jobs_col().where(filter=FieldFilter("status", "in", ["queued", "running"])).stream():
+        j = d.to_dict() or {}
+        if j.get("name") == "outreach-send" and str(j.get("queued_at") or "") >= cutoff:
+            return _err(f"An outreach send is already {j.get('status')} (job {d.id}). Wait for it to finish.", 409)
+    job_id = _new_job("outreach-send", params)
+    _enqueue_task("outreach-send", job_id, params)
+    return _accepted(job_id, "outreach-send")
+
+
+@bp.route("/api/crm/outreach/send-now", methods=["POST"])
+def outreach_send_now():
+    """Start a REAL outreach send from the Outreach Status page (admin only, see main.py).
+
+    Body: {"mode": "intro"|"followup"|"both", "campaign_ids": [..] (optional)}
+    Same worker job as the scheduled run; send limits and the bounce breaker still apply.
+    Refused while another outreach-send job is queued or running.
+    """
+    from flask import g
+    body = request.get_json(silent=True) or {}
+    mode = str(body.get("mode") or "both").strip().lower()
+    if mode not in {"intro", "followup", "both"}:
+        return _err("mode must be one of: intro, followup, both", 400)
+    try:
+        return _start_outreach_send({
+            "mode": mode,
+            "limit": 500,
+            "campaign_ids": [str(c).strip() for c in (body.get("campaign_ids") or []) if str(c).strip()],
+            "dry_run": False,
+            "preview": False,
+            "started_by": getattr(g, "user_email", ""),
+        })
+    except Exception as exc:
+        return _err(str(exc), 500)
 
 
 @bp.route("/api/crm/outreach-send", methods=["GET", "POST"])
@@ -158,9 +269,7 @@ def outreach_send():
         "preview": str(_first_param(data, "preview", "") or "").lower() in ("1", "true", "yes"),
     }
     try:
-        job_id = _new_job("outreach-send", params)
-        _enqueue_task("outreach-send", job_id, params)
-        return _accepted(job_id, "outreach-send")
+        return _start_outreach_send(params)
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -169,15 +278,86 @@ def outreach_send():
 @bp.route("/api/crm/reply-match", methods=["GET", "POST"])
 @bp.route("/reply-match", methods=["GET", "POST"])
 def reply_match():
-    """Trigger one reply matching pass through the CRM worker."""
+    """Trigger one reply matching pass through the CRM worker.
+
+    Params:
+      limit=     max messages to process per account (default 200)
+      accounts=  optional comma/space/semicolon/pipe separated account emails
+      campaigns= optional comma/space/semicolon/pipe separated campaign ids
+      days=      how many days back to search IMAP (default 30)
+      dry_run=   true to find matches without writing or deleting anything
+    """
     data = _request_data()
-    params = {"limit": int(_first_param(data, "limit", 200) or 200)}
+    accounts_raw  = data.get("accounts") or data.get("account")
+    campaigns_raw = (
+        data.get("campaigns")
+        or data.get("campaign_ids")
+        or data.get("campaign_id")
+    )
+    params = {
+        "limit":     int(_first_param(data, "limit", 200) or 200),
+        "accounts":  _split_list_param(accounts_raw),
+        "campaigns": _split_list_param(campaigns_raw),
+        "days":      int(_first_param(data, "days", 30) or 30),
+        "dry_run":   str(_first_param(data, "dry_run", "") or "").lower() in ("1", "true", "yes"),
+    }
     try:
         job_id = _new_job("reply-match", params)
         _enqueue_task("reply-match", job_id, params)
         return _accepted(job_id, "reply-match")
     except Exception as exc:
         return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/build-facets", methods=["GET", "POST"])
+def build_facets_trigger():
+    """Rebuild a base filter-facets catalog from current data.
+
+    Params: pipeline=site_leads|leads (default site_leads), cap=N (default 300).
+    Returns a job_id to poll via GET /api/crm/status/<job_id>.
+    """
+    data = _request_data()
+    pipeline = str(_first_param(data, "pipeline", "site_leads") or "site_leads").strip().lower()
+    if pipeline not in ("site_leads", "leads"):
+        return _err("pipeline must be 'site_leads' or 'leads'", 400)
+    params = {"pipeline": pipeline, "cap": int(_first_param(data, "cap", 300) or 300)}
+    try:
+        job_id = _new_job("build-facets", params)
+        _enqueue_task("build-facets", job_id, params)
+        return _accepted(job_id, "build-facets")
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+def _enrich_campaign_names(db, campaign_id: str, dry_run: bool = False, skip_ai: bool = False) -> dict:
+    """Fill missing contact names of one campaign (rule based, then search + AI).
+
+    Used by the name-enrich job and as the last step of Update info (site-enrich)."""
+    import asyncio as _asyncio
+    from crm.name_enrich_lib import _enrich, _doc_id_from_email
+    contacts = []
+    for doc in db.collection("campaigns").document(campaign_id).collection("campaign_contacts").stream():
+        data = doc.to_dict() or {}
+        if (data.get("name") or "").strip():
+            continue
+        email = (data.get("email") or "").strip()
+        if not email:
+            continue
+        contacts.append({
+            "doc_id":       doc.id,
+            "email":        email,
+            "domain":       email.split("@")[1] if "@" in email else "",
+            "campaign_ref": doc.reference,
+            "ec_doc_id":    _doc_id_from_email(email),
+        })
+    if not contacts:
+        return {"total": 0, "ec_resolved": 0, "rule_resolved": 0, "ai_resolved": 0}
+    return _asyncio.run(_enrich(
+        db, contacts,
+        dry_run=dry_run, skip_ai=skip_ai,
+        model="gpt-4o-mini", batch_size=5,
+        skip_ec_lookup=False, propagate_to_campaigns=False,
+    ))
 
 
 @bp.route("/api/crm/worker/<name>/<job_id>", methods=["POST"])
@@ -204,8 +384,8 @@ def worker(name, job_id):
             result = {"added": added, "countries": body.get("countries", ["NO"])}
 
         elif name == "push-and-sync":
-            from crm.push_and_sync_lib import run_push_and_sync
-            result = run_push_and_sync(db=db, svc=svc)
+            from crm.push_to_campaign_lib import run_push_to_campaign
+            result = run_push_to_campaign(db=db, svc=svc, campaign=body.get("campaign") or "")
 
         elif name == "template-sync":
             from crm.crm_template_sync_lib import run_template_sync
@@ -248,11 +428,6 @@ def worker(name, job_id):
                 sb.campaign_statistics()
                 result = {"collected": True}
 
-        elif name == "campaign-sync":
-            from crm.campaign_sync_lib import run_campaign_sync
-            result = run_campaign_sync(db=db, svc=svc, gd=_gdisk(),
-                                       campaign_id=body.get("campaign_id", ""))
-
         elif name == "filter-count":
             from crm.filter_count_lib import run_filter_count, run_leads_filter_count
             fname = body.get("name", "")
@@ -290,61 +465,86 @@ def worker(name, job_id):
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 })
 
+        elif name == "site-enrich":
+            from crm.campaign_scrape_lib import run_campaign_scrape
+            dry_run = bool(body.get("dry_run", False))
+            result = run_campaign_scrape(
+                db,
+                campaign_id=body.get("campaign_id", "").strip(),
+                force=bool(body.get("force", False)),
+                workers=int(body.get("workers", 20)),
+                dry_run=dry_run,
+                scrape=bool(body.get("scrape", True)),
+                clean=bool(body.get("clean", True)),
+            )
+            # Update info also fills missing contact names (opt out with enrich_names=false).
+            # A failure here must not fail the scrape that already finished.
+            if body.get("enrich_names", True) and body.get("campaign_id", "").strip():
+                try:
+                    _ne_res = _enrich_campaign_names(
+                        db, body["campaign_id"].strip(),
+                        dry_run=dry_run, skip_ai=bool(body.get("skip_ai", False)))
+                    # keep the job record small: counts only, not the per-email map
+                    result["name_enrich"] = {k: v for k, v in _ne_res.items() if k != "resolved"}
+                except Exception as _ne:
+                    print(f"[site-enrich] name enrichment failed: {_ne}", flush=True)
+                    result["name_enrich"] = {"error": str(_ne)}
+
         elif name == "name-enrich":
-            from crm.name_enrich_lib import enrich_email_list, _enrich, _doc_id_from_email
-            import asyncio as _asyncio
+            from crm.name_enrich_lib import enrich_email_list
             campaign_id = body.get("campaign_id", "").strip()
             emails      = body.get("emails") or []
             dry_run     = bool(body.get("dry_run", False))
             skip_ai     = bool(body.get("skip_ai", False))
             if campaign_id:
-                camp_ref = db.collection("campaigns").document(campaign_id)
-                contacts = []
-                for doc in camp_ref.collection("campaign_contacts").stream():
-                    data = doc.to_dict() or {}
-                    if data.get("name", "").strip():
-                        continue
-                    email = (data.get("email") or "").strip()
-                    if not email:
-                        continue
-                    contacts.append({
-                        "doc_id":       doc.id,
-                        "email":        email,
-                        "domain":       email.split("@")[1] if "@" in email else "",
-                        "campaign_ref": doc.reference,
-                        "ec_doc_id":    _doc_id_from_email(email),
-                    })
-                result = _asyncio.run(_enrich(
-                    db, contacts,
-                    dry_run=dry_run, skip_ai=skip_ai,
-                    model="gpt-4o-mini", batch_size=5,
-                    skip_ec_lookup=False, propagate_to_campaigns=False,
-                ))
+                result = _enrich_campaign_names(db, campaign_id, dry_run=dry_run, skip_ai=skip_ai)
             else:
                 result = enrich_email_list(
                     emails, db=db, dry_run=dry_run, skip_ai=skip_ai,
                 )
 
         elif name == "inbound-read":
-            from smart_mail.inbound_read_lib import run_inbound_read
-            result = run_inbound_read(
+            # One sync runs BOTH single-source readers:
+            #   • reply_matcher.match_new_replies — the ONLY reader of replies (INBOX)
+            #   • inbound_read_lib.run_sent_sync  — the ONLY reader of sent mail (SENT)
+            from smart_mail.reply_matcher import match_new_replies
+            from smart_mail.inbound_read_lib import run_sent_sync
+            _camps = (
+                body.get("campaign_ids")
+                or body.get("campaigns")
+                or body.get("campaign_id")
+                or None
+            )
+            _days = int(body.get("days") or 7)
+            reply_res = match_new_replies(campaigns=_camps, days=_days)
+            sent_res = run_sent_sync(
                 db               = db,
-                campaign_ids     = (
-                    body.get("campaign_ids")
-                    or body.get("campaigns")
-                    or body.get("campaign_id")
-                    or None
-                ),
+                campaign_ids     = _camps,
                 contact_doc_id   = body.get("contact_doc_id")   or None,
                 outreach_account = body.get("outreach_account") or None,
-                days             = int(body.get("days") or 7),
+                days             = _days,
             )
+            _replies = int(reply_res.get("matched", 0)) + int(reply_res.get("bounced", 0))
+            result = {
+                "reply": reply_res,
+                "sent":  sent_res,
+                "synced_entries":   _replies + int(sent_res.get("synced_entries", 0)),
+                "updated_contacts": _replies + int(sent_res.get("updated_contacts", 0)),
+            }
 
         elif name == "outreach-send":
             from smart_mail.outreach_sender import send_outreach
             mode = str(body.get("mode") or "both").strip().lower()
             modes = ["intro", "followup"] if mode == "both" else [mode]
             passes = []
+            import time as _time
+            _deadline = _time.monotonic() + int(os.getenv("OUTREACH_MAX_RUN_SECONDS", "780"))   # shared by both passes
+            _done = {"sent": 0, "failed": 0}
+
+            def _progress(s, _done=_done):
+                # live counts on the job, so a killed worker still shows what went out
+                _update_job(job_id, progress={"sent": _done["sent"] + s["sent"], "failed": _done["failed"] + s["failed"]})
+
             for pass_mode in modes:
                 passes.append(send_outreach(
                     mode         = pass_mode,
@@ -352,7 +552,10 @@ def worker(name, job_id):
                     campaign_ids = body.get("campaign_ids") or None,
                     dry_run      = bool(body.get("dry_run", False)),
                     preview      = bool(body.get("preview", False)),
+                    progress     = _progress,
+                    deadline     = _deadline,
                 ))
+                _done["sent"] += passes[-1].get("sent", 0); _done["failed"] += passes[-1].get("failed", 0)
             result = {
                 "mode": mode,
                 "passes": passes,
@@ -360,11 +563,18 @@ def worker(name, job_id):
                 "failed": sum(int(p.get("failed", 0)) for p in passes),
                 "skipped": sum(int(p.get("skipped", 0)) for p in passes),
                 "would_send": sum(int(p.get("would_send", 0)) for p in passes),
+                "notes": [n for p in passes for n in (p.get("notes") or [])],
             }
 
         elif name == "reply-match":
             from smart_mail.reply_matcher import match_new_replies
-            result = match_new_replies(limit=int(body.get("limit") or 200))
+            result = match_new_replies(
+                limit     = int(body.get("limit") or 200),
+                accounts  = body.get("accounts") or None,
+                campaigns = body.get("campaigns") or None,
+                days      = int(body.get("days") or 30),
+                dry_run   = bool(body.get("dry_run", False)),
+            )
 
         elif name == "campaign-move":
             from crm.campaign_move_lib import run_campaign_move
@@ -375,6 +585,14 @@ def worker(name, job_id):
                 target_campaign_id = body.get("target_campaign_id", ""),
                 new_campaign_name  = body.get("new_campaign_name", ""),
                 user               = body.get("user", "api"),
+            )
+
+        elif name == "build-facets":
+            from crm.build_facets_lib import run_build_facets
+            result = run_build_facets(
+                db=db,
+                pipeline=body.get("pipeline", "site_leads"),
+                cap=int(body.get("cap") or 300),
             )
 
         else:
@@ -412,40 +630,33 @@ def list_jobs():
     ?limit=20       max results (default 20, max 500)
     ?running=true   only return running or queued jobs
     ?campaign_id=X  only return jobs for a specific campaign
+    ?name=outreach-send  only return jobs with this name (looks at the 200 newest)
     """
-    limit       = min(int(request.args.get("limit", 20)), 500)
-    running     = request.args.get("running", "").lower() in ("1", "true", "yes")
+    limit = min(int(request.args.get("limit", 20)), 500)
+    running = request.args.get("running", "").lower() in ("1", "true", "yes")
     campaign_id = request.args.get("campaign_id", "").strip()
+    name = request.args.get("name", "").strip()
 
     query = _jobs_col().order_by("queued_at", direction="DESCENDING")
 
-    # Compute cutoff time if since parameter given
     since_minutes = request.args.get("since", type=int)
-    cutoff = None
     if since_minutes:
-        from datetime import timedelta
         cutoff = (datetime.now(timezone.utc) - timedelta(minutes=since_minutes)).isoformat()
+        query = query.where(filter=FieldFilter("queued_at", ">=", cutoff))
 
     if running:
-        from google.cloud.firestore_v1.base_query import FieldFilter as FF
-        queued       = list(_jobs_col().where(filter=FF("status", "==", "queued")).stream())
-        running_docs = list(_jobs_col().where(filter=FF("status", "==", "running")).stream())
-        all_jobs = [d.to_dict() for d in queued + running_docs]
-        # Filter by campaign_id
-        if campaign_id:
-            all_jobs = [j for j in all_jobs if (j.get("params") or {}).get("campaign_id") == campaign_id]
-        # Filter by time window (ignore stale jobs)
-        if cutoff:
-            all_jobs = [j for j in all_jobs if (j.get("queued_at") or "") >= cutoff]
-        # Only truly active statuses
-        all_jobs = [j for j in all_jobs if j.get("status") in ("queued", "running")]
-        all_jobs.sort(key=lambda j: j.get("queued_at", ""), reverse=True)
-        return jsonify({"jobs": all_jobs[:limit], "count": len(all_jobs)})
+        query = query.where(filter=FieldFilter("status", "in", ["queued", "running"]))
 
-    docs = list(query.limit(limit).stream())
-    jobs = [d.to_dict() for d in docs]
-    if campaign_id:
-        jobs = [j for j in jobs if (j.get("params") or {}).get("campaign_id") == campaign_id]
-    if cutoff:
-        jobs = [j for j in jobs if (j.get("queued_at") or "") >= cutoff]
-    return jsonify({"jobs": jobs, "count": len(jobs)})
+    docs = list(query.limit(200 if name else limit).stream())
+    jobs = []
+    for d in docs:
+        j = d.to_dict()
+        if name and j.get("name") != name:
+            continue
+        if len(jobs) >= limit:
+            break
+        if campaign_id and (j.get("params") or {}).get("campaign_id") != campaign_id:
+            continue
+        jobs.append({**j, "job_id": d.id})
+
+    return jsonify({"status": "ok", "jobs": jobs})

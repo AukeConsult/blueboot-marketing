@@ -66,6 +66,12 @@ _NUMERIC_DOMAIN_RE = re.compile(r'@[0-9]+\.')    # block @0., @1., @123. domains
 
 
 def _valid_email(email: str) -> bool:
+    try:
+        from crm.contact_clean_lib import clean_email as _shared_clean
+        if not _shared_clean(email):          # the one shared e-mail check
+            return False
+    except ImportError:
+        pass
     # Reject strings with control chars or JSON-artifact characters
     # e.g. 'partner","slug":"anne-sofie...' leaked from JSON parsing
     if any(ord(c) < 32 or ord(c) == 127 for c in email):
@@ -607,16 +613,12 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
     data_docs: list[tuple[str, dict]] = []
     lifecycle_docs: list[tuple[str, dict]] = []   # only for new docs
 
-    lifecycle = {'status': 'pending', 'created_at': now_ts}
-
     for doc_id, email, name, first, row in valid_rows:
         doc = {
             # Identity
             'doc_id':             doc_id,
-            'approved':           '',
             'lead_id_site':       row.get('lead_id_site', ''),
             'contact_id':         row.get('contact_id', ''),
-            'mark_site_leads':    True,
             'email':              email,
             'name':               name,
             'title':              clean_str(row.get('title', '')),
@@ -660,10 +662,13 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
         }
 
         # Lifecycle fields — only written on first creation, never on updates
+        # (approved / mark_site_leads may be edited later, so they must not be reset)
         lifecycle = {
-            'status':     'pending',
-            'created_at': now_ts,
-            'campaign':   campaign or '',
+            'status':          'pending',
+            'created_at':      now_ts,
+            'campaign':        campaign or '',
+            'approved':        '',
+            'mark_site_leads': True,
         }
 
         data_docs.append((doc_id, doc))

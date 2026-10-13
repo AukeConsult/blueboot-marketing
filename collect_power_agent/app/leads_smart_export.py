@@ -66,6 +66,12 @@ _NUMERIC_DOMAIN_RE = re.compile(r'@[0-9]+\.')    # block @0., @1., @123. domains
 
 
 def _valid_email(email: str) -> bool:
+    try:
+        from crm.contact_clean_lib import clean_email as _shared_clean
+        if not _shared_clean(email):          # the one shared e-mail check
+            return False
+    except ImportError:
+        pass
     # Reject strings with control chars or JSON-artifact characters
     # e.g. 'partner","slug":"anne-sofie...' leaked from JSON parsing
     if any(ord(c) < 32 or ord(c) == 127 for c in email):
@@ -270,9 +276,7 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
         doc = {
             # Identity
             'doc_id':            doc_id,
-            'approved':           '',
             'lead_id_leads':     row.get('lead_id_leads', ''),
-            'mark_leads':        True,
             'email':             email,
             'name':              name,
             'title':             clean_str(row.get('title', '')),
@@ -307,7 +311,8 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
         }
         data_docs.append((doc_id, doc))
         if doc_id not in existing_ids:
-            lifecycle_docs.append((doc_id, {'status': 'pending', 'created_at': now_ts, 'campaign': campaign or ''}))
+            lifecycle_docs.append((doc_id, {'status': 'pending', 'created_at': now_ts, 'campaign': campaign or '',
+                                            'approved': '', 'mark_leads': True}))
 
     # ── Step C: batch write data fields ───────────────────────────────────
     total_batches = (len(data_docs) + BATCH_SIZE - 1) // BATCH_SIZE

@@ -1,0 +1,504 @@
+"""contact_clean_lib.py -- clean scraped contact names and e-mail addresses.
+
+    from crm.contact_clean_lib import clean_name, clean_email, deobfuscate
+
+    clean_name("“Email Adam Kenneman.”")      -> "Adam Kenneman"
+    clean_name("Mejla Anna Lindqvist")                -> "Anna Lindqvist"
+    clean_name("Contact us")                          -> ""
+    clean_email("mailto:Info@Firma.se?subject=Hi")    -> "info@firma.se"
+
+Used by the campaign scraper (crm.campaign_scrape_lib), site_agent / site_enrich_agent
+(app/functions/utils.py) and the clean-up command (app/maint_clean_contacts.py).
+
+Call-to-action words ("Email", "Mejla", "Send e-mail til" ...) are listed per language in
+CTA_PHRASES.  To support another language add its phrases there -- no other change needed.
+Unknown languages are still handled when an e-mail address is known: the words of the
+text that match the address (adam.kenneman@ -> "Adam Kenneman") are kept, the rest dropped.
+"""
+from __future__ import annotations
+
+import html as _html
+import re
+import unicodedata
+from urllib.parse import unquote
+
+# ---------------------------------------------------------------------------
+# Language data
+# ---------------------------------------------------------------------------
+
+# Words/phrases that tell the reader to write to someone.  Lower case.
+CTA_PHRASES: dict[str, list[str]] = {
+    "en": ["mail to", "email to", "e-mail to", "send an email to", "send an e-mail to", "send email to", "send e-mail to",
+           "send a message to", "send mail to", "email us at", "email", "e-mail", "mailto",
+           "mail", "write to", "contact", "contact us", "get in touch with", "message",
+           "reach out to", "reach"],
+    "sv": ["mail till", "e-post till", "epost till", "email till", "skicka e-post till", "skicka epost till", "skicka mail till", "skicka e-brev till",
+           "skicka ett mejl till", "mejla", "maila", "e-post", "epost", "e-posta", "mejl",
+           "skriv till", "kontakta"],
+    "da": ["send en e-mail til", "send e-mail til", "send email til", "send mail til",
+           "e-mail til", "mail til", "skriv til", "kontakt"],
+    "no": ["send en e-post til", "send e-post til", "send epost til", "send en epost til",
+           "e-post til", "epost til", "skriv til", "kontakt", "kontakt oss"],
+    "de": ["senden sie eine e-mail an", "senden sie eine email an", "e-mail senden an",
+           "e-mail an", "email an", "mail an", "mailen an", "schreiben sie an",
+           "schreiben an", "schreibe an", "kontaktieren sie", "kontaktiere", "kontakt"],
+    "fr": ["envoyer un e-mail à", "envoyer un email à", "envoyer un courriel à",
+           "envoyer un mail à", "écrire à", "ecrire à", "écrivez à", "contactez", "contacter",
+           "courriel à", "e-mail à", "email à", "mail à", "courriel"],
+    "es": ["enviar un correo electrónico a", "enviar un correo a", "enviar correo a",
+           "enviar un email a", "enviar email a", "escribir a", "escribe a", "contactar con",
+           "contactar a", "contactar", "correo electrónico a", "correo a", "correo",
+           "email a", "e-mail a"],
+    "it": ["invia una email a", "invia una e-mail a", "invia email a", "invia una mail a",
+           "invia un'email a", "scrivere a", "scrivi a", "contattare", "contatta",
+           "email a", "e-mail a", "mail a"],
+    "nl": ["neem contact met ons op", "neem contact met mij op", "neem contact op", "neem contact",
+           "contact opnemen", "contacteer ons", "mail ons", "mail mij", "e-mail ons", "email ons",
+           "stuur ons een bericht", "stuur ons een berichtje", "stuur een berichtje", "stuur bericht",
+           "stuur mail", "stuur ons een mail", "stuur een mail", "schrijf ons", "bel ons", "bel mij",
+           "vraag een offerte aan", "offerte aanvragen", "plan een afspraak", "afspraak maken",
+           "klik hier om te mailen", "klik hier", "lees meer", "meer informatie", "meer info",
+           "stuur ons een mailtje naar", "stuur een mailtje naar", "stuur ons een mailtje", "stuur een mailtje", "stuur een e-mailtje", "stuur ons een e-mail",
+           "stuur een bericht", "stuur een e-mail", "stuur een mail", "stuur een e-mail naar",
+           "stuur een mail naar", "mailtje", "e-mailtje", "e-mail naar", "email naar",
+           "mail naar", "mailen naar", "schrijf naar", "contacteer", "neem contact op met"],
+    "fi": ["lähetä sähköpostia", "lähetä sähköposti", "lähetä viesti", "sähköpostia",
+           "sähköposti", "ota yhteyttä"],
+    "pt": ["mail para", "enviar e-mail para", "enviar email para", "escrever para", "e-mail para",
+           "email para", "contactar", "contatar"],
+    "pl": ["wyślij e-mail do", "wyślij email do", "wyślij mail do", "napisz e-mail do",
+           "napisz do", "e-mail do", "email do", "skontaktuj się z"],
+}
+
+# Greetings and self-introductions that end up in front of a name ("Hoi Ik ben Remco").
+# Removed from the front only; the name that follows is kept.  Lower case.
+GREETING_PHRASES: dict[str, list[str]] = {
+    "en": ["hi", "hello", "hey", "dear", "i am", "i'm", "my name is", "this is", "name is",
+           "hi i am", "hi i'm", "hello i am", "hello i'm", "hey i am", "hey i'm"],
+    "nl": ["hoi", "hallo", "goedendag", "goedemorgen", "goedemiddag", "beste", "ik ben", "mijn naam is",
+           "ik heet", "dit is", "hoi ik ben", "hallo ik ben"],
+    "sv": ["hej", "hejsan", "hallå", "jag heter", "jag är", "mitt namn är", "hej jag heter", "hej jag är"],
+    "da": ["hej", "goddag", "jeg hedder", "jeg er", "mit navn er", "hej jeg hedder", "hej jeg er"],
+    "no": ["hei", "hallo", "god dag", "jeg heter", "jeg er", "mitt navn er", "hei jeg heter", "hei jeg er"],
+    "de": ["hallo", "guten tag", "servus", "ich bin", "ich heiße", "ich heisse", "mein name ist",
+           "hallo ich bin", "hallo, mein name ist"],
+    "fr": ["bonjour", "salut", "bonsoir", "je suis", "je m'appelle", "je me nomme", "mon nom est",
+           "bonjour je suis", "salut je suis"],
+    "es": ["hola", "buenos días", "buenas tardes", "me llamo", "mi nombre es", "hola soy", "hola me llamo"],
+    "it": ["ciao", "buongiorno", "buonasera", "mi chiamo", "il mio nome è", "ciao sono", "salve sono"],
+    "fi": ["moi", "hei", "terve", "hyvää päivää", "nimeni on", "moi olen", "hei olen"],
+    "pt": ["olá", "oi", "bom dia", "boa tarde", "eu sou", "meu nome é", "me chamo", "olá eu sou"],
+    "pl": ["cześć", "dzień dobry", "witam", "nazywam się", "mam na imię", "cześć jestem", "witam jestem"],
+}
+
+# Titles / honorifics removed from the front of a name.
+HONORIFICS = {
+    "mr", "mrs", "ms", "miss", "mx", "dr", "prof", "professor", "sir", "madam",
+    "herr", "frau", "hr", "fru", "fröken", "fr", "monsieur", "madame", "mme", "mlle",
+    "señor", "senor", "señora", "sr", "sra", "signor", "signora", "sig", "dott", "dottore",
+    "dottoressa", "ing", "dipl", "mag", "mgr", "meneer", "mevrouw", "dhr", "mw", "pan", "pani",
+}
+POST_NOMINALS = {"phd", "md", "mba", "msc", "bsc", "ma", "ba", "cpa", "dds", "esq", "jr", "sr.", "ii", "iii"}
+
+# Words that are never a person's name on their own (labels, buttons, roles).
+GENERIC_WORDS = {
+    "contact", "contacts", "us", "kontakt", "kontakta", "oss", "os", "uns", "nous", "nos",
+    "click", "here", "read", "more", "info", "information", "team", "staff", "support",
+    "sales", "admin", "office", "email", "e-mail", "mail", "mejla", "mejl", "e-post",
+    "epost", "address", "adresse", "adress", "send", "write", "us.", "our", "the", "your",
+    "klicka", "klik", "hier", "ici", "aqui", "aquí", "qui", "link", "website", "webmaster",
+    "enquiries", "enquiry", "inquiries", "reception", "service", "customer", "kundeservice",
+    "kundservice", "post", "postmaster", "hello", "hi", "hej", "hallo", "moi", "hola", "ciao",
+    "name", "navn", "namn", "nombre", "nom", "naam", "nome", "imię", "nimi", "phone", "tel",
+    "telefon", "tlf", "fax", "mobile", "mobil", "linkedin", "twitter", "facebook",
+    "instagram", "undefined", "null", "none", "n/a", "unknown",
+    # Dutch labels / buttons / roles
+    "mailtje", "e-mailtje", "mailen", "bericht", "berichtje", "ons", "mij", "stuur", "neem", "op",
+    "met", "bel", "reageer", "reageren", "contactpersoon", "contactformulier", "klantenservice",
+    "secretariaat", "administratie", "receptie", "directie", "verkoop", "inkoop", "offerte",
+    "afspraak", "informatie", "meer", "lees", "algemeen", "aanvragen", "aanvraag",
+}
+# Name particles that stay lower case inside a name.
+PARTICLES = {"van", "von", "de", "der", "den", "ter", "ten", "af", "av", "da", "di", "du",
+             "del", "della", "dos", "das", "la", "le", "bin", "al", "el", "zu", "y", "e", "of"}
+
+# E-mail rules
+ASSET_TLDS = {"png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "bmp", "tif", "tiff", "heic",
+              "heif", "jfif", "apng", "ico", "cur", "css", "scss", "less", "js", "mjs", "ts", "map",
+              "woff", "woff2", "ttf", "otf", "eot", "pdf", "doc", "docx", "xls", "xlsx", "ppt",
+              "pptx", "csv", "txt", "mp4", "m4v", "webm", "mov", "avi", "mkv", "mp3", "wav", "ogg",
+              "zip", "gz", "rar", "json", "xml", "html", "htm", "php", "asp", "aspx", "wasm"}
+# "logo@2x.png"-style retina / hashed asset names: a domain label like 2x, 3x or a build hash
+_ASSET_LABEL_RE = re.compile(r"^(?:[1-4]x|[0-9a-f]{8,})$")
+PLACEHOLDER_DOMAINS = {"example.com", "example.org", "example.net", "domain.com", "email.com",
+                       "yourdomain.com", "yoursite.com", "yourcompany.com", "company.com",
+                       "test.com", "sentry.io", "wixpress.com", "sentry-next.wixpress.com",
+                       "mysite.com", "website.com", "site.com", "domene.no", "domain.se"}
+PLACEHOLDER_LOCALS = {"your", "you", "yourname", "your.name", "name", "email", "user",
+                      "username", "someone", "example", "test", "xxx", "navn", "nombre"}
+
+_ZERO_WIDTH = dict.fromkeys(map(ord, "​‌‍⁠﻿­‎‏"), None)
+_QUOTES = "\"'`´‘’‚‛“”„‟«»‹›"
+_EDGE = " \t\r\n" + _QUOTES + ".,;:!?()[]{}<>|/\\*•·–—-_=+~#"
+_WORD_RE = re.compile(r"^[^\W\d_]+(?:['’.\-][^\W\d_]+)*\.?$", re.UNICODE)
+_LOCAL_RE = re.compile(r"^[a-z0-9!#$%&'*+/=?^_`{|}~.\-]+$")
+_LABEL_RE = re.compile(r"^(?:e-?mail|mail|name|navn|namn|kontakt|contact)\s*[:\-]\s*", re.I)
+
+
+def _norm_text(s) -> str:
+    if not isinstance(s, str):
+        return ""
+    s = _html.unescape(s)
+    s = unicodedata.normalize("NFC", s).translate(_ZERO_WIDTH)
+    s = s.replace(" ", " ")
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _fold(s: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", s.casefold())
+                   if unicodedata.category(c) != "Mn")
+
+
+def _phrase_regex(phrases) -> re.Pattern:
+    alts = "|".join(re.escape(p).replace(r"\ ", r"\s+")
+                    for p in sorted(set(phrases), key=len, reverse=True))
+    return re.compile(r"(?<!\w)(?:" + alts + r")(?!\w)", re.I)
+
+
+_ALL_CTA = [p for plist in CTA_PHRASES.values() for p in plist] + \
+           [p for plist in GREETING_PHRASES.values() for p in plist]
+_CTA_LEAD = re.compile(r"^(?:" + _phrase_regex(_ALL_CTA).pattern + r")[\s:,\-–—]*", re.I)
+_CTA_TAIL_WORDS = ["email", "e-mail", "mail", "e-post", "epost", "sähköposti", "courriel",
+                   "correo", "contact", "kontakt", "mejla", "maila", "mejl"]
+_CTA_TAIL = re.compile(r"[\s,:\-–—(\[]*(?:" + "|".join(map(re.escape, _CTA_TAIL_WORDS)) +
+                       r")[\s)\]]*$", re.I)
+
+
+def _strip_edges(s: str) -> str:
+    return s.strip(_EDGE)
+
+
+def _title_case(name: str) -> str:
+    """Fix ALL CAPS / all lower case only; mixed-case names are left alone."""
+    if not (name.isupper() or name.islower()):
+        return name
+    out = []
+    for i, w in enumerate(name.split()):
+        lw = w.lower()
+        if i > 0 and lw in PARTICLES:
+            out.append(lw)
+            continue
+        parts = re.split(r"([\-'’])", lw)
+        w2 = "".join(p[:1].upper() + p[1:] if p not in ("-", "'", "’") else p for p in parts)
+        if re.match(r"^Mc[a-z]", w2):
+            w2 = "Mc" + w2[2].upper() + w2[3:]
+        out.append(w2)
+    return " ".join(out)
+
+
+def _align_with_email(words: list[str], email: str) -> list[str]:
+    """Keep only the span of words that match the e-mail local part."""
+    local = email.split("@", 1)[0].lower()
+    tokens = [t for t in re.split(r"[._\-+0-9]+", _fold(local)) if len(t) >= 2]
+    if len(tokens) < 2:
+        return words
+    hits = [i for i, w in enumerate(words)
+            if any(_fold(w).strip(".'") == t or (len(t) >= 3 and _fold(w).startswith(t))
+                   for t in tokens)]
+    if len(hits) >= 2:
+        return words[hits[0]:hits[-1] + 1]
+    return words
+
+
+# ---------------------------------------------------------------------------
+# Public: names
+# ---------------------------------------------------------------------------
+
+def clean_name(raw, email: str = "") -> str:
+    """Return the person's name, or "" when the text is not a name."""
+    s = _norm_text(raw)
+    if not s:
+        return ""
+    s = re.sub(r"^mailto:", "", s, flags=re.I)
+    if "@" in s or re.search(r"https?://|www\.", s, re.I) or re.search(r"u00[0-9a-f]{2}", s):
+        return ""
+    s = s.replace("’", "'")
+
+    for _ in range(4):                       # peel quotes / labels / CTA words until stable
+        before = s
+        s = _strip_edges(s)
+        s = _LABEL_RE.sub("", s)
+        s = _CTA_LEAD.sub("", s)
+        s = _CTA_TAIL.sub("", s)
+        if s == before:
+            break
+    s = _strip_edges(s)
+    s = re.sub(r",\s*(?:%s)\.?$" % "|".join(sorted(POST_NOMINALS)), "", s, flags=re.I)
+
+    words = s.split()
+    while words and _fold(words[0]).strip(".") in HONORIFICS and len(words) > 1:
+        words = words[1:]
+    while words and _fold(words[-1]).strip(".,") in POST_NOMINALS and len(words) > 1:
+        words = words[:-1]
+
+    if email:
+        words = _align_with_email(words, email)
+
+    words = [w.strip(_EDGE.replace("'", "").replace(".", "")) for w in words]
+    words = [w for w in words if w]
+    if not words or len(words) > 5:
+        return ""
+    if any(not _WORD_RE.match(w) for w in words):
+        return ""
+    if all(_fold(w).strip(".") in GENERIC_WORDS for w in words):
+        return ""
+    if len(words) == 1 and len(words[0].strip(".")) < 2:
+        return ""
+    return _title_case(" ".join(words))
+
+
+def is_junk_name(raw) -> bool:
+    """True when the text is only call-to-action / label words ("Stuur een mailtje",
+    "Contact us", "Kontakta oss"): safe to blank even on an imported contact."""
+    s = _norm_text(raw)
+    if not s:
+        return False
+    s = re.sub(r"^mailto:", "", s, flags=re.I).replace("’", "'")
+    for _ in range(4):
+        before = s
+        s = _strip_edges(s)
+        s = _LABEL_RE.sub("", s)
+        s = _CTA_LEAD.sub("", s)
+        s = _CTA_TAIL.sub("", s)
+        if s == before:
+            break
+    words = [w.strip(_EDGE.replace("'", "").replace(".", "")) for w in _strip_edges(s).split()]
+    words = [w for w in words if w]
+    return not words or all(_fold(w).strip(".") in GENERIC_WORDS for w in words)
+
+
+def name_fits_email(name: str, email: str) -> bool:
+    """True when the e-mail local part plausibly belongs to this person:
+    initials (bs@ = Brian Stein, mht@ = Mark Thompson), first name, last name, first.last,
+    flast ..."""
+    words = [_fold(w).strip(".'") for w in name.split() if w.strip(".'")]
+    if len(words) < 2:
+        return False
+    fold2 = lambda t: t.replace("ø", "o").replace("æ", "ae").replace("å", "a")
+    words = [fold2(w) for w in words]
+    local = fold2(_fold(email.split("@", 1)[0]))
+    l2 = re.sub(r"[^a-z]", "", local)
+    if not l2:
+        return False
+    first, last = words[0], words[-1]
+    if 2 <= len(l2) <= 4 and l2[0] == first[0] and l2[-1] == last[0]:
+        return True                                           # initials
+    if len(first) >= 3 and (l2 == first or l2.startswith(first) or first in l2):
+        return True
+    if len(l2) >= 3 and (first.startswith(l2) or last.startswith(l2)):
+        return True                                           # stu@ = Stuart Turnbull
+    if len(last) >= 3 and (l2 == last or l2.endswith(last) or last in l2):
+        return True
+    return l2 in (first[0] + last, first + last[0])
+
+
+_BLOCK_BREAK = re.compile(r"</?(?:p|div|br|li|ul|ol|tr|td|th|table|section|article|header|footer|"
+                          r"h[1-6]|figure|figcaption|address|blockquote|span)\b[^>]*>|<img\b[^>]*>",
+                          re.I)
+
+
+def names_from_page_blocks(html: str, emails) -> dict:
+    """{email: name} for e-mails that sit in plain text under/next to a person's name
+    (team sections: <h3>Brian Stein</h3> CEO &lt;bs@firm.dk&gt;).  A name is accepted only
+    when the e-mail local part fits it (see name_fits_email)."""
+    if not html or not emails:
+        return {}
+    t = re.sub(r"<(script|style|noscript)[^>]*>[\s\S]*?</\1>", " ", html, flags=re.I)
+    t = _BLOCK_BREAK.sub("\n", t)
+    t = re.sub(r"<[^>]+>", " ", t)
+    lines = [_norm_text(l) for l in t.split("\n")]
+    lines = [l for l in lines if l]
+    out: dict = {}
+    for em in emails:
+        for i, line in enumerate(lines):
+            if em not in line.lower():
+                continue
+            same = line.lower().split(em)[0]
+            cands = [same] + [lines[j] for j in range(i - 1, max(-1, i - 5), -1)]
+            for c in cands:
+                nm = clean_name(c, em)
+                if nm and len(nm.split()) >= 2 and name_fits_email(nm, em):
+                    out[em] = nm
+                    break
+            if em in out:
+                break
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Public: e-mail
+# ---------------------------------------------------------------------------
+
+_OBFUSCATION = [
+    (re.compile(r"\s*[\[\(\{]\s*(?:at|@|snabel-a|snabela|ät|arroba)\s*[\]\)\}]\s*", re.I), "@"),
+    (re.compile(r"\s*[\[\(\{]\s*(?:dot|punkt|punto|point|prikk|punktum)\s*[\]\)\}]\s*", re.I), "."),
+    (re.compile(r"&#0*64;|&commat;|&#x0*40;", re.I), "@"),
+    (re.compile(r"&#0*46;|&#x0*2e;", re.I), "."),
+]
+
+
+def deobfuscate(text: str) -> str:
+    """name [at] firma [dot] se  ->  name@firma.se (safe, bracketed forms only)."""
+    if not text:
+        return text
+    for rx, rep in _OBFUSCATION:
+        text = rx.sub(rep, text)
+    return text
+
+
+def clean_email(raw) -> str:
+    """THE e-mail check used by every routine (scrape, imports, sync, exports, maintenance).
+
+    Returns a normalised, plausible e-mail address, or "" if it is not a proper address.
+    A contact whose email gives "" must not be created (and is deleted by Update info)."""
+    if not isinstance(raw, str):
+        return ""
+    s = _norm_text(unquote(raw))
+    s = re.sub(r"^mailto:", "", s, flags=re.I)
+    s = re.split(r"[?#]", s, maxsplit=1)[0]
+    toks = [t for t in re.split(r"[\s,;:<>()\[\]\"']+", s) if re.search(r"\w@\w", t)]
+    if len(toks) == 1:                       # "Email adam@x.com." -> the token with the @
+        s = toks[0]
+    s = s.replace(" ", "").strip(_EDGE.replace("_", "").replace("-", "").replace("+", "")
+                                 .replace("=", "").replace("~", "").replace("#", "")
+                                 + "‑")
+    s = s.lower()
+    if s.count("@") != 1:
+        return ""
+    local, domain = s.split("@")
+    m = re.match(r"^(\d{6,})([a-z][a-z0-9._\-]*)$", local)       # phone digits glued on
+    if m:
+        local = m.group(2)
+    domain = domain.strip(".-")
+    if not local or not domain or len(local) > 64 or len(domain) > 253:
+        return ""
+    if local.startswith(".") or local.endswith(".") or ".." in local or ".." in domain:
+        return ""
+    if not _LOCAL_RE.match(local):
+        return ""
+    if not domain.isascii():
+        try:
+            domain = domain.encode("idna").decode("ascii")
+        except UnicodeError:
+            return ""
+    labels = domain.split(".")
+    if any(_ASSET_LABEL_RE.fullmatch(l) for l in labels[:-1]):      # logo@2x.126ba3da.avif
+        return ""
+    if len(labels) < 2 or any(not re.fullmatch(r"[a-z0-9\-]{1,63}", l) or l.startswith("-")
+                               or l.endswith("-") for l in labels):
+        return ""
+    tld = labels[-1]
+    if tld in ASSET_TLDS or tld.isdigit() or not (tld.startswith("xn--") or
+                                                  re.fullmatch(r"[a-z]{2,24}", tld)):
+        return ""
+    if domain in PLACEHOLDER_DOMAINS or any(domain.endswith("." + d) for d in
+                                            ("wixpress.com", "sentry.io")):
+        return ""
+    if local in PLACEHOLDER_LOCALS and domain.split(".")[0] in ("domain", "email", "example",
+                                                                  "yourdomain", "company"):
+        return ""
+    if len(local) >= 16 and re.fullmatch(r"[0-9a-f\-]+", local):
+        return ""
+    if re.search(r"u00[0-9a-f]{2}", local):
+        return ""
+    return f"{local}@{domain}"
+
+
+# ---------------------------------------------------------------------------
+# THE e-mail detector -- the only place in the system that finds addresses in text
+# ---------------------------------------------------------------------------
+
+_FIND_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)+")
+
+
+def find_emails(*texts) -> list:
+    """Every proper e-mail address in the given html / text pieces, normalised, de-duplicated,
+    in order of appearance.  Decodes \\uXXXX escapes and HTML entities, undoes
+    "name [at] firma [dot] se" obfuscation, and drops anything clean_email() rejects
+    (asset names, placeholders, hashes ...).  Scrapers, imports and the reply matcher all use this."""
+    out: list = []
+    seen: set = set()
+    for t in texts:
+        if not isinstance(t, str) or "@" not in t and "at" not in t.lower():
+            continue
+        t = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), t)
+        t = deobfuscate(_html.unescape(t))
+        for m in _FIND_RE.finditer(t):
+            e = clean_email(m.group(0))
+            if e and e not in seen:
+                seen.add(e)
+                out.append(e)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# LinkedIn profiles (team pages: name + title + "Connect on LinkedIn")
+# ---------------------------------------------------------------------------
+
+_LI_ANCHOR = re.compile(r"<a\b[^>]*?href=[\"']([^\"']*linkedin\.com/in/[^\"'?#\s]+)[^\"']*[\"'][^>]*>(.*?)</a>",
+                        re.I | re.S)
+_CONNECT_HINT = re.compile(r"(?:forbind med|connect with|følg|follow|kontakt|connect to|"
+                           r"förbind med|koppla upp med)\s+([^\W\d_][\w'’\-]+)", re.I | re.U)
+
+
+def normalize_linkedin(url: str) -> str:
+    m = re.search(r"linkedin\.com/in/([^/?#\s\"']+)", url or "", re.I)
+    return f"https://www.linkedin.com/in/{m.group(1).strip('/').lower()}" if m else ""
+
+
+def find_linkedin_profiles(html: str) -> list:
+    """[{url, name, title}] for personal LinkedIn links (/in/...) on a page.  The name is the
+    nearest line above the link that looks like a person's name AND fits the profile slug or
+    the "Connect with <first name>" link text; the title is the line right after that name."""
+    if not html or "linkedin.com/in/" not in html.lower():
+        return []
+    groups: dict = {}
+    for m in _LI_ANCHOR.finditer(html):
+        url = normalize_linkedin(m.group(1))
+        if not url:
+            continue
+        g = groups.setdefault(url, {"start": m.start(), "end": m.end(), "text": []})
+        g["end"] = m.end()
+        g["text"].append(re.sub(r"<[^>]+>", " ", m.group(2)))
+    out, last_end = [], 0
+    for url, g in sorted(groups.items(), key=lambda kv: kv[1]["start"]):
+        start, last_end_prev = g["start"], last_end
+        last_end = g["end"]
+        chunk = html[max(last_end_prev, start - 3000):start]
+        chunk = re.sub(r"<(script|style|noscript)[^>]*>[\s\S]*?</\1>", " ", chunk, flags=re.I)
+        chunk = _BLOCK_BREAK.sub("\n", chunk)
+        chunk = re.sub(r"<[^>]+>", " ", chunk)
+        lines = [l for l in (_norm_text(x) for x in chunk.split("\n")) if l]
+        slug = _fold(url.rsplit("/", 1)[-1])
+        toks = [t for t in re.split(r"[^a-z]+", slug) if len(t) >= 3]
+        hint = ""
+        near = _norm_text(" ".join(g["text"]))
+        hm = _CONNECT_HINT.search(near) or _CONNECT_HINT.search(" ".join(lines[-2:]))
+        lines = lines + [near]                     # the link text itself can be the name
+        if hm:
+            hint = _fold(hm.group(1))
+        name = title = ""
+        for i in range(len(lines) - 1, -1, -1):
+            nm = clean_name(lines[i])
+            if not nm or len(nm.split()) < 2 or len(nm.split()) > 4:
+                continue
+            if any(not (w[:1].isupper() or _fold(w) in PARTICLES) for w in nm.split()):
+                continue                            # "Steffen sælger" is a sentence, not a name
+            f = [_fold(w).strip(".'") for w in nm.split()]
+            if any(t in w or w in t for t in toks for w in f if len(w) >= 3) or (hint and f[0] == hint):
+                name = nm
+                if i + 1 < len(lines) - 1 and len(lines[i + 1]) <= 80:
+                    title = lines[i + 1]
+                break
+        out.append({"url": url, "name": name, "title": title})
+    return out

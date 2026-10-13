@@ -28,7 +28,7 @@ functions-crm/
 │   ├── mail_accounts.py  ← mail account settings (CRUD, ping, test-send)
 │   ├── inbound_read.py ← inbound mail read job trigger
 │   ├── gdisk.py          ← Google Drive folder endpoints
-│   ├── filter_facets.py  ← filter facets + facet-to-campaign
+│   ├── filter_facets.py  ← Leads DB filters ("facets") + saved search to campaign
 │   ├── leads.py          ← lead lookup, exclusion, name-enrich
 │   ├── statistics.py     ← statistics collect + get
 │   └── auth.py           ← user doc management
@@ -46,7 +46,7 @@ functions-crm/
     ├── gdisk_interface.py
     ├── mail_sender.py
     ├── name_enrich_lib.py
-    ├── push_and_sync_lib.py
+    ├── push_to_campaign_lib.py
     ├── sheets_config.py
     └── statistics_builder.py
 ```
@@ -156,6 +156,32 @@ POST /api/crm/reply-match
 The `/api/crm/...` compatibility trigger paths require `campaign-user` or `admin`.
 
 Scheduled Smart Mail triggers should use `POST`; do not use `GET` for `outreach-send`.
+
+---
+
+## Outreach Sender — Contact Eligibility Rules
+
+A contact in `campaign_contacts` is only sent a mail if it passes **all** checks
+below, evaluated in this order by `smart_mail/outreach_mail_select.py` (rules 1–8)
+and `smart_mail/outreach_sender.py` (rules 9–10).
+
+1. **`status == "pending"`** — any other status is never re-sent.
+2. **Mode gate** — `intro`: `mail_sent` must be empty. `followup`: must have ≥ 1 entry.
+3. **Site lead status** — if the contact has a `lead_id`, the `campaign_leads/{lead_id}`
+   doc must either not exist, or have `status` of `"pending"` or `"active"`. Any other
+   status (e.g. `excluded`) skips the contact.
+4. **Campaign status** — `intro` requires campaign `"ready"`; `followup` requires `"active"`.
+5. **Campaign has an Intro step** — `mail_sequence` must contain a step whose type/name
+   includes `"intro"`. Campaigns without one are skipped entirely.
+6. **Next step is due** *(followup only)* — `now >= first_sent_at + delay_days`.
+7. **Next step exists** — `mail_sequence[len(mail_sent)]` must be present.
+8. **Sending account is configured** — `outreach_email_account` must resolve to a
+   `settings/mail_accounts/accounts/{email}` doc with valid credentials.
+9. **Send budget available** *(per account)* — checked against `settings/send_limits`
+   (Firestore) with env-var fallback. Budget is reserved atomically in
+   `send_run_reservations` at run start — not recalculated per send.
+10. **Bounce-rate breaker** — if failure rate exceeds `bounce_rate_pause_threshold`
+    after ≥ 8 attempts, the account's remaining batch is stopped immediately.
 
 Or the full deploy (functions + hosting):
 

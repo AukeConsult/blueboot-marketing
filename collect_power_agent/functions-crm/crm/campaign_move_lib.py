@@ -25,6 +25,7 @@ Params (passed via job body):
 """
 from __future__ import annotations
 
+from google.cloud.firestore_v1.base_query import FieldFilter
 from datetime import datetime, timezone
 
 
@@ -37,7 +38,6 @@ def run_campaign_move(
     user: str = "api",
 ) -> dict:
     from google.cloud import firestore as _gfs
-    from google.cloud.firestore_v1.base_query import FieldFilter
 
     now = datetime.now(timezone.utc).isoformat()
 

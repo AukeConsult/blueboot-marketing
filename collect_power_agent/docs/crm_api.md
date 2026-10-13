@@ -74,18 +74,20 @@ GET /api/crm/contact-sync?countries=NO,SE&max=500&min_pages=500
 
 ---
 
-## Filter facets
+## Filter facets (Leads DB)
 
-The selectable-value catalog used by the Filter Facets page. See also
+> **Naming:** "facets" is the technical name for the **Leads DB** search (UI: *Campaigns → Leads DB*). A *facet* = a selectable filter value; a saved selection = a *saved search*. Collection `filter_facets`, API `/api/crm/filter-facets`, page `filter-facets.html` and the scripts keep the old name. Details: `public/doc/system-architecture.md` §8.
+
+The selectable-value catalog used by the Leads DB page. See also
 [`docs/gdisk_interface.md`](gdisk_interface.md) and the facet builder
 `app/build_filter_facets.py`.
 
 | Method | Path | Body | Description |
 |---|---|---|---|
-| GET | `/api/crm/filter-facets` | — | List facet docs (catalog + saved presets). |
+| GET | `/api/crm/filter-facets` | — | List docs (filter-value catalogs + saved searches). |
 | GET | `/api/crm/filter-facets/<name>` | — | Get one facet doc (e.g. `site_leads`). |
-| POST·PATCH | `/api/crm/filter-facets/<name>` | full facets object (must contain `filters`) | Save a preset; also **enqueues a `filter-count` job** that refreshes keywords, counts matching sites/contacts and stores `counts` (including `selected_count` per value) back. Returns `{job_id, poll}`. |
-| POST | `/api/crm/filter-facets/<name>/create-campaign` | `{campaign_id, dry_run?}` | Create (or refresh) a campaign from a saved facet preset. Streams `email_contacts`, applies the saved filter selections, deduplicates against existing campaign contacts, and writes matching contacts to `campaigns/<campaign_id>/campaign_contacts`. Stores `source_facet_path`, `source_facet_filters` (selection snapshot), and `source_facet_built_at` on the campaign doc. Enqueues a `facet-campaign` job; returns `{job_id, poll}`. Button is only enabled on the UI when `contacts_in_email_contacts > 0`. |
+| POST·PATCH | `/api/crm/filter-facets/<name>` | full facets object (must contain `filters`) | Save a search; also **enqueues a `filter-count` job** that refreshes keywords, counts matching sites/contacts and stores `counts` (including `selected_count` per value) back. Returns `{job_id, poll}`. |
+| POST | `/api/crm/filter-facets/<name>/create-campaign` | `{campaign_id, dry_run?}` | Create (or refresh) a campaign from a saved search. Streams `email_contacts`, applies the saved filter selections, deduplicates against existing campaign contacts, and writes matching contacts to `campaigns/<campaign_id>/campaign_contacts`. Stores `source_facet_path`, `source_facet_filters` (selection snapshot), and `source_facet_built_at` on the campaign doc. Enqueues a `facet-campaign` job; returns `{job_id, poll}`. Button is only enabled on the UI when `contacts_in_email_contacts > 0`. |
 
 ---
 

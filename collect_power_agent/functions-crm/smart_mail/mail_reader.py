@@ -14,6 +14,7 @@ from email.header import decode_header
 from datetime import datetime, timezone
 
 from .firestore_client import get_firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 
 def decode_mime(value):
@@ -111,7 +112,7 @@ def read_unread_emails(account: str | None = None):
 
             existing = (
                 db.collection("inbox_messages")
-                .where("message_id", "==", message_id)
+                .where(filter=FieldFilter("message_id", "==", message_id))
                 .limit(1)
                 .stream()
             )

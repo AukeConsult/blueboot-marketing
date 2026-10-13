@@ -3,7 +3,7 @@
 # No local Docker required — image is built and pushed entirely on GCP.
 set -euo pipefail
 
-PROJECT="${GCP_PROJECT:-blueboot-market}"
+PROJECT="${GCP_PROJECT:-$(sed -n 's/^GCP_PROJECT=\([^ #]*\).*/\1/p' "$(dirname "$0")/../../.env" 2>/dev/null | head -1)}"
 LOCATION="${GCP_LOCATION:-us-central1}"
 REPO="batch-runner"
 IMAGE="${LOCATION}-docker.pkg.dev/${PROJECT}/${REPO}/batch-runner"

@@ -362,9 +362,11 @@ python crm\contact_sync.py --countries NO --max 5 --min-pages 500 --max-pages 50
 
 ---
 
-## Facet-to-campaign (filter-based campaign builder)
+## Facet-to-campaign (Leads DB saved search to campaign)
 
-Create or refresh a campaign directly from a saved filter-facets preset. Filters `email_contacts`, deduplicates against all other existing campaigns, and writes matching contacts to `campaigns/<id>/campaign_contacts`.
+> **Naming:** "facets" is the technical name for the **Leads DB** search (UI: *Campaigns → Leads DB*). A *facet* = a selectable filter value; a saved selection = a *saved search*. Collection `filter_facets`, API `/api/crm/filter-facets`, page `filter-facets.html` and the scripts keep the old name. Details: `public/doc/system-architecture.md` §8.
+
+Create or refresh a campaign directly from a saved Leads DB search (stored as a filter-facets preset). Filters `email_contacts`, deduplicates against all other existing campaigns, and writes matching contacts to `campaigns/<id>/campaign_contacts`.
 
 ```bash
 python app\facet_campaign.py --facet leif_test_b2b_personal --campaign NO_b2b_jul01

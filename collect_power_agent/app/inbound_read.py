@@ -1,12 +1,15 @@
 ﻿# app/inbound_read.py
-"""Command-line runner for inbound mail read.
+"""Command-line runner for the mailbox sync.
 
-Fetches inbox + sent messages for each outreach mail account, matches them
-against campaign_contacts by email address, and appends EMAIL_IN / EMAIL_OUT
-entries to each matching contact's comment_history in Firestore.
+Runs BOTH single-purpose readers, the same as the CRM "Sync emails" job:
+  • reply_matcher.match_new_replies — the ONLY reader of replies (INBOX):
+    classifies reply / bounce / DMARC, matches by sender, writes EMAIL_IN with
+    body, updates follow-up status, deletes bounces.
+  • inbound_read_lib.run_sent_sync  — the ONLY reader of sent mail (SENT folder):
+    writes EMAIL_OUT with body for mails sent outside the CRM.
 
-The operation is idempotent: each entry carries a unique email_id so running
-the sync multiple times against the same mailbox never creates duplicates.
+Both are idempotent: replies dedupe by message_id, sent mail by email_id, so
+running the sync repeatedly never creates duplicates.
 
 Usage examples
 --------------
@@ -32,7 +35,8 @@ import re
 
 import _pathsetup  # noqa: F401 — sets up Windows event loop policy + path
 
-from smart_mail.inbound_read_lib import run_inbound_read
+from smart_mail.inbound_read_lib import run_sent_sync
+from smart_mail.reply_matcher import match_new_replies
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -136,16 +140,19 @@ def main(argv=None) -> None:
     print()
 
     if args.dry_run:
-        # Dry run: run the lib with a fake db that intercepts ArrayUnion writes
+        # Reply preview (reply_matcher prints intended changes, writes nothing)
+        match_new_replies(campaigns=campaign_ids or None, days=args.days, dry_run=True)
+        # Sent preview (no writes)
         _run_dry(db, args)
     else:
-        result = run_inbound_read(
+        reply_res = match_new_replies(campaigns=campaign_ids or None, days=args.days)
+        sent_res = run_sent_sync(
             db             = db,
             campaign_ids   = campaign_ids,
             contact_doc_id = args.contact  or None,
             days           = args.days,
         )
-        _print_result(result)
+        _print_result(reply_res, sent_res)
 
 
 def _run_dry(db, args):
@@ -221,7 +228,7 @@ def _run_dry(db, args):
 
         try:
             sent_folder  = _find_sent_folder(conn)
-            folders_dirs = [("INBOX", False)] + ([(sent_folder, True)] if sent_folder else [])
+            folders_dirs = [(sent_folder, True)] if sent_folder else []   # SENT only
             for folder, is_sent in folders_dirs:
                 for msg in _fetch_headers(conn, folder, cutoff, 500):
                     from_addr = _extract_email(msg["from"])
@@ -257,16 +264,21 @@ def _run_dry(db, args):
     print()
 
 
-def _print_result(result: dict) -> None:
+def _print_result(reply_res: dict, sent_res: dict) -> None:
     print()
     print("=" * 60)
     print("  SYNC COMPLETE")
     print("=" * 60)
-    print(f"  New entries    : {result.get('synced_entries', 0)}")
-    print(f"  Contacts hit   : {result.get('synced_contacts', 0)}")
-    print(f"  Contacts updated: {result.get('updated_contacts', result.get('synced_contacts', 0))}")
-    print(f"  Window         : {result.get('days', '?')} days")
-    errors = result.get("errors") or []
+    print("  Replies (reply_matcher, INBOX):")
+    print(f"    Replies matched : {reply_res.get('matched', 0)}")
+    print(f"    Bounces matched : {reply_res.get('bounced', 0)}")
+    print(f"    Unmatched       : {reply_res.get('unmatched', 0)}")
+    print(f"    Skipped         : {reply_res.get('skipped', 0)}")
+    print("  Sent (run_sent_sync, SENT folder):")
+    print(f"    New entries     : {sent_res.get('synced_entries', 0)}")
+    print(f"    Contacts updated: {sent_res.get('updated_contacts', sent_res.get('synced_contacts', 0))}")
+    errors = (reply_res.get("errors") if isinstance(reply_res.get("errors"), list) else []) \
+        + (sent_res.get("errors") or [])
     if errors:
         print(f"  Errors ({len(errors)}):")
         for e in errors:

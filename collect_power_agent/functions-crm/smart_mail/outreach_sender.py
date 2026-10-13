@@ -16,10 +16,14 @@ from __future__ import annotations
 import os
 import re
 import time
+import uuid
 from datetime import datetime, timedelta, timezone
 
+from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 from .firestore_client import get_firestore
 from .outreach_stats import refresh_campaign_stats
+from .outreach_status_lib import outstanding
 from .config import (
     CAMPAIGN_SEND_DELAY_SECONDS as _CFG_SEND_DELAY,
     MAX_SENDS_PER_HOUR,
@@ -43,8 +47,8 @@ def _sent_count_since(db, sender_account: str, since_iso: str) -> int:
     try:
         docs = (
             db.collection("outreach_sent")
-            .where("sender_account", "==", sender_account)
-            .where("sent_at", ">=", since_iso)
+            .where(filter=FieldFilter("sender_account", "==", sender_account))
+            .where(filter=FieldFilter("sent_at", ">=", since_iso))
             .stream()
         )
         return sum(1 for _ in docs)
@@ -53,33 +57,155 @@ def _sent_count_since(db, sender_account: str, since_iso: str) -> int:
         return 10**9
 
 
-def compute_send_budget(db, sender_account: str) -> int:
-    """How many more emails this account may send right now."""
+def _load_send_limits(db) -> tuple[int, int, float, str]:
+    """Read send limits from Firestore settings/send_limits.
+
+    Falls back to env-var/config constants if the doc is missing or unreadable.
+    Returns (max_per_hour, max_per_day, bounce_threshold, source)
+    where source is 'Firestore(settings/send_limits)' or 'defaults(env/config)'.
+    """
+    try:
+        doc = db.collection("settings").document("send_limits").get()
+        if doc.exists:
+            d = doc.to_dict() or {}
+            return (
+                int(d.get("max_sends_per_hour",            MAX_SENDS_PER_HOUR)),
+                int(d.get("max_sends_per_day",             MAX_SENDS_PER_DAY)),
+                float(d.get("bounce_rate_pause_threshold", BOUNCE_RATE_PAUSE_THRESHOLD)),
+                "Firestore(settings/send_limits)",
+            )
+    except Exception as ex:
+        print(f"[throttle] could not load send limits from Firestore ({ex}); using defaults")
+    return MAX_SENDS_PER_HOUR, MAX_SENDS_PER_DAY, BOUNCE_RATE_PAUSE_THRESHOLD, "defaults(env/config)"
+
+
+_RUN_RESERVATION_TTL_SECONDS = 1200  # stale active reservations older than this are ignored (worker is killed after 15 min)
+# Stop starting new mails after this many seconds so the run ends cleanly and reports its counts
+# before the worker (900 s) is killed. Whatever is left goes out on the next run.
+MAX_RUN_SECONDS = int(os.getenv("OUTREACH_MAX_RUN_SECONDS", "780"))
+
+
+def _claim_send_budget(db, sender_account: str) -> tuple[int, str, float]:
+    """Reserve a send budget for this run.
+
+    Reads past confirmed sends from ``outreach_sent`` and any budget already
+    claimed by other active runs from ``send_run_reservations``, then writes a
+    new reservation doc and returns ``(budget, run_id, bounce_threshold)``.
+    Call ``_release_send_run()`` when the run finishes to mark it done.
+    """
+    max_per_hour, max_per_day, threshold, source = _load_send_limits(db)
+    run_id   = str(uuid.uuid4())
     now      = datetime.now(timezone.utc)
     hour_ago = (now - timedelta(hours=1)).isoformat()
     day_ago  = (now - timedelta(days=1)).isoformat()
+    stale_cutoff = (now - timedelta(seconds=_RUN_RESERVATION_TTL_SECONDS)).isoformat()
 
     sent_last_hour = _sent_count_since(db, sender_account, hour_ago)
     sent_last_day  = _sent_count_since(db, sender_account, day_ago)
 
-    remaining_hour = max(0, MAX_SENDS_PER_HOUR - sent_last_hour)
-    remaining_day  = max(0, MAX_SENDS_PER_DAY  - sent_last_day)
+    try:
+        # Delete done reservations older than 24 h — they serve no guard purpose.
+        done_cutoff = (now - timedelta(hours=24)).isoformat()
+        done_old = (
+            db.collection("send_run_reservations")
+            .where(filter=FieldFilter("account",    "==", sender_account))
+            .where(filter=FieldFilter("status",     "==", "done"))
+            .where(filter=FieldFilter("started_at", "<",  done_cutoff))
+            .stream()
+        )
+        for done_doc in done_old:
+            try:
+                done_doc.reference.delete()
+                print(f"[budget] deleted done reservation {done_doc.id}")
+            except Exception as del_ex:
+                print(f"[budget] could not delete done reservation {done_doc.id}: {del_ex}")
 
+        # Delete stale active reservations (older than TTL) before counting.
+        stale = (
+            db.collection("send_run_reservations")
+            .where(filter=FieldFilter("account",    "==", sender_account))
+            .where(filter=FieldFilter("status",     "==", "active"))
+            .where(filter=FieldFilter("started_at", "<",  stale_cutoff))
+            .stream()
+        )
+        for stale_doc in stale:
+            try:
+                stale_doc.reference.delete()
+                print(f"[budget] deleted stale reservation {stale_doc.id}")
+            except Exception as del_ex:
+                print(f"[budget] could not delete stale reservation {stale_doc.id}: {del_ex}")
+
+        active = (
+            db.collection("send_run_reservations")
+            .where(filter=FieldFilter("account",    "==", sender_account))
+            .where(filter=FieldFilter("status",     "==", "active"))
+            .where(filter=FieldFilter("started_at", ">=", stale_cutoff))
+            .stream()
+        )
+        already_reserved = sum(outstanding(d.to_dict() or {}) for d in active)
+    except Exception as ex:
+        print(f"[budget] could not read active reservations ({ex}); assuming 0 reserved")
+        already_reserved = 0
+
+    remaining_hour = max(0, max_per_hour - sent_last_hour - already_reserved)
+    remaining_day  = max(0, max_per_day  - sent_last_day  - already_reserved)
     budget = min(remaining_hour, remaining_day)
-    print(
-        f"[throttle] {sender_account}: "
-        f"sent_last_hour={sent_last_hour}/{MAX_SENDS_PER_HOUR}  "
-        f"sent_last_day={sent_last_day}/{MAX_SENDS_PER_DAY}  "
-        f"budget_this_run={budget}"
-    )
-    return budget
+
+    sep = "=" * 60
+    print(f"\n{sep}")
+    print(f"[budget] account        : {sender_account}")
+    print(f"[budget] run_id         : {run_id}")
+    print(f"[budget] limits source  : {source}")
+    print(f"[budget] max_per_hour   : {max_per_hour}  max_per_day={max_per_day}  bounce_threshold={threshold:.0%}")
+    print(f"[budget] sent_last_hour : {sent_last_hour}/{max_per_hour}  sent_last_day={sent_last_day}/{max_per_day}")
+    print(f"[budget] reserved_others: {already_reserved}")
+    print(f"[budget] budget_this_run: {budget}")
+    print(sep)
+
+    if budget > 0:
+        try:
+            db.collection("send_run_reservations").document(run_id).set({
+                "account":        sender_account,
+                "started_at":     now.isoformat(),
+                "budget_claimed": budget,
+                "status":         "active",
+            })
+        except Exception as ex:
+            print(f"[budget] could not write reservation ({ex}); proceeding without one")
+
+    return budget, run_id, threshold
 
 
-def bounce_rate_tripped(sent_count: int, failed_count: int) -> bool:
+def _release_send_run(
+    db, run_id: str, budget: int, sent_actual: int, failed: int
+) -> None:
+    """Mark a run reservation as done, record actuals, and print a summary banner."""
+    finished_at = datetime.now(timezone.utc).isoformat()
+    unused = max(0, budget - sent_actual - failed)
+    sep = "=" * 60
+    print(f"\n{sep}")
+    print(f"[budget] run DONE       : {run_id}")
+    print(f"[budget] budget_claimed : {budget}  sent={sent_actual}  failed={failed}  unused={unused}")
+    print(f"[budget] finished_at    : {finished_at}")
+    print(sep)
+    try:
+        db.collection("send_run_reservations").document(run_id).update({
+            "status":      "done",
+            "sent_actual": sent_actual,
+            "failed":      failed,
+            "unused":      unused,
+            "finished_at": finished_at,
+        })
+    except Exception as ex:
+        print(f"[budget] could not release run {run_id}: {ex}")
+
+
+def bounce_rate_tripped(threshold: float, sent_count: int, failed_count: int) -> bool:
+    """Return True if failure rate exceeds threshold (after min attempts)."""
     attempts = sent_count + failed_count
     if attempts < _MIN_ATTEMPTS_BEFORE_BREAKER:
         return False
-    return (failed_count / attempts) > BOUNCE_RATE_PAUSE_THRESHOLD
+    return (failed_count / attempts) > threshold
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +301,8 @@ def send_outreach(
     campaign_ids: list[str] | None = None,
     dry_run: bool = False,
     preview: bool = False,
+    progress=None,
+    deadline: float | None = None,
 ) -> dict:
     """One-pass send loop for intro or followup outreach.
 
@@ -188,20 +316,24 @@ def send_outreach(
     mode "intro"    -- pending contacts with no sent mail; uses Intro step.
     mode "followup" -- pending contacts with sent mail; uses next due sequence step.
 
+    progress(summary) is called after every mail so the caller can store live counts.
+    deadline (time.monotonic() value) stops the run cleanly; default is MAX_RUN_SECONDS from now.
+
     Returns a summary dict.
     """
+    deadline = deadline if deadline is not None else time.monotonic() + MAX_RUN_SECONDS
     # Lazy imports keep dry-run cheap and avoid import-time Firestore work.
     if not dry_run:
         from smart_mail.mail_sender import MailSender              # noqa: PLC0415
     else:
         MailSender = None
-    from smart_mail.outreach_mail_select import read_outreach, confirm_sent, prepare_mail_sequences  # noqa: PLC0415
+    from smart_mail.outreach_mail_select import read_outreach, confirm_sent  # noqa: PLC0415
     from smart_mail.outreach_render_mail import render_mail, MailStep  # noqa: PLC0415
+    from smart_mail.mail_trailer import load_trailer                   # noqa: PLC0415
 
     db = get_firestore()
+    trailer = load_trailer(db)      # one default trailer for all mails, read once per run
 
-    # Prepare current campaigns that have mail_schedule but no mail_sequence.
-    prepare_mail_sequences(db)
 
     summary: dict = {
         "mode": mode,
@@ -210,12 +342,14 @@ def send_outreach(
         "failed": 0,
         "skipped": 0,
         "would_send": 0,
+        "notes": [],          # human-readable reasons shown on the Outreach Status page
     }
     campaign_filter = _coerce_id_set(campaign_ids)
 
     batches = read_outreach(mode=mode, limit=limit, campaign_ids=sorted(campaign_filter))
     if not batches:
         print(f"[sender] no outreach candidates for mode={mode!r}")
+        summary["notes"].append(f"{mode}: nothing waiting to send")
         return summary
 
     for batch in batches:
@@ -232,13 +366,15 @@ def send_outreach(
             skipped = sum(len(cwc.contacts) for cwc in campaigns)
             summary["skipped"] += skipped
             print(f"[sender] {reason} for {account.email} -- skipping {skipped} contact(s)")
+            summary["notes"].append(f"{account.email}: {reason} ({skipped} skipped)")
             continue
 
-        budget = compute_send_budget(db, account.email)
+        budget, run_id, threshold = _claim_send_budget(db, account.email)
         if budget <= 0:
             skipped = sum(len(cwc.contacts) for cwc in campaigns)
             summary["skipped"] += skipped
             print(f"[sender] {account.email} budget exhausted -- skipping {skipped} contact(s)")
+            summary["notes"].append(f"{account.email}: send budget reached ({skipped} left for later)")
             continue
 
         sender = None
@@ -252,10 +388,14 @@ def send_outreach(
                     f"[sender] cannot open sender for {account.email}: "
                     f"{open_result.get('message', 'unknown error')} -- skipping {skipped} contact(s)"
                 )
+                summary["notes"].append(
+                    f"{account.email}: cannot open mail connection: {open_result.get('message', 'unknown error')}")
+                _release_send_run(db, run_id, budget, 0, 0)
                 continue
 
         print(
-            "\nAccount : %s  (%s)  host=%s:%d  %s  budget=%d  campaigns=%d  contacts=%d%s"
+            "\n[sender] account=%s  from=%r  host=%s:%d  %s"
+            "  budget=%d  campaigns=%d  contacts=%d  run_id=%s%s"
             % (
                 account.email,
                 account.from_name,
@@ -265,6 +405,7 @@ def send_outreach(
                 budget,
                 len(campaigns),
                 sum(len(cwc.contacts) for cwc in campaigns),
+                run_id,
                 "  [dry-run]" if dry_run else "",
             )
         )
@@ -272,6 +413,7 @@ def send_outreach(
         sent_batch   = 0
         failed_batch = 0
         tried_batch  = 0
+        timed_out    = False
 
         try:
             for cwc in campaigns:
@@ -290,6 +432,13 @@ def send_outreach(
                         )
                         continue
 
+                    if not dry_run and time.monotonic() >= deadline:
+                        summary["notes"].append(
+                            f"{account.email}: stopped at the time limit of one run after {sent_batch} sent; "
+                            "the rest goes out on the next run")
+                        timed_out = True
+                        break
+
                     # Stop if budget used up for this account
                     if tried_batch >= budget:
                         print(f"[sender] budget reached for {account.email}")
@@ -304,10 +453,12 @@ def send_outreach(
                         body_text = step_dict.get("body_text", ""),
                     )
 
-                    rendered = render_mail(step, contact)
+                    rendered = render_mail(step, contact, trailer)
 
                     try:
+                        seq = f"[{tried_batch + 1}/{budget}]"
                         if dry_run:
+                            print(f"  {seq}", end="  ")
                             _print_preview(contact, step, rendered, preview)
                             sent_batch += 1
                             tried_batch += 1
@@ -341,25 +492,38 @@ def send_outreach(
                             subject        = rendered.subject,
                             mode           = mode,
                             sender_account = account.email,
+                            body_text      = rendered.text_body or "",
+                            body_html      = rendered.html_body or "",
                         )
 
                         sent_batch      += 1
                         tried_batch     += 1
                         summary["sent"] += 1
-                        print(f"[sender] sent {contact.email}")
+                        print(f"[sender] {seq} sent {contact.email}")
+                        try:    # keeps the reservation honest: only the unsent part of the claim stays reserved
+                            db.collection("send_run_reservations").document(run_id).update(
+                                {"sent_so_far": firestore.Increment(1)})
+                        except Exception as rex:
+                            print(f"[budget] could not update reservation: {rex}")
 
                     except Exception as ex:
                         failed_batch       += 1
                         tried_batch        += 1
                         summary["failed"]  += 1
-                        print(f"[sender] FAILED {contact.email}: {ex}")
+                        print(f"[sender] {seq} FAILED {contact.email}: {ex}")
 
-                    if not dry_run and bounce_rate_tripped(sent_batch, failed_batch):
+                    if progress:
+                        try: progress(summary)
+                        except Exception: pass
+
+                    if not dry_run and bounce_rate_tripped(threshold, sent_batch, failed_batch):
                         print(
                             f"[breaker] {account.email}: failure rate "
                             f"{failed_batch}/{sent_batch + failed_batch} exceeded "
-                            f"{BOUNCE_RATE_PAUSE_THRESHOLD:.0%} -- stopping batch"
+                            f"{threshold:.0%} -- stopping batch"
                         )
+                        summary["notes"].append(
+                            f"{account.email}: stopped by bounce guard ({failed_batch} failed of {sent_batch + failed_batch})")
                         break
 
                     if not dry_run:
@@ -371,13 +535,29 @@ def send_outreach(
                         refresh_campaign_stats(campaign.campaign_id)
                     except Exception as ex:
                         print(f"[sender] stats refresh failed for {campaign.campaign_id}: {ex}")
+                if timed_out:
+                    break
         finally:
             if sender is not None:
                 sender.close()
+            _release_send_run(db, run_id, budget, sent_batch, failed_batch)
 
+    sep = "=" * 60
+    print(f"\n{sep}")
     print(
         f"[sender] done  mode={mode!r}  dry_run={dry_run}  "
         f"sent={summary['sent']}  failed={summary['failed']}  "
         f"skipped={summary['skipped']}  would_send={summary['would_send']}"
     )
+    if dry_run and summary["would_send"] > 0:
+        print()
+        print("  *** DRY RUN — NO MAIL WAS SENT ***")
+        print(f"  {summary['would_send']} contact(s) are ready to receive mail.")
+        print("  To send for real, run:")
+        print("    python app/outreach_send.py --send --mode intro")
+        print("  or with a specific campaign:")
+        print("    python app/outreach_send.py --send --campaigns <campaign_id>")
+    elif dry_run:
+        print("  *** DRY RUN — no eligible contacts found ***")
+    print(sep)
     return summary

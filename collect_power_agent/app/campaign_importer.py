@@ -1,249 +1,103 @@
-# app/campaign_importer.py
+"""campaign_importer.py -- Import leads + contacts from Excel into a campaign.
 
+Reads the standard export format (Leads+Contacts tab) and writes to:
+  campaigns/{id}/campaign_leads/{lead_id}
+  campaigns/{id}/campaign_contacts/{doc_id}
+
+ID derivation
+-------------
+  lead_id  : from 'Lead ID' column, or derived from 'Website' via lead_id_from_url()
+  doc_id   : always from email -- e.g. adrian@blisynlig.no -> adrian_blisynlig_no
+
+Usage:
+    python app/campaign_importer.py NO_tech_jul01 output/NO_tech_jul01/campaign.xlsx
+    python app/campaign_importer.py NO_tech_jul01 campaign.xlsx --dry-run
+"""
 from __future__ import annotations
+
+import argparse
+import json
+import sys
 from pathlib import Path
-from openpyxl import load_workbook
 
-from app.firestore_client import get_firestore
+import _pathsetup  # noqa: F401
+
+_CRM_DIR = str(Path(__file__).resolve().parent.parent / "functions-crm")
+if _CRM_DIR not in sys.path:
+    sys.path.insert(0, _CRM_DIR)
+
+
+def _get_db():
+    try:
+        from app.firestore_client import get_firestore
+    except ImportError:
+        from firestore_client import get_firestore
+    return get_firestore()
+
+
+def main(argv=None) -> None:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
+    p = argparse.ArgumentParser(
+        description="Import leads + contacts from Excel into a campaign")
+    p.add_argument("campaign_id", metavar="CAMPAIGN_ID",
+                   help="Campaign ID (e.g. NO_tech_jul01). Created if missing.")
+    p.add_argument("file", metavar="FILE",
+                   help="Path to .xlsx file with a 'Leads+Contacts' tab")
+    p.add_argument("--dry-run", action="store_true",
+                   help="Preview counts without writing to Firestore")
+    args = p.parse_args(argv)
+
+    xlsx_path = Path(args.file)
+    if not xlsx_path.exists():
+        print(f"[campaign-import] ERROR: file not found: {xlsx_path}", file=sys.stderr)
+        sys.exit(1)
+    if xlsx_path.suffix.lower() != ".xlsx":
+        print("[campaign-import] ERROR: file must be .xlsx", file=sys.stderr)
+        sys.exit(1)
+
+    from crm.campaign_import_lib import parse_sheet, run_campaign_import
+
+    file_bytes = xlsx_path.read_bytes()
+
+    print(f"[campaign-import] parsing {xlsx_path.name} …", flush=True)
+    try:
+        rows, warnings = parse_sheet(file_bytes)
+    except Exception as exc:
+        print(f"[campaign-import] ERROR parsing file: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"[campaign-import] {len(rows)} rows parsed", flush=True)
+    for w in warnings:
+        print(f"[campaign-import]   WARN {w}", flush=True)
+
+    db = _get_db()
+    try:
+        result = run_campaign_import(
+            db, args.campaign_id, rows, dry_run=args.dry_run)
+    except Exception as exc:
+        print(f"[campaign-import] ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    print()
+    print(json.dumps(result, indent=2))
+    print()
+    if args.dry_run:
+        print(f"  DRY RUN — {result['leads_new']} leads new, "
+              f"{result['leads_updated']} leads update, "
+              f"{result['contacts_new']} contacts new, "
+              f"{result['contacts_updated']} contacts update, "
+              f"{result['skipped']} skipped.")
+        print("  Re-run without --dry-run to write.")
+    else:
+        total = (result['leads_new'] + result['leads_updated'] +
+                 result['contacts_new'] + result['contacts_updated'])
+        print(f"  Done — {total} records written to campaign '{args.campaign_id}'.")
 
-
-LEAD_UPDATABLE_FIELDS = {
-    "company",
-    "priority",
-    "status",
-    "notes",
-    "suggested_angle",
-}
-
-CONTACT_UPDATABLE_FIELDS = {
-    "name",
-    "title",
-    "phone",
-    "linkedin",
-}
-
-
-LEAD_HEADER_MAP = {
-    "Company": "company",
-    "Priority": "priority",
-    "Status": "status",
-    "Notes": "notes",
-    "Suggested Angle": "suggested_angle",
-}
-
-CONTACT_HEADER_MAP = {
-    "Name": "name",
-    "Title": "title",
-    "Phone": "phone",
-    "LinkedIn": "linkedin",
-}
-
-
-def _normalize(value):
-    if value is None:
-        return ""
-
-    return str(value).strip()
-
-
-def _load_workbook(excel_file):
-    return load_workbook(
-        excel_file,
-        data_only=True,
-    )
-
-
-def _validate_campaign(wb, campaign_id):
-    ws = wb["Campaign"]
-
-    headers = [c.value for c in ws[1]]
-    values = [c.value for c in ws[2]]
-    row = dict(zip(headers, values))
-
-    workbook_campaign_id = _normalize(row.get("Extract ID"))
-
-    if workbook_campaign_id != campaign_id:
-        raise ValueError(
-            f"Campaign mismatch. "
-            f"Workbook={workbook_campaign_id} "
-            f"Argument={campaign_id}"
-        )
-
-
-def _import_leads(wb, campaign_ref, dry_run):
-    ws = wb["Leads"]
-
-    headers = [c.value for c in ws[1]]
-
-    lead_updates = 0
-    lead_skipped = 0
-
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        data = dict(zip(headers, row))
-        lead_id = _normalize(data.get("Lead ID"))
-
-        if not lead_id:
-            continue
-
-        lead_ref = (campaign_ref.collection("leads_extracted").document(lead_id))
-        snap = lead_ref.get()
-
-        if not snap.exists:
-            lead_skipped += 1
-            continue
-
-        firestore_data = (snap.to_dict() or {})
-        updates = {}
-
-        for excel_col, field in (LEAD_HEADER_MAP.items()):
-            if field not in LEAD_UPDATABLE_FIELDS:
-                continue
-
-            excel_value = _normalize(data.get(excel_col))
-
-            firestore_value = _normalize(firestore_data.get(field))
-
-            if excel_value != firestore_value:
-                updates[field] = excel_value
-
-        if updates:
-            print(f"Lead update: {lead_id} -> {list(updates.keys())}")
-            if not dry_run:
-                lead_ref.update(updates)
-
-            lead_updates += 1
-
-    return (
-        lead_updates,
-        lead_skipped,
-    )
-
-
-def _import_contacts(wb, campaign_ref, dry_run):
-    ws = wb["Contacts"]
-
-    headers = [c.value for c in ws[1]]
-    contact_updates = 0
-    contact_skipped = 0
-
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        data = dict(zip(headers, row))
-
-        lead_id = _normalize(data.get("Lead ID"))
-
-        contact_id = _normalize(data.get("Contact ID"))
-
-        if not lead_id:
-            continue
-
-        if not contact_id:
-            continue
-
-        contact_ref = (
-            campaign_ref
-            .collection("leads_extracted")
-            .document(lead_id)
-            .collection(
-                "contacts_extracted"
-            )
-            .document(contact_id)
-        )
-
-        snap = contact_ref.get()
-
-        if not snap.exists:
-            contact_skipped += 1
-            continue
-
-        firestore_data = (snap.to_dict() or {})
-
-        updates = {}
-
-        for excel_col, field in (CONTACT_HEADER_MAP.items()):
-            if (
-                field
-                not in
-                CONTACT_UPDATABLE_FIELDS
-            ):
-                continue
-
-            excel_value = _normalize(data.get(excel_col))
-
-            firestore_value = _normalize(firestore_data.get(field))
-
-            if excel_value != firestore_value:
-                updates[field] = excel_value
-
-        if updates:
-            print(f"Contact update: {contact_id} -> {list(updates.keys())}")
-            if not dry_run:
-                contact_ref.update(updates)
-
-            contact_updates += 1
-
-    return (
-        contact_updates,
-        contact_skipped,
-    )
-
-
-def import_campaign(campaign_id: str, excel_file: str, dry_run: bool = False):
-    excel_file = Path(excel_file)
-    print(f"Import file: {excel_file.resolve()}")
-
-    if not excel_file.exists():
-        raise FileNotFoundError(excel_file)
-
-    wb = _load_workbook(excel_file)
-
-    _validate_campaign(wb, campaign_id)
-
-    db = get_firestore()
-
-    campaign_ref = (db.collection("leads_extract").document(campaign_id))
-
-    campaign_snap = (campaign_ref.get())
-
-    if not campaign_snap.exists:
-        raise ValueError(
-            f"Campaign not found: "
-            f"{campaign_id}"
-        )
-
-    (
-        lead_updates,
-        lead_skipped,
-    ) = _import_leads(
-        wb,
-        campaign_ref,
-        dry_run,
-    )
-
-    (
-        contact_updates,
-        contact_skipped,
-    ) = _import_contacts(
-        wb,
-        campaign_ref,
-        dry_run,
-    )
-
-    result = {
-        "campaign_id": campaign_id,
-        "lead_updates": lead_updates,
-        "contact_updates": contact_updates,
-        "lead_skipped": lead_skipped,
-        "contact_skipped": contact_skipped,
-        "dry_run": dry_run,
-    }
-
-    print(result)
-
-    return result
 
 if __name__ == "__main__":
-    import_campaign(
-        campaign_id="NO_high_score_may26",
-        excel_file="output/NO_high_score_may26/campaign.xlsx",
-        dry_run=True,
-    )
+    main()

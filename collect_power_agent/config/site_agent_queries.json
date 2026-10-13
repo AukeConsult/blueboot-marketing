@@ -1312,6 +1312,36 @@
         "UK health spa retreat wellness services",
         "UK exhibition organiser trade shows congress",
         "UK ferry company routes passengers freight"
+      ],
+      "ecommerce_uk": [
+        "online shop uk fashion clothing buy",
+        "uk online electronics store delivery",
+        "uk online home garden furniture shop",
+        "uk online grocery delivery shop",
+        "uk online pharmacy health shop",
+        "uk online bookshop books music",
+        "uk online diy tools builders merchant",
+        "uk online sports outdoor equipment shop"
+      ],
+      "company_cities": [
+        "london company services b2b website",
+        "manchester company services website",
+        "birmingham company services website",
+        "leeds company services b2b website",
+        "edinburgh company services website",
+        "glasgow company services website",
+        "bristol company services website",
+        "cardiff belfast company services website"
+      ],
+      "saas_tech_uk": [
+        "uk saas software company b2b",
+        "uk cloud solution provider business",
+        "uk startup tech website",
+        "uk fintech company website",
+        "uk healthtech company website",
+        "uk edtech company website",
+        "uk b2b marketplace platform website",
+        "uk mobile app company business"
       ]
     }
   },

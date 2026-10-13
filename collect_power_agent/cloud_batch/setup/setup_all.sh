@@ -5,7 +5,7 @@ set -euo pipefail
 
 SETUP_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-export GCP_PROJECT="${GCP_PROJECT:-blueboot-market}"
+export GCP_PROJECT="${GCP_PROJECT:-$(sed -n 's/^GCP_PROJECT=\([^ #]*\).*/\1/p' "$(dirname "$0")/../../.env" 2>/dev/null | head -1)}"
 export GCP_LOCATION="${GCP_LOCATION:-us-central1}"
 
 echo "========================================"

@@ -82,7 +82,7 @@ python app/site_email_check.py --countries UK --batch-size 50 --concurrent 4
 
 ### `site_smart_export.py` — Tiered export to Excel / email_contacts
 
-Scores and tiers site_leads (Enterprise / Hot / Good / Warm / Cold) based on page count, platform and sector. Exports to Excel and optionally writes to `email_contacts`.
+Scores and tiers site_leads (Enterprise / Hot / Good / Warm / Cold) based on page count, platform and sector. Exports to Excel. Only with `--write-contacts` does it also write the contacts to `email_contacts` (new e-mails are added, existing ones are updated; see below).
 
 ```bash
 python app/site_smart_export.py --countries NO
@@ -91,9 +91,18 @@ python app/site_smart_export.py --countries NO --min-pages 50
 python app/site_smart_export.py --countries NO --write-contacts --campaign NO_jun
 ```
 
-**Key flags:** `--countries`, `--min-pages`, `--out`, `--write-contacts`, `--campaign`, `--dry-run`
+**Key flags:** `--countries`, `--min-pages`, `--outreach-priority N` (only contacts with priority ≤ N), `--out`, `--gdisk` (also upload the Excel to Google Drive), `--write-contacts`, `--campaign`, `--dry-run-contacts`
 
-**Writes to:** Excel file; optionally `email_contacts/` collection
+**What `--write-contacts` does to `email_contacts`** (document id = the e-mail with special characters replaced by `_`, so one document per e-mail):
+
+| E-mail | What happens |
+|---|---|
+| Not in `email_contacts` yet | A new document is created with all data fields plus `status: pending`, `created_at`, `campaign` (from `--campaign`), `approved` (empty) and `mark_site_leads: true`. |
+| Already in `email_contacts` | The data fields (name, title, phone, company, country, tier, priority, AI fields …) are overwritten with the latest values. `status`, `created_at`, `campaign`, `approved` and `mark_site_leads` are **not touched**, so edits made later are kept. |
+
+Use `--dry-run-contacts` to see how many contacts would be written, per tier and priority, without writing anything.
+
+**Writes to:** Excel file; with `--write-contacts` also `email_contacts/`
 
 ---
 
@@ -154,7 +163,7 @@ python app/leads_email_check.py --countries IN --force
 
 ### `leads_smart_export.py` — Tiered export to Excel / email_contacts
 
-Scores leads by reseller potential and exports to Excel. Optionally writes to `email_contacts`.
+Scores leads by reseller potential and exports to Excel. Only with `--write-contacts` does it also write the contacts to `email_contacts`; same rules as `site_smart_export.py`, but the marker field is `mark_leads`.
 
 ```bash
 python app/leads_smart_export.py --countries UK
@@ -163,7 +172,11 @@ python app/leads_smart_export.py --countries NO SE DK --min-score 50
 python app/leads_smart_export.py --countries NO --write-contacts --campaign NO_agencies_jun
 ```
 
-**Writes to:** Excel file; optionally `email_contacts/` collection
+**Key flags:** `--countries`, `--min-score N`, `--outreach-priority N`, `--collection NAME` (default `leads`), `--out`, `--gdisk`, `--write-contacts`, `--campaign`, `--dry-run-contacts`
+
+New e-mails are added to `email_contacts` with `status: pending`, `created_at`, `campaign`, `approved` (empty) and `mark_leads: true`. For e-mails already there, only the data fields are overwritten; those lifecycle fields are kept.
+
+**Writes to:** Excel file; with `--write-contacts` also `email_contacts/`
 
 ---
 
@@ -194,9 +207,9 @@ python app/email_contacts_export.py --mark both    # contacts in both pipelines
 
 ---
 
-### `filter_site_leads.py` — Filter site_leads by facets
+### `filter_site_leads.py` — Filter site_leads (Leads DB) by saved search
 
-Filters `site_leads` and their contacts using the stored filter facets, and exports results.
+Filters `site_leads` and their contacts using a saved Leads DB search (stored in `filter_facets/`), and exports results.
 
 ```bash
 python app/filter_site_leads.py --filter ai_sector=technology,ecommerce
@@ -240,7 +253,7 @@ python app/campaign_name_enrich.py --campaign MY_CAMPAIGN_ID --debug
 
 **Requires:** `OPENAI_API_KEY` and `BRAVE_API_KEY` in `.env`
 
-**Frontend trigger:** Campaign page → **Enrich names** button
+**Frontend trigger:** Campaign page → **Update info** (option "Fill missing names")
 → API: `POST /api/crm/campaigns/<id>/name-enrich`
 → Cloud Tasks job: `name-enrich`
 
@@ -295,12 +308,15 @@ Exports selected `email_contacts` to the master CRM contact sheet.
 
 ---
 
-### `crm/push_and_sync.py` — Push selected to CRM work sheet 🌐 Frontend triggered
+### `crm/push_to_campaign_lib.py` — Push selected contacts into campaigns 🌐 Frontend triggered
 
-Takes contacts marked in the contact sheet and pushes them to the CRM work sheet, grouped by site.
+Moves the contacts marked (Select) in the contact sheet into the campaign named in their **Campaign** column. The sheet is only read; nothing is written to the CRM work sheet.
 
-**Frontend trigger:** CRM page → Step 3 "Push to CRM"
-→ API: `GET /api/crm/push-and-sync`
+A row is **ignored** when its site is already in another campaign (`campaign_leads` of any other campaign) or its e-mail is already in another campaign (`campaign_contacts` of any other campaign). A row already in its own campaign is left as it is. Rows without Campaign, site reference or valid e-mail cannot be pushed. Everything else is added through the normal campaign import (`run_campaign_import`): the campaign is created as a draft when missing, the `campaign_leads` and `campaign_contacts` entries are created, and existing entries are never overwritten.
+
+**Frontend trigger:** legacy CRM page → Step 3 "Push selected to campaign" (optional Campaign field narrows the selection)
+→ Analysis first (read-only, writes nothing): `GET /api/crm/push-preview[?campaign=X]` — shown in a popup with a **Push to campaign** button
+→ API: `GET /api/crm/push-and-sync[?campaign=X]` (the job keeps its old name so job history stays readable)
 → Cloud Tasks job: `push-and-sync`
 
 ---
@@ -319,7 +335,7 @@ Reads `crm_status`, `crm_sales_person`, and `crm_date` from the CRM work sheet a
 
 Reads the master CRM contact sheet and syncs contacts into the correct campaign in Firestore.
 
-**Frontend trigger:** CRM page → Step 6 "Sync campaigns" / Discover campaigns button
+**Frontend trigger:** CRM discover (legacy) page → step 6 Discover campaigns button
 → API: `GET /api/crm/crm-sync`
 → Cloud Tasks job: `crm-sync`
 
@@ -333,12 +349,52 @@ These operations have no standalone CLI — they run as Cloud Tasks jobs trigger
 |---|---|---|---|
 | Campaign sync (Drive sheet → DB) | Campaign page → Sync | `GET /api/crm/campaign-sync` | `campaign-sync` |
 | Full override (DB → Drive sheet) | Campaign page → Full override | `GET /api/crm/campaign-export` | `campaign-export` |
-| Discover campaigns | Campaign workspace → Discover campaigns | `GET /api/crm/discover-campaigns` | — (sync jobs spawned) |
+| Discover campaigns | CRM discover (legacy) → step 6 Discover campaigns | `GET /api/crm/discover-campaigns` | — (sync jobs spawned) |
 | Collect statistics | Statistics page → Collect statistics | `POST /api/crm/statistics/collect` | `statistics` |
 | Load all follow-up contacts | CRM Follow-up page load | `GET /api/crm/followup-contacts` | — (direct read) |
 | Update follow-up field | CRM Follow-up inline edit | `PATCH /api/crm/campaigns/<id>/contacts/<doc>` | — (direct write) |
 | Read inbound/sent mail | CRM Follow-up → Sync messages | `POST /api/crm/inbound-read` | `inbound-read` |
-| Enrich contact names | Campaign page → Enrich names | `POST /api/crm/campaigns/<id>/name-enrich` | `name-enrich` |
+| Enrich contact names | Campaign page → Update info → Fill missing names | `POST /api/crm/campaigns/<id>/name-enrich` | `name-enrich` |
+
+---
+
+## Sending & replies
+
+### `outreach_send.py` — Send outreach mail (command line)
+
+Sends the waiting intro and follow-up mails. It uses exactly the same sender code as the **Send now** button on the Outreach status page and the scheduled `smartMail` job (job `outreach-send`, `smart_mail/outreach_sender.py`): same selection, same account budget, same bounce breaker. **Default is a dry run**; add `--send` to send real mail.
+
+```bash
+python app/outreach_send.py --dry-run                    # intro pass, nothing sent
+python app/outreach_send.py --mode followup --preview    # show rendered body snippets
+python app/outreach_send.py --send --mode both           # real mail, intro + follow-up
+python app/outreach_send.py --campaigns NO_jun SE_jun    # only these campaigns
+```
+
+**Three ways to start the same send**
+
+| Start | Campaigns | Overlap guard |
+|---|---|---|
+| **Send now** button (admin) → `POST /api/crm/outreach/send-now` | the ticked ones | refused (409) while another send is queued or running |
+| Cloud Scheduler → `POST …/smartMail/outreach-send` | all, unless `campaigns` is given | same guard |
+| `outreach_send.py --send` on a computer | all, unless `--campaigns` is given | none (runs locally) |
+
+**Writes to:** `campaigns/{id}/campaign_contacts/` (recorded per sent mail by `confirm_sent`). See [Send Outreach Mail](doc-viewer.html?doc=send-outreach).
+
+---
+
+### `reply_match.py` — Match replies and bounces to contacts 🌐 Frontend triggered
+
+Reads the mail accounts over IMAP, classifies each message and matches replies and bounces to campaign contacts in one pass (`inbox_messages` is only an audit log).
+
+```bash
+python app/reply_match.py                                  # all accounts and campaigns, last 30 days
+python app/reply_match.py --dry-run                        # show matches, write nothing
+python app/reply_match.py --accounts sales@blueboot.ai
+python app/reply_match.py --campaigns NO_jun SE_jun
+```
+
+**Trigger:** `smartMail/reply-match` (scheduler) or `POST /api/crm/reply-match` → Cloud Tasks job `reply-match`. See [Smart Mail](doc-viewer.html?doc=smart-mail).
 
 ---
 
@@ -366,9 +422,9 @@ python app/maint_statistics.py --only campaigns
 
 ---
 
-### `build_filter_facets.py` — Build filter facet catalog 🌐 Frontend triggered
+### `build_filter_facets.py` — Build Leads DB filter values ("facet catalog") 🌐 Frontend triggered
 
-Scans `site_leads` + `site_contacts` and builds the filter facet catalog stored in `filter_facets/site_leads`.
+Scans `site_leads` + `site_contacts` and builds the list of selectable filter values for the Leads DB page, stored in `filter_facets/site_leads` ("facet" is the technical name for a filter value).
 
 ```bash
 python app/build_filter_facets.py

@@ -111,17 +111,30 @@ function providerLabel(providers) {
   return providers.map(p => PROVIDER_ICONS[p] || escapeHtml(p)).join(' ');
 }
 
-function avatar(user) {
-  if (user.photoURL)
-    return `<img src="${escapeHtml(user.photoURL)}" width="26" height="26" class="rounded-circle" onerror="this.replaceWith(initials('${escapeHtml(user.displayName||user.email||'?')}'))">`;
-  return initials(user.displayName || user.email || '?');
+const AVATAR_STYLE = 'width:26px;height:26px;border-radius:50%;background:#eef0ff;color:#4f6ef7;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center';
+
+function initialsText(name) {
+  return String(name || '?').split(/\s+/).map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '?';
 }
 
+// HTML string for use inside the table template.
+function initialsHtml(name) {
+  return `<div style="${AVATAR_STYLE}">${escapeHtml(initialsText(name))}</div>`;
+}
+
+// DOM element, used when a profile photo fails to load.
 function initials(name) {
   const el = document.createElement('div');
-  el.style.cssText = 'width:26px;height:26px;border-radius:50%;background:#eef0ff;color:#4f6ef7;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center';
-  el.textContent = name.split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0,2);
+  el.style.cssText = AVATAR_STYLE;
+  el.textContent = initialsText(name);
   return el;
+}
+
+function avatar(user) {
+  const name = user.displayName || user.email || '?';
+  if (user.photoURL)
+    return `<img src="${escapeHtml(user.photoURL)}" width="26" height="26" class="rounded-circle" data-name="${escapeHtml(name)}" onerror="this.replaceWith(initials(this.dataset.name))">`;
+  return initialsHtml(name);
 }
 
 function fmt(iso) {

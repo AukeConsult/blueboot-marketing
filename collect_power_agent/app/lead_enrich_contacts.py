@@ -85,7 +85,16 @@ async def _bing_search_async(
         ) as resp:
             # bounded read — RSS is small; guards against a huge/hostile body
             # blocking the loop in ET.fromstring (sync parse)
-            raw = await resp.content.read(2_000_001)
+            _chunks: list[bytes] = []
+            _read = 0
+            async for _chunk in resp.content.iter_chunked(65536):
+                _chunks.append(_chunk)
+                _read += len(_chunk)
+                if _read > 2_000_000:
+                    break
+            raw = b"".join(_chunks)
+            if len(raw) > 2_000_000:
+                raw = raw[:2_000_000]
         text = raw[:2_000_000].decode("utf-8", errors="replace")
         root = ET.fromstring(text)
         urls = []
@@ -288,6 +297,12 @@ _PLACEHOLDER_EMAIL_RE = re.compile(
 
 def _is_valid_email(email: str) -> bool:
     """Return True if email looks like a real, reachable address."""
+    try:
+        from crm.contact_clean_lib import clean_email as _shared_clean
+        if not _shared_clean(email):          # the one shared e-mail check
+            return False
+    except ImportError:
+        pass
     # Reject control characters or JSON-artifact chars leaked from bad parsing
     if any(ord(c) < 32 or ord(c) == 127 for c in email):
         return False

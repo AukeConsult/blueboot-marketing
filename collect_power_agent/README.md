@@ -100,7 +100,7 @@ Requires a valid Firebase token. These low-risk read routes allow `guest`:
 GET /
 GET /api/crm/whoami
 
-GET /api/crm/filter-facets
+GET /api/crm/filter-facets          (Leads DB: filter values + saved searches)
 GET /api/crm/filter-facets/<name>
 
 GET /api/crm/leads/by-domain/<domain>
@@ -146,8 +146,8 @@ GET /api/crm/contact-sync
 GET /api/crm/push-and-sync
 GET /api/crm/template-sync
 GET /api/crm/crm-sync
-GET /api/crm/campaign-sync
 GET /api/crm/campaign-export
+POST /api/crm/campaign-import
 GET /api/crm/discover-campaigns
 
 POST /api/crm/campaigns/<campaign_id>/create
@@ -216,6 +216,72 @@ https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-match
 ```
 
 Scheduled Smart Mail triggers should use `POST`. Do not expose `outreach-send` as an unauthenticated public GET URL.
+
+---
+
+## Outreach Sender — Contact Eligibility Rules
+
+A contact must pass **all** of the following checks before a mail is dispatched.
+Checks run in this order; the first failure skips the contact.
+
+1. **Contact status = `pending`**
+   The `campaign_contacts` document must have `status == "pending"`. Contacted,
+   replied, excluded, or any other status is never re-sent.
+
+2. **Mode gate (intro vs followup)**
+   - `intro` — `mail_sent` must be empty (first-ever mail).
+   - `followup` — `mail_sent` must contain at least one entry (prior contact exists).
+
+3. **Site lead status** *(when the contact has a `lead_id`)*
+   The associated `campaign_leads/{lead_id}` document is checked.
+   - If the lead doc **does not exist** → contact is allowed through.
+   - If the lead doc exists, its `status` must be `"pending"` or `"active"`.
+   - Any other status (`excluded`, `rejected`, etc.) → contact is skipped.
+   This prevents sending to a company whose site was subsequently excluded from
+   the pipeline after the contact was already queued.
+
+4. **Campaign status**
+   - `intro` mode → campaign must be `"ready"`.
+   - `followup` mode → campaign must be `"active"`.
+
+5. **Campaign has an Intro mail step**
+   The `mail_sequence` must contain at least one step where `mail_type`, `name`,
+   `step_name`, or `step_id` contains the word `"intro"`. Campaigns without an
+   intro step are skipped in full.
+
+6. **Next sequence step is due** *(followup only)*
+   The next step (`mail_sequence[len(mail_sent)]`) must have a `delay_days` field
+   and `now >= first_sent_at + delay_days`.
+
+7. **Next step exists**
+   `mail_sequence[len(mail_sent)]` must exist — the contact has not exhausted all
+   steps in the sequence.
+
+8. **Sending account is configured**
+   The campaign's `outreach_email_account` must resolve to a valid document in
+   `settings/mail_accounts/accounts/{email}` with credentials (OAuth tokens for
+   Gmail; host + username + password for IMAP/SMTP).
+
+9. **Send budget available** *(per sending account)*
+   `sent_last_hour < max_sends_per_hour` and `sent_last_day < max_sends_per_day`
+   after subtracting budget claimed by other active run reservations.
+   Limits are read from `settings/send_limits` (Firestore) with fallback to
+   env-var / config defaults. Budget is reserved once per run start, not
+   recalculated per send.
+
+10. **Bounce-rate circuit breaker** *(live, per account per run)*
+    If `failed / (sent + failed) > bounce_rate_pause_threshold` after at least
+    8 attempts, the whole remaining batch for that account is stopped immediately.
+
+### Source files
+
+| File | Role |
+|---|---|
+| `functions-crm/smart_mail/outreach_mail_select.py` | Rules 1–8: contact selection and account resolution |
+| `functions-crm/smart_mail/outreach_sender.py` | Rules 9–10: budget reservation and bounce breaker |
+| `app/outreach_send.py` | CLI entry point (`--dry-run` / `--send`) |
+
+---
 
 ### `admin` only
 
@@ -598,7 +664,7 @@ Firestore
 | `app/site_contact_enrich.py` | Enriches `site_contacts` via Brave Search + GPT |
 | `app/site_email_check.py` | Classifies `site_contacts` by email type and contact role (OpenAI) |
 | `app/site_smart_export.py` | Tiered Excel (6 tiers) + writes to `email_contacts` via `--write-contacts` |
-| `app/facet_campaign.py` | Create or refresh a campaign from a saved filter-facets preset — filters `email_contacts`, deduplicates against existing campaigns, writes `campaign_contacts` |
+| `app/facet_campaign.py` | Create or refresh a campaign from a saved Leads DB search (technical name: filter-facets preset) — filters `email_contacts`, deduplicates against existing campaigns, writes `campaign_contacts` |
 | `site_scrape.bat` | Runs site_agent + site_enrich_agent for all countries |
 | `run_site_pipeline.bat` | **Full Site Pipeline starter** — runs all 6 steps, edit `COUNTRIES` + `CAMPAIGN` at top |
 
@@ -1920,6 +1986,52 @@ It covers all five stages, every script, the contact schema, and the status life
 
 ---
 
+## `prospects_import.py` — sync the BlueSearch prospect catalogue into campaigns
+
+Reads every `.xlsx` in the shared prospects folder
+(given with `--dir "<folder>"`, or env / `.env` `PROSPECTS_DIR`; there is no built-in default),
+groups the rows by country and upserts them into one campaign per country
+(`BS_UK`, `BS_DK`, `BS_FI`, `BS_SE`, `BS_DE`, `BS_US`). New rows are created, changed
+rows are updated field by field, unchanged rows are left alone. Outreach state
+(`status`, `mail_sent`, `followup_*` ...) is never touched and nothing is deleted.
+
+**Dry run by default** — nothing is written until `--apply` is given.
+
+```bat
+run_prospects_import.bat --dir "G:\path\to\prospects"           :: preview (new / changed / unchanged); source folder is required
+run_prospects_import.bat --dir "G:\path\to\prospects" --apply   :: write to Firestore
+run_prospects_import.bat --country UK,DK       :: only these countries
+run_prospects_import.bat --file BlueSearch-UK-prospects.xlsx
+run_prospects_import.bat --campaign-only       :: skip site_leads / site_contacts / email_contacts
+run_prospects_import.bat --measure --apply     :: first read sitemaps -> sheet columns page_count + sitemap_url (empty ones only; --force overwrites)
+```
+
+| Writes | Rule |
+|---|---|
+| `campaigns/{BS_xx}` | created as draft if missing |
+| `campaign_leads/{lead_id}` , `campaign_contacts/{doc_id}` | new / changed fields only |
+| `site_leads/{lead_id}` | created only when missing (existing crawler docs untouched) |
+| `site_leads/*/site_contacts`, `email_contacts/{doc_id}` | created, or empty fields filled |
+
+Logic: `functions-crm/crm/prospect_import_lib.py`. Full guide (column mapping, IDs, skipped
+rows, workflow): `public/doc/prospect-catalogue-sync.md` (also in the app under
+Docs → Prospect catalogue sync).
+
+---
+
+## `maint_clean_contacts.py` — clean names on existing contacts
+
+Scrapers now clean names and e-mails automatically (`functions-crm/crm/contact_clean_lib.py`,
+e.g. `"Email Adam Kenneman."` gives `Adam Kenneman`, `Mejla` gives empty). This command applies
+the same rules to contacts already saved. **Dry run by default**; `--apply` writes, keeping the
+original in `name_raw`. See `public/doc/contact-cleaning.md`.
+
+```bat
+python app\maint_clean_contacts.py                  :: preview
+python app\maint_clean_contacts.py --apply          :: write
+python app\maint_clean_contacts.py --campaign BS_UK :: one campaign
+```
+
 ## Additional Scripts
 
 ### `campaign_importer.py` — import campaign Excel back to Firestore
@@ -1940,17 +2052,15 @@ the `leads_extract` Firestore collection. Used internally by other scripts.
 
 ---
 
-### `send_mail.py` / `mail_sender.py` / `mail_reader.py` — outreach email components
+### `mail_sender.py` / `mail_reader.py` — outreach email components
 
-Three components of the outreach email system:
+Two components of the outreach email system:
 
 | Script | Purpose |
 |---|---|
-| `send_mail.py` | Generates and sends personalised outreach emails via SMTP |
 | `mail_sender.py` | Low-level SMTP sending helper — rate limiting, retries, tracking |
 | `mail_reader.py` | IMAP reply reader — polls inbox, detects replies, updates `status=replied` |
 
-Requires SMTP credentials in `.env` (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `GMAIL_SENDER`).
 
 ---
 

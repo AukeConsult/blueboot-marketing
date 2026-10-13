@@ -24,12 +24,15 @@ for _path in (_CRM_DIR,):
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-GCP_PROJECT     = os.getenv("GCP_PROJECT",     "blueboot-market")
+# Project id: GCP_PROJECT from .env locally; on Cloud Functions GOOGLE_CLOUD_PROJECT
+# is set automatically, so nothing needs configuring there.
+GCP_PROJECT     = (os.getenv("GCP_PROJECT") or os.getenv("GOOGLE_CLOUD_PROJECT")
+                   or os.getenv("GCLOUD_PROJECT") or "")
 GCP_LOCATION    = os.getenv("GCP_LOCATION",    "us-central1")
 TASKS_QUEUE     = os.getenv("TASKS_QUEUE",     "crm-queue")
 WORKER_BASE_URL = os.getenv(
     "WORKER_BASE_URL",
-    "https://us-central1-blueboot-market.cloudfunctions.net/crmWorker/api/crm/worker",
+    f"https://{GCP_LOCATION}-{GCP_PROJECT}.cloudfunctions.net/crmWorker/api/crm/worker",
 )
 JOBS_COLLECTION = os.getenv("JOBS_COLLECTION", "crm_jobs")
 
@@ -95,7 +98,10 @@ def _enqueue_task(name: str, job_id: str, params: dict):
     client = tasks_v2.CloudTasksClient()
     queue  = client.queue_path(GCP_PROJECT, GCP_LOCATION, TASKS_QUEUE)
     url    = f"{WORKER_BASE_URL}/{name}/{job_id}"
+    from google.protobuf import duration_pb2
     task   = {
+        # Cloud Tasks gives up after 10 min by default and then retries, while the worker may run 15 min
+        "dispatch_deadline": duration_pb2.Duration(seconds=900),
         "http_request": {
             "http_method": tasks_v2.HttpMethod.POST,
             "url":         url,

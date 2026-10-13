@@ -7,7 +7,7 @@
 # The .env file itself is excluded from the Docker image via .dockerignore.
 set -euo pipefail
 
-PROJECT="${GCP_PROJECT:-blueboot-market}"
+PROJECT="${GCP_PROJECT:-$(sed -n 's/^GCP_PROJECT=\([^ #]*\).*/\1/p' "$(dirname "$0")/../../.env" 2>/dev/null | head -1)}"
 ENV_FILE="$(cd "$(dirname "$0")/../.." && pwd)/.env"
 
 if [ ! -f "$ENV_FILE" ]; then

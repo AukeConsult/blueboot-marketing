@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Blueboot — CRM</title>
+<title>Blueboot — CRM Discover (legacy)</title>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
 <link rel="stylesheet" href="css/styles.css">
@@ -30,6 +30,16 @@
 
 <div class="container py-4" style="max-width:860px">
 
+  <div class="alert alert-warning d-flex align-items-start gap-2 mb-3" role="alert">
+    <i class="ti ti-alert-triangle fs-4"></i>
+    <div class="small">
+      <strong>Legacy functionality &mdash; will be removed.</strong>
+      This page (CRM Discover) and the CRM sync it belongs to are no longer developed and will be
+      removed in a future release. Do not build new work on it. Use
+      <a href="campaigns.html">Campaigns</a> and
+      <a href="campaign-import.html">Import campaign</a> to bring contacts in.
+    </div>
+  </div>
   <h5 class="page-title mb-2"><i class="ti ti-server-2 me-2 text-primary"></i>CRM Discover</h5>
 
   <p class="small mb-3" style="color:var(--bb-muted);max-width:620px;line-height:1.6">
@@ -69,7 +79,7 @@
     <div class="wf-step-num">2</div>
     <div class="wf-body">
       <p class="wf-title"><i class="ti ti-table me-1 text-primary"></i>Review &amp; select</p>
-      <p class="wf-desc">Open the contact sheet, review the list and fill the <code>Select</code> column for contacts you want to pursue. If you also fill in a campaign name in the <code>Campaign</code> column, you can use the campaign route instead — go to <a href="campaigns.html">Campaigns</a> and click <strong>Discover campaigns</strong> to create the campaign and import the contacts automatically.</p>
+      <p class="wf-desc">Open the contact sheet, review the list and fill the <code>Select</code> column for contacts you want to pursue. If you also fill in a campaign name in the <code>Campaign</code> column, you can use the campaign route instead — use step 6 below (<strong>Discover campaigns</strong>) to create the campaign and import the contacts automatically.</p>
     </div>
     <div class="wf-action">
       <a href="https://docs.google.com/spreadsheets/d/1aMglV53NiMEArjld37HN5cxliyNRGzIP2mrM4kwlupA" target="_blank" class="wf-ext-link">
@@ -82,12 +92,14 @@
   <div class="wf-card bb-card">
     <div class="wf-step-num">3</div>
     <div class="wf-body">
-      <p class="wf-title"><i class="ti ti-upload me-1 text-primary"></i>Push selected to CRM</p>
-      <p class="wf-desc">Takes all selected contacts, groups by site, and adds them as new rows in the CRM work sheet.</p>
+      <p class="wf-title"><i class="ti ti-upload me-1 text-primary"></i>Push selected to campaign</p>
+      <p class="wf-desc">Analyses first (nothing is written) and then moves the selected contacts into the campaign named in their Campaign column (created as a draft if missing). Ignored: a site that is already in another campaign (campaign_leads) and a contact that is already in another campaign (campaign_contacts). Existing entries are never overwritten. The sheet is only read. Optionally enter a campaign name to handle only rows with that Campaign value.</p>
     </div>
-    <div class="wf-action">
-      <button class="btn btn-primary btn-sm" style="height:30px;font-size:.8rem" onclick="trigger('push-and-sync','')">
-        <i class="ti ti-upload me-1"></i>Push to CRM
+    <div class="wf-action gap-2">
+      <input id="push-campaign" class="form-control form-control-sm" style="width:170px;height:30px;font-size:.8rem"
+             placeholder="Campaign (blank = all)" title="Only rows where the Campaign column in the contact sheet equals this">
+      <button class="btn btn-primary btn-sm" id="push-analyse-btn" style="height:30px;font-size:.8rem" onclick="analysePush()">
+        <i class="ti ti-report-search me-1"></i>Analyse &amp; push
       </button>
     </div>
   </div>
@@ -120,6 +132,22 @@
     </div>
   </div>
 
+
+  <!-- Step 6: Discover campaigns (moved here from the Campaigns page) -->
+  <div class="wf-card bb-card">
+    <div class="wf-step-num">6</div>
+    <div class="wf-body">
+      <p class="wf-title"><i class="ti ti-search me-1 text-primary"></i>Discover campaigns</p>
+      <p class="wf-desc">Reads the <code>Campaign</code> column of the contact sheet, creates every campaign that does not exist yet
+        (as a draft) and syncs its contacts. Existing campaigns are never changed and nothing is deleted.</p>
+      <div id="discover-bar" class="alert py-2 px-2 small mt-2 mb-0" style="display:none"></div>
+    </div>
+    <div class="wf-action">
+      <button class="btn btn-primary btn-sm" style="height:30px;font-size:.8rem" id="discover-btn" onclick="discover()">
+        <i class="ti ti-search me-1"></i>Discover campaigns
+      </button>
+    </div>
+  </div>
 
 </div>
 
@@ -155,6 +183,145 @@ async function trigger(name, params) {
     const d = await r.json();
     showFeedback(d.message || 'Job queued — check Jobs for progress.', 'success');
   } catch(e) {
+    showFeedback('Error: ' + e.message, 'danger');
+  }
+}
+
+async function discover() {
+  const btn = document.getElementById('discover-btn');
+  const bar = document.getElementById('discover-bar');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Scanning…';
+  bar.style.display = 'none';
+  try {
+    const r = await fetch(BASE + '/api/crm/discover-campaigns');
+    const d = await r.json();
+    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Discover failed');
+    const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    const created = d.created || [];
+    const renamed = created.filter(c => c.renamed).map(c => `<em>${esc(c.original_id)}</em> → <strong>${esc(c.campaign_id)}</strong>`).join(', ');
+    bar.className = 'alert alert-info py-2 px-2 small mt-2 mb-0';
+    bar.innerHTML = created.length
+      ? `<i class="ti ti-check me-1 text-success"></i>${esc(d.message || 'Campaigns discovered.')}<br><strong>${esc(created.map(c => c.campaign_id).join(', '))}</strong>`
+        + (renamed ? `<br><i class="ti ti-info-circle me-1 text-warning"></i>${renamed}` : '')
+      : `<i class="ti ti-refresh me-1"></i>${esc(d.message || 'No new campaigns.')}<br>Syncing contacts…`;
+    bar.style.display = '';
+    const sd = await (await fetch(BASE + '/api/crm/crm-sync')).json();
+    if (sd.job_id) {
+      for (let i = 0; i < 60; i++) {
+        await new Promise(res => setTimeout(res, 3000));
+        const jd = await (await fetch(`${BASE}/api/crm/status/${sd.job_id}`)).json();
+        if (jd.status === 'done') {
+          const res = jd.result || {};
+          bar.className = 'alert alert-success py-2 px-2 small mt-2 mb-0';
+          bar.innerHTML = `<i class="ti ti-check me-1"></i>Done<br>${res.campaigns_upserted ?? 0} campaigns, ${res.contact_select_synced ?? 0} contacts synced`;
+          break;
+        }
+        if (jd.status === 'error') throw new Error(jd.error || 'Sync failed');
+      }
+    }
+  } catch (e) {
+    bar.className = 'alert alert-danger py-2 px-2 small mt-2 mb-0';
+    bar.textContent = e.message;
+    bar.style.display = '';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover campaigns';
+}
+
+const _escH = t => String(t ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const _pushCampaign = () => (document.getElementById('push-campaign')?.value || '').trim();
+
+async function analysePush() {
+  const btn = document.getElementById('push-analyse-btn');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Analysing…';
+  try {
+    const r = await fetch(BASE + '/api/crm/push-preview?campaign=' + encodeURIComponent(_pushCampaign()));
+    const d = await r.json();
+    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Analysis failed');
+    renderPushPreview(d);
+    bootstrap.Modal.getOrCreateInstance(document.getElementById('pushPreviewModal')).show();
+  } catch (e) {
+    showFeedback('Error: ' + e.message, 'danger');
+  }
+  btn.disabled = false;
+  btn.innerHTML = orig;
+}
+
+function _pvSection(title, cls, count, rowsHtml, note) {
+  const more = note ? `<div class="text-muted">${_escH(note)}</div>` : '';
+  const list = rowsHtml
+    ? `<details class="mt-1"><summary class="text-muted" style="cursor:pointer">Show list</summary>` +
+      `<div style="max-height:220px;overflow:auto" class="mt-1">${rowsHtml}</div>${more}</details>` : '';
+  return `<div class="border rounded p-2 mb-2"><span class="badge text-bg-${cls} me-2">${count}</span><strong>${title}</strong>${list}</div>`;
+}
+
+const _PUSH_IGNORED = [
+  ['site_in_other',    'Ignored: the site is already in ANOTHER campaign (campaign_leads)', 'secondary'],
+  ['contact_in_other', 'Ignored: the contact is already in ANOTHER campaign (campaign_contacts)', 'secondary'],
+  ['already_in_campaign', 'Already in their own campaign (left as they are)', 'secondary'],
+  ['no_campaign',      'No Campaign value in the sheet — cannot be pushed', 'warning'],
+  ['no_site',          'No site reference (lead id / website) — cannot be pushed', 'warning'],
+  ['no_email',         'No valid e-mail — cannot be pushed', 'warning'],
+];
+
+function renderPushPreview(d) {
+  const rows = items => (items || []).map(c =>
+    `<div>${_escH(c.name || '(no name)')} &lt;${_escH(c.email)}&gt; <span class="text-muted">${_escH(c.website)}</span>` +
+    (c.campaign ? ` <span class="badge text-bg-light border">sheet: ${_escH(c.campaign)}</span>` : '') +
+    (c.others && c.others.length ? ` &rarr; in campaign: <span class="badge text-bg-info">${c.others.map(_escH).join(', ')}</span>` : '') +
+    `</div>`).join('');
+  const cap = (n, items) => n > (items || []).length ? `Showing first ${(items || []).length} of ${n}.` : '';
+  const add = d.add || {}, sh = d.sheet || {};
+  let h = `<p class="mb-2"><strong>${d.selected}</strong> contact(s) selected in the contact sheet${d.campaign ? ' for campaign <strong>' + _escH(d.campaign) + '</strong>' : ''} (tab <code>${_escH(sh.tab)}</code>, ${sh.rows ?? 0} rows scanned).</p>`;
+  const sc = Object.entries(d.sheet_campaigns || {});
+  if (sc.length) h += '<p class="mb-2 text-muted">Campaign values in the sheet (selected rows): ' +
+    sc.map(([k, n]) => `<a href="#" class="badge text-bg-light border text-decoration-none" onclick="pickPushCampaign(this.dataset.c);return false" data-c="${_escH(k === '(blank)' ? '' : k)}">${_escH(k)}: ${n}</a>`).join(' ') + '</p>';
+  h += _pvSection(`Will be added to their campaign: ${add.sites ?? 0} site(s)`, add.contacts ? 'success' : 'secondary',
+                  add.contacts ?? 0, rows(add.items), cap(add.contacts, add.items));
+  _PUSH_IGNORED.forEach(([key, title, cls]) => {
+    const g = (d.ignored || {})[key] || {};
+    h += _pvSection(title, g.count ? cls : 'secondary', g.count ?? 0, rows(g.items), cap(g.count, g.items));
+  });
+  (d.warnings || []).forEach(w => { h += `<div class="alert alert-warning py-1 px-2 mb-1">${_escH(w)}</div>`; });
+  if (!d.can_push) h += '<div class="alert alert-info py-1 px-2 mt-2 mb-0">Nothing to add.</div>';
+  document.getElementById('push-preview-body').innerHTML = h;
+  document.getElementById('push-preview-go').disabled = !d.can_push;
+}
+
+function pickPushCampaign(c) {
+  document.getElementById('push-campaign').value = c;
+  analysePush();
+}
+
+function confirmPush() {
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('pushPreviewModal')).hide();
+  runPush();
+}
+
+async function runPush() {
+  try {
+    const r = await fetch(BASE + '/api/crm/push-and-sync?campaign=' + encodeURIComponent(_pushCampaign()));
+    const d = await r.json();
+    if (!d.job_id) throw new Error(d.message || 'No job_id');
+    showFeedback('Pushing… (job ' + d.job_id + ')', 'info');
+    for (let i = 0; i < 60; i++) {
+      await new Promise(res => setTimeout(res, 3000));
+      const jd = await (await fetch(`${BASE}/api/crm/status/${d.job_id}`)).json();
+      if (jd.status === 'done') {
+        const x = jd.result || {};
+        const ig = Object.values(x.ignored || {}).reduce((n, v) => n + v, 0);
+        showFeedback(`Done: ${x.contacts_added ?? 0} contact(s) and ${x.sites_added ?? 0} site(s) added to ` +
+          `${Object.keys(x.campaigns || {}).length} campaign(s); ${ig} of ${x.selected ?? 0} selected contact(s) ignored.`, 'success');
+        return;
+      }
+      if (jd.status === 'error') throw new Error(jd.error || 'Push failed');
+    }
+    showFeedback('Still running — check Jobs for the result.', 'warning');
+  } catch (e) {
     showFeedback('Error: ' + e.message, 'danger');
   }
 }
@@ -201,6 +368,27 @@ async function runCrmSync() {
   btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Sync campaigns';
 }
 </script>
+
+<!-- Push preview modal -->
+<div class="modal fade" id="pushPreviewModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title"><i class="ti ti-report-search me-1"></i>Push to campaign &mdash; analysis</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body small" id="push-preview-body"></div>
+      <div class="modal-footer py-2">
+        <span class="text-muted small me-auto">Analysis only &mdash; nothing has been changed yet.</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary btn-sm" id="push-preview-go" onclick="confirmPush()">
+          <i class="ti ti-upload me-1"></i>Push to campaign
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="vendor/bootstrap.bundle.min.js"></script>
 </body>
 </html>
                                                     

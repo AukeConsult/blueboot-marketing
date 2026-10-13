@@ -137,3 +137,38 @@ thread safety & locking, `_write_exec` usage, large-file editing, ElementTree
 steps) live in `CLAUDE.md` at the project root. Follow them for any code change.
 This skill covers project *domain* context only — the two pipelines, Firestore
 layout, config files, and scripts above.
+
+## Frontend Page Boilerplate — MANDATORY
+
+Every new `public/*.html` page (except `login.html`, `index.html`, `doc-viewer.html`) must have:
+
+**Scripts (in this exact order, before closing `</body>`):**
+```html
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+```
+
+**Nav bar in `<body>`:**
+```html
+<div id="nav"></div>
+```
+
+**Auth gate wrapping all data loading:**
+```js
+requireAuth().then(() => {
+  requireRole(['admin']);  // adjust roles as needed
+  load();
+});
+```
+
+**`PAGE_ROLES` entry in `public/js/crm-common.js`:**
+```js
+'my-page.html': ['admin'],
+```
+
+Missing any of these is a bug. Always check all four before considering a page done.
+

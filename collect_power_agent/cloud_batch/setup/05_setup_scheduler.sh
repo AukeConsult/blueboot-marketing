@@ -9,7 +9,7 @@
 # This script is provided for CI/CD or first-time setup after 04_deploy_cloudrun.sh.
 set -euo pipefail
 
-PROJECT="${GCP_PROJECT:-blueboot-market}"
+PROJECT="${GCP_PROJECT:-$(sed -n 's/^GCP_PROJECT=\([^ #]*\).*/\1/p' "$(dirname "$0")/../../.env" 2>/dev/null | head -1)}"
 LOCATION="${GCP_LOCATION:-us-central1}"
 SA_EMAIL="${BATCH_SA:-batch-runner@${PROJECT}.iam.gserviceaccount.com}"
 

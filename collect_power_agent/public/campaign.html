@@ -6,7 +6,7 @@
 <title>Blueboot — Campaigns</title>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css">
+<link rel="stylesheet" href="vendor/quill.snow.css">
 <link rel="stylesheet" href="css/styles.css">
 <style>
 .bb-lead-link{color:var(--bs-link-color,#0d6efd);cursor:pointer;text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color .15s}
@@ -93,24 +93,58 @@ body { overflow: hidden; }
   width: 100%;
   min-width: 0;
 }
-.campaign-detail-grid {
-  display: grid;
-  grid-template-columns: minmax(360px, 0.9fr) minmax(520px, 1.4fr);
-  gap: 16px;
-  align-items: start;
-}
-.campaign-info-col,
-.campaign-contacts-col {
-  min-width: 0;
-}
-.campaign-contacts-col {
-  position: sticky;
-  top: 0;
-}
-.campaign-contacts-col .table-responsive {
-  max-height: calc(100vh - 190px);
+.campaign-tab-pane .table-responsive {
+  max-height: calc(100vh - 240px);
   overflow: auto;
 }
+.tab-content > .campaign-tab-pane {
+  border: 1px solid #dee2e6;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 16px;
+  background: #fff;
+}
+#campaign-tabs .nav-link {
+  font-size: .85rem;
+  padding: .45rem .85rem;
+}
+/* ── Sites tab ─────────────────────────────────────────────── */
+.site-row { cursor: pointer; }
+.site-row:hover td { background: #f5f7ff; }
+.site-row.expanded td { background: #f0fdf4 !important; border-top: 2px solid #16a34a; }
+.site-row.expanded td:first-child { border-left: 2px solid #16a34a; }
+.site-row.expanded td:last-child  { border-right: 2px solid #16a34a; }
+.contacts-sub-row > td { background: #f0fdf4; border-bottom: 2px solid #16a34a;
+  border-left: 2px solid #16a34a; border-right: 2px solid #16a34a; padding: 0; }
+.lead-status-pending  { background:#f1f5f9; color:#475569; }
+.lead-status-active   { background:#dcfce7; color:#15803d; }
+.lead-status-sent     { background:#dbeafe; color:#1d4ed8; }
+.lead-status-excluded { background:#fee2e2; color:#b91c1c; }
+.lead-pill { display:inline-block; font-size:11px; padding:1px 7px; border-radius:20px;
+             background:#f3f4f6; color:#374151; margin:1px; }
+.lc-editable {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 3px;
+  padding: 2px 5px;
+  outline: none;
+  transition: background .15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc-editable:hover  { background: #f1f5f9; text-overflow: clip; overflow: visible; }
+.lc-editable:focus  { background: #eff6ff; box-shadow: 0 0 0 2px #93c5fd; text-overflow: clip; overflow: visible; white-space: normal; }
+td:has(.lc-editable) { padding: 2px 4px !important; }
+.lc-editable.saving { opacity: .5; pointer-events: none; }
+.lc-editable.saved  { background: #dcfce7; }
+.lc-editable.error  { background: #fee2e2; }
+.lead-detail-label { font-size:11px; color:var(--bb-muted); white-space:nowrap; }
+.lead-detail-value { font-size:13px; color:#111; word-break:break-word; }
+.lead-detail-grid  { display:grid; grid-template-columns:130px 1fr; gap:4px 14px; align-items:baseline; }
+.lead-summary-box  { background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px;
+                     padding:10px 12px; font-size:13px; color:#334155; white-space:pre-wrap; line-height:1.55; }
 .contacts-card-header {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -118,11 +152,11 @@ body { overflow: hidden; }
   align-items: center;
 }
 .contacts-toolbar {
-  display: grid;
-  grid-template-columns: minmax(110px, 130px) minmax(120px, 1fr) auto auto;
+  display: flex;
+  flex-wrap: nowrap;
   gap: 6px;
   align-items: center;
-  justify-content: end;
+  justify-content: flex-end;
 }
 .contacts-toolbar .form-select,
 .contacts-toolbar .form-control {
@@ -130,16 +164,13 @@ body { overflow: hidden; }
   min-width: 0;
 }
 .contacts-toolbar .btn {
-  min-width: 32px;
   height: 31px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  white-space: nowrap;
 }
-.contacts-toolbar #status-filter { order: 1; }
-.contacts-toolbar #contact-search { order: 2; max-width: none !important; }
-.contacts-toolbar #enrich-btn { order: 3; }
-.contacts-toolbar #delete-excluded-btn { order: 4; }
+.contacts-toolbar #status-filter { width: 120px; flex-shrink: 0; }
+.contacts-toolbar #contact-search { width: 200px; flex-shrink: 1; }
 .mail-editor-component .ql-toolbar {
   background: #f9fafb;
   border-radius: 8px 8px 0 0;
@@ -163,13 +194,7 @@ body { overflow: hidden; }
     overflow: visible;
     padding: 14px;
   }
-  .campaign-detail-grid {
-    grid-template-columns: 1fr;
-  }
-  .campaign-contacts-col {
-    position: static;
-  }
-  .campaign-contacts-col .table-responsive {
+  .campaign-tab-pane .table-responsive {
     max-height: none;
   }
   .contacts-card-header,
@@ -197,6 +222,7 @@ body { overflow: hidden; }
           <option value="draft">Draft</option>
           <option value="ready">Ready</option>
           <option value="active">Active</option>
+          <option value="on_hold">On hold</option>
           <option value="canceled">Canceled</option>
         </select>
       </div>
@@ -205,13 +231,12 @@ body { overflow: hidden; }
       </select>
       <div class="d-flex gap-2 mt-2">
         <a href="filter-facets.html" class="btn btn-sm btn-outline-success flex-fill">
-          <i class="ti ti-filter me-1"></i>Filter new
+          <i class="ti ti-database-search me-1"></i>New from Leads DB
         </a>
-        <button class="btn btn-sm btn-outline-primary flex-fill" onclick="discover()" id="discover-btn">
-          <i class="ti ti-search me-1"></i>Discover
-        </button>
+        <a href="campaign-import.html" class="btn btn-sm btn-outline-primary flex-fill" title="Import a campaign from an Excel file">
+          <i class="ti ti-file-import me-1"></i>Import campaign
+        </a>
       </div>
-      <div id="discover-bar" class="alert py-2 px-2 small mt-2 mb-0" style="display:none"></div>
     </div>
     <div id="campaign-list" class="campaign-list-scroll">
       <div class="text-center py-5 small" style="color:var(--bb-muted)">
@@ -241,24 +266,38 @@ body { overflow: hidden; }
            style="pointer-events:none;color:var(--bb-muted)" title="Open connected sheet">
           <i class="ti ti-table-spark me-1"></i>Sheet
         </a>
-        <button class="btn btn-outline-secondary" onclick="syncCampaign()" title="Sync contacts from sheet">
-          <i class="ti ti-refresh me-1"></i>Sync
-        </button>
         <button id="override-btn" class="btn btn-outline-secondary" onclick="confirmFullOverride()" title="Regenerate sheet from database">
           <i class="ti ti-table-export me-1"></i>Full override
         </button>
       </div>
-<button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none">
+<button id="scrape-btn" class="btn btn-sm btn-outline-secondary" onclick="scrapeEmails()" title="Update info: scrape each site for emails and page count, then refresh the contact counts">
+        <i class="ti ti-mail-search me-1"></i>Update info
+      </button>
+      <button class="btn btn-sm btn-success" onclick="confirmSend()" id="send-btn" style="display:none" title="Mark the campaign ready. It is then picked up by the outreach send; nothing is sent until you do this.">
         <i class="ti ti-circle-check me-1"></i>Mark ready
       </button>
-      <button class="btn btn-sm btn-outline-danger" onclick="confirmCancel()" id="cancel-btn" style="display:none">
+      <button class="btn btn-sm btn-outline-warning" onclick="confirmHold()" id="hold-btn" style="display:none" title="Pause: no mail (intro or follow-up) is sent while on hold. Contacts, mail text and history are kept. Press Resume to continue.">
+        <i class="ti ti-player-pause me-1"></i>Put on hold
+      </button>
+      <button class="btn btn-sm btn-success" onclick="resumeCampaign()" id="resume-btn" style="display:none" title="Resume: the campaign goes back to the status it had before the hold and sending continues.">
+        <i class="ti ti-player-play me-1"></i>Resume
+      </button>
+      <button class="btn btn-sm btn-outline-danger" onclick="confirmCancel()" id="cancel-btn" style="display:none" title="Cancel: permanently stops the campaign. Nothing is deleted, but it can never be sent or reopened. To just pause, use Put on hold.">
         <i class="ti ti-ban me-1"></i>Cancel
       </button>
-      <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete()" id="delete-btn" style="display:none">
+      <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete()" id="delete-btn" style="display:none" title="Delete: permanently removes the campaign with all its leads and contacts. Only draft or canceled campaigns can be deleted.">
         <i class="ti ti-trash me-1"></i>Delete
+      </button>
+      <button class="btn btn-sm btn-outline-warning" onclick="openResetModal()" id="reset-btn" style="display:none" title="Reset: clears all send history and sets every contact and site back to pending, so the campaign can be sent again from the start.">
+        <i class="ti ti-refresh-alert me-1"></i>Reset
+      </button>
+      <button class="btn btn-sm btn-outline-danger" id="delete-excluded-btn" style="display:none" onclick="openRemoveExcludedModal()" title="Remove all excluded contacts and sites from this campaign">
+        <i class="ti ti-trash me-1"></i>Delete excluded
       </button>
     </div>
   </div>
+
+  <div id="status-help" class="small mb-2" style="display:none;color:var(--bb-muted)"></div>
 
   <div id="campaign-empty" class="text-center py-5" style="color:var(--bb-muted)">
     <i class="ti ti-speakerphone" style="font-size:2rem;opacity:.3"></i>
@@ -266,11 +305,9 @@ body { overflow: hidden; }
   </div>
 
   <div id="campaign-detail" style="display:none">
-    <div class="campaign-detail-grid">
-      <section class="campaign-info-col">
 
     <!-- Status line -->
-    <div class="mb-3 small d-flex align-items-center flex-wrap gap-2" style="color:var(--bb-muted)">
+    <div class="mb-2 small d-flex align-items-center flex-wrap gap-2" style="color:var(--bb-muted)">
       <span><strong id="c-contacts" style="color:#111">—</strong> contacts</span>
       <span>·</span>
       <span><strong id="c-sites" style="color:#111">—</strong> sites</span>
@@ -283,16 +320,48 @@ body { overflow: hidden; }
       <span id="c-pipeline-badge" style="display:none"></span>
     </div>
 
-    <div id="sync-feedback" class="alert py-1 px-2 small mb-3" style="display:none"></div>
+    <div id="sync-feedback" class="alert py-1 px-2 small mb-2" style="display:none"></div>
+
+    <!-- Tab nav -->
+    <ul class="nav nav-tabs mb-0 align-items-center" id="campaign-tabs">
+      <li class="nav-item">
+        <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-info">
+          <i class="ti ti-info-circle me-1"></i>Info
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="tab-mail-btn" data-bs-toggle="tab" data-bs-target="#tab-mail">
+          <i class="ti ti-mail me-1"></i>Mail
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-contacts">
+          <i class="ti ti-users me-1"></i>Contacts
+        </button>
+      </li>
+      <li class="nav-item">
+        <button class="nav-link" id="tab-sites-btn" data-bs-toggle="tab" data-bs-target="#tab-sites">
+          <i class="ti ti-building me-1"></i>Sites
+        </button>
+      </li>
+      <li class="nav-item ms-2" id="lists-refresh-indicator" style="display:none">
+        <span class="small text-muted d-flex align-items-center gap-1">
+          <span class="spinner-border spinner-border-sm" style="width:.75rem;height:.75rem"></span>
+          Refreshing…
+        </span>
+      </li>
+    </ul>
+
+    <div class="tab-content">
+      <!-- Info tab -->
+      <div class="tab-pane fade show active campaign-tab-pane" id="tab-info">
 
     <!-- Campaign details (expandable) -->
     <div class="bb-card mb-3">
-      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
-           style="cursor:pointer;border-radius:10px 10px 0 0;background:#f9fafb" onclick="toggleDetails()">
+      <div class="px-3 py-2 d-flex align-items-center border-bottom bb-card-header">
         <span class="fw-500 small"><i class="ti ti-info-circle me-1 text-primary"></i>Campaign details</span>
-        <i class="ti ti-chevron-down" style="color:var(--bb-muted)" id="details-chevron"></i>
       </div>
-      <div id="details-body" style="display:none" class="px-3 pb-3 pt-3">
+      <div id="details-body" class="px-3 pb-3 pt-3">
         <div class="row g-3 small">
           <div class="col-6">
             <label class="mb-1" style="color:var(--bb-muted)">Email account</label>
@@ -319,7 +388,7 @@ body { overflow: hidden; }
           </div>
           <div class="col-12" id="c-facet-row" style="display:none">
             <label class="mb-1" style="color:var(--bb-muted)">
-              <i class="ti ti-filter me-1"></i>Built from facet filter
+              <i class="ti ti-filter me-1"></i>Built from a Leads DB search
             </label>
             <div class="d-flex flex-wrap align-items-center gap-2 pt-1">
               <a id="c-facet-name" href="#" class="fw-500 small text-decoration-none text-primary"></a>
@@ -331,40 +400,10 @@ body { overflow: hidden; }
       </div>
     </div>
 
-    <!-- Mail schedule panel -->
-    <div class="bb-card mb-3" id="mail-schedule-card">
-      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
-           style="border-radius:10px 10px 0 0;background:#f9fafb">
-        <span class="fw-500 small"><i class="ti ti-mail me-1 text-primary"></i>Mail schedule
-          <span id="mail-schedule-count" class="ms-1" style="color:var(--bb-muted);font-weight:400"></span>
-        </span>
-        <div class="d-flex align-items-center gap-2">
-          <button class="bb-btn-refresh" title="Refresh" onclick="refreshMailSchedule()"><i class="ti ti-refresh"></i></button>
-          <div class="dropdown">
-          <button class="btn btn-sm btn-outline-primary py-0 dropdown-toggle" style="font-size:.78rem"
-                  data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="ti ti-plus me-1"></i>Add step
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:160px;font-size:.85rem">
-            <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Intro');return false">
-              <i class="ti ti-mail me-2 text-primary"></i>Intro</a></li>
-            <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Reminder 1');return false">
-              <i class="ti ti-bell me-2 text-warning"></i>Reminder 1</a></li>
-            <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Reminder 2');return false">
-              <i class="ti ti-bell-ringing me-2 text-danger"></i>Reminder 2</a></li>
-          </ul>
-          </div>
-        </div>
-      </div>
-      <div id="mail-schedule-body" class="px-3 pt-2 pb-1">
-        <div class="text-center py-3 small" style="color:var(--bb-muted)" id="mail-schedule-empty">
-          No mail steps yet — use <strong>Add step</strong> to add Intro, Reminder 1, or Reminder 2.
-        </div>
-      </div>
-    </div>
+      </div><!-- /tab-pane#tab-info -->
 
-      </section>
-      <section class="campaign-contacts-col">
+      <!-- Contacts tab -->
+      <div class="tab-pane fade campaign-tab-pane" id="tab-contacts">
 
     <!-- Contacts table -->
     <div class="bb-card" id="contacts-list-card">
@@ -377,22 +416,28 @@ body { overflow: hidden; }
             <option value="active">Active</option>
             <option value="excluded">Excluded</option>
           </select>
-          <button id="delete-excluded-btn" class="btn btn-sm btn-outline-danger" style="display:none" onclick="openRemoveExcludedModal()" title="Remove excluded contacts from this campaign">
-            <i class="ti ti-trash"></i>
-          </button>
-          <button id="enrich-btn" class="btn btn-sm btn-outline-secondary" onclick="enrichNames()" title="Fill missing names using Bing + AI">
-            <i class="ti ti-user-search"></i>
-          </button>
-          <a id="sites-btn" href="campaign_sites.html" class="btn btn-sm btn-outline-primary" title="View campaign sites">
-            <i class="ti ti-building me-1"></i>Sites
-          </a>
+          <select id="confirm-filter" class="form-select form-select-sm" style="width:150px;flex-shrink:0" onchange="filterContacts()" title="Filter on send confirmation (first mail only)">
+            <option value="">Send: all</option>
+            <option value="yes">Confirmed to send</option>
+            <option value="no">Not confirmed</option>
+          </select>
+          <button class="btn btn-sm btn-outline-success" onclick="confirmShown(true)" title="Confirm all shown contacts that have not been mailed yet"><i class="ti ti-checks me-1"></i>Confirm shown</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="confirmShown(false)" title="Remove confirmation from all shown unsent contacts"><i class="ti ti-square-off me-1"></i>Unconfirm</button>
+          <span id="confirm-counter" class="small" style="color:var(--bb-muted);white-space:nowrap"></span>
+          <div class="form-check form-switch mb-0" title="When on, the first (intro) mail is only sent to contacts you have ticked. Reminders are not affected.">
+            <input class="form-check-input" type="checkbox" id="require-confirm-switch" onchange="toggleRequireConfirm(this)">
+            <label class="form-check-label small" for="require-confirm-switch">Require confirmation</label>
+          </div>
           <input id="contact-search" class="form-control form-control-sm" style="max-width:180px" placeholder="Search…" oninput="filterContacts()">
         </div>
       </div>
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0">
           <thead class="bb-thead"><tr>
+            <th class="small text-center" style="width:34px" title="Confirm to send first mail"><input type="checkbox" id="confirm-all-box" onclick="confirmAllHeader(this)"></th>
             <th class="small bb-sortable" data-col="status" onclick="sortBy('status')">Status <span class="sort-icon"></span></th>
+            <th class="small bb-sortable" data-col="followup_status" onclick="sortBy('followup_status')">Follow-up <span class="sort-icon"></span></th>
+            <th class="small bb-sortable" data-col="last_sent" onclick="sortBy('last_sent')">Mail sent <span class="sort-icon"></span></th>
             <th class="small bb-sortable" data-col="name" onclick="sortBy('name')">Name <span class="sort-icon"></span></th>
             <th class="small bb-sortable" data-col="email" onclick="sortBy('email')">Email <span class="sort-icon"></span></th>
             <th class="small bb-sortable" data-col="title" onclick="sortBy('title')">Title <span class="sort-icon"></span></th>
@@ -405,22 +450,120 @@ body { overflow: hidden; }
       <div id="contacts-empty" class="text-center py-3 small" style="color:var(--bb-muted);display:none">No contacts found.</div>
     </div>
 
-    <div class="bb-card" id="mail-editor-card" style="display:none">
-      <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
-           style="border-radius:10px 10px 0 0;background:#f9fafb">
-        <span class="fw-500 small"><i class="ti ti-pencil me-1 text-primary"></i>Mail editor</span>
-        <button class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="showContactListView()" title="Back to contacts">
-          <i class="ti ti-arrow-left me-1"></i>Contacts
-        </button>
-      </div>
-      <div class="p-3">
-        <div id="campaign-mail-editor"></div>
-      </div>
-    </div>
-      </section>
-    </div>
+      </div><!-- /tab-pane#tab-contacts -->
 
-  </div>
+      <!-- Mail tab -->
+      <div class="tab-pane fade campaign-tab-pane" id="tab-mail">
+
+        <!-- Mail schedule -->
+        <div class="bb-card mb-3" id="mail-schedule-card">
+          <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
+               style="border-radius:10px 10px 0 0;background:#f9fafb">
+            <span class="fw-500 small"><i class="ti ti-mail me-1 text-primary"></i>Mail schedule
+              <span id="mail-schedule-count" class="ms-1" style="color:var(--bb-muted);font-weight:400"></span>
+            </span>
+            <div class="d-flex align-items-center gap-2">
+              <button class="bb-btn-refresh" title="Refresh" onclick="refreshMailSchedule()"><i class="ti ti-refresh"></i></button>
+              <div class="dropdown">
+                <button class="btn btn-sm btn-outline-primary py-0 dropdown-toggle" style="font-size:.78rem"
+                        data-bs-toggle="dropdown" aria-expanded="false">
+                  <i class="ti ti-plus me-1"></i>Add step
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:160px;font-size:.85rem">
+                  <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Intro');return false">
+                    <i class="ti ti-mail me-2 text-primary"></i>Intro</a></li>
+                  <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Reminder 1');return false">
+                    <i class="ti ti-bell me-2 text-warning"></i>Reminder 1</a></li>
+                  <li><a class="dropdown-item" href="#" onclick="addScheduleStep('Reminder 2');return false">
+                    <i class="ti ti-bell-ringing me-2 text-danger"></i>Reminder 2</a></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div id="mail-schedule-body" class="px-3 pt-2 pb-1">
+            <div class="text-center py-3 small" style="color:var(--bb-muted)" id="mail-schedule-empty">
+              No mail steps yet — use <strong>Add step</strong> to add Intro, Reminder 1, or Reminder 2.
+            </div>
+          </div>
+        </div>
+
+        <!-- Mail editor (shown when a step is selected) -->
+        <div class="bb-card" id="mail-editor-card" style="display:none">
+          <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
+               style="border-radius:10px 10px 0 0;background:#f9fafb">
+            <span class="fw-500 small"><i class="ti ti-pencil me-1 text-primary"></i>Mail editor
+              <span id="mail-editor-step-label" class="ms-1" style="color:var(--bb-muted);font-weight:400"></span>
+            </span>
+            <button class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="closeMailEditor()">
+              <i class="ti ti-x me-1"></i>Close
+            </button>
+          </div>
+          <div class="p-3">
+            <div id="campaign-mail-editor"></div>
+          </div>
+        </div>
+
+      </div><!-- /tab-pane#tab-mail -->
+
+      <!-- Sites tab -->
+      <div class="tab-pane fade campaign-tab-pane" id="tab-sites">
+
+        <!-- Toolbar -->
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+          <input id="sites-search" class="form-control form-control-sm"
+                 style="max-width:200px" placeholder="Search…" oninput="applySitesFilter()">
+          <select id="sites-status-sel" class="form-select form-select-sm"
+                  style="max-width:140px" onchange="applySitesFilter()">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="active">Active</option>
+            <option value="sent">Sent</option>
+            <option value="excluded">Excluded</option>
+          </select>
+          <select id="sites-sector-sel" class="form-select form-select-sm"
+                  style="max-width:160px" onchange="applySitesFilter()">
+            <option value="">All sectors</option>
+          </select>
+          <select id="sites-source-sel" class="form-select form-select-sm"
+                  style="max-width:140px" onchange="applySitesFilter()">
+            <option value="">All sources</option>
+            <option value="site_leads">site_leads</option>
+            <option value="leads">leads</option>
+          </select>
+          <span id="sites-count-badge" class="badge bg-light text-secondary border ms-1"
+                style="font-size:12px"></span>
+          <button class="bb-btn-refresh ms-auto" title="Refresh" onclick="loadSites()">
+            <i class="ti ti-refresh"></i>
+          </button>
+        </div>
+
+        <!-- Sites table -->
+        <div class="bb-card">
+          <div class="table-responsive" style="max-height:calc(100vh - 270px);overflow:auto">
+            <table class="table table-sm table-hover mb-0" id="sites-table">
+              <thead class="bb-thead" id="sites-thead"><tr>
+                <th class="small sites-th" style="width:170px;cursor:pointer" data-col="company">Company <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+                <th class="small" style="width:180px">Website</th>
+                <th class="small sites-th" style="width:110px;cursor:pointer" data-col="ai_sector">Sector <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+                <th class="small text-center sites-th" style="width:62px;cursor:pointer" data-col="page_count">Pages <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+                <th class="small">Summary</th>
+                <th class="small text-center sites-th" style="width:90px;cursor:pointer" data-col="contact_count">Contacts <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+                <th class="small text-center sites-th" style="width:65px;cursor:pointer" data-col="priority">Prio <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+                <th class="small sites-th" style="width:115px;cursor:pointer" data-col="status">Status <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
+              </tr></thead>
+              <tbody id="sites-body">
+                <tr><td colspan="8" class="text-center py-5 small" style="color:var(--bb-muted)">
+                  Select a campaign to view sites.
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /tab-pane#tab-sites -->
+    </div><!-- /tab-content -->
+
+  </div><!-- /#campaign-detail -->
     </div>
   </main>
 </div>
@@ -542,6 +685,67 @@ body { overflow: hidden; }
 </div>
 
 <!-- Send modal -->
+<div class="modal fade" id="holdModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:480px">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title text-warning"><i class="ti ti-player-pause me-2"></i>Put campaign <code id="hold-campaign-id"></code> on hold</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body small">
+        <p class="mb-2">The campaign is now <strong id="hold-status-now"></strong>. Putting it on hold <strong>pauses all sending</strong>.</p>
+        <ul class="mb-2">
+          <li>No mail (intro or follow-up) is sent, automatic or manual, until you resume.</li>
+          <li>Contacts, sites, mail text and history are all kept.</li>
+          <li><strong>Resume</strong> returns the campaign to the status it had and sending continues. Nothing is lost.</li>
+        </ul>
+        <label class="form-label small fw-500 mb-1" for="hold-reason">Reason <span style="color:var(--bb-muted)">(optional, shown to your team)</span></label>
+        <input id="hold-reason" class="form-control form-control-sm" maxlength="500" placeholder="e.g. waiting for new mail text"
+               onkeydown="if(event.key==='Enter'){document.getElementById('hold-confirm-btn').click();}">
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Keep sending</button>
+        <button id="hold-confirm-btn" class="btn btn-sm btn-warning"><i class="ti ti-player-pause me-1"></i>Put on hold</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="cancelModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:480px">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title text-danger"><i class="ti ti-ban me-2"></i>Cancel campaign <code id="cancel-campaign-id"></code></h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body small">
+        <p class="mb-2">Canceling <strong>stops this campaign permanently</strong>.</p>
+        <p class="mb-1"><i class="ti ti-circle-check text-success me-1"></i><strong>What happens</strong></p>
+        <ul class="mb-2">
+          <li>No more mail (intro or follow-up) is sent from this campaign.</li>
+          <li>The status becomes <em>canceled</em>. You can then <em>Delete</em> or <em>Reset</em> the campaign.</li>
+        </ul>
+        <p class="mb-1"><i class="ti ti-database text-primary me-1"></i><strong>What is kept</strong></p>
+        <ul class="mb-2">
+          <li>All <strong id="cancel-contact-count">0</strong> contacts, sites, mail text and send history. Nothing is deleted.</li>
+          <li>Contacts keep their own status (pending, sent, replied&hellip;). Contacts still pending or sent here keep blocking the same email from being added to another campaign until the campaign is deleted.</li>
+        </ul>
+        <p class="mb-2 text-danger"><i class="ti ti-alert-triangle me-1"></i><strong>This cannot be undone</strong> &mdash; a canceled campaign cannot be reopened or sent again.</p>
+        <p class="mb-2" style="color:var(--bb-muted)">Only want a break? Use <em>Put on hold</em> instead &mdash; it can be resumed at any time.</p>
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="cancel-understand"
+                 onchange="document.getElementById('cancel-confirm-btn').disabled = !this.checked">
+          <label class="form-check-label" for="cancel-understand">I understand the campaign will be canceled permanently</label>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Keep campaign</button>
+        <button id="cancel-confirm-btn" class="btn btn-sm btn-danger" disabled><i class="ti ti-ban me-1"></i>Cancel campaign</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="sendModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
@@ -573,15 +777,14 @@ body { overflow: hidden; }
         <h6 class="modal-title"><i class="ti ti-trash text-danger me-2"></i>Remove excluded from campaign</h6>
       </div>
       <div class="modal-body">
-        <p class="mb-2">
-          Remove <strong><span id="remove-excluded-count">0</span></strong> excluded contact(s) from this campaign?
-        </p>
+        <p class="mb-2">This will remove all excluded items from this campaign:</p>
+        <ul class="small mb-2">
+          <li><span id="remove-excluded-count">0</span> excluded contact(s)</li>
+          <li id="remove-excluded-sites-row" style="display:none"><span id="remove-excluded-sites-count">0</span> excluded site(s) and all their contacts</li>
+        </ul>
         <div class="alert alert-warning py-2 small mb-2">
           <i class="ti ti-alert-triangle me-1"></i>
-          This does not delete the contact from the database. It only removes the contact from this campaign, so the same email address can be picked up by another campaign later.
-        </div>
-        <div class="small" style="color:var(--bb-muted)">
-          If you keep a contact excluded in this campaign, that email address will stay reserved here and will not appear in other campaigns.
+          Removed contacts and sites are not deleted from the database — they are only removed from this campaign, so they can be picked up by another campaign later.
         </div>
       </div>
       <div class="modal-footer border-0 pt-0">
@@ -626,9 +829,18 @@ body { overflow: hidden; }
 <script src="firebase-config.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/crm-common.js"></script>
+<script src="js/crm-defs.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
 <script src="js/mail-editor-component.js"></script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
 <script>
+// Activate Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(
+    el => new bootstrap.Tooltip(el, { trigger: 'hover' })
+  );
+});
+
 // BASE + helpers from js/crm-common.js
 let allContacts = [];
 let allCampaigns = [];
@@ -642,17 +854,44 @@ function contactStatus(s) {
 
 function campaignStatus(s) {
   const st = String(s || 'draft').toLowerCase();
-  return ['draft', 'ready', 'active', 'canceled'].includes(st) ? st : 'draft';
+  return ['draft', 'ready', 'active', 'on_hold', 'canceled'].includes(st) ? st : 'draft';
 }
 
 function campaignStatusLabel(s) {
   const st = campaignStatus(s);
-  return ({ draft: 'draft', ready: 'ready', active: 'active', canceled: 'canceled' }[st]) || 'draft';
+  return ({ draft: 'draft', ready: 'ready', active: 'active', on_hold: 'on hold', canceled: 'canceled' }[st]) || 'draft';
 }
 
 function statusBadge(s) {
   const st = campaignStatus(s);
   return `<span class="bb-badge bb-badge-${st}">${campaignStatusLabel(st)}</span>`;
+}
+
+function sentMails(c) {
+  const list = Array.isArray(c.mail_sent) ? c.mail_sent.filter(m => m && m.sent_at) : [];
+  return list.slice().sort((a, b) => String(a.sent_at).localeCompare(String(b.sent_at)));
+}
+
+function lastSentAt(c) {
+  const list = sentMails(c);
+  return list.length ? String(list[list.length - 1].sent_at) : '';
+}
+
+function mailSentCell(c) {
+  const list = sentMails(c);
+  if (!list.length) return '<span class="text-muted">—</span>';
+  const last = list[list.length - 1];
+  const tip = list.map(m => `${m.mail_type || 'mail'}: ${fmt(m.sent_at)}`).join('\n');
+  const more = list.length > 1 ? ` <span class="text-muted">(${list.length} mails)</span>` : '';
+  return `<span title="${escapeHtml(tip)}">${fmt(last.sent_at)}</span>`
+       + `<br><span class="text-muted">${escapeHtml(last.mail_type || 'mail')}${more}</span>`;
+}
+
+function followupStatusBadge(v) {
+  const val = String(v || '').trim().toLowerCase();
+  const def = FU_STATUSES.find(x => x.value === val);
+  if (!val || !def) return '<span class="text-muted">—</span>';
+  return `<span class="bb-badge bb-badge-fu-${val}">${escapeHtml(def.label)}</span>`;
 }
 
 function contactStatusBadge(s) {
@@ -736,69 +975,26 @@ async function loadCampaignList() {
   }
 }
 
-async function discover() {
-  const btn = document.getElementById('discover-btn');
-  const bar = document.getElementById('discover-bar');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Scanning...';
-  bar.style.display = 'none';
-  try {
-    const r = await fetch(BASE + '/api/crm/discover-campaigns');
-    const d = await r.json();
-    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Discover failed');
-    const newCampaigns = d.created || [];
-    const renamedList = newCampaigns.filter(c => c.renamed).map(c =>
-      `<em>${escapeHtml(c.original_id)}</em> -> <strong>${escapeHtml(c.campaign_id)}</strong>`).join(', ');
-
-    bar.className = 'alert alert-info py-2 px-2 small mt-2 mb-0';
-    bar.innerHTML = newCampaigns.length
-      ? `<i class="ti ti-check me-1 text-success"></i>${escapeHtml(d.message || 'Campaigns discovered.')}<br><strong>${escapeHtml(newCampaigns.map(c => c.campaign_id).join(', '))}</strong>`
-        + (renamedList ? `<br><i class="ti ti-info-circle me-1 text-warning"></i>${renamedList}` : '')
-      : `<i class="ti ti-refresh me-1"></i>${escapeHtml(d.message || 'No new campaigns.')}<br>Syncing contacts...`;
-    bar.style.display = '';
-
-    const sr = await fetch(BASE + '/api/crm/crm-sync');
-    const sd = await sr.json();
-    const jobId = sd.job_id;
-    if (jobId) {
-      for (let i = 0; i < 60; i++) {
-        await new Promise(resolve => setTimeout(resolve, 3000));
-        const jr = await fetch(`${BASE}/api/crm/status/${jobId}`);
-        const jd = await jr.json();
-        if (jd.status === 'done') {
-          const res = jd.result || {};
-          bar.className = 'alert alert-success py-2 px-2 small mt-2 mb-0';
-          bar.innerHTML = `<i class="ti ti-check me-1"></i>Done<br>${res.campaigns_upserted ?? 0} campaigns, ${res.contact_select_synced ?? 0} contacts synced`;
-          break;
-        }
-        if (jd.status === 'error') {
-          throw new Error(jd.error || 'Sync failed');
-        }
-      }
-    }
-    await loadCampaignList();
-    const currentId = document.getElementById('campaign-select').value;
-    if (currentId) await loadCampaign();
-  } catch(e) {
-    bar.className = 'alert alert-danger py-2 px-2 small mt-2 mb-0';
-    bar.innerHTML = `<i class="ti ti-circle-x me-1"></i>${escapeHtml(e.message)}`;
-    bar.style.display = '';
-  }
-  btn.disabled = false;
-  btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover';
-}
-
 async function selectCampaign(id, event) {
+  _sitesLoaded = '';
   if (event) event.preventDefault();
   if (!id) return;
   document.getElementById('campaign-select').value = id;
-  document.getElementById('sites-btn').href = `campaign_sites.html?campaign=${encodeURIComponent(id)}`;
   localStorage.setItem('selectedCampaign', id);
   const url = new URL(window.location.href);
   url.searchParams.set('campaign_id', id);
   window.history.replaceState({}, '', url);
   filterCampaignList();
-  await loadCampaign();
+  await refreshCampaignData();
+}
+
+// Reload BOTH the contact list (inside the campaign document) and the sites list.
+// Used when a campaign is opened/switched and after anything that changes either list.
+async function refreshCampaignData(opts) {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  _sitesLoaded = '';
+  await Promise.all([loadCampaign(opts), loadSites()]);
 }
 
 document.getElementById('campaign-list').addEventListener('click', event => {
@@ -807,13 +1003,6 @@ document.getElementById('campaign-list').addEventListener('click', event => {
   selectCampaign(item.dataset.campaignId || '', event);
 });
 
-function toggleDetails() {
-  const b = document.getElementById('details-body');
-  const c = document.getElementById('details-chevron');
-  const open = b.style.display === 'block';
-  b.style.display = open ? 'none' : 'block';
-  c.className = open ? 'ti ti-chevron-down' : 'ti ti-chevron-up';
-}
 
 // ── Mail schedule ────────────────────────────────────────────────────────
 function refreshMailSchedule() {
@@ -821,14 +1010,9 @@ function refreshMailSchedule() {
   if (id) loadCampaign(id);
 }
 
-function showContactListView() {
+function closeMailEditor() {
   document.getElementById('mail-editor-card').style.display = 'none';
-  document.getElementById('contacts-list-card').style.display = '';
-}
-
-function showMailEditorView() {
-  document.getElementById('contacts-list-card').style.display = 'none';
-  document.getElementById('mail-editor-card').style.display = '';
+  document.getElementById('mail-editor-step-label').textContent = '';
 }
 
 function ensureMailEditor() {
@@ -867,18 +1051,20 @@ function ensureMailEditor() {
   return mailEditor;
 }
 
+function _stepLabel(step) {
+  return step.index === 0 ? 'Intro' : `Reminder ${step.index}`;
+}
+
 function renderMailSchedule(campaign) {
-  const steps   = campaign.mail_schedule || [];
+  const steps = campaign.mail_sequence || [];
   const body    = document.getElementById('mail-schedule-body');
   const empty   = document.getElementById('mail-schedule-empty');
   const countEl = document.getElementById('mail-schedule-count');
-  const id      = campaign.campaign_id;
 
   countEl.textContent = steps.length ? `(${steps.length} step${steps.length > 1 ? 's' : ''})` : '';
 
   if (!steps.length) {
     empty.style.display = '';
-    // remove any old step rows
     body.querySelectorAll('.sched-step').forEach(el => el.remove());
     return;
   }
@@ -894,17 +1080,17 @@ function renderMailSchedule(campaign) {
     body.insertBefore(warn, body.firstChild);
   }
 
-  steps.forEach((step, i) => {
-    const mail    = step.mail || {};
-    const subject = mail.subject || '—';
+  steps.forEach((step) => {
+    const name    = _stepLabel(step);
+    const subject = step.subject || '—';
     const day     = step.delay_days != null ? `Day ${step.delay_days}` : 'Day 0';
-    const name    = step.name || `Step ${i + 1}`;
     const sentAt  = step.sent_at ? fmt(step.sent_at) : '—';
+    const idx     = step.index;
     const row = document.createElement('div');
     row.className = 'sched-step d-flex align-items-center gap-2 py-2 border-bottom';
     row.style = 'font-size:.87rem';
     row.innerHTML = `
-      <div class="sched-num">${i + 1}</div>
+      <div class="sched-num">${idx + 1}</div>
       <div style="flex:1;min-width:0">
         <div class="fw-500">${escapeHtml(name)}</div>
         <div style="color:var(--bb-muted);font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="opacity:.6">Subject:</span> ${escapeHtml(subject)}</div>
@@ -912,15 +1098,15 @@ function renderMailSchedule(campaign) {
       </div>
       <span class="bb-badge bb-badge-muted" style="flex-shrink:0">${escapeHtml(day)}</span>
       <button class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:.75rem;flex-shrink:0"
-              onclick="openCampaignTestMailStep('${escapeHtml(step.step_id)}')">
+              onclick="openCampaignTestMailStep(${idx})">
         <i class="ti ti-send"></i>
       </button>
       <button class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:.75rem;flex-shrink:0"
-              onclick="openMailEditorStep('${escapeHtml(step.step_id)}')" title="Edit step">
+              onclick="openMailEditorStep(${idx})" title="Edit step">
         <i class="ti ti-edit"></i>
       </button>
       <button class="btn btn-xs btn-outline-danger py-0 px-2" style="font-size:.75rem;flex-shrink:0"
-              onclick="deleteScheduleStep('${escapeHtml(step.step_id)}', '${escapeHtml(name)}')">
+              onclick="deleteScheduleStep(${idx}, '${escapeHtml(name)}')">
         <i class="ti ti-trash"></i>
       </button>`;
     body.appendChild(row);
@@ -933,39 +1119,65 @@ const MAIL_STEP_DEFAULTS = {
   'Reminder 2': { delay: 12 },
 };
 
-function addScheduleStep(name) {
+async function addScheduleStep(name) {
   const id = document.getElementById('campaign-select').value;
   if (!id) return;
-  const stepId = 'step_' + Date.now();
-  const steps  = (window._campaignData || {}).mail_schedule || [];
-  // Use preset delay if defined, otherwise increment from last step
+  const steps = (window._campaignData || {}).mail_sequence || [];
+  const nextIndex = steps.length;
   const preset = name && MAIL_STEP_DEFAULTS[name];
   const lastDelay = steps.length ? (steps[steps.length - 1].delay_days ?? 0) : -5;
   const delay = preset ? preset.delay : (steps.length ? lastDelay + 5 : 0);
-  openMailEditorStep(stepId, { stepNew: true, stepName: name || '', delay });
+  // Save skeleton immediately so step appears in list right away
+  try {
+    await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mail_sequence_step: {
+          index:      nextIndex,
+          mail_type:  nextIndex === 0 ? 'intro' : `followup_${nextIndex}`,
+          delay_days: delay,
+          subject:    '',
+          body_html:  '',
+          body_text:  '',
+          css:        ''
+        }
+      })
+    });
+    const c = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`);
+    window._campaignData = c;
+    renderMailSchedule(c);
+  } catch(e) {
+    console.warn('[addScheduleStep]', e.message);
+  }
+  openMailEditorStep(nextIndex, { stepNew: false, stepName: name || '', delay });
 }
 
-function openMailEditorStep(stepId, opts = {}) {
+function openMailEditorStep(stepIndex, opts = {}) {
   const id = document.getElementById('campaign-select').value;
-  if (!id || !stepId) return;
-  showMailEditorView();
+  if (!id || stepIndex == null) return;
+  const mailTabBtn = document.getElementById('tab-mail-btn');
+  if (mailTabBtn) bootstrap.Tab.getOrCreateInstance(mailTabBtn).show();
+  document.getElementById('mail-editor-card').style.display = '';
+  const label = opts.stepName ? ` — ${opts.stepName}` : '';
+  document.getElementById('mail-editor-step-label').textContent = label;
   ensureMailEditor().load({
     campaignId: id,
-    stepId,
+    stepIndex,
     stepNew: !!opts.stepNew,
     stepName: opts.stepName || '',
     delay: opts.delay || 0
   }).catch(e => console.warn('[mail-editor-step]', e.message));
-  document.getElementById('mail-editor-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => document.getElementById('mail-editor-card').scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
 }
 
-async function deleteScheduleStep(stepId, name) {
+async function deleteScheduleStep(stepIndex, name) {
   if (!confirm(`Delete step "${name}"?`)) return;
   const id = document.getElementById('campaign-select').value;
   try {
     const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ delete_step: stepId })
+      body: JSON.stringify({ delete_step: stepIndex })
     });
     const d = await r.json();
     if (d.status !== 'ok') { alert(d.message || 'Delete failed'); return; }
@@ -973,33 +1185,45 @@ async function deleteScheduleStep(stepId, name) {
   } catch(e) { alert(e.message); }
 }
 
-function openCampaignTestMailStep(stepId) {
-  const steps = (window._campaignData || {}).mail_schedule || [];
-  const step  = steps.find(s => s.step_id === stepId);
+function openCampaignTestMailStep(stepIndex) {
+  const steps = (window._campaignData || {}).mail_sequence || [];
+  const step  = steps.find(s => s.index === stepIndex);
   if (!step) return;
-  const mail = step.mail || {};
-  window._campaignMail = { ...mail,
+  const body = step.body_html || step.body_text || '';
+  const type = step.body_html ? 'html' : 'plain';
+  window._campaignMail = {
+    subject: step.subject || '',
+    body,
+    type,
+    css: step.css || '',
     outreach_email: (window._campaignData || {}).outreach_email_account || '',
-    _display_name:  ((window._campaignData || {}).mail_account || {}).display_name || '' };
+    _display_name:  ((window._campaignData || {}).mail_account || {}).display_name || ''
+  };
   openCampaignTestMail();
 }
 
 function renderContacts(list) {
   const tbody = document.getElementById('contacts-body');
   const empty = document.getElementById('contacts-empty');
-  if (!list.length) { tbody.innerHTML = ''; empty.style.display = ''; updateRemoveExcludedBtn(); return; }
+  if (!list.length) { tbody.innerHTML = ''; empty.style.display = ''; updateRemoveExcludedBtn(); updateConfirmUi(); return; }
   empty.style.display = 'none';
   const campaignId = document.getElementById('campaign-select').value;
   tbody.innerHTML = list.map(c => {
     const cStatus = contactStatus(c.status);
     const isExcluded = cStatus === 'excluded';
     const docId = contactDocId(c);
+    const canConfirm = cStatus === 'pending' && !sentMails(c).length;
     return `<tr data-email="${c.email}">
+    <td class="text-center"><input type="checkbox" class="confirm-box" ${c.send_confirmation ? 'checked' : ''} ${canConfirm ? '' : 'disabled'}
+        title="${canConfirm ? 'Confirm: send first mail to this contact' : 'Only unsent, pending contacts can be confirmed'}"
+        data-email="${escapeHtml(c.email || '')}" data-doc="${escapeHtml(docId)}" onchange="toggleConfirmBox(this)"></td>
     <td>
       ${contactStatusBadge(cStatus)}
 
       ${cStatus !== 'pending' && c.sent_at ? `<br><span style="font-size:.72rem;color:var(--bb-muted)">${fmt(c.sent_at)}</span>` : ''}
     </td>
+    <td class="small">${followupStatusBadge(c.followup_status)}</td>
+    <td class="small">${mailSentCell(c)}</td>
     <td class="small"><span class="editable-cell" data-field="name" data-doc="${c.doc_id||(c.email||"").replace(/[^a-zA-Z0-9_-]/g,"_").toLowerCase()}" data-email="${c.email}">${escapeHtml(c.name||'')}<span class="edit-placeholder" style="color:var(--bb-muted)">${c.name?'':'—'}</span></span></td>
     <td class="small"><a href="mailto:${c.email}">${c.email||'—'}</a></td>
     <td class="small"><span class="editable-cell" data-field="title" data-doc="${c.doc_id||(c.email||"").replace(/[^a-zA-Z0-9_-]/g,"_").toLowerCase()}" data-email="${c.email}">${escapeHtml(c.title||'')}<span class="edit-placeholder" style="color:var(--bb-muted)">${c.title?'':'—'}</span></span></td>
@@ -1010,11 +1234,11 @@ function renderContacts(list) {
       <a href="${c.website}" target="_blank" class="bb-lead-ext" title="Open site"><i class="ti ti-external-link"></i></a>` : '—'}
     </td>
     <td class="text-center">
-      <div class="d-inline-flex align-items-center justify-content-center gap-1">
-        <button class="btn btn-xs ${cStatus === 'active' ? 'btn-success' : 'btn-outline-success'} py-0 px-2" style="font-size:.72rem" data-email="${escapeHtml(c.email || '')}" data-doc="${escapeHtml(docId)}" onclick="toggleContactStatusBtn(this,'active')" title="${cStatus === 'active' ? 'Unset active' : 'Set active'}">
-          <i class="ti ti-user-check"></i>
+      <div class="d-inline-flex gap-1">
+        <button class="btn btn-xs btn-outline-secondary py-0 px-2" style="font-size:.72rem" onclick="openContactDetail('${escapeHtml(docId)}','${escapeHtml(c.email||'')}')" title="Contact details">
+          <i class="ti ti-info-circle"></i>
         </button>
-        <button class="btn btn-xs ${cStatus === 'excluded' ? 'btn-danger' : 'btn-outline-danger'} py-0 px-2" style="font-size:.72rem" data-email="${escapeHtml(c.email || '')}" data-doc="${escapeHtml(docId)}" onclick="toggleContactStatusBtn(this,'excluded')" title="${cStatus === 'excluded' ? 'Unset excluded' : 'Set excluded'}">
+        <button class="btn btn-xs ${isExcluded ? 'btn-danger' : 'btn-success'} py-0 px-2" style="font-size:.72rem" data-email="${escapeHtml(c.email || '')}" data-doc="${escapeHtml(docId)}" onclick="toggleContactStatusBtn(this,'${isExcluded ? 'pending' : 'excluded'}')" title="${isExcluded ? 'Remove exclusion' : 'Exclude contact'}">
           <i class="ti ti-user-x"></i>
         </button>
       </div>
@@ -1022,6 +1246,142 @@ function renderContacts(list) {
   </tr>`;
   }).join('');
   updateRemoveExcludedBtn();
+  updateConfirmUi();
+}
+
+// ── Send confirmation (first mail only) ───────────────────────────────────
+function _eligibleConfirm(c) { return contactStatus(c.status) === 'pending' && !sentMails(c).length; }
+
+function _shownContacts() {
+  const q  = document.getElementById('contact-search').value.toLowerCase();
+  const st = document.getElementById('status-filter').value;
+  const cf = document.getElementById('confirm-filter').value;
+  let list = allContacts;
+  if (st) list = list.filter(c => contactStatus(c.status) === st);
+  if (cf === 'yes') list = list.filter(c => c.send_confirmation && _eligibleConfirm(c));
+  if (cf === 'no')  list = list.filter(c => !c.send_confirmation && _eligibleConfirm(c));
+  if (q)  list = list.filter(c =>
+    [(c.name||''),(c.email||''),(c.website||''),(c.title||'')].some(v => v.toLowerCase().includes(q)));
+  return list;
+}
+
+function updateConfirmUi() {
+  const el = document.getElementById('confirm-counter');
+  if (!el) return;
+  const unsent = allContacts.filter(_eligibleConfirm);
+  const yes = unsent.filter(c => c.send_confirmation).length;
+  el.textContent = `${yes} confirmed / ${unsent.length - yes} not confirmed`;
+  const sw = document.getElementById('require-confirm-switch');
+  if (sw) sw.checked = !!(window._campaignData || {}).require_send_confirmation;
+  const box = document.getElementById('confirm-all-box');
+  if (box) {
+    const shown = _shownContacts().filter(_eligibleConfirm);
+    const n = shown.filter(c => c.send_confirmation).length;
+    box.checked = shown.length > 0 && n === shown.length;
+    box.indeterminate = n > 0 && n < shown.length;
+  }
+}
+
+async function _postConfirm(body) {
+  const id = document.getElementById('campaign-select').value;
+  const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/contacts/confirm`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  if (!r.ok || d.status === 'error') throw new Error(d.message || 'Confirm failed');
+  return d;
+}
+
+function _leadCacheContact(doc) {
+  for (const k in _leadContactCache) {
+    const c = (_leadContactCache[k] || []).find(x => (x.doc_id || '') === doc);
+    if (c) return c;
+  }
+  return null;
+}
+
+// Optimistic set of send_confirmation from any view; rolls back on failure.
+function setContactConfirm(doc, email, value, onRollback) {
+  const id = document.getElementById('campaign-select').value;
+  const targets = [
+    allContacts.find(x => x.email === email || contactDocId(x) === doc),
+    _leadCacheContact(doc)
+  ].filter(Boolean);
+  targets.forEach(c => { c.send_confirmation = value; });
+  updateConfirmUi();
+  fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/contacts/${encodeURIComponent(doc)}`, {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({send_confirmation: value})
+  }).then(async r => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Save failed');
+  }).catch(e => {
+    console.warn('[confirm] save failed, rolled back:', e.message);
+    targets.forEach(c => { c.send_confirmation = !value; });
+    updateConfirmUi();
+    if (document.getElementById('campaign-select').value === id) filterContacts();
+    if (onRollback) onRollback();
+  });
+}
+
+function toggleLeadConfirm(box) {
+  setContactConfirm(box.dataset.doc, box.dataset.email, box.checked, () => { box.checked = !box.checked; });
+}
+
+function toggleConfirmBox(box) {
+  // Optimistic: update UI at once, save in the background, roll back on failure.
+  const id = document.getElementById('campaign-select').value;
+  const doc = box.dataset.doc, email = box.dataset.email, value = box.checked;
+  const c = allContacts.find(x => x.email === email || contactDocId(x) === doc);
+  if (c) c.send_confirmation = value;
+  updateConfirmUi();
+  fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/contacts/${encodeURIComponent(doc)}`, {
+    method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({send_confirmation: value})
+  }).then(async r => {
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Save failed');
+  }).catch(e => {
+    console.warn('[confirm] save failed, rolled back:', e.message);
+    if (c) c.send_confirmation = !value;
+    if (document.getElementById('campaign-select').value === id) filterContacts();
+  });
+}
+
+function confirmShown(value) {
+  const list = _shownContacts().filter(c => _eligibleConfirm(c) && !!c.send_confirmation !== value);
+  if (!list.length) { alert('Nothing to change in the shown list.'); return; }
+  const msg = value
+    ? `Confirm ${list.length} contact(s) to receive the FIRST mail?`
+    : `Remove confirmation from ${list.length} contact(s)?`;
+  if (!confirm(msg)) return;
+  const id = document.getElementById('campaign-select').value;
+  list.forEach(c => { c.send_confirmation = value; });
+  filterContacts();                       // instant UI; save runs in the background
+  _postConfirm({value, doc_ids: list.map(contactDocId)}).catch(e => {
+    list.forEach(c => { c.send_confirmation = !value; });
+    if (document.getElementById('campaign-select').value === id) filterContacts();
+    alert('Could not save, change rolled back: ' + e.message);
+  });
+}
+
+function confirmAllHeader(box) {
+  const value = box.checked;
+  box.checked = !value;          // restored by updateConfirmUi after the action
+  confirmShown(value);
+}
+
+async function toggleRequireConfirm(sw) {
+  const id = document.getElementById('campaign-select').value;
+  const value = sw.checked;
+  if (!value && !confirm('Turn OFF confirmation? The first mail will then go to ALL pending contacts without a tick.')) { sw.checked = true; return; }
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({require_send_confirmation: value})
+    });
+    const d = await r.json();
+    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Save failed');
+    if (window._campaignData) window._campaignData.require_send_confirmation = value;
+  } catch (e) { alert(e.message); sw.checked = !value; }
+  updateConfirmUi();
 }
 
 async function patchContactStatus(email, doc, status) {
@@ -1038,24 +1398,27 @@ async function patchContactStatus(email, doc, status) {
   if (c) c.status = status;
 }
 
-async function toggleContactStatusBtn(btn, status) {
-  const oldHtml = btn.innerHTML;
+function toggleContactStatusBtn(btn, status) {
+  // Optimistic: update list and counts at once, save in the background, roll back on failure.
   const email = btn.dataset.email || '';
   const doc = btn.dataset.doc || '';
+  const campaignId = document.getElementById('campaign-select').value;
   const row = allContacts.find(x => x.email === email || contactDocId(x) === doc);
-  const currentStatus = contactStatus(row?.status);
-  const nextStatus = currentStatus === status ? 'pending' : status;
-  btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader"></i>';
-  try {
-    await patchContactStatus(email, doc, nextStatus);
-    filterContacts();
-    updateCampaignCountsFromContacts();
-  } catch(e) {
-    console.warn('[contact-status] save failed:', e.message);
-    btn.disabled = false;
-    btn.innerHTML = oldHtml;
-  }
+  const prevStatus = row ? row.status : undefined;
+  const nextStatus = contactStatus(prevStatus) === status ? 'pending' : status;
+  if (row) row.status = nextStatus;
+  filterContacts();
+  updateCampaignCountsFromContacts();
+  patchContactStatus(email, doc, nextStatus).then(() => {
+    _refreshBothLists(campaignId);
+  }).catch(e => {
+    console.warn('[contact-status] save failed, rolled back:', e.message);
+    if (row) row.status = prevStatus;
+    if (document.getElementById('campaign-select').value === campaignId) {
+      filterContacts();
+      updateCampaignCountsFromContacts();
+    }
+  });
 }
 
 function updateCampaignCountsFromContacts() {
@@ -1068,56 +1431,90 @@ function updateCampaignCountsFromContacts() {
   }
 }
 
-function updateRemoveExcludedBtn() {
-  // Show "Delete excluded" button when any contact is excluded
-  const btn = document.getElementById('delete-excluded-btn');
-  if (!btn) return;
-  const hasExcluded = allContacts.some(c => contactStatus(c.status) === 'excluded');
-  btn.style.display = hasExcluded ? '' : 'none';
+function _refreshBothLists(id) {
+  if (!id) return;
+  const indicator = document.getElementById('lists-refresh-indicator');
+  if (indicator) indicator.style.display = '';
+  Promise.all([
+    fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`),
+    fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads`),
+  ]).then(([campaign, sitesData]) => {
+    if (campaign?.campaign_contacts) {
+      allContacts = campaign.campaign_contacts;
+      filterContacts();
+    }
+    if (sitesData?.leads) {
+      _allLeads = sitesData.leads;
+      applySitesFilter();
+    }
+    updateRemoveExcludedBtn();
+  }).catch(() => {}).finally(() => {
+    if (indicator) indicator.style.display = 'none';
+  });
 }
 
-function openRemoveExcludedModal() {
-  const excluded = allContacts.filter(c => contactStatus(c.status) === 'excluded');
-  if (!excluded.length) return;
-  document.getElementById('remove-excluded-count').textContent = excluded.length;
+function updateRemoveExcludedBtn() {
+  const btn = document.getElementById('delete-excluded-btn');
+  if (!btn) return;
+  const hasExcludedContacts = allContacts.some(c => contactStatus(c.status) === 'excluded');
+  const hasExcludedSites    = _allLeads.some(l => l.status === 'excluded');
+  btn.style.display = (hasExcludedContacts || hasExcludedSites) ? '' : 'none';
+}
+
+async function openRemoveExcludedModal() {
+  const campaignId = document.getElementById('campaign-select').value;
+  if (!campaignId) return;
   const btn = document.getElementById('remove-excluded-confirm-btn');
-  btn.disabled = false;
-  btn.innerHTML = '<i class="ti ti-trash me-1"></i>Remove from campaign';
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Checking…';
+  document.getElementById('remove-excluded-count').textContent = '…';
+  const sitesRow = document.getElementById('remove-excluded-sites-row');
+  sitesRow.style.display = 'none';
   new bootstrap.Modal(document.getElementById('removeExcludedModal')).show();
+  try {
+    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/excluded-counts`);
+    document.getElementById('remove-excluded-count').textContent = d.excluded_contacts ?? 0;
+    if (d.excluded_sites) {
+      document.getElementById('remove-excluded-sites-count').textContent = d.excluded_sites;
+      sitesRow.style.display = '';
+    }
+    if (!d.excluded_contacts && !d.excluded_sites) {
+      bootstrap.Modal.getInstance(document.getElementById('removeExcludedModal')).hide();
+      return;
+    }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-trash me-1"></i>Remove from campaign';
+  } catch(e) {
+    document.getElementById('remove-excluded-count').textContent = '?';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-trash me-1"></i>Remove from campaign';
+  }
 }
 
 async function deleteExcluded() {
-  const excluded = allContacts.filter(c => contactStatus(c.status) === 'excluded').map(c => c.email);
-  if (!excluded.length) return;
   const campaignId = document.getElementById('campaign-select').value;
-  const fb = document.getElementById('sync-feedback');
+  if (!campaignId) return;
+  const fb    = document.getElementById('sync-feedback');
   const modal = bootstrap.Modal.getInstance(document.getElementById('removeExcludedModal'));
-  const btn = document.getElementById('remove-excluded-confirm-btn');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerHTML = '<i class="ti ti-loader me-1"></i>Removing...';
-  }
+  const btn   = document.getElementById('remove-excluded-confirm-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Removing...'; }
   fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
-  fb.textContent = `Removing ${excluded.length} excluded contact(s) from this campaign...`;
+  fb.textContent = 'Removing excluded contacts and sites…';
   fb.style.display = '';
   try {
-    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/remove`, {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ emails: excluded })
+    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/remove`, {
+      method: 'POST'
     });
-    const d = await r.json();
     if (d.status !== 'ok') throw new Error(d.message || 'remove failed');
     if (modal) modal.hide();
+    const sitePart = d.leads_deleted ? `, ${d.leads_deleted} site(s)` : '';
     fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
-    fb.textContent = `Removed ${d.deleted} contact(s) from this campaign. Refreshing...`;
-    await loadCampaign();
+    fb.textContent = `Removed ${d.deleted} contact(s)${sitePart}. Refreshing…`;
+    await refreshCampaignData({ keepView: true });
     await loadCampaignList();
-    fb.textContent = `Removed ${d.deleted} contact(s) from this campaign.`;
+    fb.textContent = `Removed ${d.deleted} contact(s)${sitePart} from this campaign.`;
   } catch(e) {
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="ti ti-trash me-1"></i>Remove from campaign';
-    }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="ti ti-trash me-1"></i>Remove from campaign'; }
     fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
     fb.textContent = 'Error: ' + e.message;
   }
@@ -1150,8 +1547,8 @@ function sortBy(col) {
 function _applySort(list) {
   if (!_sortCol) return list;
   return [...list].sort((a, b) => {
-    const va = String(a[_sortCol] || '').toLowerCase();
-    const vb = String(b[_sortCol] || '').toLowerCase();
+    const va = (_sortCol === 'last_sent' ? lastSentAt(a) : String(a[_sortCol] || '')).toLowerCase();
+    const vb = (_sortCol === 'last_sent' ? lastSentAt(b) : String(b[_sortCol] || '')).toLowerCase();
     return _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
   });
 }
@@ -1165,25 +1562,25 @@ document.addEventListener('click', function(e) {
 function filterContacts() {
   const q  = document.getElementById('contact-search').value.toLowerCase();
   const st = document.getElementById('status-filter').value;
-  let list = allContacts;
-  if (st)  list = list.filter(c => contactStatus(c.status) === st);
-  if (q)   list = list.filter(c =>
-    [(c.name||''),(c.email||''),(c.website||''),(c.title||'')].some(v => v.toLowerCase().includes(q)));
-  renderContacts(_applySort(list));
+  renderContacts(_applySort(_shownContacts()));
 }
 
 // ── Bulk selection helpers ────────────────────────────────────────────────
-async function loadCampaign() {
+async function loadCampaign(opts) {
   const id = document.getElementById('campaign-select').value;
-  if (id) document.getElementById('sites-btn').href = `campaign_sites.html?campaign=${encodeURIComponent(id)}`;
-  document.getElementById('sync-feedback').style.display = 'none';
-  document.getElementById('campaign-detail').style.display = 'none';
-  document.getElementById('campaign-actions').style.display = 'none';
+  const keep = !!(opts && opts.keepView);      // refresh in place: keep message + visible page
+  if (!keep) {
+    document.getElementById('sync-feedback').style.display = 'none';
+    document.getElementById('campaign-detail').style.display = 'none';
+    document.getElementById('campaign-actions').style.display = 'none';
+  }
   document.getElementById('campaign-empty').style.display = id ? 'none' : 'block';
   if (!id) return;
+  allContacts = [];                       // never show the previous campaign's contacts
   try {
-    const r = await fetch(`${BASE}/api/crm/campaigns/${id}`);
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, { cache: 'no-store' });
     const c = await r.json();
+    if (document.getElementById('campaign-select').value !== id) return;   // user switched meanwhile
     if (!r.ok || c.status === 'error') {
       document.getElementById('campaign-empty').textContent = `Error: ${c.message || r.status}`;
       document.getElementById('campaign-empty').style.display = 'block';
@@ -1206,6 +1603,7 @@ async function loadCampaign() {
     c.status = st;
     const badge = document.getElementById('c-status-badge');
     badge.className = `bb-badge bb-badge-${st}`; badge.textContent = campaignStatusLabel(st);
+    badge.title = holdTooltip(c);
     document.getElementById('c-contacts').textContent = c.contact_count || 0;
     document.getElementById('c-sites').textContent    = c.sites_count || 0;
     document.getElementById('c-countries').textContent = (c.countries||[]).length || '—';
@@ -1228,7 +1626,7 @@ async function loadCampaign() {
     window._campaignMail = { ...(c.mail || {}), outreach_email: c.outreach_email_account || '',
                               _display_name: (c.mail_account || {}).display_name || '' };
     renderMailSchedule(c);
-    showContactListView();
+    closeMailEditor();
     // Facet reference
     const facetRow = document.getElementById('c-facet-row');
     if (c.source_facet) {
@@ -1263,13 +1661,7 @@ async function loadCampaign() {
       facetRow.style.display = 'none';
     }
 
-    const isLocked = st === 'active' || st === 'canceled';
-    const sendBtn = document.getElementById('send-btn');
-    sendBtn.style.display = st === 'draft' ? '' : 'none';
-    document.getElementById('cancel-btn').style.display = (st === 'ready' || st === 'active') ? '' : 'none';
-    document.getElementById('delete-btn').style.display = (st === 'draft' || st === 'canceled') ? '' : 'none';
-    const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
-    if (syncBtn) syncBtn.disabled = isLocked;
+    setStatusButtons(st);
     allContacts = c.campaign_contacts || [];
     document.getElementById('c-contact-count').textContent = `(${allContacts.length})`;
     renderContacts(allContacts);
@@ -1348,80 +1740,7 @@ async function pollExport(jobId, id) {
   btn.disabled = false; btn.innerHTML = '<i class="ti ti-table-export me-1"></i>Full override';
 }
 
-async function enrichNames() {
-  const id = document.getElementById('campaign-select').value;
-  if (!id) return;
-  const fb  = document.getElementById('sync-feedback');
-  const btn = document.getElementById('enrich-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Enriching…';
-  fb.style.display = 'none';
-  try {
-    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/name-enrich`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({}),
-    });
-    const d = await r.json();
-    if (d.status === 'error') throw new Error(d.message || 'enrich failed');
-    fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
-    fb.innerHTML = `Name enrichment job queued (${d.job_id || ''}) — working…`;
-    fb.style.display = '';
-    if (d.job_id) pollEnrich(d.job_id);
-    else btnReset();
-  } catch(e) {
-    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
-    fb.textContent = 'Enrich failed: ' + (e.message || e);
-    fb.style.display = '';
-    btnReset();
-  }
-  function btnReset() {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="ti ti-user-search me-1"></i>Enrich names';
-  }
-}
 
-async function pollEnrich(jobId) {
-  const fb  = document.getElementById('sync-feedback');
-  const btn = document.getElementById('enrich-btn');
-  for (let i = 0; i < 120; i++) {
-    await new Promise(r => setTimeout(r, 3000));
-    try {
-      const r = await fetch(`${BASE}/api/crm/status/${jobId}`);
-      const j = await r.json();
-      if (j.status === 'done') {
-        const res = j.result || {};
-        const written  = res.written  ?? 0;
-        const skipped  = res.skipped  ?? 0;
-        const ai       = res.ai_resolved  ?? 0;
-        const rule     = res.rule_resolved ?? 0;
-        fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
-        fb.innerHTML = `Enrichment done — ${written} names written `
-          + `(rule: ${rule}, ai: ${ai}, skipped: ${skipped}). `
-          + `<a href="" onclick="location.reload();return false">Reload contacts</a>`;
-        btn.disabled = false;
-        btn.innerHTML = '<i class="ti ti-user-search me-1"></i>Enrich names';
-        return;
-      }
-      if (j.status === 'error') {
-        fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
-        fb.textContent = 'Enrichment failed: ' + (j.error || 'unknown');
-        btn.disabled = false;
-        btn.innerHTML = '<i class="ti ti-user-search me-1"></i>Enrich names';
-        return;
-      }
-      // Still running — show progress if available
-      if (j.result) {
-        fb.innerHTML = `Enriching… (${j.result.written ?? 0} written so far)`;
-      }
-    } catch(_) { /* keep polling */ }
-  }
-  // Timeout after 6 minutes — let user know but don't error
-  fb.className = 'alert alert-warning py-1 px-2 small mt-2 mb-0';
-  fb.textContent = 'Job still running in background — check back in a moment.';
-  btn.disabled = false;
-  btn.innerHTML = '<i class="ti ti-user-search me-1"></i>Enrich names';
-}
 
 async function openLeadPopup(evt, website, pipeline) {
   evt.preventDefault();
@@ -1571,26 +1890,6 @@ async function removeLeadFromCampaign() {
   btn.disabled = false; btn.innerHTML = '<i class="ti ti-user-minus me-1"></i>Remove from campaign';
 }
 
-async function syncCampaign() {
-  const id = document.getElementById('campaign-select').value;
-  if (!id) return;
-  const fb = document.getElementById('sync-feedback');
-  const btn = document.querySelector('[onclick="syncCampaign()"]');
-  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Syncing…';
-  fb.style.display = 'none';
-  try {
-    const r = await fetch(`${BASE}/api/crm/campaign-sync?campaign_id=${encodeURIComponent(id)}`);
-    const d = await r.json();
-    fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
-    fb.textContent = d.status === 'queued' ? `Sync job queued (${d.job_id})` : (d.message || 'Sync triggered');
-    fb.style.display = '';
-    setTimeout(async () => { await loadCampaign(); await loadCampaignList(); }, 3000);
-  } catch(e) {
-    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
-    fb.textContent = e.message; fb.style.display = '';
-  }
-  btn.disabled = false; btn.innerHTML = '<i class="ti ti-refresh me-1"></i>Sync from sheet';
-}
 
 function confirmSend() {
   const id = document.getElementById('campaign-select').value;
@@ -1619,6 +1918,7 @@ async function doSend() {
       }
       document.getElementById('send-btn').style.display = 'none';
       document.getElementById('cancel-btn').style.display = '';
+      document.getElementById('reset-btn').style.display = '';
       fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
       fb.textContent = 'Campaign marked as ready. It will become active after the first real mail is sent.'; fb.style.display = '';
     } else {
@@ -1631,10 +1931,119 @@ async function doSend() {
   }
 }
 
+// Which action buttons are visible for each campaign status.
+function statusHelp(st) { return ({
+  draft:    '<strong>Draft</strong> &mdash; being prepared. Nothing is sent. Add contacts and write the mail, then press <em>Mark ready</em>.',
+  ready:    '<strong>Ready</strong> &mdash; approved for sending. The outreach run sends the first mail to pending contacts and the campaign then becomes <em>Active</em>. <em>Put on hold</em> pauses it; <em>Cancel</em> stops it for good.',
+  active:   '<strong>Active</strong> &mdash; mail has been sent and follow-ups continue. <em>Put on hold</em> pauses all sending and can be resumed; <em>Cancel</em> stops the campaign permanently (history is kept).',
+  on_hold:  '<strong>On hold</strong> &mdash; paused: no mail is sent. Everything is kept. <em>Resume</em> continues where it left off; <em>Cancel</em> stops it for good.',
+  canceled: '<strong>Canceled</strong> &mdash; stopped permanently and cannot be reopened. All data is kept until you <em>Delete</em> the campaign. <em>Reset</em> clears its send history.',
+})[st] || ''; }
+
+function setStatusButtons(st) {
+  const show = (id, on) => { document.getElementById(id).style.display = on ? '' : 'none'; };
+  const help = document.getElementById('status-help');
+  if (help) {
+    help.innerHTML = statusHelp(st);
+    help.style.display = statusHelp(st) ? '' : 'none';
+  }
+  show('send-btn',   st === 'draft');
+  show('hold-btn',   st === 'ready' || st === 'active');
+  show('resume-btn', st === 'on_hold');
+  show('cancel-btn', st === 'ready' || st === 'active' || st === 'on_hold');
+  show('delete-btn', st === 'draft' || st === 'canceled');
+  show('reset-btn',  st !== 'draft');
+}
+
+function holdTooltip(c) {
+  if (campaignStatus(c.status) !== 'on_hold') return '';
+  const parts = ['On hold'];
+  if (c.held_at) parts[0] += ' since ' + fmt(c.held_at);
+  if (c.held_by) parts.push('by ' + c.held_by);
+  if (c.held_reason) parts.push('- ' + c.held_reason);
+  return parts.join(' ');
+}
+
+async function setCampaignStatus(status, extra = {}) {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return null;
+  const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status, ...extra})
+  });
+  const d = await r.json();
+  if (!r.ok || d.status !== 'ok') throw new Error(d.message || 'Status change failed');
+  return d;
+}
+
+async function confirmHold() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const reason = await new Promise(resolve => {
+    document.getElementById('hold-campaign-id').textContent = id;
+    document.getElementById('hold-status-now').textContent =
+      (document.getElementById('c-status-badge').textContent || '').trim() || 'current status';
+    document.getElementById('hold-reason').value = '';
+    const modalEl = document.getElementById('holdModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    let answer = null;                    // null = dismissed
+    document.getElementById('hold-confirm-btn').onclick = () => {
+      answer = document.getElementById('hold-reason').value.trim();
+      modal.hide();
+    };
+    modalEl.addEventListener('hidden.bs.modal', () => resolve(answer), { once: true });
+    modal.show();
+  });
+  if (reason === null) return;          // dismissed the dialog
+  const fb = document.getElementById('sync-feedback');
+  try {
+    await setCampaignStatus('on_hold', { hold_reason: reason });
+    fb.className = 'alert alert-warning py-1 px-2 small mt-2 mb-0';
+    fb.textContent = 'Campaign is on hold. No mail will be sent until you resume it.';
+    fb.style.display = '';
+    await loadCampaign({ keepView: true });
+    await loadCampaignList();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = e.message; fb.style.display = '';
+  }
+}
+
+async function resumeCampaign() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const fb = document.getElementById('sync-feedback');
+  try {
+    const held = (window._campaignData || {}).held_from;
+    await setCampaignStatus(held === 'ready' || held === 'active' ? held : 'ready');
+    fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
+    fb.textContent = 'Campaign resumed.';
+    fb.style.display = '';
+    await loadCampaign({ keepView: true });
+    await loadCampaignList();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = e.message; fb.style.display = '';
+  }
+}
+
 async function confirmCancel() {
   const id = document.getElementById('campaign-select').value;
   if (!id) return;
-  if (!confirm(`Cancel campaign "${id}"? Active campaigns stay locked until canceled, and canceled campaigns can be deleted.`)) return;
+  const ok = await new Promise(resolve => {
+    document.getElementById('cancel-campaign-id').textContent = id;
+    document.getElementById('cancel-understand').checked = false;
+    document.getElementById('cancel-confirm-btn').disabled = true;
+    document.getElementById('cancel-contact-count').textContent = (typeof allContacts !== 'undefined' ? allContacts.length : '?');
+    const modalEl = document.getElementById('cancelModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    let answer = false;
+    document.getElementById('cancel-confirm-btn').onclick = () => { answer = true; modal.hide(); };
+    modalEl.addEventListener('hidden.bs.modal', () => resolve(answer), { once: true });
+    modal.show();
+  });
+  if (!ok) return;
   const fb = document.getElementById('sync-feedback');
   try {
     const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
@@ -1647,11 +2056,9 @@ async function confirmCancel() {
     const badge = document.getElementById('c-status-badge');
     badge.className = 'bb-badge bb-badge-canceled';
     badge.textContent = 'canceled';
-    document.getElementById('send-btn').style.display = 'none';
-    document.getElementById('cancel-btn').style.display = 'none';
-    document.getElementById('delete-btn').style.display = '';
-    const syncBtn = document.querySelector('[onclick="syncCampaign()"]');
-    if (syncBtn) syncBtn.disabled = true;
+    setStatusButtons('canceled');
+    document.getElementById('reset-btn').style.display = 'none';
+
     fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
     fb.textContent = 'Campaign canceled.';
     fb.style.display = '';
@@ -1738,7 +2145,7 @@ async function populateOwnerSelect(currentOwner) {
   const sel = document.getElementById('c-owner-select');
   if (_usersForOwner.length === 0) {
     try {
-      const projectId = (window.FIREBASE_CONFIG || {}).projectId || 'blueboot-market';
+      const projectId = (window.FIREBASE_CONFIG || {}).projectId;
       const url = `https://firestore.googleapis.com/v1/projects/${projectId}`
                 + `/databases/(default)/documents/settings/users/users`;
       const r   = await fetch(url, { cache: 'no-store' });
@@ -1952,19 +2359,932 @@ function startEdit(span) {
   inp.addEventListener('blur', save);
   inp.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
-    if (e.key === 'Escape') { renderSpan(cur === '—' ? '' : cur); }
   });
 }
 
+
+// ── Sites tab ─────────────────────────────────────────────────────────────────
+let _allLeads       = [];
+let _expandedLeadId = '';   // lead_id to restore after re-render
+let _sitesLoaded    = '';   // campaign id last loaded
+let _leadDetailModal = null;
+const _leadContactCache = {};
+
+function _leadCountHtml(l) {
+  if (l.contact_count == null) return '—';
+  return `<span title="Total">${l.contact_count}</span>`
+    + (l.pending_count  > 0 ? ` <span class="text-success" title="Pending">${l.pending_count}p</span>`  : '')
+    + (l.excluded_count > 0 ? ` <span class="text-danger"  title="Excluded">${l.excluded_count}x</span>` : '');
+}
+
+function leadStatusBadge(s) {
+  return `<span class="badge lead-status-${s||'pending'}">${escapeHtml(s||'pending')}</span>`;
+}
+
+function priorityBadge(p) {
+  if (!p) return '<span class="text-muted">—</span>';
+  const colors = { A:'success', B:'warning', C:'secondary' };
+  return `<span class="badge bg-${colors[p]||'secondary'}">${escapeHtml(p)}</span>`;
+}
+
+async function loadSites() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  _sitesLoaded = id;
+  _allLeads = [];
+  Object.keys(_leadContactCache).forEach(k => delete _leadContactCache[k]);
+  document.getElementById('sites-body').innerHTML =
+    '<tr><td colspan="8" class="text-center py-5 small" style="color:var(--bb-muted)">' +
+    '<div class="spinner-border spinner-border-sm me-2"></div>Loading…</td></tr>';
+  try {
+    const data = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads`, { cache: 'no-store' });
+    if (document.getElementById('campaign-select').value !== id) return;   // user switched meanwhile
+    _allLeads = data.leads || [];
+    _populateSectorFilter(_allLeads);
+    applySitesFilter();
+    updateRemoveExcludedBtn();
+  } catch(e) {
+    document.getElementById('sites-body').innerHTML =
+      `<tr><td colspan="7" class="text-center py-5 small text-danger">Error: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function _populateSectorFilter(leads) {
+  const sectors = [...new Set(leads.map(l => l.ai_sector).filter(Boolean))].sort();
+  const sel = document.getElementById('sites-sector-sel');
+  sel.innerHTML = '<option value="">All sectors</option>' +
+    sectors.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+}
+
+
+
+// ── Inline contact field editing (name / title) ───────────────────────────────
+document.addEventListener('blur', async e => {
+  const el = e.target;
+  if (!el.classList.contains('lc-editable')) return;
+  const campaignId = document.getElementById('campaign-select').value;
+  const leadId     = el.dataset.lead;
+  const ci         = parseInt(el.dataset.ci, 10);
+  const field      = el.dataset.field;
+  const docId      = el.dataset.doc;
+  const val        = el.textContent.trim();
+  if (!docId) return;
+
+  // Check if value actually changed
+  const contacts = _leadContactCache[leadId] || [];
+  const c = contacts[ci];
+  if (!c) return;
+  const current = (field === 'name' ? c.name : (c.title || c.role)) || '';
+  if (val === current) return;
+
+  el.classList.add('saving');
+  try {
+    await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/${encodeURIComponent(docId)}`,
+      { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ [field]: val }) }
+    );
+    c[field] = val;
+    el.classList.remove('saving');
+    el.classList.add('saved');
+    setTimeout(() => el.classList.remove('saved'), 1200);
+  } catch (err) {
+    el.classList.remove('saving');
+    el.classList.add('error');
+    el.textContent = current;  // revert
+    setTimeout(() => el.classList.remove('error'), 2000);
+  }
+}, true);  // capture phase so blur fires on contenteditable
+
+// Prevent Enter from inserting newlines — commit on Enter instead
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.classList.contains('lc-editable')) {
+    e.preventDefault();
+    e.target.blur();
+  }
+}, true);
+
+// ── Sites sort state ──────────────────────────────────────────────────────────
+let _sitesSort = { col: '', dir: 1 };
+
+function _sortLeads(leads) {
+  const { col, dir } = _sitesSort;
+  if (!col) return leads;
+  return [...leads].sort((a, b) => {
+    let av = a[col], bv = b[col];
+    if (col === 'company') { av = (a.company || a.domain || '').toLowerCase(); bv = (b.company || b.domain || '').toLowerCase(); }
+    if (col === 'priority') { const order = { A:1, B:2, C:3 }; av = order[av] || 99; bv = order[bv] || 99; }
+    if (col === 'contact_count' || col === 'page_count') { av = (av != null && av !== '') ? Number(av) : -1; bv = (bv != null && bv !== '') ? Number(bv) : -1; }
+    if (av == null) av = '';
+    if (bv == null) bv = '';
+    if (av < bv) return -1 * dir;
+    if (av > bv) return  1 * dir;
+    return 0;
+  });
+}
+
+function _updateSortIcons() {
+  document.querySelectorAll('#sites-thead .sites-th').forEach(th => {
+    const icon = th.querySelector('.sites-sort-icon');
+    if (!icon) return;
+    if (th.dataset.col === _sitesSort.col) {
+      icon.className = `ti ${_sitesSort.dir === 1 ? 'ti-sort-ascending' : 'ti-sort-descending'} sites-sort-icon`;
+      icon.style.opacity = '1';
+    } else {
+      icon.className = 'ti ti-arrows-sort sites-sort-icon';
+      icon.style.opacity = '.45';
+    }
+  });
+}
+
+document.addEventListener('click', e => {
+  const th = e.target.closest('#sites-thead .sites-th');
+  if (!th) return;
+  const col = th.dataset.col;
+  if (_sitesSort.col === col) _sitesSort.dir *= -1;
+  else { _sitesSort.col = col; _sitesSort.dir = 1; }
+  _updateSortIcons();
+  applySitesFilter();
+});
+
+function applySitesFilter() {
+  const q      = (document.getElementById('sites-search').value||'').trim().toLowerCase();
+  const status = document.getElementById('sites-status-sel').value;
+  const sector = document.getElementById('sites-sector-sel').value;
+  const source = document.getElementById('sites-source-sel').value;
+  const filtered = _allLeads.filter(l => {
+    if (status && l.status !== status) return false;
+    if (sector && l.ai_sector !== sector) return false;
+    if (source && !(l.sources||[]).includes(source)) return false;
+    if (q) {
+      const hay = [l.company, l.domain, l.website, l.country_name, l.ai_sector, l.title]
+        .filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  const badge = document.getElementById('sites-count-badge');
+  badge.textContent = filtered.length === _allLeads.length
+    ? `${_allLeads.length} sites`
+    : `${filtered.length} / ${_allLeads.length} sites`;
+  renderSitesTable(_sortLeads(filtered));
+}
+
+async function _restoreExpanded() {
+  if (!_expandedLeadId) return;
+  const row = document.querySelector(
+    `#sites-body .site-row[data-lead-id="${_expandedLeadId}"]`);
+  if (row) await toggleLeadExpand(row);
+}
+
+function renderSitesTable(leads) {
+  const tbody = document.getElementById('sites-body');
+  if (!leads.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-5 small" style="color:var(--bb-muted)">No sites match the filter.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = leads.map(l => {
+    const idx = _allLeads.indexOf(l);
+    return `
+    <tr class="site-row" data-idx="${idx}" data-lead-id="${escapeHtml(l.lead_id||'')}" onclick="toggleLeadExpand(this)">
+      <td class="fw-semibold small">
+        <i class="ti ti-chevron-right expand-icon me-1" style="font-size:11px;transition:transform .15s;color:#94a3b8"></i>
+        ${escapeHtml(l.company||l.domain||'—')}
+      </td>
+      <td style="font-size:12px">
+        <a href="${escapeHtml(l.website||'#')}" target="_blank" onclick="event.stopPropagation()">
+          ${escapeHtml(l.website||l.domain||'—')}
+        </a>
+      </td>
+      <td style="font-size:12px">${escapeHtml(l.ai_sector||'—')}</td>
+      <td class="text-center" style="font-size:12px;color:#475569">${l.page_count!=null&&l.page_count!==''?l.page_count:'—'}</td>
+      <td style="font-size:12px;color:#475569">${escapeHtml((l.summary||'').slice(0,120)||'—')}</td>
+      <td class="text-center" style="font-size:11px;white-space:nowrap">${_leadCountHtml(l)}</td>
+      <td>${priorityBadge(l.priority)}</td>
+      <td>
+        <div class="d-inline-flex align-items-center gap-1">
+          ${leadStatusBadge(l.status)}
+          <button class="btn btn-xs ${l.status==='excluded'?'btn-danger':'btn-success'} py-0 px-1"
+            title="${l.status==='excluded'?'Remove exclusion':'Exclude site'}"
+            onclick="event.stopPropagation();toggleLeadExclude(this,${idx},'${l.status==='excluded'?'pending':'excluded'}')">
+            <i class="ti ti-building-off"></i>
+          </button>
+          <button class="btn btn-xs btn-outline-secondary py-0 px-1" title="Full details"
+            onclick="event.stopPropagation();openLeadDetail(${idx})">
+            <i class="ti ti-info-circle"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  _restoreExpanded();
+}
+
+async function toggleLeadExclude(btn, leadIdx, newStatus) {
+  const lead = _allLeads[leadIdx];
+  if (!lead) return;
+  const id = document.getElementById('campaign-select').value;
+  btn.disabled = true;
+  try {
+    await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads/${encodeURIComponent(lead.lead_id)}`,
+      { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:newStatus}) }
+    );
+    lead.status = newStatus;
+    applySitesFilter();
+    _refreshBothLists(id);
+  } catch(e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
+async function toggleLeadExpand(row) {
+  if (row.classList.contains('expanded')) {
+    row.classList.remove('expanded');
+    row.querySelector('.expand-icon').style.transform = '';
+    const next = row.nextElementSibling;
+    if (next && next.classList.contains('contacts-sub-row')) next.remove();
+    _expandedLeadId = '';
+    return;
+  }
+  document.querySelectorAll('#sites-body .site-row.expanded').forEach(r => {
+    r.classList.remove('expanded');
+    r.querySelector('.expand-icon').style.transform = '';
+    const nx = r.nextElementSibling;
+    if (nx && nx.classList.contains('contacts-sub-row')) nx.remove();
+  });
+  row.classList.add('expanded');
+  row.querySelector('.expand-icon').style.transform = 'rotate(90deg)';
+  const leadId = row.dataset.leadId;
+  _expandedLeadId = leadId;
+  const sub = document.createElement('tr');
+  sub.className = 'contacts-sub-row';
+  sub.innerHTML = `<td colspan="7" class="py-2 px-3">
+    <div class="text-muted small"><div class="spinner-border spinner-border-sm me-1"></div>Loading contacts…</div>
+  </td>`;
+  row.insertAdjacentElement('afterend', sub);
+  const id = document.getElementById('campaign-select').value;
+  if (!_leadContactCache[leadId]) {
+    try {
+      const data = await fetchJSON(
+        `${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads/${encodeURIComponent(leadId)}/contacts`
+      );
+      _leadContactCache[leadId] = data.contacts || [];
+    } catch(e) {
+      sub.querySelector('td').innerHTML = `<span class="text-danger small">Error: ${escapeHtml(e.message)}</span>`;
+      return;
+    }
+  }
+  const contacts = _leadContactCache[leadId];
+  renderLeadContacts(sub.querySelector('td'), leadId, contacts);
+}
+
+function renderLeadContacts(cell, leadId, contacts) {
+  const lid = escapeHtml(leadId);
+  const rows = contacts.length
+    ? contacts.map((c, ci) => {
+        const isExcl = (c.status||'pending') === 'excluded';
+        const docId  = escapeHtml(c.doc_id||'');
+        const canConf = (c.status||'pending') === 'pending' && !sentMails(c).length;
+        return `<tr>
+          <td class="text-center" style="width:34px"><input type="checkbox" ${c.send_confirmation ? 'checked' : ''} ${canConf ? '' : 'disabled'}
+            title="${canConf ? 'Confirm: send first mail to this contact' : 'Only unsent, pending contacts can be confirmed'}"
+            data-doc="${docId}" data-email="${escapeHtml(c.email||'')}" onchange="toggleLeadConfirm(this)"></td>
+          <td class="small">
+            <span class="lc-editable" data-lead="${lid}" data-ci="${ci}" data-field="name"
+              data-doc="${docId}" contenteditable="true" spellcheck="false"
+              title="Click to edit name">${escapeHtml(c.name||'')}</span>
+          </td>
+          <td class="small">${escapeHtml(c.email||'—')}</td>
+          <td class="small text-muted">
+            <span class="lc-editable" data-lead="${lid}" data-ci="${ci}" data-field="title"
+              data-doc="${docId}" contenteditable="true" spellcheck="false"
+              title="Click to edit title">${escapeHtml(c.title||c.role||'')}</span>
+          </td>
+          <td class="text-end" style="white-space:nowrap">
+            <div class="d-inline-flex align-items-center gap-1">
+              ${leadStatusBadge(c.status)}
+              <button class="btn btn-xs btn-outline-secondary py-0 px-1" title="Contact details"
+                onclick="openContactDetail('${docId}','${escapeHtml(c.email||'')}')">
+                <i class="ti ti-info-circle"></i>
+              </button>
+              <button class="btn btn-xs ${isExcl?'btn-danger':'btn-success'} py-0 px-1"
+                title="${isExcl?'Remove exclusion':'Exclude contact'}"
+                onclick="toggleLeadContactExclude(this,'${lid}',${ci})">
+                <i class="ti ti-user-x"></i>
+              </button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="5" class="text-muted small py-2">No contacts.</td></tr>`;
+
+  cell.innerHTML = `
+    <table class="table table-sm mb-0" style="font-size:12px">
+      <thead><tr style="background:#f1f5f9">
+        <th style="width:34px" class="small text-center" title="Confirm to send first mail">Send</th>
+        <th style="width:180px" class="small">Name</th>
+        <th style="width:200px" class="small">Email</th>
+        <th class="small">Title / Role</th>
+        <th style="width:130px" class="small text-end">Status</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <div class="d-flex gap-2 flex-wrap align-items-center p-2 border-top" style="background:#f8fafc">
+      <input class="form-control form-control-sm" style="width:150px" placeholder="Name" id="lc-name-${lid}">
+      <input class="form-control form-control-sm" style="width:190px" placeholder="Email *" id="lc-email-${lid}">
+      <input class="form-control form-control-sm" style="width:150px" placeholder="Title / Role" id="lc-title-${lid}">
+      <button class="btn btn-sm btn-primary" onclick="saveSiteContact('${lid}')">
+        <i class="ti ti-plus me-1"></i>Add
+      </button>
+    </div>`;
+}
+
+async function toggleLeadContactExclude(btn, leadId, ci) {
+  const contacts = _leadContactCache[leadId];
+  if (!contacts || !contacts[ci]) return;
+  const c = contacts[ci];
+  if (!c.doc_id) { alert('Contact has no doc_id.'); return; }
+  const nextStatus = (c.status||'pending') === 'excluded' ? 'pending' : 'excluded';
+  const id = document.getElementById('campaign-select').value;
+  btn.disabled = true;
+  const oldHtml = btn.innerHTML;
+  btn.innerHTML = '<i class="ti ti-loader"></i>';
+  try {
+    await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/contacts/${encodeURIComponent(c.doc_id)}`,
+      { method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({status:nextStatus}) }
+    );
+    c.status = nextStatus;
+    const subRow = document.querySelector(`#sites-body .site-row[data-lead-id="${leadId}"] + .contacts-sub-row`);
+    if (subRow) renderLeadContacts(subRow.querySelector('td'), leadId, contacts);
+    _refreshBothLists(id);
+  } catch(e) {
+    alert('Error: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = oldHtml;
+  }
+}
+
+async function saveSiteContact(leadId) {
+  const name  = document.getElementById('lc-name-'  + leadId).value.trim();
+  const email = document.getElementById('lc-email-' + leadId).value.trim();
+  const title = document.getElementById('lc-title-' + leadId).value.trim();
+  if (!email) { alert('Email is required.'); return; }
+  const id = document.getElementById('campaign-select').value;
+  try {
+    const resp = await fetchJSON(
+      `${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/leads/${encodeURIComponent(leadId)}/contacts`,
+      { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,email,title}) }
+    );
+    if (!_leadContactCache[leadId]) _leadContactCache[leadId] = [];
+    _leadContactCache[leadId].push(resp.contact);
+    const subRow = document.querySelector(`#sites-body .site-row[data-lead-id="${leadId}"] + .contacts-sub-row`);
+    if (subRow) renderLeadContacts(subRow.querySelector('td'), leadId, _leadContactCache[leadId]);
+    const lead = _allLeads.find(l => l.lead_id === leadId);
+    if (lead) {
+      lead.contact_count = (lead.contact_count||0) + 1;
+      lead.pending_count  = (lead.pending_count ||0) + 1;
+      const siteRow = document.querySelector(`#sites-body .site-row[data-lead-id="${leadId}"]`);
+      if (siteRow) {
+        const cell = siteRow.querySelectorAll('td')[4];
+        if (cell) cell.innerHTML = _leadCountHtml(lead);
+      }
+    }
+  } catch(e) {
+    alert(e.message);
+  }
+}
+
+function openLeadDetail(leadIdx) {
+  const lead = _allLeads[leadIdx];
+  if (!lead) return;
+  if (!_leadDetailModal)
+    _leadDetailModal = new bootstrap.Modal(document.getElementById('leadDetailModal'));
+
+  // header
+  document.getElementById('lead-detail-title').textContent = lead.company || lead.domain || lead.lead_id;
+  document.getElementById('lead-detail-sub').innerHTML =
+    (lead.website ? `<a href="${escapeHtml(lead.website)}" target="_blank" class="text-decoration-none">${escapeHtml(lead.domain||lead.website)}</a>` : escapeHtml(lead.domain||''))
+    + (lead.country_name ? ` · ${escapeHtml(lead.country_name)}` : '');
+
+  const badges = document.getElementById('lead-detail-badges');
+  badges.innerHTML = leadStatusBadge(lead.status)
+    + (lead.priority ? ` ${priorityBadge(lead.priority)}` : '');
+
+  document.getElementById('lead-detail-website-btn').href = lead.website || '#';
+
+  // exclude button
+  const exclBtn = document.getElementById('lead-detail-excl-btn');
+  const isExcl  = lead.status === 'excluded';
+  exclBtn.className = `btn btn-sm ${isExcl ? 'btn-danger' : 'btn-outline-danger'}`;
+  exclBtn.innerHTML = `<i class="ti ti-building-off me-1"></i>${isExcl ? 'Remove exclusion' : 'Exclude'}`;
+  exclBtn.onclick = () => toggleLeadExclude(exclBtn, leadIdx, isExcl ? 'pending' : 'excluded');
+
+  // pills helper
+  const pills = arr => (arr||[]).map(v =>
+    `<span class="badge" style="font-size:10px;font-weight:400;background:var(--bb-surface);color:var(--bb-muted);border:0.5px solid var(--bb-border)">${escapeHtml(v)}</span>`
+  ).join(' ');
+
+  const sources = pills(lead.sources);
+  const spec    = pills(lead.ai_specialisation);
+
+  function row(label, val) {
+    if (!val && val !== 0) return '';
+    return `<tr>
+      <td style="color:var(--bb-muted);font-size:12px;padding:4px 12px 4px 0;white-space:nowrap;vertical-align:top">${escapeHtml(label)}</td>
+      <td style="font-size:13px;padding:4px 0">${val}</td></tr>`;
+  }
+
+  document.getElementById('lead-detail-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:0.5px solid var(--bb-border)">
+      <div style="padding:14px 20px;border-right:0.5px solid var(--bb-border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">Identity</div>
+        <table style="width:100%;border-collapse:collapse">
+          ${row('Sector',      escapeHtml(lead.ai_sector||''))}
+          ${row('Type',        escapeHtml(lead.ai_company_type||''))}
+          ${row('Platform',    escapeHtml(lead.platform||lead.ai_platform||''))}
+          ${row('Client base', escapeHtml(lead.ai_client_base||''))}
+          ${row('Location',    escapeHtml(lead.location||''))}
+          ${row('Pages',       lead.page_count != null ? lead.page_count : '')}
+        </table>
+      </div>
+      <div style="padding:14px 20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">Scoring</div>
+        <table style="width:100%;border-collapse:collapse">
+          ${row('Priority',       lead.priority ? priorityBadge(lead.priority) : '')}
+          ${row('Reseller score', lead.reseller_score != null ? lead.reseller_score : '')}
+          ${row('Query cat.',     escapeHtml(lead.query_category||''))}
+          ${row('AI country',     escapeHtml(lead.ai_country||''))}
+          ${row('Sources',        sources)}
+        </table>
+      </div>
+    </div>
+    ${spec ? `<div style="padding:12px 20px;border-bottom:0.5px solid var(--bb-border)">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">Specialisation</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px">${spec}</div>
+    </div>` : ''}
+    ${lead.suggested_angle ? `<div style="padding:12px 20px;border-bottom:0.5px solid var(--bb-border)">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:6px">Suggested angle</div>
+      <div style="font-size:13px;line-height:1.55;padding:8px 12px;border-radius:6px;background:var(--bb-surface);border-left:2px solid #93c5fd">${escapeHtml(lead.suggested_angle)}</div>
+    </div>` : ''}
+    ${lead.summary ? `<div style="padding:12px 20px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:6px">Summary</div>
+      <div style="font-size:13px;color:var(--bb-muted);line-height:1.55">${escapeHtml(lead.summary)}</div>
+    </div>` : ''}
+  `;
+  _leadDetailModal.show();
+}
+
+
+// ── Contact detail modal ───────────────────────────────────────────────────────
+let _contactDetailModal = null;
+
+function _initials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  return (parts[0][0] + (parts[1] ? parts[1][0] : '')).toUpperCase();
+}
+
+async function openContactDetail(docId, email) {
+  if (!_contactDetailModal)
+    _contactDetailModal = new bootstrap.Modal(document.getElementById('contactDetailModal'));
+
+  // populate header from local cache while loading
+  const cached = allContacts.find(c => (c.doc_id || contactDocId(c)) === docId || c.email === email) || {};
+  const name   = cached.name || email || docId;
+  document.getElementById('contact-detail-name').textContent = name;
+  document.getElementById('contact-detail-sub').textContent  =
+    [cached.title, cached.email || email].filter(Boolean).join(' · ');
+  document.getElementById('contact-detail-avatar').textContent = _initials(name);
+  document.getElementById('contact-detail-status-badge').innerHTML =
+    contactStatusBadge(contactStatus(cached.status));
+  document.getElementById('contact-detail-body').innerHTML =
+    '<div class="text-center py-5 text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>';
+
+  // follow-up link
+  document.getElementById('contact-detail-follow-btn').href =
+    `crm_follow.html?email=${encodeURIComponent(cached.email||email||'')}`;
+
+  // exclude button
+  const exclBtn  = document.getElementById('contact-detail-excl-btn');
+  const isExcl   = contactStatus(cached.status) === 'excluded';
+  exclBtn.className = `btn btn-sm ${isExcl ? 'btn-danger' : 'btn-outline-danger'}`;
+  exclBtn.innerHTML = `<i class="ti ti-user-x me-1"></i>${isExcl ? 'Remove exclusion' : 'Exclude'}`;
+  exclBtn.onclick = async () => {
+    const nextStatus = isExcl ? 'pending' : 'excluded';
+    try {
+      await toggleContactStatusBtn(exclBtn, nextStatus === 'excluded' ? 'excluded' : 'pending');
+    } catch(e) {}
+    _contactDetailModal.hide();
+  };
+
+  _contactDetailModal.show();
+
+  // fetch full record
+  const campaignId = document.getElementById('campaign-select').value;
+  let d;
+  try {
+    d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(campaignId)}/contacts/${encodeURIComponent(docId)}`);
+  } catch(e) {
+    document.getElementById('contact-detail-body').innerHTML =
+      `<div class="text-center py-5 text-danger small">Error: ${escapeHtml(e.message)}</div>`;
+    return;
+  }
+
+  // update header with full data
+  document.getElementById('contact-detail-name').textContent = d.name || d.email || docId;
+  document.getElementById('contact-detail-avatar').textContent = _initials(d.name || d.email);
+  document.getElementById('contact-detail-sub').textContent =
+    [d.title, d.email].filter(Boolean).join(' · ');
+  document.getElementById('contact-detail-status-badge').innerHTML =
+    contactStatusBadge(contactStatus(d.status));
+
+  function row(icon, label, val, isLink) {
+    if (!val) return '';
+    const disp = isLink
+      ? `<a href="${escapeHtml(val)}" target="_blank" style="color:var(--bb-muted)">${escapeHtml(val.replace(/^https?:\/\//,'').slice(0,40))}</a>`
+      : `<span style="color:var(--bb-text)">${escapeHtml(String(val))}</span>`;
+    return `<tr>
+      <td style="padding:4px 10px 4px 0;white-space:nowrap;vertical-align:top">
+        <i class="ti ti-${icon}" style="font-size:14px;color:var(--bb-muted)"></i>
+        <span style="font-size:12px;color:var(--bb-muted);margin-left:4px">${escapeHtml(label)}</span>
+      </td>
+      <td style="padding:4px 0;font-size:13px">${disp}</td></tr>`;
+  }
+
+  function fuRow(label, val) {
+    if (!val) return '';
+    return `<tr>
+      <td style="font-size:12px;color:var(--bb-muted);padding:4px 12px 4px 0;white-space:nowrap">${escapeHtml(label)}</td>
+      <td style="font-size:13px;padding:4px 0">${escapeHtml(String(val))}</td></tr>`;
+  }
+
+  const history = (d.comment_history || []).slice().reverse().slice(0, 8);
+  const histHtml = history.length ? history.map(h => {
+    const icon = (h.type||'').toLowerCase().includes('mail') ? 'mail' : 'note';
+    return `<div style="display:flex;gap:10px;align-items:flex-start;padding:6px 0;border-bottom:0.5px solid var(--bb-border)">
+      <div style="width:28px;height:28px;border-radius:50%;background:var(--bb-surface);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="ti ti-${icon}" style="font-size:13px;color:var(--bb-muted)"></i>
+      </div>
+      <div>
+        <div style="font-size:12px">${escapeHtml(h.text||'')}</div>
+        <div style="font-size:11px;color:var(--bb-muted)">${escapeHtml((h.date||'').slice(0,10))}${h.user ? ' · ' + escapeHtml(h.user) : ''}</div>
+      </div>
+    </div>`;
+  }).join('') : '<div style="font-size:12px;color:var(--bb-muted);padding:6px 0">No history.</div>';
+
+  const hasFu = d.followup_status || d.followup_date || d.followup_owner || d.followup_importance;
+
+  const _canConf = contactStatus(d.status) === 'pending' && !d.intro_sent && !sentMails(d).length;
+  document.getElementById('contact-detail-body').innerHTML = `
+    <div style="padding:10px 20px;border-bottom:0.5px solid var(--bb-border)">
+      <label class="d-flex align-items-center gap-2 mb-0" style="font-size:13px" title="First (intro) mail is only sent when ticked, if the campaign requires confirmation. Reminders are not affected.">
+        <input type="checkbox" id="cd-confirm" ${d.send_confirmation ? 'checked' : ''} ${_canConf ? '' : 'disabled'}>
+        Confirmed to send first mail
+        <span class="text-muted" style="font-size:11px">${_canConf ? '' : (d.intro_sent ? 'first mail already sent' : 'only pending contacts')}</span>
+      </label>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:0.5px solid var(--bb-border)">
+      <div style="padding:14px 20px;border-right:0.5px solid var(--bb-border)">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">Contact</div>
+        <table style="width:100%;border-collapse:collapse">
+          ${row('globe',          'Website',  d.website, true)}
+          ${row('phone',          'Phone',    d.phone)}
+          ${row('brand-linkedin', 'LinkedIn', d.linkedin, true)}
+          ${row('brand-twitter',  'Twitter',  d.twitter, true)}
+        </table>
+      </div>
+      ${hasFu ? `<div style="padding:14px 20px">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">Follow-up</div>
+        <table style="width:100%;border-collapse:collapse">
+          ${fuRow('Status',     d.followup_status)}
+          ${fuRow('Date',       d.followup_date)}
+          ${fuRow('Owner',      d.followup_owner)}
+          ${fuRow('Importance', d.followup_importance)}
+        </table>
+      </div>` : '<div style="padding:14px 20px"><div style="font-size:12px;color:var(--bb-muted)">No follow-up set.</div></div>'}
+    </div>
+    ${d.followup_comment ? `<div style="padding:12px 20px;border-bottom:0.5px solid var(--bb-border)">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:6px">Comment</div>
+      <div style="font-size:13px;color:var(--bb-muted);font-style:italic;line-height:1.5">${escapeHtml(d.followup_comment)}</div>
+    </div>` : ''}
+    <div style="padding:12px 20px">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--bb-muted);margin-bottom:8px">History</div>
+      ${histHtml}
+    </div>
+  `;
+  const cdBox = document.getElementById('cd-confirm');
+  if (cdBox) cdBox.onchange = () =>
+    setContactConfirm(docId, d.email || email, cdBox.checked, () => { cdBox.checked = !cdBox.checked; });
+}
+
+// Load sites when tab shown (if campaign changed since last load)
+document.addEventListener('shown.bs.tab', e => {
+  if (e.target.id === 'tab-sites-btn') {
+    const id = document.getElementById('campaign-select').value;
+    if (id && id !== _sitesLoaded) loadSites();
+  }
+});
+
+// ── Page init ─────────────────────────────────────────────────────────────────
 (async () => {
+  await requireAuth();
+  requireRole(['user', 'campaign-user', 'admin']);
+  const params    = new URLSearchParams(location.search);
+  const paramId   = params.get('campaign_id') || '';
+  const storedId  = localStorage.getItem('selectedCampaign') || '';
   await loadCampaignList();
-  const cid = new URLSearchParams(window.location.search).get('campaign_id')
-           || localStorage.getItem('selectedCampaign')
-           || ((allCampaigns[0] || {}).campaign_id || '');
-  document.getElementById('campaign-select').value = cid || '';
-  if (cid) await loadCampaign();
+  const startId = paramId || storedId || (allCampaigns[0] || {}).campaign_id || '';
+  if (startId) await selectCampaign(startId, null);
+  else {
+    document.getElementById('campaign-empty').style.display = '';
+    document.getElementById('campaign-detail').style.display = 'none';
+  }
 })();
 </script>
-<script src="vendor/bootstrap.bundle.min.js"></script>
+<!-- Lead detail modal -->
+<div class="modal fade" id="leadDetailModal" tabindex="-1" aria-labelledby="lead-detail-title" aria-modal="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:600px">
+    <div class="modal-content border-0" style="border-radius:12px;overflow:hidden">
+      <!-- header -->
+      <div class="d-flex align-items-center gap-3 px-4 py-3" style="border-bottom:0.5px solid var(--bb-border)">
+        <div class="d-flex align-items-center justify-content-center flex-shrink-0"
+             style="width:44px;height:44px;border-radius:8px;background:var(--bb-surface);border:0.5px solid var(--bb-border)">
+          <i class="ti ti-building" style="font-size:22px;color:var(--bb-muted)"></i>
+        </div>
+        <div class="flex-grow-1 min-width-0">
+          <div class="fw-medium" id="lead-detail-title" style="font-size:15px"></div>
+          <div id="lead-detail-sub" style="font-size:12px;color:var(--bb-muted)"></div>
+        </div>
+        <div id="lead-detail-badges" class="d-flex gap-1 flex-shrink-0"></div>
+        <button type="button" class="btn-close ms-1" data-bs-dismiss="modal"></button>
+      </div>
+      <!-- body -->
+      <div class="modal-body p-0" id="lead-detail-body" style="max-height:70vh;overflow-y:auto"></div>
+      <!-- footer -->
+      <div class="d-flex gap-2 justify-content-end px-4 py-3" style="border-top:0.5px solid var(--bb-border)">
+        <a id="lead-detail-website-btn" href="#" target="_blank" class="btn btn-sm btn-outline-secondary">
+          <i class="ti ti-external-link me-1"></i>Open site
+        </a>
+        <button id="lead-detail-excl-btn" class="btn btn-sm" data-bs-dismiss="modal">
+          <i class="ti ti-building-off me-1"></i>Exclude
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Contact detail modal -->
+<div class="modal fade" id="contactDetailModal" tabindex="-1" aria-labelledby="contact-detail-name" aria-modal="true">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable" style="max-width:560px">
+    <div class="modal-content border-0" style="border-radius:12px;overflow:hidden">
+      <div class="d-flex align-items-center gap-3 px-4 py-3" style="border-bottom:0.5px solid var(--bb-border)">
+        <div id="contact-detail-avatar"
+             style="width:44px;height:44px;border-radius:50%;background:#e0e7ff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:500;color:#4338ca;flex-shrink:0"></div>
+        <div class="flex-grow-1 min-width-0">
+          <div class="fw-medium" id="contact-detail-name" style="font-size:15px"></div>
+          <div id="contact-detail-sub" style="font-size:12px;color:var(--bb-muted)"></div>
+        </div>
+        <span id="contact-detail-status-badge"></span>
+        <button type="button" class="btn-close ms-1" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0" id="contact-detail-body" style="max-height:70vh;overflow-y:auto">
+        <div class="text-center py-5 text-muted small"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>
+      </div>
+      <div class="d-flex gap-2 justify-content-end px-4 py-3" style="border-top:0.5px solid var(--bb-border)">
+        <a id="contact-detail-follow-btn" href="#" class="btn btn-sm btn-outline-secondary">
+          <i class="ti ti-external-link me-1"></i>Open full profile
+        </a>
+        <button id="contact-detail-excl-btn" class="btn btn-sm btn-danger" data-bs-dismiss="modal">
+          <i class="ti ti-user-x me-1"></i>Exclude
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Reset campaign modal -->
+<div class="modal fade" id="resetModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title text-danger"><i class="ti ti-refresh-alert me-2"></i>Reset campaign</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="reset-preview" class="alert alert-secondary py-2 small mb-3">
+          <div class="spinner-border spinner-border-sm me-1"></div>Calculating…
+        </div>
+        <p class="small mb-1">This will <strong>permanently</strong>:</p>
+        <ul class="small mb-2">
+          <li>Delete all send history (<code>outreach_sent</code>)</li>
+          <li>Reset all contacts → <code>pending</code>, clear <code>mail_sent</code> &amp; <code>comment_history</code></li>
+          <li>Reset all leads → <code>pending</code></li>
+          <li>Reset campaign status → <code>ready</code></li>
+        </ul>
+        <p class="small text-danger mb-0"><strong>This cannot be undone.</strong></p>
+        <div id="reset-feedback" class="alert py-2 small mt-2 mb-0" style="display:none"></div>
+      </div>
+      <div class="modal-footer py-2">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button id="reset-confirm-btn" class="btn btn-sm btn-danger" onclick="confirmReset()">
+          <i class="ti ti-refresh-alert me-1"></i>Reset campaign
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Campaign reset ────────────────────────────────────────────────────────────
+
+async function openResetModal() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const preview = document.getElementById('reset-preview');
+  const fb      = document.getElementById('reset-feedback');
+  const btn     = document.getElementById('reset-confirm-btn');
+  preview.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Calculating…';
+  preview.className = 'alert alert-secondary py-2 small mb-3';
+  fb.style.display = 'none';
+  btn.disabled = false;
+  new bootstrap.Modal(document.getElementById('resetModal')).show();
+  try {
+    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: true }),
+    });
+    preview.className = 'alert alert-warning py-2 small mb-3';
+    preview.innerHTML = `Will reset: <strong>${d.contacts_reset}</strong> contacts, `
+      + `<strong>${d.leads_reset}</strong> leads, `
+      + `delete <strong>${d.sent_deleted}</strong> send history records.`;
+  } catch(e) {
+    preview.className = 'alert alert-danger py-2 small mb-3';
+    preview.textContent = 'Could not load preview: ' + (e.message || e);
+  }
+}
+
+async function confirmReset() {
+  const id  = document.getElementById('campaign-select').value;
+  if (!id) return;
+  const fb  = document.getElementById('reset-feedback');
+  const btn = document.getElementById('reset-confirm-btn');
+  btn.disabled = true;
+  fb.className = 'alert alert-secondary py-2 small mt-2 mb-0';
+  fb.innerHTML = '<div class="spinner-border spinner-border-sm me-1"></div>Resetting…';
+  fb.style.display = '';
+  try {
+    const d = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dry_run: false }),
+    });
+    fb.className = 'alert alert-success py-2 small mt-2 mb-0';
+    fb.innerHTML = `<i class="ti ti-check me-1"></i>Reset complete — `
+      + `${d.contacts_reset} contacts, ${d.leads_reset} leads reset; `
+      + `${d.sent_deleted} send records deleted.`;
+    setTimeout(() => {
+      bootstrap.Modal.getInstance(document.getElementById('resetModal')).hide();
+      refreshCampaignData({ keepView: true });
+    }, 1800);
+  } catch(e) {
+    fb.className = 'alert alert-danger py-2 small mt-2 mb-0';
+    fb.innerHTML = '<i class="ti ti-circle-x me-1"></i>Reset failed: ' + escapeHtml(e.message || String(e));
+    btn.disabled = false;
+  }
+}
+
+async function scrapeEmails() {
+  const id = document.getElementById('campaign-select').value;
+  if (!id) return;
+
+  // Ask whether to force-re-scrape already-processed sites
+  const modal = new bootstrap.Modal(document.getElementById('scrapeOptionsModal'));
+  const opts = await new Promise(resolve => {
+    const g = id => document.getElementById(id);
+    const read = () => ({ scrape: g('so-scrape').checked, force: g('so-scrape').checked && g('so-force').checked,
+                          clean: g('so-clean').checked, enrich_names: g('so-names').checked });
+    let chosen = null;
+    g('so-scrape').onchange = () => { g('so-force').disabled = !g('so-scrape').checked; };
+    g('so-force').disabled = !g('so-scrape').checked;
+    g('so-full').onclick  = () => { ['so-scrape','so-force','so-clean','so-names'].forEach(i => { g(i).checked = true; g(i).disabled = false; });
+                                    chosen = read(); modal.hide(); };
+    g('so-start').onclick = () => { chosen = read(); modal.hide(); };
+    g('scrapeOptionsModal').addEventListener('hidden.bs.modal', () => resolve(chosen), { once: true });
+    modal.show();
+  });
+  if (!opts) return;   // dismissed
+  if (!opts.scrape && !opts.clean && !opts.enrich_names) return;   // nothing selected
+
+  const fb  = document.getElementById('sync-feedback');
+  const btn = document.getElementById('scrape-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader me-1"></i>Updating…';
+  fb.style.display = 'none';
+  try {
+    const r = await fetchJSON(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}/site-enrich`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(opts)
+    });
+    if (r.status === 'error') throw new Error(r.message || 'scrape failed');
+    fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
+    fb.innerHTML = `<i class="ti ti-clock me-1"></i>Scraping websites for emails… (job ${r.job_id || ''})`;
+    fb.style.display = '';
+    if (r.job_id) pollScrape(r.job_id);
+    else btnScrapeReset();
+  } catch(e) {
+    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+    fb.textContent = 'Scrape failed: ' + (e.message || e);
+    fb.style.display = '';
+    btnScrapeReset();
+  }
+  function btnScrapeReset() {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-mail-search me-1"></i>Update info';
+  }
+}
+
+async function pollScrape(jobId) {
+  const fb  = document.getElementById('sync-feedback');
+  const btn = document.getElementById('scrape-btn');
+  function reset() { btn.disabled = false; btn.innerHTML = '<i class="ti ti-mail-search me-1"></i>Update info'; }
+  for (let i = 0; i < 120; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    try {
+      const j = await fetchJSON(`${BASE}/api/crm/status/${jobId}`);
+      if (j.status === 'done') {
+        const res = j.result || {};
+        fb.className = 'alert alert-success py-1 px-2 small py-2 small mt-2';
+        fb.innerHTML = `<i class="ti ti-check me-1"></i>Update done — ${res.scraped||0} sites scraped, ${res.new_contacts||0} new contacts, ${res.pages_updated||0} page counts updated; all ${res.recalc_checked||0} existing contacts re-checked (${res.recalc_names||0} names and ${res.recalc_emails||0} emails cleaned${res.recalc_excluded? ', '+res.recalc_excluded+' deleted (not a proper email)':''})` +
+          (res.contact_count != null ? `, ${res.contact_count} contacts in total.` : '.') +
+          (res.name_enrich ? (res.name_enrich.error
+            ? ` Name enrichment failed: ${res.name_enrich.error}.`
+            : ` Names filled: ${(res.name_enrich.ec_resolved||0)+(res.name_enrich.rule_resolved||0)+(res.name_enrich.ai_resolved||0)}.`) : '');
+        if (res.contact_count != null) {
+          document.getElementById('c-contacts').textContent = res.contact_count;
+          if (window._campaignData) window._campaignData.contact_count = res.contact_count;
+        }
+        reset();
+        refreshCampaignData({ keepView: true });
+        return;
+      }
+      if (j.status === 'error') {
+        fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
+        fb.textContent = 'Scrape failed: ' + (j.error || j.message || 'unknown error');
+        reset(); return;
+      }
+    } catch(e) { /* keep polling */ }
+  }
+  fb.className = 'alert alert-warning py-1 px-2 small mt-2 mb-0';
+  fb.textContent = 'Scrape timed out — check job status.';
+  reset();
+}
+
+
+</script>
+
+<!-- Scrape options modal -->
+<div class="modal fade" id="scrapeOptionsModal" tabindex="-1" aria-labelledby="scrapeOptionsLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="scrapeOptionsLabel"><i class="ti ti-world-search me-2"></i>Update site info</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body small">
+        <p class="mb-2">Choose what to run:</p>
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" id="so-scrape" checked>
+          <label class="form-check-label" for="so-scrape"><strong>Scrape websites</strong> for e-mails and page counts
+            <div class="text-muted" style="font-size:.8rem">Sites not scraped yet.</div></label>
+        </div>
+        <div class="form-check mb-2 ms-4">
+          <input class="form-check-input" type="checkbox" id="so-force">
+          <label class="form-check-label" for="so-force">Also re-scrape sites that are already processed
+            <div class="text-muted" style="font-size:.8rem">Slower. Use after the scraper has been improved.</div></label>
+        </div>
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" id="so-clean" checked>
+          <label class="form-check-label" for="so-clean"><strong>Clean existing contacts</strong>
+            <div class="text-muted" style="font-size:.8rem">Re-check every name and e-mail; delete contacts without a proper e-mail.</div></label>
+        </div>
+        <div class="form-check mb-1">
+          <input class="form-check-input" type="checkbox" id="so-names" checked>
+          <label class="form-check-label" for="so-names"><strong>Fill missing names</strong>
+            <div class="text-muted" style="font-size:.8rem">E-mail rules, then web search + AI. Takes longer with many unnamed contacts.</div></label>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <button id="so-full" class="btn btn-sm btn-outline-warning me-auto" title="Everything above, including re-scraping processed sites">
+          <i class="ti ti-refresh-alert me-1"></i>Full: do all</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button id="so-start" class="btn btn-sm btn-primary"><i class="ti ti-player-play me-1"></i>Start</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

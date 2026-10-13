@@ -28,16 +28,16 @@
       this.onSaved = opts.onSaved || null;
       this.campaignId = '';
       this.campaign = null;
-      this.stepId = '';
+      this.stepIndex = null;
       this.stepNew = false;
       this.saveTimer = null;
+      this._queue = Promise.resolve();   // serialises saves
       this.quill = null;
       this.currentTab = 'wysiwyg';
       this.uid = 'me_' + Math.random().toString(36).slice(2, 9);
       this.showMainButton = opts.showMainButton !== false;
       this.showSaveButton = opts.showSaveButton !== false;
       this.showTestButton = opts.showTestButton !== false;
-      this.showAccountField = opts.showAccountField !== false;
       if (!this.root) throw new Error('MailEditorComponent root not found');
       MailEditorComponent.ensureStyles();
       this.renderShell();
@@ -82,7 +82,10 @@
         <div class="mail-editor-component">
           <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
             <div>
-              <div class="fw-600 small"><i class="ti ti-mail text-primary me-1"></i><span data-me="title">Mail editor</span></div>
+              <div class="fw-600 small d-flex align-items-center gap-2">
+                <i class="ti ti-mail text-primary me-1"></i><span data-me="title">Mail editor</span>
+                <span data-me="stepBadge" class="badge fw-normal" style="display:none;background:#dbeafe;color:#1d4ed8;font-size:.72rem;letter-spacing:.01em"></span>
+              </div>
               <div class="small" style="color:var(--bb-muted)" data-me="subtitle">No campaign selected</div>
             </div>
             <div class="d-flex align-items-center gap-2">
@@ -99,28 +102,48 @@
             </div>
           </div>
 
-          <div data-me="stepBar" class="p-2 mb-2 rounded" style="display:none;background:#eff6ff;border:1px solid #bfdbfe">
-            <div class="row g-2 align-items-end">
-              <div class="col-md-7">
-                <label class="form-label small fw-500 mb-1">Step name</label>
-                <input data-me="stepName" class="form-control form-control-sm" placeholder="Initial outreach">
-              </div>
-              <div class="col-md-5">
-                <label class="form-label small fw-500 mb-1">Send after days</label>
-                <input data-me="stepDelay" class="form-control form-control-sm" type="number" min="0" placeholder="0">
-              </div>
-            </div>
+          <div data-me="stepBar" class="p-2 mb-2 rounded align-items-center gap-3" style="display:none;background:#eff6ff;border:1px solid #bfdbfe">
+            <label class="form-label small fw-500 mb-0 text-nowrap">Send after days</label>
+            <input data-me="stepDelay" class="form-control form-control-sm" type="number" min="0" placeholder="0" style="max-width:90px">
           </div>
 
-          <div class="row g-2 mb-2">
-            <div class="col-md-5" data-me="accountWrap" style="${this.showAccountField ? '' : 'display:none'}">
-              <label class="form-label small fw-500 mb-1">Outreach account</label>
-              <input data-me="account" class="form-control form-control-sm" placeholder="sender@example.com">
+          <div class="mb-2">
+            <label class="form-label small fw-500 mb-1">Subject</label>
+            <input data-me="subject" class="form-control form-control-sm" placeholder="Email subject">
+          </div>
+
+          <div data-me="tools" class="mb-2 p-2 rounded" style="display:none;background:#f9fafb;border:1px solid #e5e7eb">
+            <div class="row g-2 mb-2">
+              <div class="col-sm-6">
+                <label class="form-label small fw-500 mb-1">Campaign ref</label>
+                <input data-me="campaignRef" class="form-control form-control-sm" placeholder="hot-no2" autocomplete="off">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label small fw-500 mb-1">Language (code)</label>
+                <input data-me="campaignLang" class="form-control form-control-sm" list="${this.uid}_langs" placeholder="en" autocomplete="off">
+                <datalist id="${this.uid}_langs">
+                  <option value="en">English</option><option value="da">Danish</option><option value="no">Norwegian</option>
+                  <option value="sv">Swedish</option><option value="fi">Finnish</option><option value="de">German</option>
+                  <option value="nl">Dutch</option><option value="fr">French</option><option value="es">Spanish</option>
+                  <option value="it">Italian</option><option value="pt">Portuguese</option><option value="pl">Polish</option>
+                </datalist>
+              </div>
             </div>
-            <div class="${this.showAccountField ? 'col-md-7' : 'col-12'}">
-              <label class="form-label small fw-500 mb-1">Subject</label>
-              <input data-me="subject" class="form-control form-control-sm" placeholder="Email subject">
+            <div class="d-flex flex-wrap gap-2 mb-1">
+              <button class="btn btn-sm btn-outline-primary" type="button" data-me="applyBtn" title="Set the language and ref in every blueboot.ai link of this mail">
+                <i class="ti ti-link me-1"></i>Apply ref and language to links
+              </button>
+              <button class="btn btn-sm btn-outline-primary" type="button" data-me="trBtn" title="AI translation of the subject and text into the language above">
+                <i class="ti ti-language me-1"></i>Translate
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" data-me="trUndo" style="display:none">
+                <i class="ti ti-arrow-back-up me-1"></i>Undo translation
+              </button>
+              <button class="btn btn-sm btn-outline-primary" type="button" data-me="trailerBtn" title="Copy the default mail trailer to the end of this mail">
+                <i class="ti ti-file-text me-1"></i>Add default trailer
+              </button>
             </div>
+            <div class="form-text mt-0 mb-0" data-me="toolsMsg">Ref and language belong to the campaign (all steps). <strong>Apply</strong> changes <code>/lang/xx</code> and <code>?ref=</code> in blueboot.ai links, e.g. <code>https://blueboot.ai/lang/en/bs/docs/why-use/?ref=hot-no2</code>. <strong>Translate</strong> is a pure AI translation into the language code; placeholders, links and formatting are kept, it replaces the current text and is saved (Undo is available).</div>
           </div>
 
           <div class="d-flex align-items-center gap-3 mb-2 small" style="color:var(--bb-muted)">
@@ -154,12 +177,29 @@
     }
 
     bind() {
-      ['subject', 'account', 'bodyPlain', 'bodyHtml', 'css', 'stepName', 'stepDelay'].forEach(name => {
+      ['subject', 'bodyPlain', 'bodyHtml', 'css', 'stepDelay'].forEach(name => {
         const el = this.$(name);
         if (el) el.addEventListener('input', () => this.autoSave());
       });
+      // Raw HTML typed or pasted in the HTML tab is saved when the box loses focus,
+      // not only after the 0.9 s debounce.
+      this.$('bodyHtml').addEventListener('blur',   () => this.flush());
+      this.$('bodyHtml').addEventListener('change', () => this.flush());
+      this.$('subject').addEventListener('blur',    () => this.flush());
+      // HTML pasted into the Plain box -> switch to HTML mode so it is not sent as plain text.
+      this.$('bodyPlain').addEventListener('paste', () => setTimeout(() => this.detectPastedHtml(), 0));
+      // Do not lose a pending edit when the tab is hidden or closed.
+      this._onHide = () => { if (document.visibilityState === 'hidden') this.flush(true); };
+      document.addEventListener('visibilitychange', this._onHide);
+      window.addEventListener('pagehide', () => this.flush(true));
       this.$('typePlain').addEventListener('change', () => { this.switchMode(); this.autoSave(); });
       this.$('typeHtml').addEventListener('change', () => { this.switchMode(); this.autoSave(); });
+      this.$('campaignRef').addEventListener('input', () => this.autoSave());
+      this.$('campaignLang').addEventListener('input', () => this.autoSave());
+      this.$('applyBtn').addEventListener('click', () => this.applyRefLang());
+      this.$('trailerBtn').addEventListener('click', () => this.insertTrailer());
+      this.$('trBtn').addEventListener('click', () => this.translate());
+      this.$('trUndo').addEventListener('click', () => this.undoTranslate());
       this.$('mainBtn').addEventListener('click', () => this.editCampaignMail());
       this.$('saveBtn').addEventListener('click', () => this.save(false));
       this.$('testBtn').addEventListener('click', () => this.openTest());
@@ -168,9 +208,10 @@
       });
     }
 
-    async load({ campaignId, stepId = '', stepNew = false, stepName = '', delay = 0 } = {}) {
+    async load({ campaignId, stepIndex = null, stepNew = false, stepName = '', delay = 0 } = {}) {
+      await this.flush();          // save any pending edit to the step we are leaving
       this.campaignId = campaignId || '';
-      this.stepId = stepId || '';
+      this.stepIndex = stepIndex != null ? parseInt(stepIndex, 10) : null;
       this.stepNew = !!stepNew;
       if (!this.campaignId) {
         this.$('subtitle').textContent = 'No campaign selected';
@@ -180,22 +221,36 @@
       const c = await r.json();
       if (!r.ok || c.status === 'error') throw new Error(c.message || 'Could not load campaign');
       this.campaign = c;
-      this.$('account').value = c.outreach_email_account || '';
+      this.$('tools').style.display = '';
+      this.$('campaignRef').value = c.campaign_ref || '';
+      this.$('campaignLang').value = c.campaign_lang || '';
+      this._beforeTranslate = null;
+      this.$('trUndo').style.display = 'none';
 
-      if (this.stepId) {
-        const step = (c.mail_schedule || []).find(s => s.step_id === this.stepId);
-        this.$('title').textContent = step ? `Mail editor - ${step.name || 'Step'}` : 'Mail editor - new step';
-        this.$('subtitle').textContent = `${this.campaignId} / schedule step`;
-        this.$('stepBar').style.display = '';
-        this.$('accountWrap').style.display = 'none';
-        this.$('stepName').value = step ? (step.name || '') : (stepName || '');
-        this.$('stepDelay').value = step ? (step.delay_days ?? 0) : (delay || 0);
-        this.applyMail((step && step.mail) || { subject: stepName || '', body: '', type: 'plain', css: DEFAULT_CSS });
-      } else {
+      if (this.stepIndex != null) {
+        const seq  = c.mail_sequence || [];
+        const step = seq.find(s => s.index === this.stepIndex);
+        const label = stepName || (this.stepIndex === 0 ? 'Intro' : `Reminder ${this.stepIndex}`);
         this.$('title').textContent = 'Mail editor';
         this.$('subtitle').textContent = this.campaignId;
+        const badge = this.$('stepBadge');
+        badge.textContent = label;
+        badge.style.display = '';
+        this.$('stepBar').style.display = 'flex';
+        this.$('stepDelay').value = step ? (step.delay_days ?? 0) : (delay || 0);
+        if (step) {
+          const body = step.body_html || step.body_text || '';
+          const type = step.body_html ? 'html' : 'plain';
+          this.applyMail({ subject: step.subject || '', body, type, css: step.css || DEFAULT_CSS });
+        } else {
+          this.applyMail({ subject: stepName || '', body: '', type: 'plain', css: DEFAULT_CSS });
+        }
+      } else {
+        this.stepIndex = null;
+        this.$('title').textContent = 'Mail editor';
+        this.$('subtitle').textContent = this.campaignId;
+        this.$('stepBadge').style.display = 'none';
         this.$('stepBar').style.display = 'none';
-        this.$('accountWrap').style.display = this.showAccountField ? '' : 'none';
         this.applyMail(c.mail || { type: 'plain', css: DEFAULT_CSS });
       }
     }
@@ -205,17 +260,15 @@
       this.load({ campaignId: this.campaignId }).catch(err => this.feedback(err.message, true));
     }
 
-    loadDraft({ account = '', title = 'Mail editor', subtitle = '', mail = {}, accountReadOnly = false } = {}) {
+    loadDraft({ title = 'Mail editor', subtitle = '', mail = {} } = {}) {
       this.campaignId = '';
       this.campaign = null;
-      this.stepId = '';
+      this.stepIndex = null;
       this.stepNew = false;
       this.$('title').textContent = title;
       this.$('subtitle').textContent = subtitle;
       this.$('stepBar').style.display = 'none';
-      this.$('accountWrap').style.display = this.showAccountField ? '' : 'none';
-      this.$('account').value = account || '';
-      this.$('account').readOnly = !!accountReadOnly;
+      this.$('tools').style.display = 'none';     // ref, language, translation and trailer belong to a campaign
       this.applyMail({ type: 'plain', css: DEFAULT_CSS, ...mail });
     }
 
@@ -229,9 +282,35 @@
       this.switchMode();
       if (type === 'html') {
         this.initQuill();
-        if (this.quill) this.quill.root.innerHTML = mail.body || '';
+        this._setQuillHtml(mail.body || '');
       }
       this.updatePreview();
+    }
+
+    // Show HTML in the Editor tab WITHOUT treating it as an edit.  Quill simplifies
+    // markup it does not know (tables, inline styles ...); the raw HTML in the HTML tab
+    // stays the source of truth until the user actually edits in the Editor.
+    _setQuillHtml(html) {
+      if (!this.quill) return;
+      try {
+        this.quill.setContents(this.quill.clipboard.convert({ html: html || '' }), 'silent');
+      } catch (e) {
+        console.warn('[mail-editor] could not show HTML in the Editor tab:', e.message);
+      }
+    }
+
+    detectPastedHtml() {
+      const v = this.$('bodyPlain').value;
+      if (this.getType() !== 'plain') return;
+      if (!/^\s*(<!doctype|<html|<body|<table|<div|<p[\s>]|<h[1-6][\s>]|<br|<a\s|<img|<span|<center)/i.test(v)) return;
+      if (!/<\/[a-z]+>/i.test(v)) return;
+      this.$('bodyHtml').value = v;
+      this.$('bodyPlain').value = '';
+      this.$('typeHtml').checked = true;
+      this.switchMode();
+      this.showTab('source');
+      this.feedback('HTML detected - switched to HTML mode.', false);
+      this.autoSave();
     }
 
     initQuill() {
@@ -256,10 +335,76 @@
           }
         }
       });
-      this.quill.on('text-change', () => {
+      this.quill.on('text-change', (delta, oldDelta, source) => {
+        if (source === 'silent') return;      // programmatic display only
         this.$('bodyHtml').value = this.quill.root.innerHTML;
         this.autoSave();
       });
+    }
+
+    // ── Shared modal helper ───────────────────────────────────────────────────
+
+    _ensureModals() {
+      if (document.getElementById('me-link-modal')) return;
+
+      // Link modal
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="me-link-modal" tabindex="-1">
+          <div class="modal-dialog modal-dialog-centered" style="max-width:400px">
+            <div class="modal-content">
+              <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title"><i class="ti ti-link text-primary me-2"></i>Insert link</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label small fw-500">Link text</label>
+                  <input id="me-link-text" class="form-control form-control-sm" placeholder="Click here">
+                </div>
+                <div>
+                  <label class="form-label small fw-500">URL</label>
+                  <input id="me-link-url" class="form-control form-control-sm" placeholder="https://">
+                </div>
+              </div>
+              <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary" id="me-link-insert">Insert</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
+
+      // Image modal
+      document.body.insertAdjacentHTML('beforeend', `
+        <div class="modal fade" id="me-image-modal" tabindex="-1">
+          <div class="modal-dialog modal-dialog-centered" style="max-width:440px">
+            <div class="modal-content">
+              <div class="modal-header border-0 pb-0">
+                <h6 class="modal-title"><i class="ti ti-photo text-primary me-2"></i>Insert image</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-3">
+                  <label class="form-label small fw-500">Image file</label>
+                  <input id="me-image-file" type="file" accept="image/*" class="form-control form-control-sm">
+                </div>
+                <div class="mb-1 small text-muted text-center">— or —</div>
+                <div class="mb-3">
+                  <label class="form-label small fw-500">Image URL</label>
+                  <input id="me-image-url" class="form-control form-control-sm" placeholder="https://example.com/image.png">
+                </div>
+                <div>
+                  <label class="form-label small fw-500">Link URL <span class="text-muted fw-normal">(optional — makes image clickable)</span></label>
+                  <input id="me-image-link" class="form-control form-control-sm" placeholder="https://">
+                </div>
+              </div>
+              <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-sm btn-primary" id="me-image-insert">Insert</button>
+              </div>
+            </div>
+          </div>
+        </div>`);
     }
 
     handleLink(value) {
@@ -268,39 +413,105 @@
         this.quill.format('link', false);
         return;
       }
+      this._ensureModals();
       const range = this.quill.getSelection(true);
-      const current = range ? this.quill.getFormat(range).link : '';
-      let url = window.prompt('Link URL', current || 'https://');
-      if (!url) return;
-      url = url.trim();
-      if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url;
-      if (range && range.length > 0) {
-        this.quill.format('link', url);
-      } else {
-        this.quill.insertText(range ? range.index : this.quill.getLength(), url, 'link', url);
-      }
-      this.$('bodyHtml').value = this.quill.root.innerHTML;
-      this.autoSave();
+      const currentUrl  = range ? (this.quill.getFormat(range).link || '') : '';
+      const currentText = (range && range.length > 0)
+        ? this.quill.getText(range.index, range.length).trim()
+        : '';
+
+      const urlInput  = document.getElementById('me-link-url');
+      const textInput = document.getElementById('me-link-text');
+      urlInput.value  = currentUrl || 'https://';
+      textInput.value = currentText;
+
+      const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('me-link-modal'));
+      modal.show();
+      setTimeout(() => (currentUrl ? urlInput : textInput).focus(), 300);
+
+      const insertBtn = document.getElementById('me-link-insert');
+      const doInsert = () => {
+        let url = urlInput.value.trim();
+        const text = textInput.value.trim();
+        if (!url || url === 'https://') return;
+        if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = 'https://' + url;
+        modal.hide();
+
+        if (range && range.length > 0) {
+          // Replace selection text if user changed it
+          if (text && text !== currentText) {
+            this.quill.deleteText(range.index, range.length);
+            this.quill.insertText(range.index, text, 'link', url);
+          } else {
+            this.quill.format('link', url);
+          }
+        } else {
+          const label = text || url;
+          this.quill.insertText(range ? range.index : this.quill.getLength(), label, 'link', url);
+        }
+        this.$('bodyHtml').value = this.quill.root.innerHTML;
+        this.autoSave();
+        insertBtn.removeEventListener('click', doInsert);
+      };
+      insertBtn.addEventListener('click', doInsert);
+      document.getElementById('me-link-modal').addEventListener('hidden.bs.modal', () => {
+        insertBtn.removeEventListener('click', doInsert);
+      }, { once: true });
     }
 
     handleImage() {
       if (!this.quill) return;
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.addEventListener('change', () => {
-        const file = input.files && input.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
+      this._ensureModals();
+
+      const fileInput  = document.getElementById('me-image-file');
+      const urlInput   = document.getElementById('me-image-url');
+      const linkInput  = document.getElementById('me-image-link');
+      fileInput.value  = '';
+      urlInput.value   = '';
+      linkInput.value  = '';
+
+      const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('me-image-modal'));
+      modal.show();
+
+      const insertBtn = document.getElementById('me-image-insert');
+      const doInsert = () => {
+        const linkUrl = linkInput.value.trim();
+        const imgUrl  = urlInput.value.trim();
+        const file    = fileInput.files && fileInput.files[0];
+
+        const _embed = (src) => {
+          modal.hide();
           const range = this.quill.getSelection(true);
-          this.quill.insertEmbed(range ? range.index : this.quill.getLength(), 'image', reader.result);
+          const idx   = range ? range.index : this.quill.getLength();
+          if (linkUrl) {
+            // Insert as raw HTML <a><img></a> via clipboard delta workaround
+            const html = `<a href="${esc(linkUrl)}" target="_blank"><img src="${esc(src)}" style="max-width:100%"></a>`;
+            const curHtml = this.quill.root.innerHTML;
+            // Insert at cursor by manipulating innerHTML directly then re-syncing
+            const tmp = document.createElement('div');
+            tmp.innerHTML = curHtml;
+            // Append after cursor position using Quill's clipboard
+            this.quill.clipboard.dangerouslyPasteHTML(idx, html);
+          } else {
+            this.quill.insertEmbed(idx, 'image', src);
+          }
           this.$('bodyHtml').value = this.quill.root.innerHTML;
           this.autoSave();
+          insertBtn.removeEventListener('click', doInsert);
         };
-        reader.readAsDataURL(file);
-      });
-      input.click();
+
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = () => _embed(reader.result);
+          reader.readAsDataURL(file);
+        } else if (imgUrl) {
+          _embed(imgUrl);
+        }
+      };
+      insertBtn.addEventListener('click', doInsert);
+      document.getElementById('me-image-modal').addEventListener('hidden.bs.modal', () => {
+        insertBtn.removeEventListener('click', doInsert);
+      }, { once: true });
     }
 
     switchMode() {
@@ -311,15 +522,16 @@
         this.initQuill();
         if (this.quill && !this.$('bodyHtml').value && this.$('bodyPlain').value) {
           this.$('bodyHtml').value = this.$('bodyPlain').value;
-          this.quill.root.innerHTML = this.$('bodyPlain').value;
+          this._setQuillHtml(this.$('bodyPlain').value);
         }
         this.showTab(this.currentTab === 'preview' || this.currentTab === 'source' ? this.currentTab : 'wysiwyg');
       }
     }
 
     showTab(tab) {
-      if (this.currentTab === 'wysiwyg' && this.quill) this.$('bodyHtml').value = this.quill.root.innerHTML;
-      if (this.currentTab === 'source' && this.quill) this.quill.root.innerHTML = this.$('bodyHtml').value;
+      // The HTML tab (textarea) always holds the real HTML; the Editor tab only mirrors it
+      // and writes back when the user edits there (see text-change handler).
+      if (this.currentTab === 'source' && tab !== 'source') this._setQuillHtml(this.$('bodyHtml').value);
       this.currentTab = tab;
       this.$('wysiwygPane').style.display = tab === 'wysiwyg' ? '' : 'none';
       this.$('sourcePane').style.display = tab === 'source' ? '' : 'none';
@@ -334,45 +546,184 @@
 
     getBody() {
       if (this.getType() !== 'html') return this.$('bodyPlain').value;
-      if (this.currentTab === 'wysiwyg' && this.quill) return this.quill.root.innerHTML;
-      if (this.currentTab === 'preview' && this.quill) return this.quill.root.innerHTML;
       return this.$('bodyHtml').value;
     }
 
     buildPayload() {
+      if (this.stepIndex != null) {
+        const body    = this.getBody();
+        const isHtml  = this.getType() === 'html';
+        const idx     = this.stepIndex;
+        return {
+          ...this.campaignPayload(),
+          mail_sequence_step: {
+            index:      idx,
+            mail_type:  idx === 0 ? 'intro' : `followup_${idx}`,
+            delay_days: parseInt(this.$('stepDelay').value || '0', 10) || 0,
+            subject:    this.$('subject').value.trim(),
+            body_html:  isHtml ? body : '',
+            body_text:  isHtml ? '' : body,
+            css:        this.$('css').value || DEFAULT_CSS,
+          }
+        };
+      }
       const mail = {
         subject: this.$('subject').value.trim(),
         body: this.getBody(),
         type: this.getType(),
         css: this.$('css').value || DEFAULT_CSS
       };
-      if (this.stepId) {
-        return {
-          mail_schedule_step: {
-            step_id: this.stepId,
-            name: this.$('stepName').value.trim() || 'Step',
-            delay_days: parseInt(this.$('stepDelay').value || '0', 10) || 0,
-            mail
-          }
-        };
+      return { ...this.campaignPayload(), mail };
+    }
+
+    // Campaign ref and language are saved with the mail. An invalid value is left out (and flagged),
+    // so a typing mistake there never blocks saving the mail itself.
+    campaignPayload() {
+      if (!this.campaignId) return {};
+      const ref = this.$('campaignRef').value.trim(), lang = this.$('campaignLang').value.trim().toLowerCase();
+      const out = {};
+      if (/^[A-Za-z0-9_-]*$/.test(ref)) out.campaign_ref = ref;
+      else this.feedback('Campaign ref may only contain letters, digits, - and _ (not saved yet).', true);
+      if (/^([a-z]{2,3}(-[a-z]{2})?)?$/.test(lang)) out.campaign_lang = lang;
+      else this.feedback('Language must be a code such as da, en or pt-br (not saved yet).', true);
+      return out;
+    }
+
+    toolsMessage(text, err = false) {
+      const m = this.$('toolsMsg');
+      m.textContent = text; m.style.color = err ? '#dc2626' : '';
+    }
+
+    // Replace the body (plain box, or HTML source + editor) and save.
+    setBody(text) {
+      if (this.getType() === 'html') {
+        this.$('bodyHtml').value = text;
+        this._setQuillHtml(text);
+      } else {
+        this.$('bodyPlain').value = text;
       }
-      return { mail, outreach_email_account: this.$('account').value.trim() };
+      this.autoSave();
+    }
+
+    // Set /lang/<code> and ?ref=<ref> in every blueboot.ai link of the mail, keeping the rest of each link.
+    applyRefLang() {
+      const lang = this.$('campaignLang').value.trim().toLowerCase(), ref = this.$('campaignRef').value.trim();
+      if (!lang && !ref) { this.toolsMessage('Fill in the ref and/or the language code first.', true); return; }
+      const before = this.getBody();
+      const { text, links } = MailEditorComponent.mergeRefLang(before, lang, ref);
+      if (!links) { this.toolsMessage('No blueboot.ai links found in this mail.', true); return; }
+      this.setBody(text);
+      this.toolsMessage(text === before
+        ? `All ${links} blueboot.ai link(s) already have this ref and language.`
+        : `Updated ${links} blueboot.ai link(s).`);
+    }
+
+    // Works on the mail text, so it covers href="..." in HTML and plain URLs in plain mails.
+    static mergeRefLang(text, lang, ref) {
+      let links = 0;
+      const out = text.replace(/https?:\/\/(?:www\.)?blueboot\.ai[^\s"'<>)]*/gi, match => {
+        const tail = (match.match(/[.,;:!?]+$/) || [''])[0];            // sentence punctuation is not part of the link
+        const hadAmp = match.includes('&amp;');
+        let url;
+        try { url = new URL(match.slice(0, match.length - tail.length).replace(/&amp;/g, '&')); } catch (e) { return match; }
+        links++;
+        if (lang) {
+          url.pathname = /^\/lang\/[A-Za-z-]+(?=\/|$)/.test(url.pathname)
+            ? url.pathname.replace(/^\/lang\/[A-Za-z-]+/, '/lang/' + lang)
+            : '/lang/' + lang + (url.pathname === '/' ? '/' : url.pathname);
+        }
+        if (ref) url.searchParams.set('ref', ref);
+        const result = url.toString();
+        return (hadAmp ? result.replace(/&/g, '&amp;') : result) + tail;
+      });
+      return { text: out, links };
+    }
+
+    // Copy the default trailer (Outreach Settings) to the end of the mail: the HTML version into
+    // an HTML mail, the plain-text version into a plain mail.
+    async insertTrailer() {
+      try {
+        const r = await fetch(`${this.base}/api/crm/mail-trailer`);
+        const t = await r.json();
+        if (t.status !== 'ok') throw new Error(t.message || 'Could not load the trailer');
+        if (t.enabled && !confirm('The trailer is switched on, so it is already added to every mail when it is sent. Copy it into this mail anyway?')) return;
+        const body = this.getBody();
+        this.setBody(this.getType() === 'html'
+          ? body + '<p><br></p>' + (t.html || '')
+          : body.replace(/\s+$/, '') + '\n\n---\n' + (t.text || ''));
+      } catch (e) {
+        this.feedback(e.message, true);
+      }
+    }
+
+    async translate() {
+      const language = this.$('campaignLang').value.trim().toLowerCase();
+      const btn = this.$('trBtn');
+      if (!language) { this.toolsMessage('Write the language code to translate into, for example da.', true); return; }
+      if (!confirm(`Translate the subject and text into "${language}"? It replaces the current text (Undo is available).`)) return;
+      const before = { subject: this.$('subject').value, body: this.getBody() };
+      btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Translating…';
+      this.toolsMessage('Translating…');
+      try {
+        const r = await fetch(`${this.base}/api/crm/translate-mail`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...before, language })
+        });
+        const d = await r.json();
+        if (d.status !== 'ok') throw new Error(d.message || 'Translation failed');
+        this._beforeTranslate = before;
+        this.$('subject').value = d.subject;
+        this.setBody(d.body);
+        this.$('trUndo').style.display = '';
+        this.toolsMessage(`Translated into "${language}" and saved. Check the text, then use Apply to set the language in the links.`);
+      } catch (e) {
+        this.toolsMessage(e.message, true);
+      }
+      btn.disabled = false; btn.innerHTML = '<i class="ti ti-language me-1"></i>Translate';
+    }
+
+    undoTranslate() {
+      if (!this._beforeTranslate) return;
+      this.$('subject').value = this._beforeTranslate.subject;
+      this.setBody(this._beforeTranslate.body);
+      this._beforeTranslate = null;
+      this.$('trUndo').style.display = 'none';
+      this.toolsMessage('Translation undone.');
     }
 
     autoSave() {
       clearTimeout(this.saveTimer);
-      this.saveTimer = setTimeout(() => this.save(true), 900);
+      this.saveTimer = setTimeout(() => { this.saveTimer = null; this.save(true); }, 900);
       this.updatePreview();
     }
 
-    async save(silent = false) {
-      if (!this.campaignId) return;
+    // Save a pending edit right now (blur, switching step, tab hidden / closed).
+    flush(keepalive = false) {
+      if (!this.saveTimer) return this._queue;
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+      return this.save(true, keepalive);
+    }
+
+    // Saves run one after another so an older save can never overwrite a newer one.
+    save(silent = false, keepalive = false) {
+      // Build the request NOW, so a later step/campaign switch cannot change what is saved.
+      if (!this.campaignId) return this._queue;
+      clearTimeout(this.saveTimer); this.saveTimer = null;   // this save covers any pending edit
+      const campaignId = this.campaignId;
+      const payload    = JSON.stringify(this.buildPayload());
+      this._queue = this._queue.then(() => this._send(campaignId, payload, silent, keepalive));
+      return this._queue;
+    }
+
+    async _send(campaignId, payload, silent, keepalive) {
       if (!silent) this.feedback('Saving...');
       try {
-        const r = await fetch(`${this.base}/api/crm/campaigns/${encodeURIComponent(this.campaignId)}`, {
+        const r = await fetch(`${this.base}/api/crm/campaigns/${encodeURIComponent(campaignId)}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.buildPayload())
+          body: payload,
+          keepalive: !!keepalive && payload.length < 60000
         });
         const d = await r.json();
         if (!r.ok || d.status === 'error') throw new Error(d.message || 'Save failed');
@@ -410,7 +761,7 @@
     openTest() {
       const detail = {
         campaignId: this.campaignId,
-        account: this.stepId ? (this.campaign?.outreach_email_account || '') : this.$('account').value.trim(),
+        account: this.campaign?.outreach_email_account || '',
         subject: this.$('subject').value.trim(),
         body: this.getBody(),
         type: this.getType(),

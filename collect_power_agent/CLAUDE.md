@@ -212,6 +212,41 @@ nodes, making every site report `pages=0 (index)`.
 
 ## Verification
 
+### RULE: After editing any HTML file in `public/`, run the HTML integrity check
+
+Large HTML files (`campaign.html`, `campaign-edit.html`, etc.) can be silently truncated
+by Python write operations, leaving null-byte padding at the end. This breaks the page
+completely with no obvious error. Run this check after **every** edit to any `public/*.html`:
+
+```python
+python3 - << 'PY'
+import re
+p = "public/campaign.html"   # change to the file you edited
+s = open(p, encoding="utf-8").read()
+
+print("Null bytes:", s.count("\x00"))                          # must be 0
+print("Ends with </html>:", s.rstrip().endswith("</html>"))   # must be True
+
+for tag in ["script", "html", "body"]:
+    opens  = len(re.findall(f"<{tag}[\\s>]", s))
+    closes = len(re.findall(f"</{tag}>", s))
+    status = "OK" if opens == closes else "MISMATCH"
+    print(f"<{tag}>: {opens} open, {closes} close  {status}")
+
+last_script = s.rfind("</script>")
+tail = s[last_script + 9:]
+net = tail.count("<div") - tail.count("</div>")
+print(f"Tail div balance: {net} (must be 0)")
+PY
+```
+
+If any check fails:
+- `Null bytes > 0` or `Ends with </html>: False` → file is truncated. Strip nulls with
+  `data = open(p,'rb').read().rstrip(b'\x00')`, find the real truncation point, and
+  restore the missing tail from a reference file (e.g. `campaign-edit.html` for shared modal patterns).
+- Tag mismatch → a modal or script block was not closed. Add the missing closing tags.
+- Tail div balance ≠ 0 → a modal's `</div>` stack is incomplete.
+
 ### RULE: `py_compile` is NOT enough — always run `pyflakes` for undefined names
 
 `python -m py_compile` only catches **syntax** errors. It passes on undefined-name bugs
@@ -505,9 +540,20 @@ parse blocked the loop.
 
 ### RULE: always cap response body size — never read/decompress/parse an unbounded body
 
+**Never** use `await resp.content.read(n)` or `await resp.read()` directly.
+`read(n)` may return early if the server sends data slowly across multiple TCP segments;
+`read()` is unbounded. Always drain the stream with `iter_chunked` instead:
+
 ```python
 _MAX_BODY = 8_000_000
-raw = await resp.content.read(_MAX_BODY + 1)     # bounded read, NOT resp.read()
+_chunks: list[bytes] = []
+_read = 0
+async for _chunk in resp.content.iter_chunked(65536):
+    _chunks.append(_chunk)
+    _read += len(_chunk)
+    if _read > _MAX_BODY:
+        break
+raw = b"".join(_chunks)
 if len(raw) > _MAX_BODY:
     raw = raw[:_MAX_BODY]
 if raw[:2] == b"\x1f\x8b":                        # gzip — cap the DECOMPRESSED size too
@@ -516,6 +562,13 @@ if raw[:2] == b"\x1f\x8b":                        # gzip — cap the DECOMPRESSE
         raw = _gz.read(_MAX_BODY)                  # NOT gzip.decompress(raw) — bomb risk
 text = raw.decode("utf-8", errors="replace")[:3_000_000]
 ```
+
+`iter_chunked` drains the stream completely — it never returns early the way
+`read(n)` can, so documents are always fully received before parsing begins.
+
+**Exception:** `urllib.request.urlopen(...).read()` (stdlib sync HTTP, not aiohttp)
+is fine as-is — it always reads the full response and is only used for small OAuth
+token exchanges.
 
 If genuinely heavy parsing is unavoidable, move it off the loop with
 `run_in_executor` (wrapped in `wait_for`) so a slow parse can't block other coroutines.
@@ -585,6 +638,49 @@ showing:
 - email_contacts → Contact Sheet → CRM Template → Firestore + site_leads
 - API flow: crmApi → Cloud Tasks → crmWorker → crm_jobs
 - Dashboard URL: https://blueboot-market.web.app/
+
+---
+
+## Frontend / page boilerplate rules
+
+### RULE: Every protected HTML page must include Firebase auth, nav, and call requireAuth()
+
+All pages in `public/` except `login.html`, `index.html`, and `doc-viewer.html` must:
+
+1. **Load Firebase SDK + config** before `auth.js`:
+```html
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+```
+
+2. **Include the nav bar** placeholder in `<body>`:
+```html
+<div id="nav"></div>
+```
+`crm-common.js` renders the nav automatically when this element is present.
+
+3. **Call `requireAuth()` before loading any data**, and chain `requireRole()` for
+   role-restricted pages:
+```js
+requireAuth().then(() => {
+  requireRole(['admin']);   // omit for pages open to all authenticated users
+  load();                   // your page's data-loading entry point
+});
+```
+
+Never call data-loading functions at the top level of a `<script>` block — they
+must run inside the `requireAuth()` `.then()` callback so that unauthenticated
+users are redirected before any API calls fire.
+
+**Checklist when adding a new page:**
+- [ ] Firebase SDK + `firebase-config.js` + `auth.js` + `crm-common.js` loaded in that order
+- [ ] `<div id="nav"></div>` present at the top of `<body>`
+- [ ] `requireAuth().then(...)` wraps all data loading
+- [ ] `requireRole([...])` called inside `.then()` if the page is role-restricted
+- [ ] Page added to `PAGE_ROLES` in `public/js/crm-common.js`
 
 ---
 
@@ -1084,4 +1180,34 @@ explicit pixel widths (never `width:auto` on either). Use at minimum:
 
 `width:auto` on Name causes it to collapse into the Email column when other
 columns are added or the viewport shrinks. Always set a concrete width.
+
+---
+
+## Outreach email account architecture
+
+### RULE: `outreach_email_account` is set only on the campaign — never in mail steps or the mail editor
+
+The sending account is a campaign-level concern, not a per-step or per-editor concern.
+Never add an "Outreach account" input to the mail editor UI, mail steps, or per-step data.
+
+**Architecture:**
+
+| Concern | Location |
+|---|---|
+| Which account to send from | `campaigns/{id}.outreach_email_account` (email address string) |
+| SMTP credentials for that account | `settings/mail_accounts/accounts/{email}` |
+| Where the user selects the account | Campaign Info tab in `campaign.html` — the ONLY place |
+
+**Send flow:**
+1. `outreach_mail_select.py` → `_load_campaign()` reads `campaign.outreach_email_account` → stored as `sender_email` on `CampaignMail`
+2. `read_outreach()` groups contacts by `sender_email`, calls `_load_account(db, sender_email)` to look up SMTP credentials
+3. `MailSender` uses those credentials for SMTP
+
+**Rules:**
+- `mail-editor-component.js` must NEVER render an account input field; it may read `campaign.outreach_email_account` silently (e.g. to populate "From:" in the test modal) — read-only only
+- `mail_sequence` step objects must NEVER contain an account field
+- `campaign-edit.html` must NEVER write `outreach_email_account` to the campaign
+- The campaign Info tab (`campaign.html` Info section) is the sole UI for setting `outreach_email_account`
+
+This bug was fixed after `mail-editor-component.js` had `showAccountField` + an account `<input>` that wrote to the step payload. The fix was to remove all account UI from the editor and steps, and confirm the send engine reads only from `campaign.outreach_email_account`.
 

@@ -18,6 +18,9 @@ def list_filter_facets():
             data = d.to_dict() or {}
             out.append({
                 "name":              d.id,
+                "pipeline":          data.get("pipeline")
+                                     or ("leads" if data.get("source_collection") == "leads"
+                                         else "site_leads"),
                 "source_collection": data.get("source_collection"),
                 "generated_at":      data.get("generated_at"),
                 "saved_at":          data.get("saved_at"),

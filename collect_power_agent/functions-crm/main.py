@@ -23,7 +23,7 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 
 from auth_cache import get_user_role_cached
-from handlers.shared import _err
+from handlers.shared import _err, GCP_PROJECT
 
 # -- Flask app ----------------------------------------------------------------
 app = Flask(__name__)
@@ -43,13 +43,14 @@ from handlers.leads         import bp as leads_bp
 from handlers.statistics    import bp as statistics_bp
 from handlers.auth          import bp as auth_bp
 from handlers.user_prefs    import bp as user_prefs_bp
+from handlers.send_limits   import bp as send_limits_bp
 from handlers.batch         import bp as batch_bp
 
 for bp in (
     campaigns_bp, contacts_bp, jobs_bp, mailbox_bp,
     mail_tags_bp, mail_accounts_bp, inbound_read_bp,
     gdisk_bp, filter_facets_bp, leads_bp, statistics_bp, auth_bp,
-    user_prefs_bp, batch_bp,
+    user_prefs_bp, batch_bp, send_limits_bp,
 ):
     app.register_blueprint(bp)
 
@@ -69,6 +70,7 @@ _BLUEPRINT_MIN_READ_ROLES: dict[str, str] = {
     "gdisk":         "campaign-user",  # Drive folder contents + settings/gdisk
     "mail_accounts": "campaign-user",  # mail account credentials (settings/mail_accounts)
     "auth":          "campaign-user",  # user role docs (settings/users)
+    "send_limits":   "campaign-user",  # send limits + run reservations
     "mail_tags":     "campaign-user",  # settings/mail_tag_statuses
     "mailbox":       "campaign-user",  # IMAP mailbox contents - no read for user/guest
     "batch":         "campaign-user",  # cloud_batch job definitions and run history
@@ -79,10 +81,11 @@ _JOB_ENDPOINTS = frozenset({
     "jobs.push_and_sync",
     "jobs.template_sync",
     "jobs.crm_sync_trigger",
-    "jobs.campaign_sync",
     "jobs.campaign_export",
+    "jobs.campaign_import",
     "jobs.outreach_send",
     "jobs.reply_match",
+    "jobs.build_facets_trigger",
     "jobs.job_status",
     "jobs.list_jobs",
     "campaigns.discover_campaigns",
@@ -98,6 +101,10 @@ _JOB_ENDPOINTS = frozenset({
 _ADMIN_ENDPOINTS = frozenset({
     "gdisk.gdisk_set_settings",          # POST/PATCH /api/crm/gdisk/settings
     "mail_tags.put_mail_tag_statuses",   # PUT /api/crm/settings/mail-tag-statuses
+    "send_limits.put_send_limits",       # PUT /api/crm/settings/send-limits
+    "send_limits.put_mail_trailer",      # PUT /api/crm/settings/mail-trailer
+    "jobs.outreach_send_now",            # POST /api/crm/outreach/send-now (real mail)
+    "campaigns.reset_campaign",          # POST /api/crm/campaigns/{id}/reset
 })
 
 _BLUEPRINT_MIN_ROLES: dict[str, str] = {
@@ -233,7 +240,7 @@ def index():
             "GET  /api/crm/status/<job_id>",
             "GET  /api/crm/jobs",
         ],
-        "dashboard": "https://blueboot-market.web.app/",
+        "dashboard": f"https://{GCP_PROJECT}.web.app/",
     })
 
 

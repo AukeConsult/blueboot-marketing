@@ -1,5 +1,14 @@
 {
   "dependencies": {
     "firebase-functions": "^7.2.5"
+  },
+  "scripts": {
+    "deploy:hosting": "firebase deploy --only hosting",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:crm": "firebase deploy --only functions:crm",
+    "deploy:crm:full": "deploy_crm.bat",
+    "deploy:auth": "firebase deploy --only functions:auth",
+    "deploy:batch": "gcloud builds submit --project blueboot-market . && gcloud run deploy batch-runner --image us-central1-docker.pkg.dev/blueboot-market/batch-runner/batch-runner:latest --platform managed --region us-central1 --project blueboot-market --quiet",
+    "deploy:all": "deploy_all.bat"
   }
 }

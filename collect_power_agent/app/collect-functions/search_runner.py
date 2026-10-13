@@ -370,7 +370,16 @@ async def _async_fetch(session: aiohttp.ClientSession, url: str,
             return ""
         # Bounded read — decoding/parsing a huge body synchronously would block
         # this batch's event loop (wait_for cannot cancel sync CPU work).
-        raw = await resp.content.read(2_000_001)
+        _chunks: list[bytes] = []
+        _read = 0
+        async for _chunk in resp.content.iter_chunked(65536):
+            _chunks.append(_chunk)
+            _read += len(_chunk)
+            if _read > 2_000_000:
+                break
+        raw = b"".join(_chunks)
+        if len(raw) > 2_000_000:
+            raw = raw[:2_000_000]
         return raw[:2_000_000].decode("utf-8", errors="replace")
 
 

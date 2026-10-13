@@ -24,6 +24,7 @@ No SMTP / sending code lives here.
 from __future__ import annotations
 
 from collections import defaultdict
+from google.cloud.firestore_v1.base_query import FieldFilter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 import re
@@ -152,6 +153,7 @@ class SentConfirmation:
 # ---------------------------------------------------------------------------
 
 _CONTACT_KNOWN = {
+    "send_confirmation", "send_confirmed_by", "send_confirmed_at", "send_confirm_note",
     "email", "contact_name", "company", "domain", "country",
     "status", "followup_status", "mail_sent", "created_at", "sent_at", "message_id", "sender_account",
     "lead_id",
@@ -307,11 +309,8 @@ def _attach_selected_step(contact: ContactRow, campaign: CampaignMail) -> bool:
 
 
 def _is_intro_step(step: dict) -> bool:
-    marker = " ".join(
-        str(step.get(k) or "")
-        for k in ("mail_type", "name", "step_name", "step_id")
-    ).strip().lower()
-    return "intro" in marker
+    mail_type = str(step.get("mail_type") or "").strip().lower()
+    return mail_type == "intro" or step.get("index", 999) == 0
 
 
 def _prepare_mail_sequence(seq: list) -> list:
@@ -340,39 +339,6 @@ def _log_campaign_skip(db, campaign_id: str, text: str) -> None:
     except Exception as exc:
         print(f"[outreach_mail_select] skip-log failed for {campaign_id}: {exc}")
 
-
-def prepare_mail_sequences(db=None) -> int:
-    """Build mail_sequence from the current mail_schedule format when needed."""
-    db = db or _get_db()
-    updated = 0
-    for doc in db.collection("campaigns").stream():
-        d = doc.to_dict() or {}
-        if d.get("mail_sequence"):
-            continue
-
-        mail_schedule = d.get("mail_schedule") or []
-        if mail_schedule and isinstance(mail_schedule, list):
-            mail_sequence = []
-            for i, step in enumerate(mail_schedule):
-                step_mail = step.get("mail") or {}
-                subject   = step_mail.get("subject", "").strip()
-                body      = step_mail.get("body",    "").strip()
-                step_name = (step.get("name") or "").strip().lower()
-                mail_type = "intro" if i == 0 or "intro" in step_name else f"followup_{i}"
-                is_plain = step_mail.get("type", "html") == "plain"
-                mail_sequence.append({
-                    "index":      i,
-                    "mail_type":  mail_type,
-                    "delay_days": int(step.get("delay_days") or 0),
-                    "subject":    subject,
-                    "body_html":  "" if is_plain else body,
-                    "body_text":  body if is_plain else "",
-                })
-            if mail_sequence:
-                doc.reference.update({"mail_sequence": mail_sequence})
-                print(f"[prepare-mail-sequence] {doc.id!r}: built {len(mail_sequence)} step(s) from mail_schedule")
-                updated += 1
-    return updated
 
 
 # ---------------------------------------------------------------------------
@@ -432,7 +398,6 @@ def read_outreach(
 
     # Step 1: query contacts. If campaign_ids is set, read those campaigns'
     # subcollections directly so non-matching campaigns can never leak in.
-    from google.cloud.firestore_v1.base_query import FieldFilter
     campaign_filter = _coerce_id_set(campaign_ids)
     if campaign_filter:
         queries = []
@@ -460,6 +425,19 @@ def read_outreach(
     # campaigns/{campaign_id}/campaign_contacts/{doc_id})
     by_campaign: dict[str, list[ContactRow]] = defaultdict(list)
     total = 0
+    unconfirmed_skipped = 0
+    _require_cache: dict[str, bool] = {}
+
+    def _requires_confirmation(cid: str) -> bool:
+        """Campaign setting; campaigns without the setting keep the old behaviour."""
+        if cid not in _require_cache:
+            try:
+                cd = db.collection("campaigns").document(cid).get().to_dict() or {}
+            except Exception:
+                cd = {}
+            _require_cache[cid] = bool(cd.get("require_send_confirmation", False))
+        return _require_cache[cid]
+
     for query in queries:
         for doc in query.stream():
             if total >= limit:
@@ -478,6 +456,11 @@ def read_outreach(
             doc_campaign_id = doc.reference.parent.parent.id
             if campaign_filter and doc_campaign_id not in campaign_filter:
                 continue
+            # The tick "Send" decides the INTRO only; reminders follow the intro that was sent.
+            if (mode != "followup" and not d.get("send_confirmation")
+                    and _requires_confirmation(doc_campaign_id)):
+                unconfirmed_skipped += 1
+                continue
             by_campaign[doc_campaign_id].append(ContactRow(
                 contact_doc_id = doc.id,
                 campaign_id    = doc_campaign_id,
@@ -495,6 +478,9 @@ def read_outreach(
         if total >= limit:
             break
 
+    if unconfirmed_skipped:
+        print(f"[outreach_mail_select] {unconfirmed_skipped} intro contact(s) skipped -- "
+              f"not confirmed to send", flush=True)
     if not by_campaign:
         return []
 
@@ -514,7 +500,7 @@ def read_outreach(
         filtered: list = []
         for contact in contacts:
             lid = contact.lead_id
-            if lid and lid in lead_statuses and lead_statuses[lid] != "pending":
+            if lid and lid in lead_statuses and lead_statuses[lid] not in ("pending", "active"):
                 print(
                     f"[outreach_mail_select] SKIP contact {contact.email} "
                     f"-- site lead '{lid}' status='{lead_statuses[lid]}'",
@@ -544,11 +530,11 @@ def read_outreach(
             continue
 
         campaign.status = _campaign_status(campaign.status)
-        required_status = "active" if mode == "followup" else "ready"
-        if campaign.status != required_status:
+        allowed_statuses = {"active"} if mode == "followup" else {"ready", "active"}
+        if campaign.status not in allowed_statuses:
             print(
                 f"[outreach_mail_select] {mode} send requires campaign status "
-                f"{required_status!r}; campaign '{campaign_id}' is "
+                f"{allowed_statuses}; campaign '{campaign_id}' is "
                 f"{campaign.status!r} -- skipping"
             )
             continue
@@ -598,6 +584,12 @@ def read_outreach(
     return batches
 
 
+def _mark_site_contacted(db, campaign_id: str, lead_id: str, when_iso: str) -> bool:
+    """Site follow-up -> "contacted" when it has none yet (see site_followup)."""
+    from smart_mail.site_followup import set_site_followup
+    return set_site_followup(db, campaign_id, lead_id, "contacted", ("",), when_iso)
+
+
 # ---------------------------------------------------------------------------
 # confirm_sent
 # ---------------------------------------------------------------------------
@@ -611,6 +603,8 @@ def confirm_sent(
     mode:           str        = "intro",
     sender_account: str        = "",
     sent_at:        str | None = None,
+    body_text:      str        = "",
+    body_html:      str        = "",
 ) -> SentConfirmation:
     """Record that an outreach email was successfully sent.
 
@@ -626,6 +620,7 @@ def confirm_sent(
     """
     from google.cloud.firestore_v1 import ArrayUnion
     from email.utils import make_msgid
+    from smart_mail.inbound_read_lib import email_id_from_message_id as _email_id_from_message_id
 
     confirmed_at = sent_at or datetime.now(timezone.utc).isoformat()
     # Always guarantee a unique message_id — generate one if caller did not provide it
@@ -657,6 +652,9 @@ def confirm_sent(
             "user": sender_account or "outreach",
             "text": history_text,
             "type": "MAIL_SENT",
+            "email_id": _email_id_from_message_id(message_id),
+            "body_text": (body_text or "")[:10000],
+            "body_html": (body_html or "")[:30000],
         }]),
     }
 
@@ -666,6 +664,9 @@ def confirm_sent(
 
     # 1 - write contact row
     contact_ref.update(update)
+
+    # The site the contact belongs to: "contacted" unless it already has a follow-up status.
+    _mark_site_contacted(db, campaign_id, (contact_data or {}).get("lead_id"), confirmed_at)
 
     camp_ref = db.collection("campaigns").document(campaign_id)
     camp_doc = camp_ref.get()
@@ -681,7 +682,7 @@ def confirm_sent(
     # 2 - append to outreach_sent (skip if duplicate message_id)
     existing = (
         db.collection("outreach_sent")
-        .where("message_id", "==", message_id)
+        .where(filter=FieldFilter("message_id", "==", message_id))
         .limit(1)
         .stream()
     )
@@ -718,5 +719,4 @@ __all__ = [
     "SentConfirmation",
     "read_outreach",
     "confirm_sent",
-    "prepare_mail_sequences",
 ]

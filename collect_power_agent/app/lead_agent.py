@@ -516,9 +516,7 @@ def audit_tlds(collection: str | None = None, dry_run: bool = False) -> None:
 
     # A real email domain must:  letters/digits/hyphens, at least one dot,
     # and a TLD of 2–24 real letters (no digits, no single chars like "l").
-    _VALID_EMAIL_RE = _re.compile(
-        r'^[^@\s]+@[a-z0-9]([a-z0-9\-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]*[a-z0-9])?)*\.[a-z]{2,24}$'
-    )
+    from crm.contact_clean_lib import clean_email as _shared_clean_email   # the one e-mail check
 
     print("\n[audit] Scanning contacts for blank/invalid emails and foreign email domains…")
 
@@ -537,7 +535,7 @@ def audit_tlds(collection: str | None = None, dry_run: bool = False) -> None:
             continue
 
         # ---- 2. regex validation (catches 20km@6.7l, price@tag, etc.) ----
-        if not _VALID_EMAIL_RE.match(email):
+        if not _shared_clean_email(email):
             bad_refs.append((cdoc.reference, email, lead_domain,
                              f"invalid email format: {email!r}"))
 

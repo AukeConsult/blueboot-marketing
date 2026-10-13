@@ -2,6 +2,8 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
+from google.cloud.firestore_v1.base_query import FieldFilter
+_FF = FieldFilter  # short alias
 from handlers.shared import _get_db, _ok, _err, _accepted
 
 bp = Blueprint("contacts", __name__)
@@ -10,7 +12,7 @@ bp = Blueprint("contacts", __name__)
 
 _FOLLOWUP_FIELDS = {"followup_date", "followup_status", "followup_comment", "followup_importance", "followup_owner"}
 _CONTACT_STATUSES = {"pending", "active", "excluded"}
-_FOLLOWUP_STATUSES = {"", "in_work", "contacted", "received", "replied", "meeting", "offer", "not_interested"}
+_FOLLOWUP_STATUSES = {"", "in_work", "contacted", "received", "auto_replied", "replied", "meeting", "offer", "not_interested"}
 
 _FOLLOWUP_HISTORY_TYPE = {
     "followup_status":     "STATUS",
@@ -39,7 +41,7 @@ def _followup_status(value, *, strict: bool = False) -> str:
     status = str(value or "").strip().lower()
     if status not in _FOLLOWUP_STATUSES:
         if strict:
-            raise ValueError("Invalid follow-up status. Must be one of: in_work, contacted, received, replied, meeting, offer, not_interested.")
+            raise ValueError("Invalid follow-up status. Must be one of: in_work, contacted, received, auto_replied, replied, meeting, offer, not_interested.")
         return ""
     return status
 
@@ -76,9 +78,17 @@ def get_campaign_contact(campaign_id, doc_id):
         if not doc.exists:
             return _err(f"Contact '{doc_id}' not found in campaign '{campaign_id}'", 404)
         d = doc.to_dict() or {}
+        camp = (db.collection("campaigns").document(campaign_id).get().to_dict()) or {}
+        outreach_email = (camp.get("outreach_email_account") or "").strip()
+        outreach_display_name = ""
+        if outreach_email:
+            from handlers.shared import _get_mail_account
+            outreach_display_name = (_get_mail_account(db, outreach_email) or {}).get("display_name", "")
         return jsonify({
             "campaign_id":         campaign_id,
             "doc_id":              doc_id,
+            "outreach_email":        outreach_email,
+            "outreach_display_name": outreach_display_name,
             "name":                d.get("name", ""),
             "email":               d.get("email", ""),
             "title":               d.get("title", ""),
@@ -91,6 +101,21 @@ def get_campaign_contact(campaign_id, doc_id):
             "followup_owner":      d.get("followup_owner", "") or "",
             "comment_history":     _safe_history(d.get("comment_history", [])),
             "new_mail":            bool(d.get("new_mail", False)),
+            "send_confirmation":   bool(d.get("send_confirmation", False)),
+            "send_confirmed_by":   d.get("send_confirmed_by", "") or "",
+            "send_confirmed_at":   d.get("send_confirmed_at", "") or "",
+            "send_confirm_note":   d.get("send_confirm_note", "") or "",
+            "intro_sent":          bool(d.get("mail_sent")),
+            "phone":               d.get("phone", "") or "",
+            "linkedin":            d.get("linkedin", "") or "",
+            "twitter":             d.get("twitter", "") or "",
+            "facebook":            d.get("facebook", "") or "",
+            "instagram":           d.get("instagram", "") or "",
+            "whatsapp":            d.get("whatsapp", "") or "",
+            "teams":               d.get("teams", "") or "",
+            "telegram":            d.get("telegram", "") or "",
+            "googlechat":          d.get("googlechat", "") or "",
+            "messenger":           d.get("messenger", "") or "",
         })
     except Exception as exc:
         return _err(str(exc), 500)
@@ -126,6 +151,14 @@ def update_campaign_contact(campaign_id, doc_id):
         # Boolean fields — handled separately (must not be coerced to str)
         if "new_mail" in body:
             update["new_mail"] = bool(body["new_mail"])
+        if "send_confirmation" in body:
+            from flask import g as _g0
+            update["send_confirmation"] = bool(body["send_confirmation"])
+            update["send_confirmed_by"] = (getattr(_g0, "user_email", None)
+                                           or str(body.get("_user") or "api")).strip()
+            update["send_confirmed_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if "send_confirm_note" in body:
+            update["send_confirm_note"] = str(body["send_confirm_note"]).strip()[:300]
         has_entry = bool((request.get_json(silent=True) or {}).get("_history_entry"))
         if not update and not has_entry:
             return _err("No editable fields provided.", 400)
@@ -167,7 +200,6 @@ def update_campaign_contact(campaign_id, doc_id):
         # ── Recount pending/excluded on the parent lead after status change ──
         if "status" in update:
             try:
-                from google.cloud.firestore_v1.base_query import FieldFilter as _FF
                 contact_snap = ref.get()
                 lead_id = ((contact_snap.to_dict() or {}).get("lead_id") or "").strip()
                 if lead_id:
@@ -240,6 +272,8 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
             return _err(f"No mail account found for '{outreach_email}'.", 400)
 
         campaign_status = str(camp.get("status") or "draft").strip().lower()
+        if campaign_status == "on_hold":
+            return _err("Campaign is on hold — resume it before sending mail.", 409)
         if campaign_status not in {"ready", "active"}:
             return _err(
                 f"Campaign status is '{campaign_status}' — mark it ready before sending mail.",
@@ -256,6 +290,8 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
         if result.get("status") != "ok":
             return jsonify(result)
 
+        from smart_mail.inbound_read_lib import email_id_from_message_id
+        _eid = email_id_from_message_id(result.get("message_id", ""))
         now = datetime.now(timezone.utc).isoformat()
         user = getattr(_g, "user_email", None) or (body.get("_user") or outreach_email or "api").strip()
         contact_ref.update({
@@ -269,6 +305,9 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
                 "from": outreach_email,
                 "to": to_addr,
                 "subject": subject,
+                "email_id": _eid,
+                "body_text": (body_plain or "")[:10000],
+                "body_html": (body_html or "")[:30000],
             }]),
         })
         if campaign_status == "ready":
@@ -283,38 +322,121 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
         return _err(str(exc), 500)
 
 
-@bp.route("/api/crm/campaigns/<campaign_id>/contacts/remove", methods=["POST"])
-def remove_campaign_contacts(campaign_id):
-    """Remove contacts from a campaign by email list."""
+@bp.route("/api/crm/campaigns/<campaign_id>/excluded-counts", methods=["GET"])
+def excluded_counts(campaign_id):
+    """Return counts of excluded contacts and excluded sites for a campaign."""
     try:
+        db = _get_db()
+        doc_ref = db.collection("campaigns").document(campaign_id)
+        if not doc_ref.get().exists:
+            return _err(f"Campaign '{campaign_id}' not found", 404)
+        contacts_col = doc_ref.collection("campaign_contacts")
+        leads_col    = doc_ref.collection("campaign_leads")
+        excl_contacts = sum(1 for _ in contacts_col.where(filter=FieldFilter("status", "==", "excluded")).stream())
+        excl_sites    = sum(1 for _ in leads_col.where(filter=FieldFilter("status", "==", "excluded")).stream())
+        return jsonify({"status": "ok", "excluded_contacts": excl_contacts, "excluded_sites": excl_sites})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/campaigns/<campaign_id>/contacts/confirm", methods=["POST"])
+def confirm_campaign_contacts(campaign_id):
+    """Set send_confirmation on many contacts at once.
+
+    Body: { "value": true|false,
+            "doc_ids": [...]            -- these contacts, or
+            "scope":   "all_unsent" }   -- every pending contact whose intro mail is not sent yet
+    Only pending contacts with no mail sent yet are changed (the flag only decides the intro).
+    """
+    try:
+        from flask import g as _g
         db   = _get_db()
         body = request.get_json(silent=True) or {}
-        emails = body.get("emails", [])
-        if not emails or not isinstance(emails, list):
-            return _err("Body must contain a non-empty 'emails' list", 400)
+        value = bool(body.get("value", True))
+        doc_ids = body.get("doc_ids")
+        scope = str(body.get("scope") or "")
+        if not doc_ids and scope != "all_unsent":
+            return _err("Provide 'doc_ids' or scope 'all_unsent'", 400)
+        camp = db.collection("campaigns").document(campaign_id)
+        if not camp.get().exists:
+            return _err(f"Campaign '{campaign_id}' not found", 404)
+        col = camp.collection("campaign_contacts")
+        if doc_ids:
+            if not isinstance(doc_ids, list):
+                return _err("'doc_ids' must be a list", 400)
+            snaps = [s for s in db.get_all([col.document(str(i)) for i in doc_ids]) if s.exists]
+        else:
+            snaps = list(col.stream())
+        user = (getattr(_g, "user_email", None) or str(body.get("_user") or "api")).strip()
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        changed = skipped = 0
+        batch, n = db.batch(), 0
+        for s in snaps:
+            d = s.to_dict() or {}
+            if _contact_status(d.get("status")) != "pending" or d.get("mail_sent"):
+                skipped += 1
+                continue
+            if bool(d.get("send_confirmation", False)) == value:
+                continue
+            batch.update(s.reference, {"send_confirmation": value, "send_confirmed_by": user,
+                                       "send_confirmed_at": now})
+            changed += 1
+            n += 1
+            if n >= 400:
+                batch.commit()
+                batch, n = db.batch(), 0
+        if n:
+            batch.commit()
+        return jsonify({"status": "ok", "changed": changed, "skipped": skipped, "value": value})
+    except Exception as exc:
+        return _err(str(exc), 500)
 
+
+@bp.route("/api/crm/campaigns/<campaign_id>/contacts/remove", methods=["POST"])
+def remove_campaign_contacts(campaign_id):
+    """Delete all excluded contacts and excluded sites (+ their contacts) from a campaign."""
+    try:
+        db = _get_db()
         doc_ref = db.collection("campaigns").document(campaign_id)
         if not doc_ref.get().exists:
             return _err(f"Campaign '{campaign_id}' not found", 404)
 
         contacts_col = doc_ref.collection("campaign_contacts")
+        leads_col    = doc_ref.collection("campaign_leads")
         deleted = 0
-        for email in emails:
-            matches = contacts_col.where("email", "==", email).stream()
-            for m in matches:
-                m.reference.delete()
-                deleted += 1
 
-        remaining = sum(1 for _ in contacts_col.stream())
-        doc_ref.update({"contact_count": remaining, "updated_at": datetime.now(timezone.utc).isoformat()})
+        # 1. Delete excluded contacts directly from Firestore
+        for doc in contacts_col.where(filter=FieldFilter("status", "==", "excluded")).stream():
+            doc.reference.delete()
+            deleted += 1
+
+        # 2. Delete excluded leads and all their contacts
+        excluded_leads = list(leads_col.where(filter=FieldFilter("status", "==", "excluded")).stream())
+        leads_deleted = 0
+        for lead_doc in excluded_leads:
+            lead_id = lead_doc.id
+            for lc in contacts_col.where(filter=FieldFilter("lead_id", "==", lead_id)).stream():
+                lc.reference.delete()
+                deleted += 1
+            lead_doc.reference.delete()
+            leads_deleted += 1
+
+        remaining_contacts = sum(1 for _ in contacts_col.stream())
+        remaining_leads    = sum(1 for _ in leads_col.stream())
+        doc_ref.update({
+            "contact_count": remaining_contacts,
+            "sites_count":   remaining_leads,
+            "updated_at":    datetime.now(timezone.utc).isoformat(),
+        })
 
         from handlers.shared import _new_job, _enqueue_task
         export_params = {"campaign_id": campaign_id}
         export_job_id = _new_job("campaign-export", export_params)
         _enqueue_task("campaign-export", export_job_id, export_params)
 
-        return jsonify({"status": "ok", "deleted": deleted,
-                        "contact_count": remaining, "export_job_id": export_job_id})
+        return jsonify({"status": "ok", "deleted": deleted, "leads_deleted": leads_deleted,
+                        "contact_count": remaining_contacts, "sites_count": remaining_leads,
+                        "export_job_id": export_job_id})
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -403,6 +525,10 @@ def followup_contacts():
         for doc in contacts_iter:
             d     = doc.to_dict() or {}
             status = _contact_status(d.get("status"))
+            # Never show excluded on the follow-up page;
+            # pending only shown when include_pending is set
+            if status == "excluded":
+                continue
             if not include_pending and status == "pending":
                 continue
             parts = doc.reference.path.split("/")
@@ -432,6 +558,9 @@ def followup_contacts():
                 "email":               d.get("email", ""),
                 "title":               d.get("title", ""),
                 "website":             d.get("website", ""),
+                "lead_id":             d.get("lead_id", "") or "",
+                "domain":              d.get("domain", "") or "",
+                "company":             d.get("company", "") or "",
                 "status":              status,
                 "followup_date":       d.get("followup_date", "") or "",
                 "followup_status":     _followup_status(d.get("followup_status", "")),

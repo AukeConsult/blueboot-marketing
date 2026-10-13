@@ -179,7 +179,6 @@ def run_contact_sync(db, svc, countries=None, status=None, campaign=None,
 
 def run_sync_back(db, svc, tab=CONTACT_TAB) -> None:
     """Full sync: read sheet overrides, re-fetch Firestore data, merge, write back."""
-    from google.cloud.firestore_v1.base_query import FieldFilter
     overrides = _read_existing_doc_ids(svc, CONTACT_SHEET_ID, tab)
     if not overrides:
         print("[lib] Sheet is empty -- nothing to sync back")

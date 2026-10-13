@@ -1,0 +1,356 @@
+"""campaign_import_lib.py -- Import leads + contacts from an Excel file into a campaign.
+
+Sheet format: the standard export format produced by campaign_export_lib.py /
+campaign_exporter.py — one tab named "Leads+Contacts", one row per contact,
+lead fields repeated per row.
+
+ID derivation
+-------------
+lead_id   : taken from the 'Lead ID' column if present; otherwise derived from
+            the 'Website' column using lead_id_from_url() (same as site_agent).
+contact   : always derived from email via contact_id_from_email() —
+            e.g. adrian@blisynlig.no -> adrian_blisynlig_no
+
+Import rules
+------------
+- Campaign doc created (status=draft) if it does not exist yet.
+- Leads written to campaigns/{id}/campaign_leads/{lead_id} with merge=True.
+- Contacts written to campaigns/{id}/campaign_contacts/{doc_id} with merge=True.
+- Existing contact fields status, mail_sent, followup_* are NEVER overwritten.
+- Rows with no email AND no website are skipped.
+"""
+from __future__ import annotations
+
+import re
+from collections import defaultdict
+
+from crm.contact_clean_lib import clean_email
+from datetime import datetime, timezone
+from io import BytesIO
+
+CAMPAIGNS_COLLECTION  = "campaigns"
+CAMPAIGN_LEADS_SUB    = "campaign_leads"
+CAMPAIGN_CONTACTS_SUB = "campaign_contacts"
+
+TAB_NAME = "Leads+Contacts"
+
+# Lead columns that come from the sheet
+_LEAD_FIELDS = [
+    "lead_id", "company", "website", "country", "location",
+    "platform", "page_count", "description", "priority",
+    "reseller_score", "suggested_angle", "categories",
+]
+
+# Contact columns that come from the sheet
+_CONTACT_FIELDS = [
+    "email", "name", "title", "occupation", "email_type", "phone", "linkedin",
+]
+
+# Contact fields that are NEVER overwritten on existing docs
+_PROTECTED_CONTACT_FIELDS = {
+    "status", "mail_sent", "next_mail_index", "in_reply_to",
+    "followup_status", "followup_date", "followup_comment",
+    "followup_importance", "followup_owner", "comment_history",
+    "sent_at", "message_id", "sender_account", "created_at",
+    "send_confirmation", "send_confirmed_by", "send_confirmed_at", "send_confirm_note",
+}
+
+BATCH_SIZE = 400
+
+
+# ---------------------------------------------------------------------------
+# ID derivation
+# ---------------------------------------------------------------------------
+
+def contact_id_from_email(email: str) -> str:
+    """adrian@blisynlig.no -> adrian_blisynlig_no"""
+    s = email.lower().strip()
+    s = re.sub(r"[^a-z0-9]+", "_", s)
+    s = re.sub(r"_+", "_", s).strip("_")
+    return s
+
+
+def lead_id_from_website(website: str) -> str:
+    """Derive lead_id from a website URL using the canonical project function."""
+    try:
+        from urllib.parse import urlparse
+        host = urlparse(website).hostname or website
+        slug = re.sub(r"[.\-]+", "_", host.rstrip(".").lower())
+        return re.sub(r"_+", "_", slug).strip("_")
+    except Exception:
+        slug = re.sub(r"[^a-z0-9]+", "_", website.lower())
+        return re.sub(r"_+", "_", slug).strip("_")
+
+
+# ---------------------------------------------------------------------------
+# Sheet parsing
+# ---------------------------------------------------------------------------
+
+def parse_sheet(file_bytes: bytes) -> tuple[list[dict], list[str], str]:
+    """Parse the Leads+Contacts tab from xlsx bytes.
+
+    Returns (rows, warnings, detected_campaign_id) where:
+    - rows: list of dicts keyed by normalised column header
+    - warnings: list of row-level warning strings
+    - detected_campaign_id: campaign_id found in the sheet's Campaign column
+      (empty string if not found — caller decides whether to require it)
+    """
+    from openpyxl import load_workbook
+    wb = load_workbook(BytesIO(file_bytes), read_only=True, data_only=True)
+
+    # Find the tab
+    sheet = None
+    for name in wb.sheetnames:
+        if name.lower().replace(" ", "") == TAB_NAME.lower().replace(" ", ""):
+            sheet = wb[name]
+            break
+    if sheet is None:
+        raise ValueError(
+            f"No '{TAB_NAME}' tab found. "
+            f"Available tabs: {', '.join(wb.sheetnames)}"
+        )
+
+    rows_iter = sheet.iter_rows(values_only=True)
+    header_row = next(rows_iter, None)
+    if not header_row:
+        raise ValueError(f"'{TAB_NAME}' tab is empty.")
+
+    # Normalise headers: "Lead ID" -> "lead_id", "Campaign" -> "campaign"
+    headers = [
+        re.sub(r"[^a-z0-9]+", "_", str(h or "").lower()).strip("_")
+        for h in header_row
+    ]
+
+    rows = []
+    warnings = []
+    detected_campaign_id = ""
+    for i, raw in enumerate(rows_iter, start=2):
+        row = {headers[j]: (str(v).strip() if v is not None else "")
+               for j, v in enumerate(raw) if j < len(headers)}
+        email   = row.get("email",   "").strip()
+        website = row.get("website", "").strip()
+        if not email and not website:
+            warnings.append(f"Row {i}: skipped — no email or website")
+            continue
+        # Pick up campaign_id from the "Campaign" column on the first valid row
+        if not detected_campaign_id:
+            detected_campaign_id = (
+                row.get("campaign_id") or row.get("campaign") or ""
+            ).strip()
+        rows.append(row)
+
+    return rows, warnings, detected_campaign_id
+
+
+# ---------------------------------------------------------------------------
+# Core import logic
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Cross-campaign deduplication
+# ---------------------------------------------------------------------------
+
+_BLOCKED_STATUSES = {"pending", "active", "sent", "replied", "bounced", "converted"}
+
+
+def _contacts_in_other_campaigns(db, campaign_id: str, doc_ids: set) -> set:
+    """Return doc_ids that are already active in a campaign other than campaign_id.
+
+    Statuses that block: pending, active, sent, replied, bounced, converted.
+    Statuses that free up the contact: excluded, rejected (contact was dropped).
+    """
+    if not doc_ids:
+        return set()
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    blocked = set()
+    ids = list(doc_ids)
+    for i in range(0, len(ids), 30):          # Firestore 'in' limit = 30
+        snap = (
+            db.collection_group("campaign_contacts")
+            .where(filter=FieldFilter("doc_id", "in", ids[i:i + 30]))
+            .stream()
+        )
+        for d in snap:
+            parts = d.reference.path.split("/")
+            other_campaign = parts[1] if len(parts) >= 4 else ""
+            if other_campaign != campaign_id:
+                status = (d.to_dict() or {}).get("status", "pending")
+                if status in _BLOCKED_STATUSES:
+                    blocked.add(d.id)
+    return blocked
+
+
+def run_campaign_import(
+    db,
+    campaign_id: str,
+    rows: list[dict],
+    *,
+    dry_run: bool = False,
+    detected_campaign_id: str = "",
+) -> dict:
+    """Import rows into campaign_leads + campaign_contacts.
+
+    Returns a summary dict with counts.
+    campaign_id may be empty when the caller passes detected_campaign_id
+    extracted from the sheet — the detected value is used as fallback.
+    """
+    campaign_id = campaign_id.strip() or detected_campaign_id.strip()
+    if not campaign_id:
+        raise ValueError("campaign_id is required (not found in form or in the Excel file)")
+    if not rows:
+        return {
+            "campaign_id":      campaign_id,
+            "leads_new":        0,
+            "leads_updated":    0,
+            "contacts_new":     0,
+            "contacts_updated": 0,
+            "skipped":          0,
+            "dry_run":          dry_run,
+        }
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    # ── Build lead and contact dicts ─────────────────────────────────────────
+    leads_by_id:    dict[str, dict] = {}
+    contacts_by_id: dict[str, dict] = {}
+    skipped = 0
+    warnings_invalid: list = []
+
+    for row in rows:
+        # Resolve lead_id
+        lead_id = re.sub(r"[^a-z0-9_-]+", "_", row.get("lead_id", "").strip().lower()).strip("_")
+        website = row.get("website", "").strip()
+        if not lead_id:
+            if not website:
+                skipped += 1
+                continue
+            lead_id = lead_id_from_website(website)
+
+        # Build lead doc (always — even if email is missing)
+        if lead_id not in leads_by_id:
+            lead: dict = {"lead_id": lead_id, "campaign_id": campaign_id}
+            for f in _LEAD_FIELDS:
+                v = row.get(f, "")
+                if v:
+                    if f == "page_count":
+                        try:
+                            lead[f] = int(float(v))
+                        except (ValueError, TypeError):
+                            pass
+                    else:
+                        lead[f] = v
+            leads_by_id[lead_id] = lead
+
+        # Build contact doc — skip if no email
+        raw_email = row.get("email", "").strip()
+        email = clean_email(raw_email)            # the one shared e-mail check
+        if not email:
+            if raw_email:
+                warnings_invalid.append(raw_email)
+            skipped += 1
+            continue
+        row["email"] = email
+        doc_id = contact_id_from_email(email)
+
+        contact: dict = {"lead_id": lead_id, "campaign_id": campaign_id}
+        for f in _CONTACT_FIELDS:
+            v = row.get(f, "")
+            if v:
+                contact[f] = v
+        contacts_by_id[doc_id] = contact
+
+    # ── Check what already exists ────────────────────────────────────────────
+    leads_col    = db.collection(CAMPAIGNS_COLLECTION).document(campaign_id).collection(CAMPAIGN_LEADS_SUB)
+    contacts_col = db.collection(CAMPAIGNS_COLLECTION).document(campaign_id).collection(CAMPAIGN_CONTACTS_SUB)
+
+    existing_leads    = {doc.id for doc in leads_col.select([]).stream()}
+    existing_contacts = {doc.id for doc in contacts_col.select([]).stream()}
+
+    leads_new     = [lid for lid in leads_by_id    if lid not in existing_leads]
+    leads_updated = [lid for lid in leads_by_id    if lid in  existing_leads]
+    contacts_new     = [cid for cid in contacts_by_id if cid not in existing_contacts]
+    contacts_updated = [cid for cid in contacts_by_id if cid in  existing_contacts]
+
+    # Cross-campaign dedup: skip new contacts already active in another campaign
+    reserved = _contacts_in_other_campaigns(db, campaign_id, set(contacts_new))
+    if reserved:
+        print(f"[campaign-import] {len(reserved)} contacts skipped — active in another campaign",
+              flush=True)
+    contacts_new = [cid for cid in contacts_new if cid not in reserved]
+
+    summary = {
+        "campaign_id":      campaign_id,
+        "leads_new":        len(leads_new),
+        "leads_updated":    len(leads_updated),
+        "contacts_new":     len(contacts_new),
+        "contacts_updated": len(contacts_updated),
+        "skipped":          skipped + len(reserved),
+        "invalid_emails":   len(warnings_invalid),
+        "invalid_email_examples": warnings_invalid[:10],
+        "dry_run":          dry_run,
+    }
+
+    if dry_run:
+        return summary
+
+    # ── Create campaign doc if missing ───────────────────────────────────────
+    camp_ref = db.collection(CAMPAIGNS_COLLECTION).document(campaign_id)
+    if not camp_ref.get().exists:
+        camp_ref.set({
+            "campaign_id": campaign_id,
+            "status":      "draft",
+            "require_send_confirmation": True,
+            "created_at":  now,
+            "updated_at":  now,
+        })
+        print(f"[campaign-import] created campaign '{campaign_id}'", flush=True)
+
+    # ── Write leads ──────────────────────────────────────────────────────────
+    lead_items = list(leads_by_id.items())
+    written_leads = 0
+    for i in range(0, len(lead_items), BATCH_SIZE):
+        batch = db.batch()
+        for lead_id, lead_doc in lead_items[i:i + BATCH_SIZE]:
+            lead_doc["synced_at"] = now
+            batch.set(leads_col.document(lead_id), lead_doc, merge=True)
+        batch.commit()
+        written_leads += len(lead_items[i:i + BATCH_SIZE])
+        print(f"[campaign-import] leads {written_leads}/{len(lead_items)}", flush=True)
+
+    # ── Write contacts (protected fields never overwritten) ──────────────────
+    contact_items = list(contacts_by_id.items())
+    written_contacts = 0
+    for i in range(0, len(contact_items), BATCH_SIZE):
+        batch = db.batch()
+        for doc_id, contact_doc in contact_items[i:i + BATCH_SIZE]:
+            if doc_id in existing_contacts:
+                # Existing contact: remove protected fields so merge=True leaves them intact
+                safe = {k: v for k, v in contact_doc.items()
+                        if k not in _PROTECTED_CONTACT_FIELDS}
+                batch.set(contacts_col.document(doc_id), safe, merge=True)
+            elif doc_id in reserved:
+                continue  # active in another campaign — skip
+            else:
+                # New contact: set defaults
+                contact_doc.setdefault("status",    "pending")
+                contact_doc.setdefault("created_at", now)
+                batch.set(contacts_col.document(doc_id), contact_doc, merge=True)
+        batch.commit()
+        written_contacts += len(contact_items[i:i + BATCH_SIZE])
+        print(f"[campaign-import] contacts {written_contacts}/{len(contact_items)}", flush=True)
+
+    print(f"[campaign-import] done — {written_leads} leads, {written_contacts} contacts", flush=True)
+
+    # Enrich campaign_leads from site_leads / leads Firestore collections
+    from crm.campaign_leads_lib import populate_campaign_leads
+    populate_campaign_leads(db, campaign_id)
+
+    # Every contact must belong to a site of this campaign
+    from crm.site_link_lib import ensure_site_links
+    ensure_site_links(db, campaign_id)
+
+    # Header + list figures (contacts, sites) of the campaign
+    from crm.campaign_scrape_lib import refresh_campaign_counts
+    refresh_campaign_counts(db, campaign_id)
+
+    return summary

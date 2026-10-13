@@ -1,8 +1,10 @@
 """handlers/campaigns.py — Campaign CRUD endpoints."""
 from __future__ import annotations
+import re
 from collections import Counter
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
+from google.cloud.firestore_v1.base_query import FieldFilter
 from handlers.shared import (
     _get_db, _sheets_service, _gdisk, _get_mail_account, _ma_col,
     _new_job, _enqueue_task, _ok, _err, _accepted,
@@ -11,7 +13,17 @@ from handlers.shared import (
 bp = Blueprint("campaigns", __name__)
 
 _CONTACT_STATUSES = {"pending", "active", "excluded"}
-_CAMPAIGN_STATUSES = {"draft", "ready", "active", "canceled"}
+_CAMPAIGN_STATUSES = {"draft", "ready", "active", "on_hold", "canceled"}
+
+# Allowed status changes.  on_hold is a pause: only ready/active campaigns can be held,
+# and a held campaign resumes to the status it was held from (held_from) or is canceled.
+_STATUS_TRANSITIONS = {
+    "draft":    {"ready", "canceled"},
+    "ready":    {"active", "on_hold", "canceled"},
+    "active":   {"on_hold", "canceled"},
+    "on_hold":  {"canceled"},          # + held_from, added in _status_update()
+    "canceled": set(),
+}
 
 
 def _contact_status(value) -> str:
@@ -22,8 +34,43 @@ def _contact_status(value) -> str:
 
 
 def _campaign_status(value) -> str:
-    status = str(value or "draft").strip().lower()
+    status = str(value or "draft").strip().lower().replace(" ", "_").replace("-", "_")
     return status if status in _CAMPAIGN_STATUSES else "draft"
+
+
+def _status_update(current: str, requested: str, camp: dict, body: dict, user: str):
+    """Work out the Firestore fields for a status change.
+
+    Returns (update_dict, error_message).  error_message is None when allowed.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    if requested == current:
+        return {"status": requested}, None
+
+    allowed = set(_STATUS_TRANSITIONS.get(current, set()))
+    if current == "on_hold":
+        held_from = camp.get("held_from")
+        if held_from in ("ready", "active"):
+            allowed.add(held_from)            # resume exactly where it was paused
+        else:
+            allowed |= {"ready", "active"}
+    if requested not in allowed:
+        return {}, f"Invalid campaign status transition: {current} -> {requested}."
+
+    update = {"status": requested}
+    if requested == "on_hold":
+        update.update({
+            "held_from":   current,
+            "held_at":     now,
+            "held_by":     user,
+            "held_reason": str(body.get("hold_reason") or "").strip()[:500],
+        })
+    elif current == "on_hold":
+        update.update({"held_from": None, "held_at": None, "held_by": None,
+                       "held_reason": None, "resumed_at": now})
+    if requested == "active" and current != "on_hold" and not body.get("sent_at"):
+        update["sent_at"] = now
+    return update, None
 
 
 @bp.route("/api/crm/campaigns", methods=["GET"])
@@ -89,6 +136,7 @@ def create_campaign(campaign_id):
             "sent_at":                None,
             "outreach_email_account": body.get("outreach_email_account", ""),
             "mail":                   {"subject": "", "body": "", "type": "plain"},
+            "require_send_confirmation": True,   # intro mail only to contacts ticked "Send"
             "contact_count":          0,
             "sites_count":            0,
             "countries":              [],
@@ -125,32 +173,35 @@ def update_campaign(campaign_id):
         update = {}
 
         if "status" in body:
-            raw_status = str(body["status"] or "").strip().lower()
+            raw_status = str(body["status"] or "").strip().lower().replace(" ", "_").replace("-", "_")
             if raw_status not in _CAMPAIGN_STATUSES:
                 return _err(f"Invalid status. Must be one of: {', '.join(sorted(_CAMPAIGN_STATUSES))}", 400)
-            requested_status = _campaign_status(body["status"])
-            current_status = _campaign_status((doc.to_dict() or {}).get("status", "draft"))
-            allowed_next = {
-                "draft":    {"ready", "canceled"},
-                "ready":    {"active", "canceled"},
-                "active":   {"canceled"},
-                "canceled": set(),
-            }
-            if requested_status == current_status:
-                update["status"] = requested_status
-            elif requested_status in allowed_next.get(current_status, set()):
-                update["status"] = requested_status
-                if requested_status == "active" and not body.get("sent_at"):
-                    update["sent_at"] = datetime.now(timezone.utc).isoformat()
-            else:
-                return _err(
-                    f"Invalid campaign status transition: {current_status} -> {requested_status}.",
-                    409,
-                )
+            camp_data = doc.to_dict() or {}
+            from flask import g as _g
+            status_fields, status_err = _status_update(
+                _campaign_status(camp_data.get("status", "draft")),
+                _campaign_status(raw_status), camp_data, body,
+                getattr(_g, "user_email", "") or str(body.get("_user") or ""))
+            if status_err:
+                return _err(status_err, 409)
+            update.update(status_fields)
 
         if "sent_at"                in body: update["sent_at"]                = body["sent_at"]
         if "outreach_email_account" in body: update["outreach_email_account"] = body["outreach_email_account"]
         if "owner"                  in body: update["owner"]                  = body["owner"]
+        # Campaign ref (the ?ref= value of blueboot.ai links) and language code (the /lang/xx part).
+        if "campaign_ref" in body:
+            ref = str(body["campaign_ref"] or "").strip()
+            if not re.fullmatch(r"[A-Za-z0-9_-]*", ref):
+                return _err("campaign_ref may only contain letters, digits, - and _", 400)
+            update["campaign_ref"] = ref
+        if "campaign_lang" in body:
+            lang = str(body["campaign_lang"] or "").strip().lower()
+            if not re.fullmatch(r"([a-z]{2,3}(-[a-z]{2})?)?", lang):
+                return _err("campaign_lang must be a language code such as da, en or pt-br", 400)
+            update["campaign_lang"] = lang
+        if "require_send_confirmation" in body:
+            update["require_send_confirmation"] = bool(body["require_send_confirmation"])
 
         if "mail" in body:
             existing_mail = (doc.to_dict() or {}).get("mail", {})
@@ -158,37 +209,39 @@ def update_campaign(campaign_id):
             merged_mail.update(body["mail"])
             update["mail"] = merged_mail
 
-        # --- mail_schedule support -----------------------------------------
-        # Full schedule replace: PATCH with {"mail_schedule": [...]}
-        # Single-step upsert:   PATCH with {"mail_schedule_step": {...}}
-        #   The step must contain a "step_id".  It is merged into (or appended
-        #   to) the existing array.  To delete a step send {"delete_step": id}.
-        if "mail_schedule" in body:
-            sched = body["mail_schedule"]
-            if not isinstance(sched, list):
-                return _err("mail_schedule must be an array", 400)
-            update["mail_schedule"] = sched
+        # --- mail_sequence support -----------------------------------------
+        # Full sequence replace: PATCH with {"mail_sequence": [...]}
+        # Single-step upsert:   PATCH with {"mail_sequence_step": {...}}
+        #   The step must contain an "index" field.  It is merged into (or
+        #   appended to) the existing array, kept sorted by index.
+        #   To delete a step send {"delete_step": <index>}.
+        if "mail_sequence" in body:
+            seq = body["mail_sequence"]
+            if not isinstance(seq, list):
+                return _err("mail_sequence must be an array", 400)
+            update["mail_sequence"] = seq
 
-        if "mail_schedule_step" in body:
-            step = body["mail_schedule_step"]
-            if not isinstance(step, dict) or not step.get("step_id"):
-                return _err("mail_schedule_step must be an object with step_id", 400)
-            existing_schedule = list((doc.to_dict() or {}).get("mail_schedule") or [])
-            idx = next((i for i, s in enumerate(existing_schedule)
-                        if s.get("step_id") == step["step_id"]), None)
-            if idx is not None:
-                merged = dict(existing_schedule[idx])
+        if "mail_sequence_step" in body:
+            step = body["mail_sequence_step"]
+            if not isinstance(step, dict) or step.get("index") is None:
+                return _err("mail_sequence_step must be an object with an index field", 400)
+            existing_seq = list((doc.to_dict() or {}).get("mail_sequence") or [])
+            step_idx = next((i for i, s in enumerate(existing_seq)
+                             if s.get("index") == step["index"]), None)
+            if step_idx is not None:
+                merged = dict(existing_seq[step_idx])
                 merged.update(step)
-                existing_schedule[idx] = merged
+                existing_seq[step_idx] = merged
             else:
-                existing_schedule.append(step)
-            update["mail_schedule"] = existing_schedule
+                existing_seq.append(step)
+            existing_seq.sort(key=lambda s: s.get("index", 999))
+            update["mail_sequence"] = existing_seq
 
         if "delete_step" in body:
-            step_id = body["delete_step"]
-            existing_schedule = list((doc.to_dict() or {}).get("mail_schedule") or [])
-            update["mail_schedule"] = [s for s in existing_schedule
-                                       if s.get("step_id") != step_id]
+            step_index = body["delete_step"]
+            existing_seq = list((doc.to_dict() or {}).get("mail_sequence") or [])
+            update["mail_sequence"] = [s for s in existing_seq
+                                       if s.get("index") != step_index]
 
         if "imap" in body or "gmail" in body or "mail_account_type" in body:
             campaign_data    = doc.to_dict() or {}
@@ -292,6 +345,37 @@ def ping_mail_account(campaign_id):
         return _err(str(exc), 500)
 
 
+@bp.route("/api/crm/mail-trailer", methods=["GET"])
+def get_mail_trailer_for_editor():
+    """The default mail trailer (HTML + plain text), readable by every signed-in user.
+
+    The mail editor copies it into a mail. Saving it is admin-only (settings/mail-trailer).
+    """
+    try:
+        from smart_mail.mail_trailer import load_trailer
+        return jsonify({"status": "ok", **load_trailer(_get_db())})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/translate-mail", methods=["POST"])
+def translate_mail_route():
+    """Translate the mail being edited. Body: {subject, body, language}. Returns the translation; the editor stores it.
+
+    Pure AI translation: placeholders, links and HTML tags are kept and checked (crm/mail_translate_lib.py).
+    """
+    try:
+        from crm.mail_translate_lib import translate_mail
+        body = request.get_json(silent=True) or {}
+        result = translate_mail(str(body.get("subject") or ""), str(body.get("body") or ""),
+                                str(body.get("language") or ""))
+        return jsonify({"status": "ok", **result})
+    except ValueError as exc:
+        return _err(str(exc), 400)
+    except Exception as exc:
+        return _err(f"Translation failed: {exc}", 500)
+
+
 @bp.route("/api/crm/campaigns/<campaign_id>/send-test-mail", methods=["POST"])
 def send_test_mail(campaign_id):
     """Send a test email using the campaign mail account settings."""
@@ -391,6 +475,188 @@ def discover_campaigns():
         return _err(str(exc), 500)
 
 
+
+def _host_of(u) -> str:
+    u = str(u or "").lower().strip()
+    for pre in ("https://", "http://"):
+        if u.startswith(pre):
+            u = u[len(pre):]
+    if u.startswith("www."):
+        u = u[4:]
+    return u.split("/")[0].split("?")[0].split("#")[0]
+
+
+def _contact_filter_from_args(args):
+    """Contact-list criteria sent by the follow-up page (same meaning as its header filters)."""
+    from datetime import timedelta
+    today = datetime.now(timezone.utc).date()
+    return {
+        "fu":      args.get("followup_status", "").strip().lower(),
+        "imp":     args.get("importance", "").strip().lower(),
+        "cst":     args.get("contact_status", "").strip().lower(),
+        "due":     args.get("due", "").strip().lower(),
+        "q":       args.get("q", "").strip().lower(),
+        "focus":   args.get("focus", "").strip().lower() in {"1", "true", "yes", "on"},
+        "owner":   args.get("owner", "").strip(),
+        "today":   today.isoformat(),
+        "week":    (today + timedelta(days=7)).isoformat(),
+    }
+
+
+def _contact_passes(d: dict, cid: str, camp_owner: str, f: dict, include_pending: bool) -> bool:
+    """Same rules as /followup-contacts + the follow-up page filters, for one contact doc."""
+    status = _contact_status(d.get("status"))
+    if status == "excluded" or (status == "pending" and not include_pending):
+        return False
+    owner = f["owner"]
+    if owner:
+        fu_owner = d.get("followup_owner", "") or ""
+        if owner == "__none__":
+            if fu_owner or camp_owner:
+                return False
+        elif fu_owner:
+            if fu_owner != owner:
+                return False
+        elif camp_owner != owner:
+            return False
+    if f["cst"] and status != f["cst"]:
+        return False
+    fstat = str(d.get("followup_status") or "").strip().lower()
+    if f["fu"] == "__none__":
+        if fstat:
+            return False
+    elif f["fu"] and fstat != f["fu"]:
+        return False
+    imp = str(d.get("followup_importance") or "").strip().lower()
+    if f["imp"] == "__none__":
+        if imp:
+            return False
+    elif f["imp"] and imp != f["imp"]:
+        return False
+    date = d.get("followup_date", "") or ""
+    due = f["due"]
+    if due == "none" and date:
+        return False
+    if due == "overdue" and not (date and date < f["today"]):
+        return False
+    if due == "today" and date != f["today"]:
+        return False
+    if due == "week" and not (date and f["today"] <= date <= f["week"]):
+        return False
+    if f["focus"] and not (date and date <= f["week"] and fstat != "not_interested"):
+        return False
+    if f["q"]:
+        hay = " ".join(str(d.get(k) or "") for k in ("name", "email", "website", "company", "title")) + " " + cid
+        if f["q"] not in hay.lower():
+            return False
+    return True
+
+
+@bp.route("/api/crm/leads", methods=["GET"])
+def list_leads_cross_campaign():
+    """Return campaign_leads across all campaigns, optionally filtered by campaign_id or owner.
+
+    Status filtering rules (mirrors /followup-contacts):
+    - Default: only status == "active" leads are returned.
+    - include_pending=true : return all statuses (active + pending + excluded).
+    - status=<value>       : override with an explicit status filter.
+
+    by_contacts=1 switches to "sites that have a contact in the follow-up contact list":
+    a site is returned only when at least one of its contacts passes the same criteria as the
+    contact list (followup_status, importance, contact_status, due, q, focus, owner), so the
+    client does not have to download every site and filter it. In this mode `owner` is the
+    contact-level owner, exactly as on /followup-contacts.
+    """
+    try:
+        db          = _get_db()
+        campaign_id = request.args.get("campaign_id", "").strip()
+        owner       = request.args.get("owner", "").strip()
+        # Explicit status override (e.g. status=excluded)
+        status_arg  = request.args.get("status", "").strip()
+        include_all = request.args.get("include_pending", "").strip().lower() in {"1", "true", "yes", "on"}
+
+        # Never return excluded leads on this endpoint.
+        # Default: active only. include_pending=true adds pending too.
+        if status_arg and status_arg != "excluded":
+            filter_status = status_arg          # explicit wins (except excluded)
+        else:
+            filter_status = ""                  # post-filter below
+
+        by_contacts = request.args.get("by_contacts", "").strip().lower() in {"1", "true", "yes", "on"}
+        cfilter = _contact_filter_from_args(request.args) if by_contacts else None
+
+        # Collect campaigns to query
+        camp_docs = []
+        if campaign_id:
+            doc = db.collection("campaigns").document(campaign_id).get()
+            if doc.exists:
+                camp_docs = [doc]
+        else:
+            q = db.collection("campaigns")
+            if owner and not by_contacts:
+                q = q.where(filter=FieldFilter("owner", "==", owner))
+            camp_docs = list(q.stream())
+
+        leads = []
+        for camp_doc in camp_docs:
+            cid   = camp_doc.id
+            cdata = camp_doc.to_dict() or {}
+            cname = cdata.get("name") or cid
+            q2    = db.collection("campaigns").document(cid).collection("campaign_leads")
+            # live contact figures per site (stored counters can be missing / stale)
+            per_lead: dict = {}
+            match_ids: set = set()
+            match_hosts: set = set()
+            fields = ["lead_id", "status"]
+            if by_contacts:
+                fields += ["name", "email", "website", "domain", "company", "title", "followup_status",
+                           "followup_importance", "followup_date", "followup_owner"]
+            camp_owner = cdata.get("owner", "") or ""
+            for cdoc in (db.collection("campaigns").document(cid)
+                           .collection("campaign_contacts").select(fields).stream()):
+                cd = cdoc.to_dict() or {}
+                if by_contacts and _contact_passes(cd, cid, camp_owner, cfilter, include_all):
+                    if cd.get("lead_id"):
+                        match_ids.add(cd["lead_id"])
+                    for h in (_host_of(cd.get("website")), _host_of(cd.get("domain")),
+                              str(cd.get("email") or "").lower().split("@")[-1] if "@" in str(cd.get("email") or "") else ""):
+                        if h:
+                            match_hosts.add(h)
+                st = per_lead.setdefault(cd.get("lead_id", ""), {"t": 0, "p": 0, "x": 0})
+                st["t"] += 1
+                cs = (cd.get("status") or "pending").lower()
+                if cs == "pending":  st["p"] += 1
+                elif cs == "excluded": st["x"] += 1
+            for ldoc in q2.stream():
+                d = ldoc.to_dict() or {}
+                lead_status = (d.get("status") or "pending").strip().lower()
+                # Never show excluded; pending only with include_pending
+                if lead_status == "excluded":
+                    continue
+                if filter_status and lead_status != filter_status:
+                    continue
+                if not filter_status and not include_all and lead_status != "active":
+                    continue
+                d.setdefault("lead_id", ldoc.id)
+                if by_contacts:
+                    lh = _host_of(d.get("domain") or d.get("website"))
+                    if not (d["lead_id"] in match_ids or (lh and lh in match_hosts)):
+                        continue
+                d["campaign_id"]   = cid
+                d["campaign_name"] = cname
+                cnt = per_lead.get(ldoc.id, {"t": 0, "p": 0, "x": 0})
+                d["contact_count"], d["pending_count"], d["excluded_count"] = cnt["t"], cnt["p"], cnt["x"]
+                # ensure followup fields are always present
+                for fk in ("followup_status","followup_date","followup_importance",
+                           "followup_comment","followup_owner"):
+                    d.setdefault(fk, "")
+                leads.append(d)
+
+        leads.sort(key=lambda x: (x.get("priority") or "Z", (x.get("company") or x.get("domain") or "").lower()))
+        return jsonify({"leads": leads, "count": len(leads)})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
 @bp.route("/api/crm/campaigns/<campaign_id>/leads", methods=["GET"])
 def list_campaign_leads(campaign_id):
     """Return all campaign_leads docs for a campaign."""
@@ -417,7 +683,6 @@ def list_campaign_leads(campaign_id):
 def list_lead_contacts(campaign_id, lead_id):
     """Return campaign_contacts that belong to a specific lead_id."""
     try:
-        from google.cloud.firestore_v1.base_query import FieldFilter
         db   = _get_db()
         docs = (
             db.collection("campaigns")
@@ -466,7 +731,6 @@ def create_lead_contact(campaign_id, lead_id):
 
         # Abort if this email already exists anywhere in the campaign
         # (query on email field catches contacts with any doc_id format)
-        from google.cloud.firestore_v1.base_query import FieldFilter
         dupes = list(contacts_col.where(filter=FieldFilter("email", "==", email)).limit(1).stream())
         if dupes:
             return _err(f"A contact for '{email}' already exists in this campaign.", 409)
@@ -522,10 +786,16 @@ def patch_campaign_lead(campaign_id, lead_id):
     are restored (active/sent contacts are left untouched).
     """
     try:
-        from google.cloud.firestore_v1.base_query import FieldFilter
+        from datetime import datetime, timezone
         body = request.get_json(silent=True) or {}
-        allowed = {"status"}
-        updates = {k: v for k, v in body.items() if k in allowed}
+        _FOLLOWUP = {"followup_status", "followup_date", "followup_importance",
+                     "followup_comment", "followup_owner"}
+        allowed   = {"status"} | _FOLLOWUP
+        updates   = {}
+        for k, v in body.items():
+            if k not in allowed:
+                continue
+            updates[k] = str(v).strip() if v is not None else ""
         if not updates:
             return _err("No updatable fields provided.", 400)
         new_status = updates.get("status")
@@ -536,6 +806,11 @@ def patch_campaign_lead(campaign_id, lead_id):
 
         db = _get_db()
         campaign_ref = db.collection("campaigns").document(campaign_id)
+
+        # Timestamp followup changes
+        fu_changed = [f for f in _FOLLOWUP if f in updates]
+        if fu_changed:
+            updates["followup_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
         # Update the lead doc
         campaign_ref.collection("campaign_leads").document(lead_id).update(updates)
@@ -583,5 +858,111 @@ def patch_campaign_lead(campaign_id, lead_id):
                 pass  # best-effort
 
         return _ok("Updated.", lead_id=lead_id, contacts_updated=contacts_updated, **updates)
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/campaigns/<campaign_id>/reset", methods=["POST"])
+def reset_campaign(campaign_id):
+    """Full campaign reset — option A.
+
+    Resets a campaign to its default start state:
+      1. Delete all outreach_sent docs for this campaign.
+      2. Reset every campaign_contacts doc:
+           status → "pending", followup_status → "", mail_sent → [],
+           comment_history → [], sent_at → null, new_mail → False
+      3. Reset every campaign_leads doc:
+           status → "pending"
+      4. Reset the campaign doc:
+           status → "ready", sent_at → null
+
+    Accepts optional JSON body { "dry_run": true } to preview counts.
+    Returns { contacts_reset, leads_reset, sent_deleted }.
+    """
+    try:
+        from datetime import datetime, timezone
+
+        body    = request.get_json(silent=True) or {}
+        dry_run = bool(body.get("dry_run", False))
+        db      = _get_db()
+
+        campaign_ref    = db.collection("campaigns").document(campaign_id)
+        contacts_col    = campaign_ref.collection("campaign_contacts")
+        leads_col       = campaign_ref.collection("campaign_leads")
+        sent_col        = db.collection("outreach_sent")
+
+        # ── 1. Delete outreach_sent docs ──────────────────────────────────────
+        sent_docs   = list(sent_col.where(
+            filter=FieldFilter("campaign_id", "==", campaign_id)
+        ).stream())
+        sent_deleted = len(sent_docs)
+
+        # ── 2. Count contacts & leads ─────────────────────────────────────────
+        contact_docs = list(contacts_col.stream())
+        lead_docs    = list(leads_col.stream())
+        contacts_reset = len(contact_docs)
+        leads_reset    = len(lead_docs)
+
+        if dry_run:
+            return _ok(
+                "Dry run — no changes written.",
+                dry_run=True,
+                contacts_reset=contacts_reset,
+                leads_reset=leads_reset,
+                sent_deleted=sent_deleted,
+            )
+
+        # ── 3. Delete outreach_sent (batched) ─────────────────────────────────
+        batch = db.batch()
+        for i, doc in enumerate(sent_docs):
+            batch.delete(doc.reference)
+            if (i + 1) % 400 == 0:
+                batch.commit()
+                batch = db.batch()
+        if sent_docs:
+            batch.commit()
+
+        # ── 4. Reset campaign_contacts (batched) ──────────────────────────────
+        batch = db.batch()
+        for i, doc in enumerate(contact_docs):
+            batch.update(doc.reference, {
+                "status":          "pending",
+                "followup_status": "",
+                "mail_sent":       [],
+                "comment_history": [],
+                "sent_at":         None,
+                "new_mail":        False,
+                "last_action":        "",
+                "last_action_status": "",
+            })
+            if (i + 1) % 400 == 0:
+                batch.commit()
+                batch = db.batch()
+        if contact_docs:
+            batch.commit()
+
+        # ── 5. Reset campaign_leads (batched) ─────────────────────────────────
+        batch = db.batch()
+        for i, doc in enumerate(lead_docs):
+            batch.update(doc.reference, {"status": "pending"})
+            if (i + 1) % 400 == 0:
+                batch.commit()
+                batch = db.batch()
+        if lead_docs:
+            batch.commit()
+
+        # ── 6. Reset campaign doc ─────────────────────────────────────────────
+        campaign_ref.update({
+            "status":     "ready",
+            "sent_at":    None,
+            "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        })
+
+        return _ok(
+            "Campaign reset to start.",
+            contacts_reset=contacts_reset,
+            leads_reset=leads_reset,
+            sent_deleted=sent_deleted,
+        )
     except Exception as exc:
         return _err(str(exc), 500)

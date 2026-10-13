@@ -4,7 +4,14 @@
  */
 
 // Base URL of the CRM API (crmApi Cloud Function).
-const BASE = 'https://us-central1-blueboot-market.cloudfunctions.net/crmApi';
+// Derived from public/firebase-config.js (projectId, optional functionsRegion), so
+// nothing project-specific is hard-coded here. Optional override: apiBase.
+const BASE = (function () {
+  const c = window.FIREBASE_CONFIG || {};
+  if (c.apiBase) return c.apiBase;
+  return 'https://' + (c.functionsRegion || 'us-central1') + '-' + c.projectId +
+         '.cloudfunctions.net/crmApi';
+})();
 
 // ── Auth interceptor ──────────────────────────────────────────────────────────
 // Wraps window.fetch so that every call to the CRM API (any URL starting with
@@ -161,38 +168,46 @@ function prettyError(msg){
 const PAGE_ROLES = {
   'campaigns.html':     ['admin', 'campaign-user', 'user'],
   'campaign.html':      ['admin', 'campaign-user', 'user'],
-  'campaign-edit.html': ['admin', 'campaign-user', 'user'],
-  'campaign_sites.html': ['admin', 'campaign-user', 'user'],
+  'campaign-edit.html':   ['admin', 'campaign-user', 'user'],
+  'campaign-import.html': ['admin', 'campaign-user'],
   'mailbox.html':       ['admin', 'campaign-user', 'user'],
   'crm-bp.html':        ['admin', 'user'],
   'crm-sync.html':      ['admin', 'user'],
   'crm_follow.html':    ['admin', 'campaign-user', 'user'],
+  'crm-contact.html':   ['admin', 'campaign-user', 'user'],
   'jobs.html':          ['admin'],
   'statistics.html':    ['admin', 'campaign-user', 'user'],
   'filter-facets.html': ['admin', 'campaign-user', 'user'],
   'gdisk.html':         ['admin', 'campaign-user', 'user'],
-  'settings.html':      ['admin'],
+  'settings.html':          ['admin'],
+  'outreach-settings.html': ['admin'],
+  'outreach_status.html':   ['admin', 'campaign-user'],
   'users.html':         ['admin'],
   'cloud-batch.html':    ['admin'],
   // doc-viewer.html and index.html are PUBLIC_PAGES — no role check
 };
 
 const NAV_LINKS = [
-  { href: 'campaign.html',      icon: 'ti-speakerphone',      label: 'Campaigns',
-    match: ['campaigns.html', 'campaign.html', 'campaign-edit.html', 'campaign_sites.html'],
-    roles: ['admin', 'campaign-user', 'user'] },
+  { dropdown: 'campaigns', icon: 'ti-speakerphone', label: 'Campaigns',
+    roles: ['admin', 'campaign-user', 'user'],
+    match: ['campaigns.html', 'campaign.html', 'campaign-edit.html', 'campaign-import.html', 'filter-facets.html'],
+    children: [
+      { href: 'campaigns.html',       icon: 'ti-list',          label: 'Campaign list' },
+      { href: 'campaign-import.html', icon: 'ti-table-import',  label: 'Import campaign', roles: ['admin', 'campaign-user'] },
+      { divider: true },
+      { href: 'filter-facets.html',   icon: 'ti-filter',        label: 'Leads DB' },
+    ]},
   { href: 'crm_follow.html',   icon: 'ti-phone-check',       label: 'Follow-up',
     roles: ['admin', 'campaign-user', 'user'] },
-  { href: 'crm-bp.html', icon: 'ti-server-2', label: 'CRM discover',
+  { href: 'crm-bp.html', icon: 'ti-server-2', label: 'CRM discover (legacy)',
     match: ['crm-bp.html', 'crm-sync.html'],
     roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'daily-admin', icon: 'ti-tool', label: 'Daily Admin',
     roles: ['admin', 'campaign-user', 'user'],
-    match: ['statistics.html', 'filter-facets.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html'],
+    match: ['statistics.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html', 'outreach-settings.html', 'outreach_status.html'],
     children: [
       { href: 'statistics.html',    icon: 'ti-chart-bar',             label: 'Statistics' },
-      { href: 'campaign_sites.html', icon: 'ti-building',              label: 'Campaign Sites' },
-      { href: 'filter-facets.html', icon: 'ti-filter',                label: 'Filter facets' },
+      { href: 'outreach_status.html', icon: 'ti-send',                label: 'Outreach status', roles: ['admin', 'campaign-user'] },
       { divider: true },
       { href: 'gdisk.html',         icon: 'ti-brand-google-drive',    label: 'Drive Folder' },
       { href: 'mailbox.html',       icon: 'ti-inbox',                 label: 'Message Box' },
@@ -201,6 +216,7 @@ const NAV_LINKS = [
       { href: 'cloud-batch.html',   icon: 'ti-cloud-computing',       label: 'Cloud Batch', roles: ['admin'] },
       { divider: true, roles: ['admin'] },
       { href: 'settings.html',      icon: 'ti-adjustments-horizontal',label: 'Settings',    roles: ['admin'] },
+      { href: 'outreach-settings.html', icon: 'ti-mail-cog',          label: 'Outreach settings', roles: ['admin'] },
       { href: 'users.html',         icon: 'ti-users',                 label: 'Users',       roles: ['admin'] },
     ]},
   { dropdown: 'docs',  match: ['doc-viewer.html'],           icon: 'ti-book',              label: 'Documentation',
@@ -208,7 +224,11 @@ const NAV_LINKS = [
       { href: 'doc-viewer.html?doc=user-guide',          icon: 'ti-user',           label: 'User guide' },
       { href: 'doc-viewer.html?doc=crm-follow-up',       icon: 'ti-phone-check',    label: 'CRM Follow-up' },
       { href: 'doc-viewer.html?doc=followup-page-usage', icon: 'ti-help',           label: 'Follow-up page usage' },
-      { href: 'doc-viewer.html?doc=filter-to-campaign',  icon: 'ti-filter',         label: 'Filter to campaign' },
+      { href: 'doc-viewer.html?doc=filter-to-campaign',        icon: 'ti-filter',         label: 'Filter to campaign' },
+      { href: 'doc-viewer.html?doc=campaign-import-export',    icon: 'ti-table-import',   label: 'Campaign import & export' },
+      { href: 'doc-viewer.html?doc=prospect-catalogue-sync',    icon: 'ti-address-book',   label: 'Prospect catalogue sync' },
+      { href: 'doc-viewer.html?doc=send-outreach',           icon: 'ti-send',           label: 'Send outreach mail' },
+      { href: 'doc-viewer.html?doc=contact-cleaning',           icon: 'ti-eraser',         label: 'Contact name & email cleaning' },
       { href: 'doc-viewer.html?doc=pipeline-config',     icon: 'ti-settings-2',     label: 'Pipeline config' },
       { href: 'doc-viewer.html?doc=ai-assistance',       icon: 'ti-brain',          label: 'AI assistance' },
       { divider: true },
@@ -333,9 +353,4 @@ const PUBLIC_PAGES = new Set(['login.html', 'register.html', 'index.html', 'doc-
   else go();
 })();
 
-// Back button: go to the previous page if there is history, otherwise let the
-// link's href act as a fallback. Use as: <a href="index.html" onclick="return goBack()">
-function goBack(){
-  if(history.length > 1){ history.back(); return false; }
-  return true;
-}
+// Back button: go to the previous page if there i

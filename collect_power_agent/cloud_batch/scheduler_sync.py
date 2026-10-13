@@ -8,7 +8,7 @@ Required IAM on the Cloud Run service account:
     roles/iam.serviceAccountUser    (to act as itself when setting OIDC token)
 
 Environment variables read at call time (not import time):
-    GCP_PROJECT      -- GCP project id (default: blueboot-market)
+    GCP_PROJECT      -- GCP project id (required; set in .env)
     GCP_LOCATION     -- region for Cloud Scheduler (default: us-central1)
     BATCH_RUNNER_URL -- Cloud Run service URL (used as HTTP target)
     BATCH_SA         -- service account email for OIDC auth on scheduled calls
@@ -22,7 +22,7 @@ import os
 from cloud_batch.job_status import list_definitions, list_tasks
 
 # GCP_PROJECT and GCP_LOCATION are stable at startup — safe to read at import time.
-_PROJECT  = os.getenv("GCP_PROJECT",  "blueboot-market")
+_PROJECT  = os.getenv("GCP_PROJECT",  "")
 _LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 _PARENT   = f"projects/{_PROJECT}/locations/{_LOCATION}"
 
