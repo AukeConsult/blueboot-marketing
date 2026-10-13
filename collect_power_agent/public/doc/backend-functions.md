@@ -82,7 +82,7 @@ python app/site_email_check.py --countries UK --batch-size 50 --concurrent 4
 
 ### `site_smart_export.py` — Tiered export to Excel / email_contacts
 
-Scores and tiers site_leads (Enterprise / Hot / Good / Warm / Cold) based on page count, platform and sector. Exports to Excel and optionally writes to `email_contacts`.
+Scores and tiers site_leads (Enterprise / Hot / Good / Warm / Cold) based on page count, platform and sector. Exports to Excel. Only with `--write-contacts` does it also write the contacts to `email_contacts` (new e-mails are added, existing ones are updated; see below).
 
 ```bash
 python app/site_smart_export.py --countries NO
@@ -91,9 +91,18 @@ python app/site_smart_export.py --countries NO --min-pages 50
 python app/site_smart_export.py --countries NO --write-contacts --campaign NO_jun
 ```
 
-**Key flags:** `--countries`, `--min-pages`, `--out`, `--write-contacts`, `--campaign`, `--dry-run`
+**Key flags:** `--countries`, `--min-pages`, `--outreach-priority N` (only contacts with priority ≤ N), `--out`, `--gdisk` (also upload the Excel to Google Drive), `--write-contacts`, `--campaign`, `--dry-run-contacts`
 
-**Writes to:** Excel file; optionally `email_contacts/` collection
+**What `--write-contacts` does to `email_contacts`** (document id = the e-mail with special characters replaced by `_`, so one document per e-mail):
+
+| E-mail | What happens |
+|---|---|
+| Not in `email_contacts` yet | A new document is created with all data fields plus `status: pending`, `created_at`, `campaign` (from `--campaign`), `approved` (empty) and `mark_site_leads: true`. |
+| Already in `email_contacts` | The data fields (name, title, phone, company, country, tier, priority, AI fields …) are overwritten with the latest values. `status`, `created_at`, `campaign`, `approved` and `mark_site_leads` are **not touched**, so edits made later are kept. |
+
+Use `--dry-run-contacts` to see how many contacts would be written, per tier and priority, without writing anything.
+
+**Writes to:** Excel file; with `--write-contacts` also `email_contacts/`
 
 ---
 
@@ -154,7 +163,7 @@ python app/leads_email_check.py --countries IN --force
 
 ### `leads_smart_export.py` — Tiered export to Excel / email_contacts
 
-Scores leads by reseller potential and exports to Excel. Optionally writes to `email_contacts`.
+Scores leads by reseller potential and exports to Excel. Only with `--write-contacts` does it also write the contacts to `email_contacts`; same rules as `site_smart_export.py`, but the marker field is `mark_leads`.
 
 ```bash
 python app/leads_smart_export.py --countries UK
@@ -163,7 +172,11 @@ python app/leads_smart_export.py --countries NO SE DK --min-score 50
 python app/leads_smart_export.py --countries NO --write-contacts --campaign NO_agencies_jun
 ```
 
-**Writes to:** Excel file; optionally `email_contacts/` collection
+**Key flags:** `--countries`, `--min-score N`, `--outreach-priority N`, `--collection NAME` (default `leads`), `--out`, `--gdisk`, `--write-contacts`, `--campaign`, `--dry-run-contacts`
+
+New e-mails are added to `email_contacts` with `status: pending`, `created_at`, `campaign`, `approved` (empty) and `mark_leads: true`. For e-mails already there, only the data fields are overwritten; those lifecycle fields are kept.
+
+**Writes to:** Excel file; with `--write-contacts` also `email_contacts/`
 
 ---
 
@@ -342,6 +355,46 @@ These operations have no standalone CLI — they run as Cloud Tasks jobs trigger
 | Update follow-up field | CRM Follow-up inline edit | `PATCH /api/crm/campaigns/<id>/contacts/<doc>` | — (direct write) |
 | Read inbound/sent mail | CRM Follow-up → Sync messages | `POST /api/crm/inbound-read` | `inbound-read` |
 | Enrich contact names | Campaign page → Update info → Fill missing names | `POST /api/crm/campaigns/<id>/name-enrich` | `name-enrich` |
+
+---
+
+## Sending & replies
+
+### `outreach_send.py` — Send outreach mail (command line)
+
+Sends the waiting intro and follow-up mails. It uses exactly the same sender code as the **Send now** button on the Outreach status page and the scheduled `smartMail` job (job `outreach-send`, `smart_mail/outreach_sender.py`): same selection, same account budget, same bounce breaker. **Default is a dry run**; add `--send` to send real mail.
+
+```bash
+python app/outreach_send.py --dry-run                    # intro pass, nothing sent
+python app/outreach_send.py --mode followup --preview    # show rendered body snippets
+python app/outreach_send.py --send --mode both           # real mail, intro + follow-up
+python app/outreach_send.py --campaigns NO_jun SE_jun    # only these campaigns
+```
+
+**Three ways to start the same send**
+
+| Start | Campaigns | Overlap guard |
+|---|---|---|
+| **Send now** button (admin) → `POST /api/crm/outreach/send-now` | the ticked ones | refused (409) while another send is queued or running |
+| Cloud Scheduler → `POST …/smartMail/outreach-send` | all, unless `campaigns` is given | same guard |
+| `outreach_send.py --send` on a computer | all, unless `--campaigns` is given | none (runs locally) |
+
+**Writes to:** `campaigns/{id}/campaign_contacts/` (recorded per sent mail by `confirm_sent`). See [Send Outreach Mail](doc-viewer.html?doc=send-outreach).
+
+---
+
+### `reply_match.py` — Match replies and bounces to contacts 🌐 Frontend triggered
+
+Reads the mail accounts over IMAP, classifies each message and matches replies and bounces to campaign contacts in one pass (`inbox_messages` is only an audit log).
+
+```bash
+python app/reply_match.py                                  # all accounts and campaigns, last 30 days
+python app/reply_match.py --dry-run                        # show matches, write nothing
+python app/reply_match.py --accounts sales@blueboot.ai
+python app/reply_match.py --campaigns NO_jun SE_jun
+```
+
+**Trigger:** `smartMail/reply-match` (scheduler) or `POST /api/crm/reply-match` → Cloud Tasks job `reply-match`. See [Smart Mail](doc-viewer.html?doc=smart-mail).
 
 ---
 

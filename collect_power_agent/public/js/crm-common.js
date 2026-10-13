@@ -216,6 +216,7 @@ const NAV_LINKS = [
       { href: 'cloud-batch.html',   icon: 'ti-cloud-computing',       label: 'Cloud Batch', roles: ['admin'] },
       { divider: true, roles: ['admin'] },
       { href: 'settings.html',      icon: 'ti-adjustments-horizontal',label: 'Settings',    roles: ['admin'] },
+      { href: 'outreach-settings.html', icon: 'ti-mail-cog',          label: 'Outreach settings', roles: ['admin'] },
       { href: 'users.html',         icon: 'ti-users',                 label: 'Users',       roles: ['admin'] },
     ]},
   { dropdown: 'docs',  match: ['doc-viewer.html'],           icon: 'ti-book',              label: 'Documentation',

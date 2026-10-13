@@ -13,6 +13,7 @@
       "codebase": "crm",
       "source": "functions-crm",
       "runtime": "python312",
+      "predeploy": [".venv\\Scripts\\python.exe sync_functions_env.py"],
       "ignore": ["venv", ".venv", "**/__pycache__/**"]
     },
     {

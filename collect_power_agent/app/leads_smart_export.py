@@ -276,9 +276,7 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
         doc = {
             # Identity
             'doc_id':            doc_id,
-            'approved':           '',
             'lead_id_leads':     row.get('lead_id_leads', ''),
-            'mark_leads':        True,
             'email':             email,
             'name':              name,
             'title':             clean_str(row.get('title', '')),
@@ -313,7 +311,8 @@ def _write_email_contacts(db, rows: list[dict], campaign: str | None,
         }
         data_docs.append((doc_id, doc))
         if doc_id not in existing_ids:
-            lifecycle_docs.append((doc_id, {'status': 'pending', 'created_at': now_ts, 'campaign': campaign or ''}))
+            lifecycle_docs.append((doc_id, {'status': 'pending', 'created_at': now_ts, 'campaign': campaign or '',
+                                            'approved': '', 'mark_leads': True}))
 
     # ── Step C: batch write data fields ───────────────────────────────────
     total_batches = (len(data_docs) + BATCH_SIZE - 1) // BATCH_SIZE

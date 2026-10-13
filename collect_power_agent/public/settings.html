@@ -43,6 +43,28 @@
     </div>
   </div>
 
+  <!-- Outreach settings -->
+  <div class="card p-3 mb-3">
+    <h6 class="fw-semibold mb-1"><i class="ti ti-mail-cog me-1 text-primary"></i>Outreach settings</h6>
+    <p class="small text-muted mb-2">Send limits per account, the mail trailer added to every outreach mail, and the remaining send budget.</p>
+    <div><a class="btn btn-outline-primary btn-sm" href="outreach-settings.html"><i class="ti ti-external-link me-1"></i>Open Outreach Settings</a></div>
+  </div>
+
+  <!-- AI model -->
+  <div class="card p-3 mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h6 class="fw-semibold mb-0"><i class="ti ti-sparkles me-1 text-primary"></i>AI model</h6>
+      <span id="ai-key-badge" class="badge bg-secondary small">checking…</span>
+    </div>
+    <p class="small text-muted mb-2">The OpenAI model each AI feature uses right now. To change it, set <code>OPENAI_MODEL</code> in the root <code>.env</code> and deploy the functions (the deploy copies it to the function); the key is <code>OPENAI_API_KEY</code>.</p>
+    <table class="table table-sm small mb-0">
+      <tbody>
+        <tr><td>Mail translation</td><td><code id="ai-model-translate">…</code> <span id="ai-src-translate" class="text-muted"></span></td></tr>
+        <tr><td>Fill missing names</td><td><code id="ai-model-names">…</code> <span id="ai-src-names" class="text-muted"></span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
   <!-- Google Drive folder -->
   <div class="card p-3 mb-3">
     <h6 class="fw-semibold mb-1"><i class="ti ti-brand-google-drive me-1 text-primary"></i>Google Drive folder</h6>
@@ -312,6 +334,22 @@ async function checkAccess(){
 
 loadSetting();
 loadMailAccounts();
+loadAiModel();
+
+async function loadAiModel() {
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/settings/ai-model');
+    const key = document.getElementById('ai-key-badge');
+    key.textContent = d.api_key_set ? 'API key set' : 'API key missing';
+    key.className = 'badge small ' + (d.api_key_set ? 'bg-success' : 'bg-danger');
+    [['translate', d.mail_translation], ['names', d.name_enrichment]].forEach(([id, m]) => {
+      document.getElementById('ai-model-' + id).textContent = m.model;
+      document.getElementById('ai-src-' + id).textContent = d.env_override ? '(from OPENAI_MODEL)' : '(default)';
+    });
+  } catch (e) {
+    document.getElementById('ai-key-badge').textContent = 'could not load';
+  }
+}
 
 // ── Mail accounts ────────────────────────────────────────────────────────
 

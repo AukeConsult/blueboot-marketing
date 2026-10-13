@@ -71,6 +71,10 @@ What does not fit in the budget stays waiting and goes out in a later run.
 
 ---
 
+**Reserved** is what a running send still holds: the part of its claim that is not yet sent. Mails already sent are counted under sent, never twice. A reservation older than 20 minutes is ignored, because a run is stopped after 15 minutes at the latest.
+
+**Time limit of one run:** a run stops starting new mails after about 13 minutes (`OUTREACH_MAX_RUN_SECONDS`, default 780), reports what it sent, and leaves the rest for the next run. With the default 12 second pause that is roughly 60 mails per run. The sent count on the job is updated live while it runs.
+
 ## Three ways to send
 
 All three use the same sender, so the same rules apply to every one of them: the same selection (including the Send tick), the same send budget, the same logging afterwards. Only the way you start it differs.
@@ -120,7 +124,7 @@ Use the dry run to check which contacts a run would pick (it honours the Send ti
 
 ### 3. Scheduled sendmail
 
-A Cloud Scheduler job calls the `smartMail` function on a fixed schedule. The function queues the same background job as the page does (`outreach-send`) and the sender works through the waiting mails within the budget. Each run sends no more than the account budget, so a frequent schedule spreads the day's mails out over time.
+A Cloud Scheduler job calls the `smartMail` function on a fixed schedule. The function queues the same background job as the page does (`outreach-send`, through the same code) and the sender works through the waiting mails within the budget. If a send is already queued or running, the call is refused (409) and the next scheduled call tries again, so two runs never spend the same budget at once. Each run sends no more than the account budget, so a frequent schedule spreads the day's mails out over time.
 
 The job is a normal HTTP job:
 
@@ -176,9 +180,37 @@ Things to know when stopping:
 - **Emergency stop:** pause the scheduler job, then set the active campaigns to **On hold**.
 - The **Send now** button and the command line keep working while the schedule is paused, so you can still send by hand.
 
-> Note: the older route `/api/crm/outreach-send` is meant for the scheduler only. It is declared as blocked for browsers in the access rules, but that rule is not enforced at runtime yet, so a signed-in campaign-user could still call it. Use **Send now** instead; it is limited to admins and refuses to run twice at the same time.
+> Note: the older route `/api/crm/outreach-send` is meant for the scheduler only. It is declared as blocked for browsers in the access rules, but that rule is not enforced at runtime yet, so a signed-in campaign-user could still call it. Use **Send now** instead; it is limited to admins. Both **Send now** and the scheduler refuse to start while another send is queued or running.
 
 ---
+
+## Campaign ref and language
+
+In the mail editor (campaign page, Mail tab, open a step) each campaign has a **Campaign ref** (for example `hot-no2`) and a **Language** code (for example `en`, `da`, `pt-br`). Both belong to the campaign, so every step uses the same values.
+
+- Press **Apply ref and language to links** to merge them into the links that are already in the mail. Only `blueboot.ai` links are changed, and only the two parts: the language part `/lang/en` (replaced, or added in front of the path if missing) and the ref part `?ref=hot-no2` (replaced or added). The rest of each link stays as it is, so `https://blueboot.ai/lang/en/bs/docs/why-use/?ref=old` with ref `hot-no2` and language `da` becomes `https://blueboot.ai/lang/da/bs/docs/why-use/?ref=hot-no2`.
+- It works on links in the HTML and on plain URLs in plain-text mails, and tells you how many links it changed. Other websites are never touched.
+- The ref may contain letters, digits, `-` and `_`; the language is a code, not a name. Invalid values are not saved.
+
+## Translate a mail
+
+In the mail editor, write the language code (the same **Language** field as above, for example `da`) and press **Translate**. The AI translates the subject and the text of the step you are editing and nothing else: no rewriting, shortening or improving.
+
+- Placeholders such as `{{name}}`, links, e-mail addresses, formatting and embedded images are kept as they are. The result is checked, and if the AI changed any of them nothing is replaced and you are asked to try again.
+- The translation replaces the current text and is saved at once. **Undo translation** brings the old text back. Read the result before you send. Afterwards press **Apply ref and language to links** so the links point to the right language.
+- It translates one step at a time, so open each reminder and translate it too. The mail trailer is separate: it has its own HTML and plain-text version on the Outreach Settings page.
+- It needs `OPENAI_API_KEY` in the root `.env` (the same key the name enrichment uses). `OPENAI_MODEL` in the same file sets the model; the default is `gpt-5.4-mini`. The model in use, and whether the key is set, is shown in the **AI model** card on the Settings page. Every functions deploy copies these two values (and the batch settings) from the root `.env` into `functions-crm/.env`, which is the file the cloud function actually receives; never edit that file by hand.
+
+## Mail trailer: one text at the end of every mail
+
+On **Settings → Outreach Settings → Mail trailer** (admin only) you can set one text that is added at the end of every outreach mail, intro and reminder, after a divider line. It is meant for a standing paragraph such as "Who is BlueSearch built for?".
+
+- There are two versions: an **HTML version** (formatted, edited in the editor) and a **plain-text version**. HTML mails get the HTML version, and the plain-text part of every mail gets the plain version. Plain-text-only mails get the plain version. If you leave the plain-text box empty when saving, it is made from the HTML version.
+- It is **off by default**. The page is filled with the BlueSearch text, but nothing is added until you switch on **Add to every mail** and save.
+- Placeholders such as `{{name}}` work in the trailer.
+- It applies to the next run, whether started from **Send now**, the command line or the scheduler, and to the dry-run preview. Mails already sent are not changed.
+- You can also copy it into a single mail by hand: in the mail editor press **Add default trailer**. The HTML version goes to the end of an HTML mail and the plain-text version to the end of a plain mail. If the trailer is switched on it is added automatically when sending, so use the button only when it is switched off (the page asks before copying).
+- It is the same text for all campaigns. To leave it out of a mail, switch it off and save.
 
 ## What happens after a mail is sent
 

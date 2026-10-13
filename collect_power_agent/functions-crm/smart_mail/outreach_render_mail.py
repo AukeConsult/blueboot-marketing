@@ -111,7 +111,7 @@ class RenderedMail:
 # render_mail
 # ---------------------------------------------------------------------------
 
-def render_mail(step: MailStep, contact: Any) -> RenderedMail:
+def render_mail(step: MailStep, contact: Any, trailer: dict | None = None) -> RenderedMail:
     """Render a MailStep template against a ContactRow.
 
     Parameters
@@ -120,6 +120,10 @@ def render_mail(step: MailStep, contact: Any) -> RenderedMail:
         The campaign mail step to render (subject + body template).
     contact : ContactRow
         The recipient; converted to a dict for render_template().
+    trailer : dict, optional
+        Result of mail_trailer.load_trailer(). When enabled, its html part is added to
+        HTML mails and its text part to plain-text mails (and to the plain-text part of
+        HTML mails). Placeholders in the trailer are filled like the body.
 
     Returns
     -------
@@ -145,13 +149,24 @@ def render_mail(step: MailStep, contact: Any) -> RenderedMail:
 
     subject = _render_template(step.subject, contact_dict)
 
+    trailer_html = trailer_text = ""
+    if trailer and trailer.get("enabled"):
+        trailer_html = _render_template(trailer.get("html") or "", contact_dict).strip()
+        trailer_text = _render_template(trailer.get("text") or "", contact_dict).strip()
+
     if step.body_html:
         html_body  = _render_template(step.body_html, contact_dict)
         text_body  = _html_to_text(html_body) or subject
+        if trailer_html:
+            html_body += "<hr>" + trailer_html
+        if trailer_text:
+            text_body += "\n\n---\n" + trailer_text
         return RenderedMail(subject=subject, text_body=text_body, html_body=html_body)
 
     if step.body_text:
         text_body = _render_template(step.body_text, contact_dict)
+        if trailer_text:
+            text_body += "\n\n---\n" + trailer_text
         return RenderedMail(subject=subject, text_body=text_body, html_body=None)
 
     # Both body fields empty — misconfigured step; degrade gracefully

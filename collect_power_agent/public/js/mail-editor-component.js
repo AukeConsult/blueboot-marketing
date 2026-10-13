@@ -112,6 +112,40 @@
             <input data-me="subject" class="form-control form-control-sm" placeholder="Email subject">
           </div>
 
+          <div data-me="tools" class="mb-2 p-2 rounded" style="display:none;background:#f9fafb;border:1px solid #e5e7eb">
+            <div class="row g-2 mb-2">
+              <div class="col-sm-6">
+                <label class="form-label small fw-500 mb-1">Campaign ref</label>
+                <input data-me="campaignRef" class="form-control form-control-sm" placeholder="hot-no2" autocomplete="off">
+              </div>
+              <div class="col-sm-6">
+                <label class="form-label small fw-500 mb-1">Language (code)</label>
+                <input data-me="campaignLang" class="form-control form-control-sm" list="${this.uid}_langs" placeholder="en" autocomplete="off">
+                <datalist id="${this.uid}_langs">
+                  <option value="en">English</option><option value="da">Danish</option><option value="no">Norwegian</option>
+                  <option value="sv">Swedish</option><option value="fi">Finnish</option><option value="de">German</option>
+                  <option value="nl">Dutch</option><option value="fr">French</option><option value="es">Spanish</option>
+                  <option value="it">Italian</option><option value="pt">Portuguese</option><option value="pl">Polish</option>
+                </datalist>
+              </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mb-1">
+              <button class="btn btn-sm btn-outline-primary" type="button" data-me="applyBtn" title="Set the language and ref in every blueboot.ai link of this mail">
+                <i class="ti ti-link me-1"></i>Apply ref and language to links
+              </button>
+              <button class="btn btn-sm btn-outline-primary" type="button" data-me="trBtn" title="AI translation of the subject and text into the language above">
+                <i class="ti ti-language me-1"></i>Translate
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" type="button" data-me="trUndo" style="display:none">
+                <i class="ti ti-arrow-back-up me-1"></i>Undo translation
+              </button>
+              <button class="btn btn-sm btn-outline-primary" type="button" data-me="trailerBtn" title="Copy the default mail trailer to the end of this mail">
+                <i class="ti ti-file-text me-1"></i>Add default trailer
+              </button>
+            </div>
+            <div class="form-text mt-0 mb-0" data-me="toolsMsg">Ref and language belong to the campaign (all steps). <strong>Apply</strong> changes <code>/lang/xx</code> and <code>?ref=</code> in blueboot.ai links, e.g. <code>https://blueboot.ai/lang/en/bs/docs/why-use/?ref=hot-no2</code>. <strong>Translate</strong> is a pure AI translation into the language code; placeholders, links and formatting are kept, it replaces the current text and is saved (Undo is available).</div>
+          </div>
+
           <div class="d-flex align-items-center gap-3 mb-2 small" style="color:var(--bb-muted)">
             <strong>Body:</strong>
             <label class="form-check form-check-inline mb-0"><input data-me="typePlain" class="form-check-input" type="radio" name="${this.uid}_type" value="plain" checked> Plain</label>
@@ -160,6 +194,12 @@
       window.addEventListener('pagehide', () => this.flush(true));
       this.$('typePlain').addEventListener('change', () => { this.switchMode(); this.autoSave(); });
       this.$('typeHtml').addEventListener('change', () => { this.switchMode(); this.autoSave(); });
+      this.$('campaignRef').addEventListener('input', () => this.autoSave());
+      this.$('campaignLang').addEventListener('input', () => this.autoSave());
+      this.$('applyBtn').addEventListener('click', () => this.applyRefLang());
+      this.$('trailerBtn').addEventListener('click', () => this.insertTrailer());
+      this.$('trBtn').addEventListener('click', () => this.translate());
+      this.$('trUndo').addEventListener('click', () => this.undoTranslate());
       this.$('mainBtn').addEventListener('click', () => this.editCampaignMail());
       this.$('saveBtn').addEventListener('click', () => this.save(false));
       this.$('testBtn').addEventListener('click', () => this.openTest());
@@ -181,6 +221,11 @@
       const c = await r.json();
       if (!r.ok || c.status === 'error') throw new Error(c.message || 'Could not load campaign');
       this.campaign = c;
+      this.$('tools').style.display = '';
+      this.$('campaignRef').value = c.campaign_ref || '';
+      this.$('campaignLang').value = c.campaign_lang || '';
+      this._beforeTranslate = null;
+      this.$('trUndo').style.display = 'none';
 
       if (this.stepIndex != null) {
         const seq  = c.mail_sequence || [];
@@ -223,6 +268,7 @@
       this.$('title').textContent = title;
       this.$('subtitle').textContent = subtitle;
       this.$('stepBar').style.display = 'none';
+      this.$('tools').style.display = 'none';     // ref, language, translation and trailer belong to a campaign
       this.applyMail({ type: 'plain', css: DEFAULT_CSS, ...mail });
     }
 
@@ -509,6 +555,7 @@
         const isHtml  = this.getType() === 'html';
         const idx     = this.stepIndex;
         return {
+          ...this.campaignPayload(),
           mail_sequence_step: {
             index:      idx,
             mail_type:  idx === 0 ? 'intro' : `followup_${idx}`,
@@ -526,7 +573,122 @@
         type: this.getType(),
         css: this.$('css').value || DEFAULT_CSS
       };
-      return { mail };
+      return { ...this.campaignPayload(), mail };
+    }
+
+    // Campaign ref and language are saved with the mail. An invalid value is left out (and flagged),
+    // so a typing mistake there never blocks saving the mail itself.
+    campaignPayload() {
+      if (!this.campaignId) return {};
+      const ref = this.$('campaignRef').value.trim(), lang = this.$('campaignLang').value.trim().toLowerCase();
+      const out = {};
+      if (/^[A-Za-z0-9_-]*$/.test(ref)) out.campaign_ref = ref;
+      else this.feedback('Campaign ref may only contain letters, digits, - and _ (not saved yet).', true);
+      if (/^([a-z]{2,3}(-[a-z]{2})?)?$/.test(lang)) out.campaign_lang = lang;
+      else this.feedback('Language must be a code such as da, en or pt-br (not saved yet).', true);
+      return out;
+    }
+
+    toolsMessage(text, err = false) {
+      const m = this.$('toolsMsg');
+      m.textContent = text; m.style.color = err ? '#dc2626' : '';
+    }
+
+    // Replace the body (plain box, or HTML source + editor) and save.
+    setBody(text) {
+      if (this.getType() === 'html') {
+        this.$('bodyHtml').value = text;
+        this._setQuillHtml(text);
+      } else {
+        this.$('bodyPlain').value = text;
+      }
+      this.autoSave();
+    }
+
+    // Set /lang/<code> and ?ref=<ref> in every blueboot.ai link of the mail, keeping the rest of each link.
+    applyRefLang() {
+      const lang = this.$('campaignLang').value.trim().toLowerCase(), ref = this.$('campaignRef').value.trim();
+      if (!lang && !ref) { this.toolsMessage('Fill in the ref and/or the language code first.', true); return; }
+      const before = this.getBody();
+      const { text, links } = MailEditorComponent.mergeRefLang(before, lang, ref);
+      if (!links) { this.toolsMessage('No blueboot.ai links found in this mail.', true); return; }
+      this.setBody(text);
+      this.toolsMessage(text === before
+        ? `All ${links} blueboot.ai link(s) already have this ref and language.`
+        : `Updated ${links} blueboot.ai link(s).`);
+    }
+
+    // Works on the mail text, so it covers href="..." in HTML and plain URLs in plain mails.
+    static mergeRefLang(text, lang, ref) {
+      let links = 0;
+      const out = text.replace(/https?:\/\/(?:www\.)?blueboot\.ai[^\s"'<>)]*/gi, match => {
+        const tail = (match.match(/[.,;:!?]+$/) || [''])[0];            // sentence punctuation is not part of the link
+        const hadAmp = match.includes('&amp;');
+        let url;
+        try { url = new URL(match.slice(0, match.length - tail.length).replace(/&amp;/g, '&')); } catch (e) { return match; }
+        links++;
+        if (lang) {
+          url.pathname = /^\/lang\/[A-Za-z-]+(?=\/|$)/.test(url.pathname)
+            ? url.pathname.replace(/^\/lang\/[A-Za-z-]+/, '/lang/' + lang)
+            : '/lang/' + lang + (url.pathname === '/' ? '/' : url.pathname);
+        }
+        if (ref) url.searchParams.set('ref', ref);
+        const result = url.toString();
+        return (hadAmp ? result.replace(/&/g, '&amp;') : result) + tail;
+      });
+      return { text: out, links };
+    }
+
+    // Copy the default trailer (Outreach Settings) to the end of the mail: the HTML version into
+    // an HTML mail, the plain-text version into a plain mail.
+    async insertTrailer() {
+      try {
+        const r = await fetch(`${this.base}/api/crm/mail-trailer`);
+        const t = await r.json();
+        if (t.status !== 'ok') throw new Error(t.message || 'Could not load the trailer');
+        if (t.enabled && !confirm('The trailer is switched on, so it is already added to every mail when it is sent. Copy it into this mail anyway?')) return;
+        const body = this.getBody();
+        this.setBody(this.getType() === 'html'
+          ? body + '<p><br></p>' + (t.html || '')
+          : body.replace(/\s+$/, '') + '\n\n---\n' + (t.text || ''));
+      } catch (e) {
+        this.feedback(e.message, true);
+      }
+    }
+
+    async translate() {
+      const language = this.$('campaignLang').value.trim().toLowerCase();
+      const btn = this.$('trBtn');
+      if (!language) { this.toolsMessage('Write the language code to translate into, for example da.', true); return; }
+      if (!confirm(`Translate the subject and text into "${language}"? It replaces the current text (Undo is available).`)) return;
+      const before = { subject: this.$('subject').value, body: this.getBody() };
+      btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Translating…';
+      this.toolsMessage('Translating…');
+      try {
+        const r = await fetch(`${this.base}/api/crm/translate-mail`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...before, language })
+        });
+        const d = await r.json();
+        if (d.status !== 'ok') throw new Error(d.message || 'Translation failed');
+        this._beforeTranslate = before;
+        this.$('subject').value = d.subject;
+        this.setBody(d.body);
+        this.$('trUndo').style.display = '';
+        this.toolsMessage(`Translated into "${language}" and saved. Check the text, then use Apply to set the language in the links.`);
+      } catch (e) {
+        this.toolsMessage(e.message, true);
+      }
+      btn.disabled = false; btn.innerHTML = '<i class="ti ti-language me-1"></i>Translate';
+    }
+
+    undoTranslate() {
+      if (!this._beforeTranslate) return;
+      this.$('subject').value = this._beforeTranslate.subject;
+      this.setBody(this._beforeTranslate.body);
+      this._beforeTranslate = null;
+      this.$('trUndo').style.display = 'none';
+      this.toolsMessage('Translation undone.');
     }
 
     autoSave() {

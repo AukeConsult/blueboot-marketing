@@ -1,5 +1,6 @@
 """handlers/campaigns.py — Campaign CRUD endpoints."""
 from __future__ import annotations
+import re
 from collections import Counter
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
@@ -188,6 +189,17 @@ def update_campaign(campaign_id):
         if "sent_at"                in body: update["sent_at"]                = body["sent_at"]
         if "outreach_email_account" in body: update["outreach_email_account"] = body["outreach_email_account"]
         if "owner"                  in body: update["owner"]                  = body["owner"]
+        # Campaign ref (the ?ref= value of blueboot.ai links) and language code (the /lang/xx part).
+        if "campaign_ref" in body:
+            ref = str(body["campaign_ref"] or "").strip()
+            if not re.fullmatch(r"[A-Za-z0-9_-]*", ref):
+                return _err("campaign_ref may only contain letters, digits, - and _", 400)
+            update["campaign_ref"] = ref
+        if "campaign_lang" in body:
+            lang = str(body["campaign_lang"] or "").strip().lower()
+            if not re.fullmatch(r"([a-z]{2,3}(-[a-z]{2})?)?", lang):
+                return _err("campaign_lang must be a language code such as da, en or pt-br", 400)
+            update["campaign_lang"] = lang
         if "require_send_confirmation" in body:
             update["require_send_confirmation"] = bool(body["require_send_confirmation"])
 
@@ -331,6 +343,37 @@ def ping_mail_account(campaign_id):
         return jsonify(result)
     except Exception as exc:
         return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/mail-trailer", methods=["GET"])
+def get_mail_trailer_for_editor():
+    """The default mail trailer (HTML + plain text), readable by every signed-in user.
+
+    The mail editor copies it into a mail. Saving it is admin-only (settings/mail-trailer).
+    """
+    try:
+        from smart_mail.mail_trailer import load_trailer
+        return jsonify({"status": "ok", **load_trailer(_get_db())})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/translate-mail", methods=["POST"])
+def translate_mail_route():
+    """Translate the mail being edited. Body: {subject, body, language}. Returns the translation; the editor stores it.
+
+    Pure AI translation: placeholders, links and HTML tags are kept and checked (crm/mail_translate_lib.py).
+    """
+    try:
+        from crm.mail_translate_lib import translate_mail
+        body = request.get_json(silent=True) or {}
+        result = translate_mail(str(body.get("subject") or ""), str(body.get("body") or ""),
+                                str(body.get("language") or ""))
+        return jsonify({"status": "ok", **result})
+    except ValueError as exc:
+        return _err(str(exc), 400)
+    except Exception as exc:
+        return _err(f"Translation failed: {exc}", 500)
 
 
 @bp.route("/api/crm/campaigns/<campaign_id>/send-test-mail", methods=["POST"])

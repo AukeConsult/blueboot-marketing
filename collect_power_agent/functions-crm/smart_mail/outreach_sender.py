@@ -19,9 +19,11 @@ import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from .firestore_client import get_firestore
 from .outreach_stats import refresh_campaign_stats
+from .outreach_status_lib import outstanding
 from .config import (
     CAMPAIGN_SEND_DELAY_SECONDS as _CFG_SEND_DELAY,
     MAX_SENDS_PER_HOUR,
@@ -77,7 +79,10 @@ def _load_send_limits(db) -> tuple[int, int, float, str]:
     return MAX_SENDS_PER_HOUR, MAX_SENDS_PER_DAY, BOUNCE_RATE_PAUSE_THRESHOLD, "defaults(env/config)"
 
 
-_RUN_RESERVATION_TTL_SECONDS = 7200  # stale active reservations older than this are ignored
+_RUN_RESERVATION_TTL_SECONDS = 1200  # stale active reservations older than this are ignored (worker is killed after 15 min)
+# Stop starting new mails after this many seconds so the run ends cleanly and reports its counts
+# before the worker (900 s) is killed. Whatever is left goes out on the next run.
+MAX_RUN_SECONDS = int(os.getenv("OUTREACH_MAX_RUN_SECONDS", "780"))
 
 
 def _claim_send_budget(db, sender_account: str) -> tuple[int, str, float]:
@@ -137,7 +142,7 @@ def _claim_send_budget(db, sender_account: str) -> tuple[int, str, float]:
             .where(filter=FieldFilter("started_at", ">=", stale_cutoff))
             .stream()
         )
-        already_reserved = sum(d.to_dict().get("budget_claimed", 0) for d in active)
+        already_reserved = sum(outstanding(d.to_dict() or {}) for d in active)
     except Exception as ex:
         print(f"[budget] could not read active reservations ({ex}); assuming 0 reserved")
         already_reserved = 0
@@ -296,6 +301,8 @@ def send_outreach(
     campaign_ids: list[str] | None = None,
     dry_run: bool = False,
     preview: bool = False,
+    progress=None,
+    deadline: float | None = None,
 ) -> dict:
     """One-pass send loop for intro or followup outreach.
 
@@ -309,8 +316,12 @@ def send_outreach(
     mode "intro"    -- pending contacts with no sent mail; uses Intro step.
     mode "followup" -- pending contacts with sent mail; uses next due sequence step.
 
+    progress(summary) is called after every mail so the caller can store live counts.
+    deadline (time.monotonic() value) stops the run cleanly; default is MAX_RUN_SECONDS from now.
+
     Returns a summary dict.
     """
+    deadline = deadline if deadline is not None else time.monotonic() + MAX_RUN_SECONDS
     # Lazy imports keep dry-run cheap and avoid import-time Firestore work.
     if not dry_run:
         from smart_mail.mail_sender import MailSender              # noqa: PLC0415
@@ -318,8 +329,10 @@ def send_outreach(
         MailSender = None
     from smart_mail.outreach_mail_select import read_outreach, confirm_sent  # noqa: PLC0415
     from smart_mail.outreach_render_mail import render_mail, MailStep  # noqa: PLC0415
+    from smart_mail.mail_trailer import load_trailer                   # noqa: PLC0415
 
     db = get_firestore()
+    trailer = load_trailer(db)      # one default trailer for all mails, read once per run
 
 
     summary: dict = {
@@ -377,6 +390,7 @@ def send_outreach(
                 )
                 summary["notes"].append(
                     f"{account.email}: cannot open mail connection: {open_result.get('message', 'unknown error')}")
+                _release_send_run(db, run_id, budget, 0, 0)
                 continue
 
         print(
@@ -399,6 +413,7 @@ def send_outreach(
         sent_batch   = 0
         failed_batch = 0
         tried_batch  = 0
+        timed_out    = False
 
         try:
             for cwc in campaigns:
@@ -417,6 +432,13 @@ def send_outreach(
                         )
                         continue
 
+                    if not dry_run and time.monotonic() >= deadline:
+                        summary["notes"].append(
+                            f"{account.email}: stopped at the time limit of one run after {sent_batch} sent; "
+                            "the rest goes out on the next run")
+                        timed_out = True
+                        break
+
                     # Stop if budget used up for this account
                     if tried_batch >= budget:
                         print(f"[sender] budget reached for {account.email}")
@@ -431,7 +453,7 @@ def send_outreach(
                         body_text = step_dict.get("body_text", ""),
                     )
 
-                    rendered = render_mail(step, contact)
+                    rendered = render_mail(step, contact, trailer)
 
                     try:
                         seq = f"[{tried_batch + 1}/{budget}]"
@@ -478,12 +500,21 @@ def send_outreach(
                         tried_batch     += 1
                         summary["sent"] += 1
                         print(f"[sender] {seq} sent {contact.email}")
+                        try:    # keeps the reservation honest: only the unsent part of the claim stays reserved
+                            db.collection("send_run_reservations").document(run_id).update(
+                                {"sent_so_far": firestore.Increment(1)})
+                        except Exception as rex:
+                            print(f"[budget] could not update reservation: {rex}")
 
                     except Exception as ex:
                         failed_batch       += 1
                         tried_batch        += 1
                         summary["failed"]  += 1
                         print(f"[sender] {seq} FAILED {contact.email}: {ex}")
+
+                    if progress:
+                        try: progress(summary)
+                        except Exception: pass
 
                     if not dry_run and bounce_rate_tripped(threshold, sent_batch, failed_batch):
                         print(
@@ -504,6 +535,8 @@ def send_outreach(
                         refresh_campaign_stats(campaign.campaign_id)
                     except Exception as ex:
                         print(f"[sender] stats refresh failed for {campaign.campaign_id}: {ex}")
+                if timed_out:
+                    break
         finally:
             if sender is not None:
                 sender.close()

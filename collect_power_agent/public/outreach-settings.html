@@ -6,7 +6,9 @@
 <title>Outreach Settings — Blueboot CRM</title>
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="vendor/quill.snow.css">
 <link rel="stylesheet" href="css/styles.css">
+<style>#mt-editor { min-height: 180px; font-size: 14px; }</style>
 </head>
 <body class="bg-alt">
 
@@ -53,6 +55,42 @@
     </div>
   </div>
 
+  <!-- Mail trailer -->
+  <div class="card p-3 mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h6 class="fw-semibold mb-0"><i class="ti ti-file-text me-1 text-primary"></i>Mail trailer</h6>
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" id="mt-enabled">
+        <label class="form-check-label small" for="mt-enabled">Add to every mail</label>
+      </div>
+    </div>
+    <p class="small text-muted mb-3">One text added at the end of every outreach mail (intro and follow-up), after a divider line. HTML mails get the formatted version; plain-text mails get the plain version. You can use the same placeholders as in the mail, for example <code>{{name}}</code>. Changes take effect on the next run.</p>
+    <label class="form-label small fw-semibold">HTML version</label>
+    <ul class="nav nav-tabs small mb-2" id="mt-tabs">
+      <li class="nav-item"><button type="button" class="nav-link active" data-pane="editor" onclick="trailerTab('editor')">Editor</button></li>
+      <li class="nav-item"><button type="button" class="nav-link" data-pane="html" onclick="trailerTab('html')">HTML</button></li>
+      <li class="nav-item"><button type="button" class="nav-link" data-pane="preview" onclick="trailerTab('preview')">Preview</button></li>
+    </ul>
+    <div class="mb-3">
+      <div id="mt-pane-editor"><div id="mt-editor"></div></div>
+      <div id="mt-pane-html" style="display:none">
+        <textarea id="mt-html" class="form-control form-control-sm font-monospace" rows="10" spellcheck="false"></textarea>
+      </div>
+      <div id="mt-pane-preview" style="display:none">
+        <iframe id="mt-preview" sandbox="" class="w-100 border rounded bg-white" style="height:260px"></iframe>
+        <div class="small text-muted mt-1">Shown with sample values (name Anna). Placeholders such as <code>{{name}}</code> are filled in with the real contact when the mail is sent.</div>
+      </div>
+    </div>
+    <label class="form-label small fw-semibold">Plain-text version</label>
+    <textarea id="mt-text" class="form-control form-control-sm mb-3" rows="8"></textarea>
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-outline-primary btn-sm" onclick="saveTrailer()">
+        <i class="ti ti-device-floppy me-1"></i>Save trailer
+      </button>
+      <span id="mt-status" class="small text-muted"></span>
+    </div>
+  </div>
+
   <!-- Budget remaining -->
   <div class="card p-3 mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
@@ -94,6 +132,7 @@
 <script src="firebase-config.js"></script>
 <script src="js/auth.js"></script>
 <script src="js/crm-common.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
 <script>
 const setStatus = setStatusEl;
 const esc       = escapeHtml;
@@ -141,6 +180,72 @@ async function saveSendLimits() {
     setStatus('sl-status', 'Saved.', 'ok');
   } catch (e) {
     setStatus('sl-status', 'Save failed: ' + prettyError(e.message), 'err', true);
+  }
+}
+
+// ── Mail trailer ──────────────────────────────────────────────────────────────
+
+let trailerEditor = null;
+let trailerPane = 'editor';
+
+// The HTML text lives in the editor or in the HTML box; the pane you are in decides which is current.
+function trailerHtml() {
+  return trailerPane === 'html' ? document.getElementById('mt-html').value : trailerEditor.root.innerHTML;
+}
+
+function setTrailerHtml(html) {
+  trailerEditor.root.innerHTML = html || '';
+  document.getElementById('mt-html').value = html || '';
+}
+
+function trailerTab(pane) {
+  const html = trailerHtml();                       // take over what was typed in the pane we leave
+  if (pane !== trailerPane) setTrailerHtml(html);
+  trailerPane = pane;
+  ['editor', 'html', 'preview'].forEach(p => {
+    document.getElementById('mt-pane-' + p).style.display = p === pane ? '' : 'none';
+  });
+  document.querySelectorAll('#mt-tabs .nav-link').forEach(b => b.classList.toggle('active', b.dataset.pane === pane));
+  if (pane === 'preview') {
+    const sample = { name: 'Anna', full_name: 'Anna Berg', company: 'Example AS', website: 'example.com', email: 'anna@example.com' };
+    const body = trailerEditor.getText().trim()
+      ? trailerEditor.root.innerHTML.replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => sample[k] ?? m)
+      : '<p style="color:#888">The trailer is empty. Write it in the Editor or HTML tab.</p>';
+    document.getElementById('mt-preview').srcdoc =
+      '<body style="font:14px/1.5 Arial,sans-serif;margin:12px">' + body + '</body>';
+  }
+}
+
+async function loadTrailer() {
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/settings/mail-trailer');
+    document.getElementById('mt-enabled').checked = !!d.enabled;
+    document.getElementById('mt-text').value = d.text || '';
+    setTrailerHtml(d.html);
+  } catch (e) {
+    setStatus('mt-status', 'Could not load the trailer: ' + prettyError(e.message) + ' (deploy the functions if this is new)', 'err', true);
+  }
+}
+
+async function saveTrailer() {
+  setStatus('mt-status', 'Saving…');
+  try {
+    const r = await fetch(BASE + '/api/crm/settings/mail-trailer', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled: document.getElementById('mt-enabled').checked,
+        html:    trailerHtml(),
+        text:    document.getElementById('mt-text').value,
+      }),
+    });
+    const d = await r.json();
+    if (d.status !== 'ok') throw new Error(d.message);
+    document.getElementById('mt-text').value = d.text || '';
+    setTrailerHtml(d.html);
+    setStatus('mt-status', 'Saved.', 'ok');
+  } catch (e) {
+    setStatus('mt-status', 'Save failed: ' + prettyError(e.message), 'err', true);
   }
 }
 
@@ -262,7 +367,12 @@ async function loadReservations() {
 
 requireAuth().then(() => {
   requireRole(['admin']);
+  trailerEditor = new Quill('#mt-editor', {
+    theme: 'snow',
+    modules: { toolbar: [[{ header: [2, 3, false] }], ['bold', 'italic', 'link'], [{ list: 'bullet' }], ['clean']] },
+  });
   loadSendLimits();
+  loadTrailer();
   loadBudget();
   loadReservations();
 });

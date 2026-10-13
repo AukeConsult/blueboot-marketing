@@ -1,5 +1,6 @@
 """handlers/jobs.py — Job trigger endpoints, worker dispatcher, status/list."""
 from __future__ import annotations
+import os
 from datetime import datetime, timezone, timedelta
 from flask import Blueprint, request, jsonify
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -197,6 +198,22 @@ def _first_param(data: dict, name: str, default=None):
     return value
 
 
+def _start_outreach_send(params: dict):
+    """Queue one outreach-send job. Shared by Send now and the smartMail scheduler route.
+
+    Refused (409) while another outreach-send job is queued or running, so two runs
+    can never spend the same send budget at once. Jobs older than 20 minutes count as stale (a worker run is killed after 15).
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()
+    for d in _jobs_col().where(filter=FieldFilter("status", "in", ["queued", "running"])).stream():
+        j = d.to_dict() or {}
+        if j.get("name") == "outreach-send" and str(j.get("queued_at") or "") >= cutoff:
+            return _err(f"An outreach send is already {j.get('status')} (job {d.id}). Wait for it to finish.", 409)
+    job_id = _new_job("outreach-send", params)
+    _enqueue_task("outreach-send", job_id, params)
+    return _accepted(job_id, "outreach-send")
+
+
 @bp.route("/api/crm/outreach/send-now", methods=["POST"])
 def outreach_send_now():
     """Start a REAL outreach send from the Outreach Status page (admin only, see main.py).
@@ -211,22 +228,14 @@ def outreach_send_now():
     if mode not in {"intro", "followup", "both"}:
         return _err("mode must be one of: intro, followup, both", 400)
     try:
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()   # older = stale
-        for d in _jobs_col().where(filter=FieldFilter("status", "in", ["queued", "running"])).stream():
-            j = d.to_dict() or {}
-            if j.get("name") == "outreach-send" and str(j.get("queued_at") or "") >= cutoff:
-                return _err(f"An outreach send is already {j.get('status')} (job {d.id}). Wait for it to finish.", 409)
-        params = {
+        return _start_outreach_send({
             "mode": mode,
             "limit": 500,
             "campaign_ids": [str(c).strip() for c in (body.get("campaign_ids") or []) if str(c).strip()],
             "dry_run": False,
             "preview": False,
             "started_by": getattr(g, "user_email", ""),
-        }
-        job_id = _new_job("outreach-send", params)
-        _enqueue_task("outreach-send", job_id, params)
-        return _accepted(job_id, "outreach-send")
+        })
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -260,9 +269,7 @@ def outreach_send():
         "preview": str(_first_param(data, "preview", "") or "").lower() in ("1", "true", "yes"),
     }
     try:
-        job_id = _new_job("outreach-send", params)
-        _enqueue_task("outreach-send", job_id, params)
-        return _accepted(job_id, "outreach-send")
+        return _start_outreach_send(params)
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -530,6 +537,14 @@ def worker(name, job_id):
             mode = str(body.get("mode") or "both").strip().lower()
             modes = ["intro", "followup"] if mode == "both" else [mode]
             passes = []
+            import time as _time
+            _deadline = _time.monotonic() + int(os.getenv("OUTREACH_MAX_RUN_SECONDS", "780"))   # shared by both passes
+            _done = {"sent": 0, "failed": 0}
+
+            def _progress(s, _done=_done):
+                # live counts on the job, so a killed worker still shows what went out
+                _update_job(job_id, progress={"sent": _done["sent"] + s["sent"], "failed": _done["failed"] + s["failed"]})
+
             for pass_mode in modes:
                 passes.append(send_outreach(
                     mode         = pass_mode,
@@ -537,7 +552,10 @@ def worker(name, job_id):
                     campaign_ids = body.get("campaign_ids") or None,
                     dry_run      = bool(body.get("dry_run", False)),
                     preview      = bool(body.get("preview", False)),
+                    progress     = _progress,
+                    deadline     = _deadline,
                 ))
+                _done["sent"] += passes[-1].get("sent", 0); _done["failed"] += passes[-1].get("failed", 0)
             result = {
                 "mode": mode,
                 "passes": passes,

@@ -98,7 +98,10 @@ def _enqueue_task(name: str, job_id: str, params: dict):
     client = tasks_v2.CloudTasksClient()
     queue  = client.queue_path(GCP_PROJECT, GCP_LOCATION, TASKS_QUEUE)
     url    = f"{WORKER_BASE_URL}/{name}/{job_id}"
+    from google.protobuf import duration_pb2
     task   = {
+        # Cloud Tasks gives up after 10 min by default and then retries, while the worker may run 15 min
+        "dispatch_deadline": duration_pb2.Duration(seconds=900),
         "http_request": {
             "http_method": tasks_v2.HttpMethod.POST,
             "url":         url,

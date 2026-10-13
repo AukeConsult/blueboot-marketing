@@ -28,7 +28,13 @@ from .outreach_mail_select import (
     _prepare_mail_sequence,
 )
 
-_RESERVATION_TTL_SECONDS = 7200
+_RESERVATION_TTL_SECONDS = 1200   # a worker run is killed after 15 min, so an older active reservation is dead
+
+
+def outstanding(reservation: dict) -> int:
+    """Budget an active run still holds: what it claimed minus what it has already sent.
+    Mails already sent are counted in outreach_sent, so counting the full claim would count them twice."""
+    return max(0, int(reservation.get("budget_claimed", 0) or 0) - int(reservation.get("sent_so_far", 0) or 0))
 _INTRO_OK = {"ready", "active"}      # same as read_outreach
 _FOLLOWUP_OK = {"active"}
 
@@ -83,7 +89,7 @@ def account_budget(db, account: str, limits: dict, now: datetime | None = None) 
     stale_cutoff = (now - timedelta(seconds=_RESERVATION_TTL_SECONDS)).isoformat()
     try:
         reserved = sum(
-            (d.to_dict() or {}).get("budget_claimed", 0)
+            outstanding(d.to_dict() or {})
             for d in db.collection("send_run_reservations")
             .where(filter=FieldFilter("account", "==", account))
             .where(filter=FieldFilter("status", "==", "active"))

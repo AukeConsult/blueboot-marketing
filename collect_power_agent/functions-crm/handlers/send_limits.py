@@ -65,6 +65,51 @@ def put_send_limits():
         return _err(str(exc), 500)
 
 
+@bp.route("/api/crm/settings/ai-model", methods=["GET"])
+def get_ai_model():
+    """Read-only: which OpenAI model each AI feature uses right now (set with OPENAI_MODEL in functions-crm/.env)."""
+    import os
+    from crm.mail_translate_lib import current_model, DEFAULT_MODEL
+    override = os.getenv("OPENAI_MODEL", "").strip()
+    return jsonify({
+        "status":          "ok",
+        "env_override":    override,                       # empty = nothing set, defaults apply
+        "api_key_set":     bool(os.getenv("OPENAI_API_KEY", "").strip()),
+        "mail_translation": {"model": current_model(), "default": DEFAULT_MODEL},
+        "name_enrichment":  {"model": override or "gpt-4o-mini", "default": "gpt-4o-mini"},
+    })
+
+
+@bp.route("/api/crm/settings/mail-trailer", methods=["GET"])
+def get_mail_trailer():
+    """Return the trailer added to every outreach mail (defaults when not saved yet)."""
+    try:
+        from smart_mail.mail_trailer import load_trailer
+        return jsonify({"status": "ok", **load_trailer(_get_db())})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/settings/mail-trailer", methods=["PUT"])
+def put_mail_trailer():
+    """Save the mail trailer (HTML + plain-text version).  Admin only (enforced via _ADMIN_ENDPOINTS)."""
+    try:
+        from smart_mail.mail_trailer import clean_html, DOC_PATH
+        from smart_mail.outreach_render_mail import _html_to_text
+        body = request.get_json(silent=True) or {}
+        html = clean_html(str(body.get("html") or ""))
+        text = str(body.get("text") or "").strip() or _html_to_text(html)
+        enabled = bool(body.get("enabled"))
+        if enabled and not (html or text):
+            return _err("Write a trailer text before switching it on.", 400)
+        _get_db().collection(DOC_PATH[0]).document(DOC_PATH[1]).set({
+            "enabled": enabled, "html": html, "text": text,
+        })
+        return _ok("Mail trailer saved.", enabled=enabled, html=html, text=text)
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @bp.route("/api/crm/settings/send-run-reservations", methods=["GET"])
 def get_send_run_reservations():
     """Return recent send_run_reservations, newest first."""
