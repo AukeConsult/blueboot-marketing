@@ -38,7 +38,10 @@
   </div>
 
   <div class="card mb-3">
-    <div class="card-header py-2 fw-600 small"><i class="ti ti-battery me-1 text-primary"></i>Send budget per mail account</div>
+    <div class="card-header py-2 fw-600 small"><i class="ti ti-battery me-1 text-primary"></i>Send budget per mail account
+      <button class="btn btn-sm btn-outline-primary float-end py-0" id="budget-btn" onclick="recalcBudget()"
+        title="Recalculate only the send budget (fast: does not read campaigns or contacts)"><i class="ti ti-calculator me-1"></i>Recalculate budget</button>
+      <span class="float-end small text-muted fw-normal me-2" id="budget-at"></span></div>
     <div class="table-responsive"><table class="table table-sm small mb-0">
       <thead class="bb-thead"><tr>
         <th>Account</th><th class="text-end">Sent / hour</th><th class="text-end">Sent / day</th>
@@ -476,6 +479,37 @@ async function loadRuns() {
     document.getElementById('runs-body').innerHTML =
       `<tr><td colspan="9" class="text-danger">Could not load runs: ${esc(prettyError(e.message))}</td></tr>`;
   }
+}
+
+// Fast path: only the send budget. Updates sent/hour, sent/day, reserved, budget now and what the
+// next run would send, from the campaign numbers already on the page. No campaigns or contacts are read.
+async function recalcBudget() {
+  if (!DATA) return load();
+  const btn = document.getElementById('budget-btn');
+  const label = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Calculating…';
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/outreach/budget', { cache: 'no-store' });
+    const byAcc = Object.fromEntries((d.accounts || []).map(b => [String(b.account).toLowerCase(), b]));
+    for (const a of DATA.accounts || []) {
+      const b = byAcc[String(a.account).toLowerCase()];
+      if (!b) continue;
+      Object.assign(a, {
+        sent_last_hour: b.sent_last_hour, sent_last_day: b.sent_last_day, reserved: b.reserved,
+        budget: b.budget, max_per_hour: b.max_per_hour, max_per_day: b.max_per_day,
+      });
+      a.next_run_sends = a.problem ? 0 : Math.min(a.budget, a.waiting);
+      a.left_over = a.waiting - a.next_run_sends;
+    }
+    DATA.totals.next_run_sends = (DATA.accounts || []).reduce((n, a) => n + (a.next_run_sends || 0), 0);
+    DATA.totals.left_over = (DATA.accounts || []).reduce((n, a) => n + (a.left_over || 0), 0);
+    renderTiles(); renderAccounts();
+    document.getElementById('budget-at').textContent = 'Budget calculated ' + fmtDt(d.calculated_at);
+  } catch (e) {
+    document.getElementById('budget-at').textContent = 'Budget failed: ' + prettyError(e.message);
+  }
+  btn.disabled = false; btn.innerHTML = label;
 }
 
 async function load() {

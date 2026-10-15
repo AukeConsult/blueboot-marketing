@@ -182,7 +182,7 @@ BATCH_SECRET=...
 BATCH_SA=...
 ```
 
-`sync_functions_env.py` copies them, together with `OPENAI_API_KEY` and `OPENAI_MODEL` (used by mail translation and name enrichment), into `functions-crm/.env`. It runs automatically before every `firebase deploy --only functions` (hook in `firebase.json`) and from `deploy_crm.sh`. That file is generated, so never edit it by hand. Without Cloud Batch the three batch values stay empty.
+`sync_functions_env.py` copies them, together with `OPENAI_API_KEY` and `OPENAI_MODEL` (used by mail translation and name enrichment) and `CAMPAIGN_SEND_DELAY_SECONDS` (the pause between sends), into `functions-crm/.env`. It runs automatically before every `firebase deploy --only functions` (hook in `firebase.json`) and from `deploy_crm.sh`. That file is generated, so never edit it by hand. Without Cloud Batch the three batch values stay empty.
 
 Mail accounts are **not** configured in `.env`. They are added in the dashboard (section 9). The file `.env.smart_mail.example` belongs to an old sender and is not used.
 

@@ -141,9 +141,13 @@ def get_send_run_reservations():
         return _err(str(exc), 500)
 
 
+@bp.route("/api/crm/outreach/budget", methods=["GET"])
 @bp.route("/api/crm/settings/send-budget", methods=["GET"])
 def get_send_budget():
-    """Return current send budget per mail account.
+    """Return current send budget per mail account. Reads only the limits, the sends of the
+    last 24 h and the active run reservations - no campaigns or contacts - so it is cheap.
+
+    Optional ?account=a@b.com limits it to one account.
 
     For each active mail account, calculates:
       sent_last_hour, sent_last_day, already_reserved (active runs),
@@ -167,6 +171,9 @@ def get_send_budget():
         )
         account_docs = list(accounts_col.stream())
         accounts = [d.id for d in account_docs]
+        only = (request.args.get("account") or "").strip().lower()
+        if only:
+            accounts = [a for a in accounts if a.lower() == only]
 
         from smart_mail.outreach_status_lib import account_budget
         limits = {"max_per_hour": max_hour, "max_per_day": max_day}

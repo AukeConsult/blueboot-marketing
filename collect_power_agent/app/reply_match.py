@@ -22,6 +22,9 @@ python app/reply_match.py --days 90
 
 # Limit messages per account
 python app/reply_match.py --limit 50 --dry-run
+
+# Read unmatched mails again now (normally they are retried once a day)
+python app/reply_match.py --recheck
 """
 from __future__ import annotations
 
@@ -69,6 +72,10 @@ def main(argv=None):
         help="Fetch + find matches but write nothing"
     )
     parser.add_argument(
+        "--recheck", action="store_true",
+        help="Also read mails already seen as unmatched/skipped (normally retried only after 24 h)"
+    )
+    parser.add_argument(
         "--days", type=int, default=30, metavar="N",
         help="How many days back to search IMAP (default: 30)"
     )
@@ -103,6 +110,7 @@ def main(argv=None):
         campaigns = campaigns,
         dry_run   = args.dry_run,
         days      = args.days,
+        recheck   = args.recheck,
     )
 
     print()

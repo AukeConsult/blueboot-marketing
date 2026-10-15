@@ -2,7 +2,7 @@
 functions-crm/smart_mail/mail_sender.py -- Isolated mail sending class.
 
 All outbound email goes through MailSender so fixes (display name, CSS
-inlining, headers, SSL/STARTTLS, Sent folder append) apply everywhere.
+inlining, headers, SSL/STARTTLS) apply everywhere.
 
 Usage:
     from smart_mail.mail_sender import MailSender
@@ -85,7 +85,7 @@ class MailSender:
                 server.ehlo()
                 server.starttls()
                 server.ehlo()
-                server.docmd("AUTH", "XOAUTH2 " + self._gmail_auth_b64())
+                self._xoauth2(server)
                 self._smtp_server = server
                 self._smtp_username = self.email
                 self._smtp_host = "smtp.gmail.com"
@@ -112,8 +112,9 @@ class MailSender:
     def send_open(self, *, to: str, subject: str,
                   body_plain: str = "", body_html: str = "",
                   in_reply_to: str | None = None,
-                  headers: dict | None = None) -> dict:
-        """Send through the currently open SMTP session."""
+                  headers: dict | None = None, _retry: bool = True) -> dict:
+        """Send through the currently open SMTP session.
+        If the server dropped the connection, it is reopened once and the mail is sent again."""
         if self._smtp_server is None:
             return {"status": "error", "message": "MailSender is not open"}
         try:
@@ -124,7 +125,6 @@ class MailSender:
                 sender_addr = self._smtp_username
                 msg["From"] = self._from_header(sender_addr)
                 self._smtp_server.sendmail(sender_addr, [to], msg.as_string())
-                self._append_to_sent(msg)
                 return {
                     "status": "ok",
                     "message": f"Email sent to {to} via {self._smtp_host}:{self._smtp_port}",
@@ -139,6 +139,11 @@ class MailSender:
                     "message_id": msg.get("Message-ID", ""),
                 }
             return {"status": "error", "message": f"Unknown account type: {self.account_type}"}
+        except smtplib.SMTPServerDisconnected as exc:
+            if _retry and self.open().get("status") == "ok":
+                return self.send_open(to=to, subject=subject, body_plain=body_plain, body_html=body_html,
+                                      in_reply_to=in_reply_to, headers=headers, _retry=False)
+            return {"status": "error", "message": f"SMTP connection lost: {exc}"}
         except Exception as exc:
             return {"status": "error", "message": str(exc)}
 
@@ -311,7 +316,6 @@ class MailSender:
             server, username, smtp_host, smtp_port = self._smtp_connect()
             with server:
                 server.sendmail(username, [to], msg.as_string())
-            self._append_to_sent(msg)
             return {"status": "ok",
                     "message": f"Email sent to {to} via {smtp_host}:{smtp_port}",
                     "message_id": msg.get("Message-ID", "")}
@@ -320,8 +324,6 @@ class MailSender:
         except Exception as e:
             return {"status": "error",
                     "message": f"SMTP error ({smtp_host}:{smtp_port}): {e}"}
-
-    # ── IMAP helpers (connect, find Sent, append) ─────────────────────────
 
     def _imap_connect(self):
         host     = _imap_host(self.ma)
@@ -336,49 +338,6 @@ class MailSender:
             conn = imaplib.IMAP4(host, port)
         conn.login(username, password)
         return conn
-
-    def _find_sent_folder(self, conn) -> str | None:
-        """Find Sent folder by \\Sent flag, then fallback to common names."""
-        try:
-            _, folder_list = conn.list()
-        except Exception:
-            return None
-        parsed = []
-        for item in (folder_list or []):
-            if item is None:
-                continue
-            raw = item.decode("utf-8", errors="replace") if isinstance(item, bytes) else str(item)
-            flags_m = re.match(r"\(([^)]*)\)", raw)
-            flags   = flags_m.group(1).lower() if flags_m else ""
-            name    = re.sub(r"^\(.*?\)\s+(?:\"[^\"]*\"|NIL)\s*", "", raw).strip().strip('"')
-            parsed.append((flags, name))
-        # Pass 1: \Sent flag
-        for flags, name in parsed:
-            if "\\sent" in flags or "sent" in flags.split():
-                return name
-        # Pass 2: common names
-        names = {n for _, n in parsed}
-        for candidate in ["Sent", "Sent Items", "Sent Messages",
-                          "[Gmail]/Sent Mail", "Sent Mail", "INBOX.Sent"]:
-            if candidate in names:
-                return candidate
-        return None
-
-    def _append_to_sent(self, msg) -> None:
-        """Append sent message to IMAP Sent folder. Best-effort — never raises."""
-        try:
-            conn   = self._imap_connect()
-            folder = self._find_sent_folder(conn)
-            if not folder:
-                conn.logout()
-                return
-            quoted = '"' + folder.replace('"', '\\"') + '"'
-            conn.append(quoted, "\\Seen",
-                        imaplib.Time2Internaldate(time.time()),
-                        msg.as_bytes())
-            conn.logout()
-        except Exception as e:
-            print(f"[mail_sender] append_to_sent failed (non-fatal): {e}", flush=True)
 
     def _ping_imap(self) -> dict:
         host     = _imap_host(self.ma)
@@ -421,6 +380,12 @@ class MailSender:
             raise ValueError(data.get("error_description", "Token refresh failed"))
         return token
 
+    def _xoauth2(self, server, auth_b64: str | None = None) -> None:
+        """Authenticate and CHECK the answer: docmd only returns it, it never raises on a refusal."""
+        code, resp = server.docmd("AUTH", "XOAUTH2 " + (auth_b64 or self._gmail_auth_b64()))
+        if code != 235:
+            raise smtplib.SMTPAuthenticationError(code, resp)
+
     def _gmail_auth_b64(self) -> str:
         token    = self.ma.get("access_token", "").strip() or self._get_access_token()
         auth_str = f"user={self.email}\x01auth=Bearer {token}\x01\x01"
@@ -435,7 +400,7 @@ class MailSender:
             with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as server:
                 server.ehlo()
                 server.starttls()
-                server.docmd("AUTH", "XOAUTH2 " + auth_b64)
+                self._xoauth2(server, auth_b64)
                 server.sendmail(self.email, [to], msg.as_string())
             # Gmail saves to Sent automatically — no APPEND needed
             return {"status": "ok",

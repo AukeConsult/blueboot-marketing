@@ -1,20 +1,12 @@
 # functions-crm/smart_mail/config.py
 """
-Campaign-pipeline tuning config -- deploy-time counterpart of
-the CRM mail job runtime. Same constants, same env var names; the only
-difference is no load_dotenv() (see mail_accounts_config.py for why).
+Campaign-pipeline tuning config: send pause, per-account caps, bounce threshold,
+unsubscribe headers. Mail accounts themselves live in Firestore
+(settings/mail_accounts/accounts/{email}), not in .env.
 """
 from __future__ import annotations
 
 import os
-
-from .mail_accounts_config import (
-    MAIL_ACCOUNTS,
-    DEFAULT_MAIL_ACCOUNT,
-    get_account,
-    smtp_uses_ssl,
-)
-
 
 def _int(name: str, default: str) -> int:
     try:
@@ -52,7 +44,6 @@ REPLY_CLASSIFY_WITH_AI = _bool("REPLY_CLASSIFY_WITH_AI", "false")
 
 
 __all__ = [
-    "MAIL_ACCOUNTS", "DEFAULT_MAIL_ACCOUNT", "get_account", "smtp_uses_ssl",
     "CAMPAIGN_SEND_DELAY_SECONDS", "CAMPAIGN_WORKER_POLL_SECONDS",
     "MAX_SENDS_PER_HOUR", "MAX_SENDS_PER_DAY", "BOUNCE_RATE_PAUSE_THRESHOLD",
     "UNSUBSCRIBE_BASE_URL", "UNSUBSCRIBE_MAILTO",

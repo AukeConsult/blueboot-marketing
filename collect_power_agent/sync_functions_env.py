@@ -8,7 +8,7 @@ Edit the root .env, never functions-crm/.env. Values are never printed.
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-KEYS = ["BATCH_RUNNER_URL", "BATCH_SECRET", "BATCH_SA", "OPENAI_API_KEY", "OPENAI_MODEL"]
+KEYS = ["BATCH_RUNNER_URL", "BATCH_SECRET", "BATCH_SA", "OPENAI_API_KEY", "OPENAI_MODEL", "CAMPAIGN_SEND_DELAY_SECONDS"]
 
 
 def read_root_env() -> dict:
@@ -16,7 +16,7 @@ def read_root_env() -> dict:
     for line in (ROOT / ".env").read_text(encoding="utf-8").splitlines():
         key, sep, value = line.partition("=")
         if sep and key.strip() in KEYS:
-            values[key.strip()] = value.strip().strip("'\"")
+            values[key.strip()] = value.split(" #", 1)[0].strip().strip("'\"")      # drop "  # comment"
     return values
 
 

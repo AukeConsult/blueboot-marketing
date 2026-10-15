@@ -328,7 +328,7 @@ The sender calculates a budget from `outreach_sent` for each account. Both succe
 
 The mailbox sync runs **two single-purpose readers**, so each direction has exactly one source of truth:
 
-- **Replies** are read only by `reply_matcher.match_new_replies` (INBOX). It classifies reply / bounce / DMARC, matches by sender, writes `EMAIL_IN` with the mail body, updates follow-up status, and deletes bounces. See the Reply Matcher section.
+- **Replies** are read only by `reply_matcher.match_new_replies` (INBOX). It classifies reply / bounce / DMARC, matches by sender, writes `EMAIL_IN` with the mail body, updates follow-up status, deletes matched bounces and DMARC reports, and moves handled replies from the INBOX to a `Processed` folder (created if missing). The move uses the IMAP `MOVE` command when the server supports it (one step on the server); otherwise it copies and then deletes the original, and only after the copy worked. It happens only after the contact was updated, so a failure leaves it in the INBOX for the next run. All of this happens in one cleanup pass per account. **Reading is fast:** the reader first fetches only the Message-ID and size of every mail. A mail already in the audit log (`inbox_messages`) is not downloaded again: a handled one only has its move or delete retried, and an unmatched or skipped one is looked at again after 24 hours (`python app/reply_match.py --recheck` reads them all now). The rest is downloaded 20 at a time, and a mail over 500 KB only up to its first 500 KB (attachments are never stored). The run log shows how many mails were "already seen". See the Reply Matcher section.
 - **Sent mail** is read only by `inbound_read_lib.run_sent_sync` (the SENT folder). It records mails sent *outside* the CRM as `EMAIL_OUT` with the mail body.
 
 The `inbound-read` job and `app/inbound_read.py` run **both** readers in one pass.
@@ -508,8 +508,11 @@ Replies and bounces are matched on the **email address**, against
 2. **Bounces** — the original failed recipient is recovered from the bounce
    (the `X-Failed-Recipients` header, the `message/delivery-status`
    `Final-Recipient` / `Original-Recipient`, the embedded original message's
-   `To:` header, or an Exim / cPanel "following address(es) failed:" block) and
-   then matched the same way.
+   `To:` header, or an Exim / cPanel "following address(es) failed:" block).
+   The bounce is matched first by the Message-ID of OUR mail quoted in it
+   (looked up in `outreach_sent`, which also works when the contact's mailbox
+   forwards to another address), and otherwise by each recovered address in turn,
+   the same way as replies.
 
 Matching is scoped to the `campaigns` parameter when one is supplied.
 
@@ -546,8 +549,12 @@ email_field   matched on the raw campaign_contacts email field
 
 On a matched **bounce**, the contact is moved to `excluded` (with
 `bounce_detected`, `bounced_at`, `bounce_reason`) **only if it was still
-`pending`** — an `active` / `replied` contact keeps its status and the bounce
-is recorded in `comment_history` (type `BOUNCE`) only.
+`pending` AND the bounce says the address is unknown** (5.1.1 / 5.1.2 / 5.1.3 /
+5.1.6, "user unknown", "no such user / mailbox", "domain not found"...). A bounce
+that blocks our mail (5.7.x spam, reputation or policy, full mailbox...) says
+nothing about the address, so the contact keeps its status and the bounce is only
+recorded in `comment_history` (type `BOUNCE`, marked "address NOT excluded").
+An `active` / `replied` contact also keeps its status.
 
 Every processed message is also written to `inbox_messages` as an audit log,
 carrying `match_outcome` (`updated` / `already_handled` / `unmatched`),

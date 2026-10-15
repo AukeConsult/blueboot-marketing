@@ -329,7 +329,7 @@ All outbound email goes through `MailSender`:
 2. **From header** formatted as `"Display Name <email>"` to avoid spam signals from bare addresses.
 3. **`Message-ID`** and **`Date`** headers added — missing headers are a spam trigger.
 4. **STARTTLS** (port 587) or **SSL** (port 465) selected automatically based on `smtp_ssl` flag.
-5. After successful send, the message is **appended to the IMAP Sent folder** using `IMAP APPEND` so it appears in the sending account's sent box. Gmail saves to Sent natively.
+5. A mail counts as sent when the SMTP server accepts it. It is **not** copied to the IMAP Sent folder by the CRM (Gmail saves to Sent on its own). The CRM keeps its own record in `outreach_sent` and the contact history.
 
 ---
 

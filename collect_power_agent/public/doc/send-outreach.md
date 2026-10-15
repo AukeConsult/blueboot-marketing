@@ -75,6 +75,8 @@ What does not fit in the budget stays waiting and goes out in a later run.
 
 **Time limit of one run:** a run stops starting new mails after about 13 minutes (`OUTREACH_MAX_RUN_SECONDS`, default 780), reports what it sent, and leaves the rest for the next run. With the default 12 second pause that is roughly 60 mails per run. The sent count on the job is updated live while it runs.
 
+**Recalculate only the budget:** on the Outreach status page, the budget card has a **Recalculate budget** button. It calls `GET /api/crm/outreach/budget` (optional `?account=a@b.com`), which reads only the limits, the sends of the last 24 hours and the active reservations, not campaigns or contacts. The table then updates sent per hour and day, reserved, budget now, and what the next run would send, from the waiting counts already on the page.
+
 ## Three ways to send
 
 All three use the same sender, so the same rules apply to every one of them: the same selection (including the Send tick), the same send budget, the same logging afterwards. Only the way you start it differs.
@@ -199,7 +201,7 @@ In the mail editor, write the language code (the same **Language** field as abov
 - Placeholders such as `{{name}}`, links, e-mail addresses, formatting and embedded images are kept as they are. The result is checked, and if the AI changed any of them nothing is replaced and you are asked to try again.
 - The translation replaces the current text and is saved at once. **Undo translation** brings the old text back. Read the result before you send. Afterwards press **Apply ref and language to links** so the links point to the right language.
 - It translates one step at a time, so open each reminder and translate it too. The mail trailer is separate: it has its own HTML and plain-text version on the Outreach Settings page.
-- It needs `OPENAI_API_KEY` in the root `.env` (the same key the name enrichment uses). `OPENAI_MODEL` in the same file sets the model; the default is `gpt-5.4-mini`. The model in use, and whether the key is set, is shown in the **AI model** card on the Settings page. Every functions deploy copies these two values (and the batch settings) from the root `.env` into `functions-crm/.env`, which is the file the cloud function actually receives; never edit that file by hand.
+- It needs `OPENAI_API_KEY` in the root `.env` (the same key the name enrichment uses). `OPENAI_MODEL` in the same file sets the model; the default is `gpt-5.4-mini`. The model in use, and whether the key is set, is shown in the **AI model** card on the Settings page. Every functions deploy copies these two values (and the batch settings and `CAMPAIGN_SEND_DELAY_SECONDS`) from the root `.env` into `functions-crm/.env`, which is the file the cloud function actually receives; never edit that file by hand.
 
 ## Mail trailer: one text at the end of every mail
 
@@ -211,6 +213,15 @@ On **Settings → Outreach Settings → Mail trailer** (admin only) you can set 
 - It applies to the next run, whether started from **Send now**, the command line or the scheduler, and to the dry-run preview. Mails already sent are not changed.
 - You can also copy it into a single mail by hand: in the mail editor press **Add default trailer**. The HTML version goes to the end of an HTML mail and the plain-text version to the end of a plain mail. If the trailer is switched on it is added automatically when sending, so use the button only when it is switched off (the page asks before copying).
 - It is the same text for all campaigns. To leave it out of a mail, switch it off and save.
+
+## What protects you from a wrong or double mail
+
+Right before each mail the sender checks:
+
+- **The mail itself:** a mail is not sent if the address is invalid, the subject or body is empty, or a tag like `{{name2}}` is still unfilled. It is counted as skipped, and the Outreach status page says why.
+- **The contact:** it is read again just before sending. If it replied, bounced, was excluded, or was already mailed by another run since the run started, it is skipped.
+
+After the mail server accepted the mail, the mail counts as **sent**. The sender then records it (the `outreach_sent` log first, which is also the budget count, then the contact). The log line shows the message id and time. If recording fails it is tried 3 times. If it still fails, the run stops and the notes say `SENT BUT NOT RECORDED` with the contact, so you can mark that contact as contacted by hand before the next run. The job result shows this in `unrecorded`. "Sent" means the mail server accepted it; it does not prove delivery, and later bounces are handled by the reply matcher.
 
 ## What happens after a mail is sent
 

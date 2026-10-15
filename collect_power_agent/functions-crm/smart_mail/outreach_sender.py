@@ -200,6 +200,36 @@ def _release_send_run(
         print(f"[budget] could not release run {run_id}: {ex}")
 
 
+_PLACEHOLDER_RE = re.compile(r"\{\{[^{}]*\}\}")
+
+
+def _mail_problem(contact, step, rendered) -> str:
+    """Why this mail must NOT be sent ("" when it is fine). A broken mail to a real prospect cannot be undone."""
+    if "@" not in (contact.email or ""):
+        return "the contact has no valid email address"
+    if not (rendered.subject or "").strip():
+        return "the subject is empty"
+    if not ((step.body_html or "").strip() or (step.body_text or "").strip()):
+        return "the mail body is empty"
+    for part in (rendered.subject, rendered.text_body, rendered.html_body or ""):
+        m = _PLACEHOLDER_RE.search(part)
+        if m:
+            return f"the mail still contains the unfilled tag {m.group(0)}"
+    return ""
+
+
+def _confirm_with_retry(confirm_fn, attempts: int = 3, **kwargs):
+    """confirm_sent is safe to repeat; a short Firestore hiccup must not leave a sent mail unrecorded."""
+    for i in range(attempts):
+        try:
+            return confirm_fn(**kwargs)
+        except Exception as ex:
+            print(f"[sender] recording the sent mail failed (attempt {i + 1}/{attempts}): {ex}")
+            if i == attempts - 1:
+                raise
+            time.sleep(2 * (i + 1))
+
+
 def bounce_rate_tripped(threshold: float, sent_count: int, failed_count: int) -> bool:
     """Return True if failure rate exceeds threshold (after min attempts)."""
     attempts = sent_count + failed_count
@@ -327,7 +357,9 @@ def send_outreach(
         from smart_mail.mail_sender import MailSender              # noqa: PLC0415
     else:
         MailSender = None
-    from smart_mail.outreach_mail_select import read_outreach, confirm_sent  # noqa: PLC0415
+    from smart_mail.outreach_mail_select import (                    # noqa: PLC0415
+        read_outreach, confirm_sent, contact_not_sendable_reason,
+    )
     from smart_mail.outreach_render_mail import render_mail, MailStep  # noqa: PLC0415
     from smart_mail.mail_trailer import load_trailer                   # noqa: PLC0415
 
@@ -342,6 +374,7 @@ def send_outreach(
         "failed": 0,
         "skipped": 0,
         "would_send": 0,
+        "unrecorded": 0,      # mails that DID leave but could not be written to the CRM (see notes)
         "notes": [],          # human-readable reasons shown on the Outreach Status page
     }
     campaign_filter = _coerce_id_set(campaign_ids)
@@ -352,7 +385,10 @@ def send_outreach(
         summary["notes"].append(f"{mode}: nothing waiting to send")
         return summary
 
+    problems_noted: set = set()
     for batch in batches:
+        if summary["unrecorded"]:
+            break       # Firestore is not accepting writes: do not send anything more
         account  = batch.account
         campaigns = [
             cwc for cwc in batch.campaigns
@@ -414,6 +450,7 @@ def send_outreach(
         failed_batch = 0
         tried_batch  = 0
         timed_out    = False
+        stop_run     = False
 
         try:
             for cwc in campaigns:
@@ -432,6 +469,8 @@ def send_outreach(
                         )
                         continue
 
+                    if stop_run:
+                        break
                     if not dry_run and time.monotonic() >= deadline:
                         summary["notes"].append(
                             f"{account.email}: stopped at the time limit of one run after {sent_batch} sent; "
@@ -455,6 +494,16 @@ def send_outreach(
 
                     rendered = render_mail(step, contact, trailer)
 
+                    problem = _mail_problem(contact, step, rendered)
+                    if problem:
+                        summary["skipped"] += 1
+                        print(f"[sender] NOT SENT {contact.email!r}: {problem}")
+                        if (campaign.campaign_id, problem) not in problems_noted:
+                            problems_noted.add((campaign.campaign_id, problem))
+                            summary["notes"].append(
+                                f"{campaign.campaign_id}: mails not sent because {problem} (first: {contact.email})")
+                        continue
+
                     try:
                         seq = f"[{tried_batch + 1}/{budget}]"
                         if dry_run:
@@ -463,6 +512,13 @@ def send_outreach(
                             sent_batch += 1
                             tried_batch += 1
                             summary["would_send"] += 1
+                            continue
+
+                        why = contact_not_sendable_reason(
+                            contact.campaign_id, contact.contact_doc_id, len(contact.mail_sent or []))
+                        if why:
+                            summary["skipped"] += 1
+                            print(f"[sender] {seq} SKIPPED {contact.email}: {why}")
                             continue
 
                         unsub, unsub_post = _build_unsubscribe_headers(contact.contact_doc_id)
@@ -483,23 +539,38 @@ def send_outreach(
                         if result.get("status") != "ok":
                             raise RuntimeError(result.get("message", "send failed"))
                         message_id = result.get("message_id", "")
+                        sent_at = datetime.now(timezone.utc).isoformat()
 
-                        confirm_sent(
-                            campaign_id    = contact.campaign_id,
-                            contact_doc_id = contact.contact_doc_id,
-                            message_id     = message_id,
-                            mail_type      = step.mail_type,
-                            subject        = rendered.subject,
-                            mode           = mode,
-                            sender_account = account.email,
-                            body_text      = rendered.text_body or "",
-                            body_html      = rendered.html_body or "",
-                        )
-
+                        # The SMTP server has accepted the mail: it IS sent. Count and log it first,
+                        # so that a failure while recording can never be reported as "not sent".
                         sent_batch      += 1
                         tried_batch     += 1
                         summary["sent"] += 1
-                        print(f"[sender] {seq} sent {contact.email}")
+                        print(f"[sender] {seq} sent {contact.email}  message_id={message_id}  at={sent_at}")
+
+                        try:
+                            _confirm_with_retry(
+                                confirm_sent,
+                                campaign_id    = contact.campaign_id,
+                                contact_doc_id = contact.contact_doc_id,
+                                message_id     = message_id,
+                                mail_type      = step.mail_type,
+                                subject        = rendered.subject,
+                                mode           = mode,
+                                sender_account = account.email,
+                                sent_at        = sent_at,
+                                body_text      = rendered.text_body or "",
+                                body_html      = rendered.html_body or "",
+                            )
+                        except Exception as cex:
+                            # Sent but not recorded: the contact still looks pending and would get the
+                            # mail AGAIN on the next run. Stop everything and say exactly which mail it was.
+                            summary["unrecorded"] += 1
+                            stop_run = True
+                            summary["notes"].append(
+                                f"SENT BUT NOT RECORDED: {contact.email} ({contact.campaign_id}/{contact.contact_doc_id}), "
+                                f"message_id {message_id}: {cex}. Set this contact to contacted by hand before the next run.")
+                            print(f"[sender] !!! SENT BUT NOT RECORDED {contact.email} {message_id}: {cex}")
                         try:    # keeps the reservation honest: only the unsent part of the claim stays reserved
                             db.collection("send_run_reservations").document(run_id).update(
                                 {"sent_so_far": firestore.Increment(1)})
@@ -535,7 +606,7 @@ def send_outreach(
                         refresh_campaign_stats(campaign.campaign_id)
                     except Exception as ex:
                         print(f"[sender] stats refresh failed for {campaign.campaign_id}: {ex}")
-                if timed_out:
+                if timed_out or stop_run:
                     break
         finally:
             if sender is not None:

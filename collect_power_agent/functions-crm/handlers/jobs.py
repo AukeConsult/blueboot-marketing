@@ -561,6 +561,7 @@ def worker(name, job_id):
                 "passes": passes,
                 "sent": sum(int(p.get("sent", 0)) for p in passes),
                 "failed": sum(int(p.get("failed", 0)) for p in passes),
+                "unrecorded": sum(int(p.get("unrecorded", 0)) for p in passes),
                 "skipped": sum(int(p.get("skipped", 0)) for p in passes),
                 "would_send": sum(int(p.get("would_send", 0)) for p in passes),
                 "notes": [n for p in passes for n in (p.get("notes") or [])],

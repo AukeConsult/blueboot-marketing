@@ -591,6 +591,29 @@ def _mark_site_contacted(db, campaign_id: str, lead_id: str, when_iso: str) -> b
 
 
 # ---------------------------------------------------------------------------
+# Last check before a mail leaves
+# ---------------------------------------------------------------------------
+
+def contact_not_sendable_reason(campaign_id: str, contact_doc_id: str, mails_already_sent: int) -> str:
+    """Re-read the contact right before sending. Returns "" when the mail may go out, else the reason.
+
+    The candidate list is read at the start of a run, which can take many minutes. Since then the
+    contact may have replied, bounced, been excluded, or already been mailed by another run.
+    """
+    snap = (_get_db().collection("campaigns").document(campaign_id)
+            .collection("campaign_contacts").document(contact_doc_id).get())
+    if not snap.exists:
+        return "contact no longer exists"
+    d = snap.to_dict() or {}
+    status = str(d.get("status", "")).strip().lower()
+    if status != "pending":
+        return f"contact status is now {status!r}"
+    if len(d.get("mail_sent") or []) != mails_already_sent:
+        return "contact was mailed by another run since this run started"
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # confirm_sent
 # ---------------------------------------------------------------------------
 
@@ -608,7 +631,12 @@ def confirm_sent(
 ) -> SentConfirmation:
     """Record that an outreach email was successfully sent.
 
-    Writes atomically to campaign_contacts in one .update() call:
+    Safe to call again with the same arguments (the sender retries it): the outreach_sent log doc
+    has a fixed id and the history entries are ArrayUnion of identical values. Pass sent_at so a
+    retry writes the same values.
+
+    The outreach_sent log is written FIRST: it is the send budget ledger, so a mail that has left
+    is never missing from it. Then campaign_contacts is updated in one .update() call:
       1. mail_sent        → ArrayUnion({mail_type, sent_at, message_id})
       2. comment_history  → ArrayUnion({date, user, text, type="MAIL_SENT"})
       3. follow-up stamp  → leaves status unchanged and sets
@@ -662,7 +690,19 @@ def confirm_sent(
     update["followup_status"] = "contacted"
     update["new_mail"] = False
 
-    # 1 - write contact row
+    # 1 - ledger: one log doc per mail, id derived from the message id, so a retry cannot duplicate it
+    db.collection("outreach_sent").document(re.sub(r"[^A-Za-z0-9_.-]", "_", message_id)[:200]).set({
+        "campaign_id":    campaign_id,
+        "contact_doc_id": contact_doc_id,
+        "to_email":       (contact_data or {}).get("email", ""),
+        "sender_account": sender_account,
+        "message_id":     message_id,
+        "mail_type":      mail_type,
+        "sent_at":        confirmed_at,
+        "status":         "sent",
+    })
+
+    # 2 - write contact row
     contact_ref.update(update)
 
     # The site the contact belongs to: "contacted" unless it already has a follow-up status.
@@ -678,25 +718,6 @@ def confirm_sent(
                 "sent_at": camp.get("sent_at") or confirmed_at,
                 "updated_at": confirmed_at,
             })
-
-    # 2 - append to outreach_sent (skip if duplicate message_id)
-    existing = (
-        db.collection("outreach_sent")
-        .where(filter=FieldFilter("message_id", "==", message_id))
-        .limit(1)
-        .stream()
-    )
-    if not any(existing):
-        db.collection("outreach_sent").add({
-            "campaign_id":    campaign_id,
-            "contact_doc_id": contact_doc_id,
-            "to_email":       (contact_data or {}).get("email", ""),
-            "sender_account": sender_account,
-            "message_id":     message_id,
-            "mail_type":      mail_type,
-            "sent_at":        confirmed_at,
-            "status":         "sent",
-        })
 
     return SentConfirmation(
         campaign_id    = campaign_id,
@@ -719,4 +740,5 @@ __all__ = [
     "SentConfirmation",
     "read_outreach",
     "confirm_sent",
+    "contact_not_sendable_reason",
 ]

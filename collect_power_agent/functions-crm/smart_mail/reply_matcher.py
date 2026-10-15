@@ -8,7 +8,7 @@ from __future__ import annotations
 import imaplib
 import email as _email_lib
 from email.header import decode_header
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import re
 
 from .firestore_client import get_firestore
@@ -26,6 +26,8 @@ _OUTREACH  = "outreach_sent"
 _CAMPAIGNS = "campaigns"
 _CC        = "campaign_contacts"
 _CL        = "campaign_leads"
+_PROCESSED_FOLDER = "Processed"      # handled replies are moved here out of the INBOX
+imaplib.Commands.setdefault("MOVE", ("SELECTED",))     # lets mail.uid("MOVE", ...) work (RFC 6851)
 
 
 # Bounce heuristic patterns (used only as fallback — structural checks take priority)
@@ -207,7 +209,17 @@ def _is_self_or_system(addr: str, own_domains: set[str] | None = None) -> bool:
 
 
 def _extract_bounce_recipient(msg, sender_addr: str = "") -> str | None:
-    """Best-effort recovery of the ORIGINAL intended recipient of a bounce.
+    """The most likely ORIGINAL recipient of a bounce (first of _bounce_candidates), or None."""
+    found = _bounce_candidates(msg, sender_addr)
+    return found[0] if found else None
+
+
+def _bounce_candidates(msg, sender_addr: str = "") -> list[str]:
+    """Best-effort recovery of the ORIGINAL intended recipient of a bounce, as a ranked list.
+
+    The first address is the one the mail server says FAILED, which is not always the contact we
+    mailed: when the contact's mailbox forwards to another address, the failed address is the
+    forward target. So the caller tries every candidate in turn.
 
     Candidates are gathered from several sources and ranked by how
     authoritative each source is (lower = more trustworthy). The best
@@ -268,6 +280,13 @@ def _extract_bounce_recipient(msg, sender_addr: str = "") -> str | None:
                     if v:
                         add(2, _decode_mime(v))
 
+            elif ct == "text/rfc822-headers":   # Exim often returns only the headers of the original
+                pb = part.get_payload(decode=True)
+                if pb:
+                    v = _email_lib.message_from_bytes(pb).get("To")
+                    if v:
+                        add(2, _decode_mime(v))
+
             elif ct == "text/plain":
                 pb = part.get_payload(decode=True)
                 if pb:
@@ -290,10 +309,61 @@ def _extract_bounce_recipient(msg, sender_addr: str = "") -> str | None:
     for addr in find_emails(body):
         add(3, addr)
 
-    if not found:
-        return None
     found.sort(key=lambda t: t[0])
-    return found[0][1]
+    ranked: list[str] = []
+    for _pri, addr in found:
+        if addr not in ranked:
+            ranked.append(addr)
+    return ranked
+
+
+# A bounce that says the ADDRESS itself is bad (unknown user / mailbox / domain). Only these exclude a
+# contact: a block of OUR mail (5.7.x spam / reputation / policy) or a full mailbox says nothing about
+# whether the address is valid.
+_UNKNOWN_ADDRESS_RE = re.compile(
+    r"\b5\.1\.[1236]\b|user unknown|unknown user|unknown (recipient|address|mailbox)"
+    r"|no such (user|recipient|mailbox|address)|invalid (recipient|address|mailbox)"
+    r"|mailbox (not found|unavailable|does not exist|doesn't exist)"
+    r"|(recipient|address|mailbox|user|account) (does not exist|doesn't exist|not found)"
+    r"|unrouteable address|(host or )?domain (name )?(not found|does not exist)|\bno mx\b",
+    re.IGNORECASE)
+_SMTP_REASON_RE = re.compile(r"\b[45]\d\d[ -]\d\.\d{1,3}\.\d{1,3}[^\r\n]{0,160}")
+
+
+def _bounce_text(msg) -> str:
+    """Readable text of a bounce: its plain-text parts and the delivery-status part."""
+    parts: list[str] = []
+    for part in msg.walk():
+        ct = part.get_content_type()
+        if ct == "text/plain":
+            pb = part.get_payload(decode=True)
+            if pb:
+                parts.append(pb.decode(errors="ignore"))
+        elif ct == "message/delivery-status":
+            parts.append(str(part))
+    return "\n".join(parts)
+
+
+def _bounce_kind(text: str) -> str:
+    """'unknown_address' when the bounce says the address does not exist, else 'other' (blocked, full...)."""
+    return "unknown_address" if _UNKNOWN_ADDRESS_RE.search(text or "") else "other"
+
+
+def _bounce_reason(text: str, subject: str) -> str:
+    m = _SMTP_REASON_RE.search(text or "")
+    return (m.group(0).strip() if m else (subject or "delivery failure"))[:200]
+
+
+_OUR_MSGID_RE = re.compile(r"<[0-9a-f]{32}@[\w.-]+>")
+
+
+def _our_message_ids(raw_text: str) -> list[str]:
+    """Message-IDs of mails WE sent that are quoted inside a bounce (ours are <32 hex chars@domain>)."""
+    out: list[str] = []
+    for m in _OUR_MSGID_RE.findall(raw_text or ""):
+        if m not in out:
+            out.append(m)
+    return out[:5]
 
 def _classify_message(
     msg, from_raw: str, subject: str
@@ -356,6 +426,122 @@ def _imap_since(days: int) -> str:
     return d.strftime("%d-%b-%Y")
 
 
+# ── Faster mailbox reading ────────────────────────────────────────────────────
+# 1. Headers only (Message-ID + size) for every mail; mails already in the audit log are not downloaded.
+# 2. The rest is downloaded in batches, not one request per mail.
+# 3. A big mail is downloaded only as far as _MAX_MAIL_BYTES (text and headers come first; we keep
+#    only the text/HTML bodies, capped, and never the attachments).
+_FETCH_BATCH        = 20
+_HEADER_BATCH       = 100
+_MAX_MAIL_BYTES     = 500_000
+_UNMATCHED_RETRY_HOURS = 24     # an unmatched / skipped mail is looked at again after this long
+_HANDLED = ("updated", "already_handled")
+_WAITS   = ("unmatched", "system_skipped")      # outcomes that are only retried after the waiting time
+
+
+def _parse_fetch(data) -> list[tuple[str, bytes, bytes]]:
+    """(uid, payload, fetch-info) for every message in an IMAP FETCH answer.
+    The UID and size sit either in the first line or in the line that closes the item."""
+    out: list[list] = []
+    for item in data or []:
+        if isinstance(item, tuple):
+            out.append([item[0], item[1]])
+        elif isinstance(item, bytes) and out:
+            out[-1][0] += b" " + item
+    res = []
+    for info, payload in out:
+        m = re.search(rb"UID\s+(\d+)", info)
+        if m:
+            res.append((m.group(1).decode(), payload, info))
+    return res
+
+
+def _chunks(seq, n):
+    for i in range(0, len(seq), n):
+        yield seq[i:i + n]
+
+
+def _plan_mailbox(db, mail, uids, dry_run, recheck, to_move, bounce_del, dmarc_del, counts) -> tuple[list, dict]:
+    """Decide which mails must be downloaded. Mails already in the audit log (inbox_messages) are not:
+    handled ones just go to the cleanup lists (their move/delete is retried), unmatched or skipped ones
+    are looked at again only after _UNMATCHED_RETRY_HOURS (or always with recheck=True)."""
+    info: dict[str, tuple[str, int]] = {}
+    for chunk in _chunks(uids, _HEADER_BATCH):
+        try:
+            _t, data = mail.uid("FETCH", b",".join(chunk).decode(),
+                                "(UID RFC822.SIZE BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+            for uid, payload, meta in _parse_fetch(data):
+                sz = re.search(rb"RFC822\.SIZE\s+(\d+)", meta)
+                mid = (_email_lib.message_from_bytes(payload or b"").get("Message-ID") or "").strip()
+                info[uid] = (mid, int(sz.group(1)) if sz else 0)
+        except Exception as ex:
+            print(f"[reply_matcher]   header fetch failed ({ex}) — these mails are downloaded in full")
+
+    audit: dict[str, dict] = {}
+    mids = sorted({m for m, _ in info.values() if m})
+    for chunk in _chunks(mids, 30):         # Firestore allows 30 values in an "in" filter
+        try:
+            for d in (db.collection(_INBOX).where(filter=FieldFilter("message_id", "in", chunk)).stream()):
+                row = d.to_dict() or {}
+                old = audit.get(row.get("message_id"))
+                if not old or row.get("match_outcome") in _HANDLED:
+                    audit[row.get("message_id")] = row
+        except Exception as ex:
+            print(f"[reply_matcher]   audit lookup failed ({ex}) — these mails are downloaded in full")
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=0 if recheck else _UNMATCHED_RETRY_HOURS)).isoformat()
+    todo = []
+    for uid in uids:
+        mid, _size = info.get(uid.decode(), ("", 0))
+        a = audit.get(mid) if mid else None
+        if not a:
+            todo.append(uid)
+            continue
+        outcome, mtype = a.get("match_outcome"), a.get("message_type")
+        if mtype == "dmarc_report":
+            if not dry_run:
+                dmarc_del.append(uid)
+        elif outcome in _HANDLED:
+            if not dry_run:
+                (bounce_del if mtype == "bounce" else to_move).append(uid)
+        elif (outcome not in _WAITS
+              or str(a.get("match_checked_at") or a.get("received_at") or "") < cutoff):
+            todo.append(uid)    # failed last time (error / unknown outcome), or unmatched long ago: look again
+            continue
+        counts["seen_skipped"] += 1
+    sizes = {u: info.get(u.decode(), ("", 0))[1] for u in todo}
+    return todo, sizes
+
+
+def _download(mail, todo, sizes):
+    """Yield (uid, raw bytes) for the mails to read, in batches; big mails only their first part."""
+    big = {u for u in todo if sizes.get(u, 0) > _MAX_MAIL_BYTES}
+    small = [u for u in todo if u not in big]
+    got: dict[bytes, bytes] = {}
+    pos = 0
+    for uid in todo:
+        if uid in big:
+            _t, data = mail.uid("FETCH", uid.decode(), f"(UID BODY.PEEK[]<0.{_MAX_MAIL_BYTES}>)")
+            rows = _parse_fetch(data)
+            if rows:
+                yield uid, rows[0][1]
+            continue
+        if uid not in got:
+            batch = small[pos:pos + _FETCH_BATCH]
+            pos += len(batch)
+            _t, data = mail.uid("FETCH", b",".join(batch).decode(), "(UID BODY.PEEK[])")
+            for u, payload, _m in _parse_fetch(data):
+                got[u.encode()] = payload
+            for u in batch:                     # a server that answered a mail oddly: ask for it alone
+                if u not in got:
+                    _t, d1 = mail.uid("FETCH", u.decode(), "(UID BODY.PEEK[])")
+                    r1 = _parse_fetch(d1)
+                    if r1:
+                        got[u] = r1[0][1]
+        if uid in got:
+            yield uid, got.pop(uid)
+
+
 def _process_account(
     db,
     account_email: str,
@@ -365,6 +551,7 @@ def _process_account(
     limit: int,
     dry_run: bool,
     own_domains: set[str] | None = None,
+    recheck: bool = False,
 ) -> dict:
     """Fetch messages from one IMAP account and match each directly against
     campaign_contacts.  inbox_messages is written as an audit log only."""
@@ -374,7 +561,7 @@ def _process_account(
     password  = acc.get("password", "")
 
     counts = {"replies": 0, "bounces": 0, "dmarc": 0,
-              "matched": 0, "bounced": 0, "unmatched": 0, "skipped": 0, "errors": 0}
+              "matched": 0, "bounced": 0, "unmatched": 0, "skipped": 0, "errors": 0, "seen_skipped": 0}
 
     if not imap_host:
         print(f"[reply_matcher]   {account_email}: no imap_host — skipped")
@@ -384,23 +571,26 @@ def _process_account(
     mail          = imaplib.IMAP4_SSL(imap_host, imap_port)
     dmarc_to_del:  list[bytes] = []
     bounce_to_del: list[bytes] = []
+    reply_to_move: list[bytes] = []
 
     try:
         mail.login(user, password)
         mail.select("INBOX")
         since = _imap_since(days)
-        _status, messages = mail.search(None, f"SINCE {since}")
+        _status, messages = mail.uid("SEARCH", None, f"SINCE {since}")
         email_ids = messages[0].split()
         print(f"[reply_matcher]   {len(email_ids)} message(s) since {since}")
 
+        todo, sizes = _plan_mailbox(db, mail, email_ids, dry_run, recheck,
+                                    reply_to_move, bounce_to_del, dmarc_to_del, counts)
+        print(f"[reply_matcher]   {len(todo)} to read, {counts['seen_skipped']} already seen (not downloaded)")
+
         processed = 0
-        for eid in email_ids:
+        for eid, raw in _download(mail, todo, sizes):
             if processed >= limit:
                 print(f"[reply_matcher]   limit={limit} reached — stopping")
                 break
             try:
-                _s, msg_data = mail.fetch(eid, "(RFC822)")
-                raw      = msg_data[0][1]
                 msg      = _email_lib.message_from_bytes(raw)
 
                 message_id  = (msg.get("Message-ID") or "").strip()
@@ -443,6 +633,11 @@ def _process_account(
                     label = "BOUNCE" if message_type == "bounce" else "REPLY"
                     print(f"[reply_matcher] ─── {label}  from={from_addr!r}  "
                           f"rcpt={subject_addr!r}  → SKIP (own-domain/system)")
+                    if not dry_run:
+                        _audit_log(db, message_id, {
+                            "account": account_email, "from_email": from_raw, "subject": subject,
+                            "received_at": received_at, "message_id": message_id,
+                            "message_type": message_type, "match_outcome": "system_skipped"})
                     processed += 1
                     continue
 
@@ -459,9 +654,14 @@ def _process_account(
                     "message_id":         message_id,
                     "in_reply_to":        in_reply_to,
                     "references":         references,
-                    "imap_uid":           eid.decode(),
+                    "imap_uid":           eid.decode(),     # eid is the IMAP UID (stable, unlike sequence numbers)
                     "message_type":       message_type,
                     "original_recipient": orig_rcpt,
+                    "bounce_candidates":  _bounce_candidates(msg, from_addr) if message_type == "bounce" else [],
+                    "bounce_kind":        _bounce_kind(_bounce_text(msg)) if message_type == "bounce" else "",
+                    "bounce_reason":      _bounce_reason(_bounce_text(msg), subject) if message_type == "bounce" else "",
+                    "original_message_ids": (_our_message_ids(raw.decode("utf-8", "ignore"))
+                                             if message_type == "bounce" else []),
                     "email_date":         email_date,
                 }
 
@@ -490,8 +690,9 @@ def _process_account(
                                 "match_contact_doc_id": contact_doc_id,
                                 "match_outcome":        outcome,
                             })
-                            # Only a MATCHED bounce is queued for deletion
-                            bounce_to_del.append(eid)
+                            # Only a bounce that was applied (or already was) is deleted
+                            if outcome in ("updated", "already_handled"):
+                                bounce_to_del.append(eid)
                     else:
                         print(f"[reply_matcher]     ✗ NO MATCH  (kept in mailbox)")
                         counts["unmatched"] += 1
@@ -521,6 +722,10 @@ def _process_account(
                                 "match_via":            matched_via,
                                 "match_outcome":        outcome,
                             })
+                            # The reply is saved on the contact: move it out of the INBOX
+                            # so the next run does not read it again.
+                            if outcome in ("updated", "already_handled"):
+                                reply_to_move.append(eid)
                     else:
                         print(f"[reply_matcher]     ✗ NO MATCH")
                         counts["unmatched"] += 1
@@ -531,25 +736,47 @@ def _process_account(
                 counts["errors"] += 1
                 print(f"[reply_matcher]     ✗ ERROR  {ex}")
 
-        # Delete DMARC reports from IMAP
-        if dmarc_to_del and not dry_run:
+        # One cleanup pass, by UID (UIDs do not shift when mails are removed).
+        if not dry_run:
+            moved = flagged = 0
+            folder = _PROCESSED_FOLDER
+            if reply_to_move:
+                folder, exists = _processed_folder(mail)
+                if not exists:
+                    try:
+                        typ, resp = mail.create(f'"{folder}"')
+                        print(f"[reply_matcher]   create folder {folder!r}: {typ} {resp}")
+                    except Exception as ex:
+                        print(f"[reply_matcher]   create folder {folder!r} failed: {ex}")
+                can_move = "MOVE" in (getattr(mail, "capabilities", ()) or ())
+                for eid in reply_to_move:
+                    try:
+                        if can_move:
+                            # Real IMAP MOVE: the server copies and removes in one step.
+                            typ, resp = mail.uid("MOVE", eid, f'"{folder}"')
+                        else:
+                            # No MOVE support: copy, then flag as deleted ONLY if the copy worked.
+                            typ, resp = mail.uid("COPY", eid, f'"{folder}"')
+                            if typ == "OK":
+                                mail.uid("STORE", eid, "+FLAGS", "\\Deleted")
+                                flagged += 1
+                        if typ == "OK":
+                            moved += 1
+                        else:
+                            print(f"[reply_matcher]   move to {folder!r} refused ({resp}) — reply stays in INBOX")
+                    except Exception as ex:
+                        print(f"[reply_matcher]   move to {folder!r} failed: {ex}")
             try:
-                for eid in dmarc_to_del:
-                    mail.store(eid, "+FLAGS", "\\Deleted")
-                mail.expunge()
-                print(f"[reply_matcher]   deleted {len(dmarc_to_del)} DMARC report(s) from IMAP")
+                for eid in dmarc_to_del + bounce_to_del:
+                    mail.uid("STORE", eid, "+FLAGS", "\\Deleted")
+                    flagged += 1
+                if flagged:
+                    mail.expunge()
+                if moved or flagged:
+                    print(f"[reply_matcher]   cleaned INBOX: moved {moved} repl(ies) to {folder!r}, "
+                          f"deleted {len(dmarc_to_del)} DMARC report(s) and {len(bounce_to_del)} bounce(s)")
             except Exception as ex:
-                print(f"[reply_matcher]   IMAP delete failed: {ex}")
-
-        # Delete processed bounce messages from IMAP (contacts already updated)
-        if bounce_to_del and not dry_run:
-            try:
-                for eid in bounce_to_del:
-                    mail.store(eid, "+FLAGS", "\\Deleted")
-                mail.expunge()
-                print(f"[reply_matcher]   deleted {len(bounce_to_del)} bounce message(s) from IMAP")
-            except Exception as ex:
-                print(f"[reply_matcher]   IMAP bounce delete failed: {ex}")
+                print(f"[reply_matcher]   IMAP cleanup failed: {ex}")
 
     finally:
         try:
@@ -566,8 +793,37 @@ def _process_account(
     return counts
 
 
+def _processed_folder(mail) -> tuple[str, bool]:
+    """(folder name, already exists) for the Processed folder on this server.
+
+    Servers that keep their folders under INBOX (cPanel/Dovecot: INBOX.Sent) only accept
+    INBOX.Processed; a plain "Processed" is refused there.
+    """
+    names: list[str] = []
+    delim = "/"
+    try:
+        _typ, items = mail.list()
+        for it in items or []:
+            raw = it.decode(errors="replace") if isinstance(it, bytes) else str(it)
+            m = re.match(r'\((?P<fl>[^)]*)\)\s+(?:"(?P<d>[^"]*)"|NIL)\s+(?P<n>.+)$', raw)
+            if not m:
+                continue
+            delim = m.group("d") or delim
+            names.append(m.group("n").strip().strip('"'))
+    except Exception as ex:
+        print(f"[reply_matcher]   could not list folders: {ex}")
+    for n in names:
+        if n.lower() in (_PROCESSED_FOLDER.lower(), f"inbox{delim}{_PROCESSED_FOLDER}".lower()):
+            return n, True
+    if any(n.startswith(f"INBOX{delim}") for n in names):
+        return f"INBOX{delim}{_PROCESSED_FOLDER}", False
+    return _PROCESSED_FOLDER, False
+
+
 def _audit_log(db, message_id: str, doc: dict) -> None:
-    """Write one inbox_messages document as an audit log entry (fire-and-forget)."""
+    """Write one inbox_messages document as an audit log entry (fire-and-forget).
+    match_checked_at says when the mail was last looked at (an unmatched mail is retried after a day)."""
+    doc = {**doc, "match_checked_at": datetime.now(timezone.utc).isoformat()}
     try:
         if message_id:
             existing = list(
@@ -655,48 +911,46 @@ def _find_bounced_contact(
     message: dict,
     campaign_filter: set[str] | None = None,
 ) -> tuple[str | None, str | None, str | None]:
-    """Return (contact_doc_id, campaign_id, lead_id) or all None."""
-    recipient = (message.get("original_recipient") or "").strip().lower()
-    if not recipient:
-        return None, None, None
+    """Return (contact_doc_id, campaign_id, lead_id) or all None.
 
-    # Normalize to doc_id — same formula as the rest of the CRM
-    contact_doc_id = _doc_id(recipient)
+    1. Exact: the Message-ID of OUR mail quoted in the bounce -> outreach_sent -> that contact.
+       This also works when the contact's mailbox forwards elsewhere, so the failed address is
+       not the address we mailed.
+    2. Otherwise every recovered address (failed address first, then the original To:) is looked
+       up in campaign_contacts, by doc_id and then by the email field.
+    """
+    for mid in message.get("original_message_ids") or []:
+        try:
+            for sdoc in (db.collection(_OUTREACH)
+                         .where(filter=FieldFilter("message_id", "==", mid)).limit(1).stream()):
+                sd = sdoc.to_dict() or {}
+                cid, did = sd.get("campaign_id"), sd.get("contact_doc_id")
+                if cid and did and (not campaign_filter or cid in campaign_filter):
+                    cc = (db.collection(_CAMPAIGNS).document(cid).collection(_CC).document(did).get())
+                    lead_id = ((cc.to_dict() or {}).get("lead_id")) if cc.exists else None
+                    print(f"[reply_matcher]     matched by original Message-ID {mid}")
+                    return did, cid, lead_id
+        except Exception as ex:
+            print(f"[reply_matcher]   bounce lookup by Message-ID failed: {ex}")
 
-    # Try 1: campaign_contacts by normalized doc_id
-    try:
-        cc_docs = list(
-            db.collection_group(_CC)
-            .where(filter=FieldFilter("doc_id", "==", contact_doc_id))
-            .limit(5)
-            .stream()
-        )
-        for doc in cc_docs:
-            cid = doc.reference.parent.parent.id
-            if campaign_filter and cid not in campaign_filter:
-                continue
-            lead_id = (doc.to_dict() or {}).get("lead_id")
-            return doc.id, cid, lead_id
-    except Exception as ex:
-        print(f"[reply_matcher]   bounce contact lookup (doc_id) failed: {ex}")
+    recipients = list(message.get("bounce_candidates") or [])
+    first = (message.get("original_recipient") or "").strip().lower()
+    if first and first not in recipients:
+        recipients.insert(0, first)
 
-    # Try 2: campaign_contacts by raw email field
-    try:
-        cc_by_email = list(
-            db.collection_group(_CC)
-            .where(filter=FieldFilter("email", "==", recipient))
-            .limit(5)
-            .stream()
-        )
-        for doc in cc_by_email:
-            cid = doc.reference.parent.parent.id
-            if campaign_filter and cid not in campaign_filter:
-                continue
-            lead_id = (doc.to_dict() or {}).get("lead_id")
-            return doc.id, cid, lead_id
-    except Exception as ex:
-        print(f"[reply_matcher]   bounce contact lookup (email) failed: {ex}")
-
+    for recipient in recipients:
+        contact_doc_id = _doc_id(recipient)         # same formula as the rest of the CRM
+        for field, value, label in (("doc_id", contact_doc_id, "doc_id"), ("email", recipient, "email")):
+            try:
+                docs = list(db.collection_group(_CC)
+                            .where(filter=FieldFilter(field, "==", value)).limit(5).stream())
+                for doc in docs:
+                    cid = doc.reference.parent.parent.id
+                    if campaign_filter and cid not in campaign_filter:
+                        continue
+                    return doc.id, cid, (doc.to_dict() or {}).get("lead_id")
+            except Exception as ex:
+                print(f"[reply_matcher]   bounce contact lookup ({label}) failed: {ex}")
     return None, None, None
 
 
@@ -815,6 +1069,7 @@ def _apply_actions(
               f"campaign_contacts status={status_change}  followup_status=replied")
     except Exception as ex:
         print(f"[reply_matcher]       action  → ✗ campaign_contacts failed: {ex}")
+        return "error"          # the reply stays in the INBOX and is retried next run
 
     # Site follow-up: a mail came in -> "received", but only over an empty / "contacted" status.
     if lead_id:
@@ -863,12 +1118,15 @@ def _apply_bounce_actions(
     from google.cloud.firestore_v1 import ArrayUnion
     received_at   = message.get("received_at") or datetime.now(timezone.utc).isoformat()
     message_id    = (message.get("message_id") or "").strip()
-    bounce_reason = (message.get("subject") or "delivery failure")[:200]
+    bounce_reason = (message.get("bounce_reason") or message.get("subject") or "delivery failure")[:200]
+    # Only an unknown address excludes the contact. Mails that do not say so (older callers) count as such.
+    address_failed = (message.get("bounce_kind") or "unknown_address") == "unknown_address"
 
     history_entry = {
         "date":       received_at,
         "user":       "system",
-        "text":       f"Bounce: {bounce_reason}",
+        "text":       (f"Bounce: {bounce_reason}" if address_failed
+                       else f"Bounce (delivery blocked, address NOT excluded): {bounce_reason}"),
         "type":       "BOUNCE",
         "message_id": message_id,
         "email_date": message.get("email_date", ""),
@@ -899,10 +1157,10 @@ def _apply_bounce_actions(
     try:
         current = cc_data.get("status", "pending")
         update  = {"comment_history": ArrayUnion([history_entry])}
-        # Only a still-pending contact is excluded on bounce.
-        # active / replied / any other status is left as-is — bounce is
-        # recorded in comment_history only.
-        if current == "pending":
+        # Only a still-pending contact whose ADDRESS failed is excluded on bounce.
+        # active / replied / any other status, and bounces that are not an address failure
+        # (our mail was blocked, mailbox full ...), are only recorded in comment_history.
+        if current == "pending" and address_failed:
             update.update({
                 "status":          "excluded",
                 "bounce_detected": True,
@@ -917,6 +1175,7 @@ def _apply_bounce_actions(
         cc_ref.update(update)
     except Exception as ex:
         print(f"[reply_matcher]   ✗ campaign_contacts bounce update failed {campaign_id}/{contact_doc_id}: {ex}")
+        return "error"
 
     # email_contacts is intentionally not updated here.
     # inbox_messages is updated by the caller as an audit log
@@ -925,6 +1184,8 @@ def _apply_bounce_actions(
         refresh_campaign_stats(campaign_id)
     except Exception as ex:
         print(f"[reply_matcher]       action  → ✗ stats refresh failed: {ex}")
+
+    return "updated"
 
 
 # ── Step 4: match loop ────────────────────────────────────────────────────────
@@ -940,6 +1201,7 @@ def match_new_replies(
     campaigns: list[str] | None = None,
     dry_run: bool = False,
     days: int = 30,
+    recheck: bool = False,
 ) -> dict:
     """Fetch emails directly from IMAP, classify, and match to campaign_contacts
     in a single pass per account.  inbox_messages is written only as an audit log.
@@ -948,6 +1210,7 @@ def match_new_replies(
     campaigns: restrict matching to these campaign IDs (None = all)
     dry_run:   find matches and print what would change; write nothing
     days:      how many days back to look in IMAP SINCE filter (default 30)
+    recheck:   also read mails already seen as unmatched/skipped, not only those older than a day
     limit:     max messages to process per account
     """
     db = get_firestore()
@@ -974,7 +1237,8 @@ def match_new_replies(
 
     totals = {"accounts_checked": len(to_check), "accounts_failed": 0,
               "replies": 0, "bounces": 0, "dmarc": 0,
-              "matched": 0, "bounced": 0, "unmatched": 0, "skipped": 0, "errors": 0}
+              "matched": 0, "bounced": 0, "unmatched": 0, "skipped": 0, "errors": 0,
+              "seen_skipped": 0}
 
     for account_email, acc in to_check.items():
         try:
@@ -982,9 +1246,9 @@ def match_new_replies(
                 db, account_email, acc,
                 campaign_filter=campaign_filter,
                 days=days, limit=limit, dry_run=dry_run,
-                own_domains=own_domains,
+                own_domains=own_domains, recheck=recheck,
             )
-            for k in ("replies", "bounces", "dmarc", "matched", "bounced", "unmatched", "skipped", "errors"):
+            for k in ("replies", "bounces", "dmarc", "matched", "bounced", "unmatched", "skipped", "errors", "seen_skipped"):
                 totals[k] += counts.get(k, 0)
         except Exception as ex:
             totals["accounts_failed"] += 1
@@ -995,6 +1259,7 @@ def match_new_replies(
         f"accounts={totals['accounts_checked']} failed={totals['accounts_failed']} "
         f"replies={totals['replies']} bounces={totals['bounces']} dmarc={totals['dmarc']} "
         f"matched={totals['matched']} bounced={totals['bounced']} "
-        f"unmatched={totals['unmatched']} skipped={totals['skipped']} errors={totals['errors']}"
+        f"unmatched={totals['unmatched']} skipped={totals['skipped']} errors={totals['errors']} "
+        f"already_seen={totals['seen_skipped']}"
     )
     return {**totals, "dry_run": dry_run}

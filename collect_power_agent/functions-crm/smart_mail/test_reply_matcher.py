@@ -315,20 +315,175 @@ def _make_exim_bounce(failed_to, original_from="cpanel@blueboot.ai"):
 
 class TestEximBounce(unittest.TestCase):
     def test_failed_block_recipient_recovered(self):
-        msg = _make_exim_bounce("realcontact@example.com")
+        msg = _make_exim_bounce("realcontact@acme.no")
         mtype, rcpt, _ = rm._classify_message(
             msg, "mailer-daemon@cpweb02.misshosting.no",
             "Mail delivery failed: returning message to sender")
         self.assertEqual(mtype, "bounce")
-        self.assertEqual(rcpt, "realcontact@example.com")
+        self.assertEqual(rcpt, "realcontact@acme.no")
 
     def test_sender_mailbox_not_picked(self):
         # the embedded Delivered-To / X-Original-To = cpanel@blueboot.ai
         # must never be returned
-        msg = _make_exim_bounce("realcontact@example.com")
+        msg = _make_exim_bounce("realcontact@acme.no")
         rcpt = rm._extract_bounce_recipient(msg, "mailer-daemon@cpweb02.misshosting.no")
         self.assertNotEqual(rcpt, "cpanel@blueboot.ai")
-        self.assertEqual(rcpt, "realcontact@example.com")
+        self.assertEqual(rcpt, "realcontact@acme.no")
+
+
+def _make_forwarded_bounce():
+    """Contact jane@acme.no forwards to boss@other.no; boss's server refuses with a 550.
+    The 'failed' address is the FORWARD target; the contact is only in the embedded original."""
+    raw = (
+        "From: Mail Delivery System <mailer-daemon@cpweb02.misshosting.no>\r\n"
+        "Subject: Mail delivery failed: returning message to sender\r\n"
+        "MIME-Version: 1.0\r\n"
+        'Content-Type: multipart/report; report-type=delivery-status; boundary="X"\r\n\r\n'
+        "--X\r\nContent-Type: text/plain; charset=us-ascii\r\n\r\n"
+        "A message that you sent could not be delivered. The following address(es) failed:\r\n\r\n"
+        "  boss@other.no\r\n    host smtp.mailchannels.net\r\n    550 5.7.1 unusual amount of unsolicited email\r\n\r\n"
+        "--X\r\nContent-Type: text/rfc822-headers\r\n\r\n"
+        "Message-ID: <0123456789abcdef0123456789abcdef@blueboot.ai>\r\n"
+        "From: sales@blueboot.ai\r\nTo: jane@acme.no\r\nSubject: Hello\r\n\r\n"
+        "--X--\r\n"
+    )
+    return _emaillib.message_from_bytes(raw.encode())
+
+
+class TestForwardedBounce(unittest.TestCase):
+    def test_candidates_include_original_recipient_after_failed_address(self):
+        cands = rm._bounce_candidates(_make_forwarded_bounce(), "mailer-daemon@cpweb02.misshosting.no")
+        self.assertEqual(cands[0], "boss@other.no")
+        self.assertIn("jane@acme.no", cands)
+
+    def test_our_message_id_is_found(self):
+        raw = _make_forwarded_bounce().as_string()
+        self.assertEqual(rm._our_message_ids(raw), ["<0123456789abcdef0123456789abcdef@blueboot.ai>"])
+
+    def test_contact_found_through_second_candidate(self):
+        db = FakeDB(group_rows=[
+            FakeDoc("jane_acme_no", {"doc_id": "jane_acme_no", "lead_id": "L1"}, "CAMP1")])
+        cid_doc, camp, lead = rm._find_bounced_contact(
+            db, {"original_recipient": "boss@other.no",
+                 "bounce_candidates": ["boss@other.no", "jane@acme.no"]})
+        self.assertEqual((cid_doc, camp, lead), ("jane_acme_no", "CAMP1", "L1"))
+
+
+class TestBounceKind(unittest.TestCase):
+    BLOCKED = ("The following address(es) failed:\n  boss@other.no\n    host smtp.mailchannels.net\n"
+               "    SMTP error from remote mail server after end of data:\n"
+               "    550 5.7.1 [NS] Our system has detected an unusual amount of unsolicited email")
+
+    def test_block_is_not_an_address_failure(self):
+        self.assertEqual(rm._bounce_kind(self.BLOCKED), "other")
+
+    def test_unknown_user_is_an_address_failure(self):
+        for txt in ("550 5.1.1 <a@b.no>: Recipient address rejected: User unknown in virtual mailbox table",
+                    "550 No such user here", "Host or domain name not found", "550 mailbox unavailable"):
+            self.assertEqual(rm._bounce_kind(txt), "unknown_address", txt)
+
+    def test_reason_is_the_smtp_line(self):
+        self.assertTrue(rm._bounce_reason(self.BLOCKED, "Mail delivery failed").startswith("550 5.7.1"))
+
+    def _contact_after(self, kind):
+        db = FakeDB(docstore={("C", "campaign_contacts", "c1"): {"status": "pending"}})
+        rm._apply_bounce_actions(db, "c1", "C", None, None,
+                                 {"message_id": "<b1>", "subject": "x", "bounce_kind": kind,
+                                  "received_at": "2026-10-15T00:00:00+00:00"})
+        return db.docstore[("C", "campaign_contacts", "c1")]
+
+    def test_unknown_address_excludes_the_contact(self):
+        self.assertEqual(self._contact_after("unknown_address")["status"], "excluded")
+
+    def test_blocked_mail_keeps_the_contact(self):
+        self.assertEqual(self._contact_after("other")["status"], "pending")
+
+
+class FakeImap:
+    """Just enough IMAP: header fetch, batch fetch, partial fetch. Counts requests."""
+    def __init__(self, mails):                      # {uid(str): raw bytes}
+        self.mails, self.calls = mails, []
+
+    def uid(self, cmd, uids, what):
+        self.calls.append(what)
+        out = []
+        for u in uids.split(","):
+            raw = self.mails[u]
+            if "HEADER.FIELDS" in what:
+                head = raw.split(b"\r\n\r\n")[0] + b"\r\n\r\n"
+                out.append((f"{u} (UID {u} RFC822.SIZE {len(raw)} BODY[HEADER.FIELDS (MESSAGE-ID)] {{{len(head)}}}".encode(), head))
+            else:
+                body = raw[:500_000] if "<0." in what else raw
+                out.append((f"{u} (UID {u} BODY[] {{{len(body)}}}".encode(), body))
+            out.append(b")")
+        return "OK", out
+
+
+def _raw(mid, size=0):
+    return (f"Message-ID: {mid}\r\nFrom: a@b.no\r\nSubject: x\r\n\r\n" + "x" * size).encode()
+
+
+class FakeAuditDB:
+    def __init__(self, rows): self.rows = rows
+    def collection(self, name):
+        db = self
+        class Q:
+            def where(s, filter): s.f = filter; return s
+            def stream(s): return [NS_(r) for r in db.rows if r["message_id"] in s.f.value]
+        return Q()
+
+
+class NS_:
+    def __init__(self, row): self.row = row
+    def to_dict(self): return self.row
+
+
+class TestFasterMailbox(unittest.TestCase):
+    def _plan(self, recheck=False):
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone.utc)
+        mails = {"1": _raw("<a>"), "2": _raw("<b>"), "3": _raw("<c>"), "4": _raw("<d>")}
+        db = FakeAuditDB([
+            {"message_id": "<a>", "message_type": "reply", "match_outcome": "updated"},
+            {"message_id": "<b>", "message_type": "reply", "match_outcome": "unmatched",
+             "match_checked_at": (now - timedelta(hours=1)).isoformat()},
+            {"message_id": "<d>", "message_type": "reply", "match_outcome": "unmatched",
+             "match_checked_at": (now - timedelta(hours=30)).isoformat()},
+        ])
+        lists = ([], [], [])
+        counts = {"seen_skipped": 0}
+        todo, _sizes = rm._plan_mailbox(db, FakeImap(mails), [b"1", b"2", b"3", b"4"], False, recheck,
+                                        lists[0], lists[1], lists[2], counts)
+        return todo, lists, counts
+
+    def test_seen_mails_are_not_downloaded(self):
+        todo, (to_move, _b, _d), counts = self._plan()
+        self.assertEqual(todo, [b"3", b"4"])        # new one + unmatched one older than a day
+        self.assertEqual(to_move, [b"1"])           # handled reply: only its move is retried
+        self.assertEqual(counts["seen_skipped"], 2)
+
+    def test_failed_mail_is_retried_at_once(self):
+        from datetime import datetime, timezone
+        db = FakeAuditDB([{"message_id": "<e>", "message_type": "reply", "match_outcome": "error",
+                           "match_checked_at": datetime.now(timezone.utc).isoformat()}])
+        counts = {"seen_skipped": 0}
+        todo, _ = rm._plan_mailbox(db, FakeImap({"9": _raw("<e>")}), [b"9"], False, False, [], [], [], counts)
+        self.assertEqual(todo, [b"9"])
+
+    def test_recheck_reads_unmatched_again(self):
+        todo, _lists, _counts = self._plan(recheck=True)
+        self.assertEqual(todo, [b"2", b"3", b"4"])
+
+    def test_mails_are_fetched_in_batches_and_big_ones_partially(self):
+        mails = {str(i): _raw(f"<m{i}>") for i in range(1, 46)}
+        mails["46"] = _raw("<big>", size=600_000)
+        imap = FakeImap(mails)
+        todo = [str(i).encode() for i in range(1, 47)]
+        sizes = {str(i).encode(): len(mails[str(i)]) for i in range(1, 47)}
+        got = list(rm._download(imap, todo, sizes))
+        self.assertEqual([u for u, _ in got], todo)                      # mailbox order kept
+        self.assertEqual(len(imap.calls), 3 + 1)                         # 45 small = 3 batches, 1 big alone
+        self.assertEqual(len(got[-1][1]), 500_000)                       # big mail cut at the limit
 
 
 class TestSelfOrSystem(unittest.TestCase):
