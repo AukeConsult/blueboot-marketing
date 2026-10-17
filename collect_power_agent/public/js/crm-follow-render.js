@@ -69,9 +69,15 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
           <div class="crm-contact-name">
             <a class="crm-contact-name-link small fw-500"
               href="crm-contact.html?campaign=${encodeURIComponent(r.campaign_id)}&doc=${encodeURIComponent(r.doc_id)}"
-              title="Open full contact page">${escapeHtml(r.name || '—')}</a>
-            <div class="contact-title small text-muted">${escapeHtml(r.title || '')}</div>
+              title="Open full contact page">${r.name ? escapeHtml(r.name) : '<span class="text-muted fst-italic fw-normal">No name</span>'}</a>
+            ${r.title ? `<span class="contact-title small text-muted">${escapeHtml(r.title)}</span>` : ''}
+            <span class="crm-campaign-meta" title="Campaign: ${escapeHtml(r.campaign_id || '')}"><i class="ti ti-speakerphone"></i><a href="campaign.html?campaign_id=${encodeURIComponent(r.campaign_id || '')}" onclick="event.stopPropagation()">${escapeHtml(r.campaign_id || '—')}</a></span>
           </div>
+            <div class="crm-contact-meta">
+              ${emailHtml}
+              ${phoneHtml}
+              ${websiteHtml}
+            </div>
           <div class="crm-contact-actions">
             ${statusBadge(r.status)}
             <a class="btn btn-sm btn-outline-primary crm-open-btn"
@@ -86,12 +92,6 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
               <i class="ti ti-layout-sidebar-right"></i>
             </button>
           </div>
-        </div>
-        <div class="crm-contact-meta">
-          ${emailHtml}
-          ${phoneHtml}
-          ${websiteHtml}
-          <span class="crm-campaign-meta" title="Campaign: ${escapeHtml(r.campaign_id || '')}"><i class="ti ti-speakerphone"></i><a href="campaign.html?campaign_id=${encodeURIComponent(r.campaign_id || '')}" onclick="event.stopPropagation()">${escapeHtml(r.campaign_id || '—')}</a></span>
         </div>
       </td>
       <td class="crm-followup-cell">
@@ -155,9 +155,8 @@ function render(list) {
             onfocus="onRowExpand(${gidx})"
             oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
             rows="1">${escapeHtml(r.followup_comment || '')}</textarea>
-          <button class="hist-toggle" onclick="toggleHistory(this,${gidx})" title="Show comment history">
-            <i class="ti ti-chevron-down"></i>
-            <span class="hist-count${r.comment_history.length ? ' has-entries' : ''}">${r.comment_history.length}</span>
+          <button class="hist-toggle" onclick="toggleHistory(this,${gidx})" title="Show history">
+            <span class="hist-label">History</span><span class="hist-count${r.comment_history.length ? ' has-entries' : ''}">${r.comment_history.length}</span><i class="ti ti-chevron-down"></i>
           </button>
         </div>
       </td>
@@ -211,9 +210,8 @@ function _contactRowsHtml(r) {
             onfocus="onRowExpand(${gidx})"
             oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"
             rows="1">${escapeHtml(r.followup_comment || '')}</textarea>
-          <button class="hist-toggle" onclick="toggleHistory(this,${gidx})" title="Show comment history">
-            <i class="ti ti-chevron-down"></i>
-            <span class="hist-count${r.comment_history.length ? ' has-entries' : ''}">${r.comment_history.length}</span>
+          <button class="hist-toggle" onclick="toggleHistory(this,${gidx})" title="Show history">
+            <span class="hist-label">History</span><span class="hist-count${r.comment_history.length ? ' has-entries' : ''}">${r.comment_history.length}</span><i class="ti ti-chevron-down"></i>
           </button>
         </div>
       </td>
@@ -241,8 +239,8 @@ function renderGrouped(list) {
   if (cab) {
     const allCollapsed = _currentGroupKeys.length > 0 && _currentGroupKeys.every(k => _collapsedGroups.has(k));
     cab.innerHTML = allCollapsed
-      ? '<i class="ti ti-arrows-maximize"></i>'
-      : '<i class="ti ti-arrows-minimize"></i>';
+      ? '<i class="ti ti-arrows-maximize"></i> Expand groups'
+      : '<i class="ti ti-arrows-minimize"></i> Collapse groups';
     cab.title = allCollapsed ? 'Expand all groups' : 'Collapse all groups';
   }
 

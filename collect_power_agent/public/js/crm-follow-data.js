@@ -39,6 +39,16 @@ async function loadMeta() {
     _allUsers     = meta.users     || [];
     const owners = meta.owners || [];
     populateSelect('owner-header', owners, 'All owners');
+    if (_isCampaignUser()) {
+      // Campaign users only see their own campaigns: owner filter is fixed to their email.
+      const me = _myEmail();
+      _allCampaigns = _allCampaigns.filter(c => (c.owner || '').toLowerCase() === me);
+      const os = document.getElementById('owner-header');
+      os.innerHTML = '<option value="' + escapeHtml(me) + '">' + escapeHtml(me) + '</option>';
+      os.value = me; os.disabled = true;
+      os.title = 'You see your own campaigns only';
+      return;
+    }
     // Inject "No owner" option right after "All owners"
     const _ownerSel = document.getElementById('owner-header');
     if (_ownerSel) {
@@ -49,7 +59,11 @@ async function loadMeta() {
   } catch(e) { console.warn('[meta]', e); }
 }
 
+function _isCampaignUser() { return window._userRole === 'campaign-user'; }
+function _myEmail() { return ((window._authUser && window._authUser.email) || '').toLowerCase(); }
+
 function populateCampaignDropdown(ownerVal) {
+  if (_isCampaignUser()) ownerVal = _myEmail();
   const filtered = ownerVal === '__none__'
     ? _allCampaigns.filter(c => !c.owner)
     : ownerVal
@@ -111,7 +125,7 @@ async function load() {
   // Apply saved owner + campaign now that both dropdowns are fully populated
   if (_loadedPrefs && !_prefsReady) {
     const ownerSel = document.getElementById('owner-header');
-    if (ownerSel && _loadedPrefs.owner !== undefined) {
+    if (ownerSel && _loadedPrefs.owner !== undefined && !_isCampaignUser()) {
       ownerSel.value = _loadedPrefs.owner;
       // Repopulate campaign dropdown for the restored owner, preserving saved campaign
       populateCampaignDropdown(_loadedPrefs.owner);

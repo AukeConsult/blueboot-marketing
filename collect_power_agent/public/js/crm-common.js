@@ -203,7 +203,7 @@ const NAV_LINKS = [
     match: ['crm-bp.html', 'crm-sync.html'],
     roles: ['admin', 'campaign-user', 'user'] },
   { dropdown: 'daily-admin', icon: 'ti-tool', label: 'Daily Admin',
-    roles: ['admin', 'campaign-user', 'user'],
+    roles: ['admin'],
     match: ['statistics.html', 'gdisk.html', 'mailbox.html', 'jobs.html', 'cloud-batch.html', 'settings.html', 'users.html', 'outreach-settings.html', 'outreach_status.html'],
     children: [
       { href: 'statistics.html',    icon: 'ti-chart-bar',             label: 'Statistics' },
@@ -357,7 +357,7 @@ const PUBLIC_PAGES = new Set(['login.html', 'register.html', 'index.html', 'doc-
 
 // ── Exclude a campaign contact (shared by the follow-up lists and the contact page) ──────────
 // One confirm dialog (centered Bootstrap modal) and one API call, so every place behaves the same.
-function crmConfirmExclude(label) {
+function crmConfirmExclude(label, title) {
   return new Promise(resolve => {
     const wrap = document.createElement('div');
     wrap.className = 'modal fade';
@@ -369,7 +369,7 @@ function crmConfirmExclude(label) {
             <div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle"
                  style="width:52px;height:52px;background:#fee2e2;color:#b91c1c;font-size:1.6rem">
               <i class="ti ti-user-x"></i></div>
-            <h6 class="mb-1">Exclude contact?</h6>
+            <h6 class="mb-1"></h6>
             <div class="fw-semibold small text-break mb-2"></div>
             <p class="small text-muted mb-3">Hidden from follow-up and never gets mail.
               You can restore it from the campaign page.</p>
@@ -380,6 +380,7 @@ function crmConfirmExclude(label) {
           </div>
         </div>
       </div>`;
+    wrap.querySelector('h6').textContent = title || 'Exclude contact?';
     wrap.querySelector('.fw-semibold').textContent = label || '';
     document.body.appendChild(wrap);
     const modal = new bootstrap.Modal(wrap);
@@ -398,4 +399,19 @@ function crmSetContactStatus(campaignId, docId, status, extra) {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status, ...(extra || {}) }),
   });
+}
+
+// Campaign users only see campaigns they own (owner = their email).
+function crmIsCampaignUser() { return window._userRole === 'campaign-user'; }
+function crmScopeCampaigns(list) {
+  if (!crmIsCampaignUser()) return list;
+  const me = ((window._authUser && window._authUser.email) || '').toLowerCase();
+  return list.filter(c => (c.owner || '').toLowerCase() === me);
+}
+// Fix an owner <select> to the signed-in campaign user's email (no-op for other roles).
+function crmLockOwnerSelect(sel) {
+  if (!crmIsCampaignUser() || !sel) return;
+  const me = ((window._authUser && window._authUser.email) || '').toLowerCase();
+  sel.innerHTML = '<option value="' + me + '">' + me + '</option>';
+  sel.value = me; sel.disabled = true; sel.title = 'You see your own campaigns only';
 }

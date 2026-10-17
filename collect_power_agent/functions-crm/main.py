@@ -184,6 +184,19 @@ def check_auth():
     endpoint  = req.endpoint or ""
     blueprint = endpoint.split(".")[0] if "." in endpoint else None
 
+    # Non-admins may only touch campaigns they own (/api/crm/campaigns/<id>/...).
+    if role != "admin":
+        import re as _re
+        m = _re.match(r"^/api/crm/campaigns/([^/]+)(/.*)?$", req.path)
+        if m:
+            snap = db.collection("campaigns").document(m.group(1)).get()
+            if snap.exists:
+                owner = ((snap.to_dict() or {}).get("owner") or "").strip().lower()
+                if owner != user_email:
+                    _log.warning(f"[auth] BLOCKED foreign campaign  user={user_email}  "
+                                 f"owner={owner}  {req.method} {req.path}")
+                    return _err("Access denied (403) — this campaign belongs to another owner", 403)
+
     # GET requests: check blueprint minimum read role.
     # Endpoints that trigger jobs bypass this and fall through to the full check.
     if req.method == "GET" and endpoint not in _JOB_ENDPOINTS:

@@ -222,3 +222,22 @@ def _accepted(job_id: str, name: str):
         "poll":    f"/api/crm/status/{job_id}",
         "message": f"Job queued. Poll /api/crm/status/{job_id} for result.",
     }), 202
+
+
+# ── Campaign ownership scope ────────────────────────────────────────────────
+# Only admins see every campaign. Everyone else is limited to campaigns whose
+# `owner` equals their sign-in email.
+
+def _scope_email() -> str:
+    """Email the caller is restricted to, or "" for admins (no restriction)."""
+    from flask import g, has_request_context
+    if not has_request_context():
+        return ""
+    if getattr(g, "user_role", "admin") == "admin":
+        return ""
+    return (getattr(g, "user_email", "") or "").strip().lower() or "\0none"
+
+
+def _owner_allowed(owner) -> bool:
+    scope = _scope_email()
+    return not scope or str(owner or "").strip().lower() == scope

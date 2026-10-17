@@ -5,6 +5,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
 from google.cloud.firestore_v1.base_query import FieldFilter
+from handlers.shared import _owner_allowed
 from handlers.shared import (
     _get_db, _sheets_service, _gdisk, _get_mail_account, _ma_col,
     _new_job, _enqueue_task, _ok, _err, _accepted,
@@ -87,6 +88,8 @@ def list_campaigns():
             data = d.to_dict() or {}
             data["status"] = _campaign_status(data.get("status"))
             if status and data["status"] != status:
+                continue
+            if not _owner_allowed(data.get("owner")):
                 continue
             campaigns.append(data)
         return jsonify({"campaigns": campaigns, "count": len(campaigns)})
@@ -188,7 +191,11 @@ def update_campaign(campaign_id):
 
         if "sent_at"                in body: update["sent_at"]                = body["sent_at"]
         if "outreach_email_account" in body: update["outreach_email_account"] = body["outreach_email_account"]
-        if "owner"                  in body: update["owner"]                  = body["owner"]
+        if "owner" in body:
+            from handlers.shared import _scope_email
+            if _scope_email():
+                return _err("Only an admin can change the owner", 403)
+            update["owner"] = body["owner"]
         # Campaign ref (the ?ref= value of blueboot.ai links) and language code (the /lang/xx part).
         if "campaign_ref" in body:
             ref = str(body["campaign_ref"] or "").strip()
@@ -593,13 +600,13 @@ def list_leads_cross_campaign():
         camp_docs = []
         if campaign_id:
             doc = db.collection("campaigns").document(campaign_id).get()
-            if doc.exists:
+            if doc.exists and _owner_allowed((doc.to_dict() or {}).get("owner")):
                 camp_docs = [doc]
         else:
             q = db.collection("campaigns")
             if owner and not by_contacts:
                 q = q.where(filter=FieldFilter("owner", "==", owner))
-            camp_docs = list(q.stream())
+            camp_docs = [c for c in q.stream() if _owner_allowed((c.to_dict() or {}).get("owner"))]
 
         leads = []
         for camp_doc in camp_docs:

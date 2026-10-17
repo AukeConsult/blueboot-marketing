@@ -965,8 +965,9 @@ async function loadCampaignList() {
   listEl.innerHTML = '<div class="text-center py-5 small" style="color:var(--bb-muted)"><div class="spinner-border spinner-border-sm me-2"></div>Loading...</div>';
   try {
     const d = await fetchJSON(BASE + '/api/crm/campaigns');
-    allCampaigns = d.campaigns || [];
+    allCampaigns = crmScopeCampaigns(d.campaigns || []);
     populateCampaignOwnerFilter();
+    crmLockOwnerSelect(document.getElementById('campaign-owner-filter'));
     filterCampaignList();
     return allCampaigns;
   } catch(e) {
@@ -2143,6 +2144,15 @@ let _usersForOwner = [];   // [{email, displayName, defaultMailbox}]
 
 async function populateOwnerSelect(currentOwner) {
   const sel = document.getElementById('c-owner-select');
+  if (window._userRole !== 'admin') {
+    // Only admins can change the owner or see the list of users.
+    sel.innerHTML = '<option value="' + escapeHtml(currentOwner || '') + '" selected>'
+      + escapeHtml(currentOwner || '— none —') + '</option>';
+    sel.disabled = true;
+    sel.title = 'Only an admin can change the owner';
+    return;
+  }
+  sel.disabled = false;
   if (_usersForOwner.length === 0) {
     try {
       const projectId = (window.FIREBASE_CONFIG || {}).projectId;
@@ -2195,6 +2205,7 @@ async function ownerChanged() {
 }
 
 async function saveOwner(ownerVal) {
+  if (window._userRole !== 'admin') return;
   const id = document.getElementById('campaign-select').value;
   if (!id) return;
   try {

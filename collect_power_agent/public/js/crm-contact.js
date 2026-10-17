@@ -112,6 +112,25 @@ function render() {
     document.getElementById('cc-confirm-info').textContent = !can
       ? (sent ? 'first mail already sent' : 'only pending contacts')
       : (r.send_confirmed_by ? `by ${r.send_confirmed_by}` : '');
+    // when it was confirmed and what has been sent to the contact
+    const fmt = v => { const d = v ? new Date(v) : null; return d && !isNaN(d) ? d.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''; };
+    const sentList = (Array.isArray(r.mail_sent) ? r.mail_sent : []).filter(m => m && m.sent_at);
+    const parts = [];
+    if (r.send_confirmation) {
+      parts.push(`<span class="badge bg-success-subtle text-success-emphasis"><i class="ti ti-check"></i> Confirmed${r.send_confirmed_by ? ' by ' + escapeHtml(r.send_confirmed_by) : ''}${r.send_confirmed_at ? ' · ' + escapeHtml(fmt(r.send_confirmed_at)) : ''}</span>`);
+    } else {
+      parts.push('<span class="badge bg-light text-muted border">Not confirmed</span>');
+    }
+    if (sentList.length) {
+      const first = sentList[0], rem = sentList.length - 1;
+      parts.push(`<span class="badge bg-primary-subtle text-primary-emphasis"><i class="ti ti-send"></i> Sent to contact · ${escapeHtml(fmt(first.sent_at))}${rem ? ` + ${rem} reminder${rem > 1 ? 's' : ''}` : ''}</span>`);
+    } else if (['contacted', 'auto_replied', 'replied', 'received', 'meeting', 'offer', 'not_interested'].includes(r.followup_status || '')) {
+      // follow-up status says they have been contacted (e.g. set by hand, no mail record)
+      parts.push('<span class="badge bg-primary-subtle text-primary-emphasis"><i class="ti ti-send"></i> Contacted</span>');
+    } else {
+      parts.push('<span class="badge bg-light text-muted border">Nothing sent yet</span>');
+    }
+    document.getElementById('cc-sent-info').innerHTML = parts.join(' ');
     if (!cb._bound) { cb._bound = true; cb.addEventListener('change', () => patchField('send_confirmation', cb.checked)); }
   }
   document.getElementById('f-title').value = r.title || '';

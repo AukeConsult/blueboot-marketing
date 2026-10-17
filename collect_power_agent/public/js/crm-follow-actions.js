@@ -479,3 +479,27 @@ async function excludeFollowContact(gidx, ev) {
     alert('Could not exclude: ' + e.message);
   }
 }
+
+// Bulk exclude: every ticked contact gets status "excluded" (same API call as the single Exclude).
+async function excludeSelected() {
+  const rows = allRows.filter(r => r && selected.has(r.doc_path) && r.status !== 'excluded');
+  if (!rows.length) { alert('Nothing to exclude.'); return; }
+  const label = rows.length === 1 ? (rows[0].name || rows[0].email) : rows.length + ' contacts';
+  if (!await crmConfirmExclude(label, rows.length === 1 ? 'Exclude contact?' : 'Exclude ' + rows.length + ' contacts?')) return;
+  const btn = document.getElementById('ab-exclude-btn');
+  if (btn) btn.disabled = true;
+  const failed = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < rows.length) {
+      const r = rows[next++];
+      try { await crmSetContactStatus(r.campaign_id, r.doc_id, 'excluded'); r.status = 'excluded'; }
+      catch (e) { failed.push((r.name || r.email || r.doc_id) + ': ' + e.message); }
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  if (btn) btn.disabled = false;
+  clearSelection();
+  applyFilter();
+  if (failed.length) alert('Could not exclude ' + failed.length + ' contact(s):\n' + failed.slice(0, 5).join('\n'));
+}

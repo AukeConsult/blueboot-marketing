@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, request, jsonify
 from google.cloud.firestore_v1.base_query import FieldFilter
 _FF = FieldFilter  # short alias
-from handlers.shared import _get_db, _ok, _err, _accepted
+from handlers.shared import _get_db, _ok, _err, _accepted, _owner_allowed
 
 bp = Blueprint("contacts", __name__)
 
@@ -108,6 +108,9 @@ def get_campaign_contact(campaign_id, doc_id):
             "send_confirmed_at":   d.get("send_confirmed_at", "") or "",
             "send_confirm_note":   d.get("send_confirm_note", "") or "",
             "intro_sent":          bool(d.get("mail_sent")),
+            "mail_sent":           [{"sent_at": (m or {}).get("sent_at", "") or "",
+                                     "subject": (m or {}).get("subject", "") or ""}
+                                    for m in (d.get("mail_sent") or []) if isinstance(m, dict)],
             "phone":               d.get("phone", "") or "",
             "linkedin":            d.get("linkedin", "") or "",
             "twitter":             d.get("twitter", "") or "",
@@ -503,6 +506,8 @@ def followup_contacts():
         camp_map: dict = {}
         for doc in db.collection("campaigns").stream():
             d = doc.to_dict() or {}
+            if not _owner_allowed(d.get("owner")):
+                continue
             outreach_email = d.get("outreach_email_account", "")
             outreach_display_name = ""
             if outreach_email:
@@ -571,6 +576,8 @@ def followup_contacts():
                 continue
             parts = doc.reference.path.split("/")
             cid   = parts[1] if len(parts) >= 4 else campaign_id
+            if cid not in camp_map:
+                continue          # campaign of another owner (non-admin)
             info  = camp_map.get(cid, {})
             if _site_excluded(cid, d):
                 continue
@@ -639,6 +646,8 @@ def followup_meta():
         for doc in db.collection("campaigns").stream():
             d = doc.to_dict() or {}
             owner = d.get("owner", "")
+            if not _owner_allowed(owner):
+                continue
             campaigns.append({
                 "id":            doc.id,
                 "owner":         owner,

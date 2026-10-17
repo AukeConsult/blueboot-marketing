@@ -702,3 +702,189 @@ body { display: flex; flex-direction: column; }
 .btn-check:disabled + .act-st-btn { opacity: .6; }
 @keyframes act-spin { to { transform: rotate(360deg); } }
 .act-spin { display: inline-block; animation: act-spin .8s linear infinite; }
+
+
+/* ── Contact cell polish ──────────────────────────────────────────────────────
+   Header line: name + title + campaign chip on the left, status + actions grouped on the right.
+   Below: email / phone / website with even spacing. */
+.crm-contact-cell { padding-top: 10px !important; padding-bottom: 8px !important; }
+.crm-contact-main { align-items: center; gap: 12px; }
+.crm-contact-name, .crm-contact-name {
+  display: flex !important; flex-wrap: wrap; align-items: center; gap: 2px 10px; grid-template-columns: none;
+}
+.crm-contact-name-link { font-size: .92rem !important; font-weight: 600; line-height: 1.3; }
+.crm-contact-name .contact-title { margin: 0; line-height: 1.3; }
+.crm-contact-name .crm-campaign-meta { padding: 1px 9px; font-size: .7rem; font-weight: 500; line-height: 1.5; }
+.crm-contact-actions { gap: 6px; }
+.crm-contact-actions .bb-badge { font-size: .7rem; padding: .15rem .55rem; }
+.crm-contact-actions .crm-open-btn { padding: .12rem .6rem; font-size: .78rem; line-height: 1.5; }
+.crm-contact-actions .detail-btn {
+  width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid #e3e6ee; border-radius: 6px; background: #fff; font-size: .95rem;
+}
+.crm-contact-actions .detail-btn:hover { background: #eef0ff; border-color: #c7cdfa; }
+.crm-contact-actions .detail-btn.text-danger { border-color: #f5d0d0; }
+.crm-contact-actions .detail-btn.text-danger:hover { background: #fee2e2; border-color: #f0a8a8; }
+.crm-contact-meta { margin-top: 8px; gap: 4px 20px; font-size: .76rem; }
+.crm-contact-meta .crm-phone-meta .follow-input { font-size: .76rem; }
+
+
+/* ── Highlight contact card + comment together ────────────────────────────────
+   Whichever of the two rows is hovered (or has the comment box focused), both light up as one card. */
+.follow-data-row:hover > td,
+.follow-data-row:hover + .follow-comment-row > td,
+.follow-comment-row:hover > td,
+.follow-data-row:has(+ .follow-comment-row:hover) > td,
+.follow-comment-row:focus-within > td,
+.follow-data-row:has(+ .follow-comment-row:focus-within) > td,
+.follow-comment-row:has(+ .follow-history-row:hover) > td,
+.follow-data-row:has(+ .follow-comment-row + .follow-history-row:hover) > td {
+  background: #eef0ff !important;
+  box-shadow: none !important;
+}
+.follow-data-row:hover > td:first-child,
+.follow-data-row:has(+ .follow-comment-row:hover) > td:first-child,
+.follow-data-row:has(+ .follow-comment-row:focus-within) > td:first-child { border-left-color: #a5b4fc; }
+.follow-data-row:hover > td:last-child,
+.follow-data-row:has(+ .follow-comment-row:hover) > td:last-child,
+.follow-data-row:has(+ .follow-comment-row:focus-within) > td:last-child { border-right-color: #a5b4fc; }
+.follow-comment-row:hover > td,
+.follow-data-row:hover + .follow-comment-row > td,
+.follow-comment-row:focus-within > td { border-bottom-color: #a5b4fc !important; }
+.follow-comment-row:hover > td:first-child, .follow-data-row:hover + .follow-comment-row > td:first-child,
+.follow-comment-row:focus-within > td:first-child { border-left-color: #a5b4fc; }
+.follow-comment-row:hover > td:last-child, .follow-data-row:hover + .follow-comment-row > td:last-child,
+.follow-comment-row:focus-within > td:last-child { border-right-color: #a5b4fc; }
+/* the comment box stays white-ish so it still reads as an input */
+.follow-comment-row:hover .comment-row-input,
+.follow-data-row:hover + .follow-comment-row .comment-row-input { background: transparent; }
+
+
+/* ── One-line contact cell: name | email · phone · website | status + actions.
+   Wraps onto more lines only when the column gets narrow. ───────────────────── */
+.crm-contact-main { flex-wrap: wrap; align-items: center; gap: 6px 18px; }
+.crm-contact-main .crm-contact-name { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.crm-contact-main .crm-contact-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 18px;
+  flex: 1 1 340px; width: auto; margin-top: 0; min-width: 0; overflow: hidden;
+}
+.crm-contact-main .crm-contact-meta > span { flex: 0 1 auto; width: auto; max-width: 260px; }
+.crm-contact-main .crm-contact-meta .crm-phone-meta { flex: 0 1 130px; }
+.crm-contact-main .crm-contact-meta .crm-phone-meta .follow-input { width: 100%; }
+.crm-contact-main .crm-contact-actions { margin-left: auto; }
+@media (max-width: 991.98px) {
+  .crm-contact-main .crm-contact-meta { flex-basis: 100%; order: 3; }
+  .crm-contact-main .crm-contact-meta > span { max-width: 100%; flex: 1 1 100%; }
+}
+
+/* Narrower column: drop the optional bits first, so the line stays one line as long as possible. */
+@media (min-width: 992px) {
+  .crm-contact-main { container-type: inline-size; }
+  @container (max-width: 1040px) { .contact-title { display: none; } }
+  @container (max-width: 860px) {
+    .crm-contact-actions .crm-open-btn { font-size: 0; padding: .12rem .45rem; }
+    .crm-contact-actions .crm-open-btn i { font-size: .85rem; margin: 0 !important; }
+  }
+  @container (max-width: 700px) { .crm-contact-meta .crm-website-meta { display: none; } }
+}
+
+/* From 1200px up the line never wraps: the name, email and website shrink with "…" instead. */
+@media (min-width: 1200px) {
+  .crm-contact-main { flex-wrap: nowrap; gap: 6px 14px; }
+  .crm-contact-main .crm-contact-name { flex-wrap: nowrap; flex: 0 1 auto; min-width: 90px; overflow: hidden; }
+  .crm-contact-main .crm-contact-name .crm-contact-name-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto; }
+  .crm-contact-main .crm-contact-name .contact-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 100 auto; min-width: 0; }
+  .crm-contact-main .crm-contact-name .crm-campaign-meta { flex: 0 0 auto; }
+  .crm-contact-main .crm-contact-meta { flex: 1 1 0; flex-wrap: nowrap; gap: 2px 14px; min-width: 0; }
+  .crm-contact-main .crm-contact-meta > span { flex: 0 1 auto; min-width: 0; max-width: none; }
+  .crm-contact-main .crm-contact-meta .crm-email-meta { flex: 3 1 auto; }
+  .crm-contact-main .crm-contact-meta .crm-phone-meta { flex: 0 0 112px; }
+  .crm-contact-main .crm-contact-meta .crm-website-meta { flex: 2 1 auto; display: flex; }
+  .crm-contact-main .crm-contact-actions { flex: 0 0 auto; }
+}
+
+
+/* ── History panel: part of the card ─────────────────────────────────────────
+   When opened, data row + comment row + history row read as one card.       */
+.hist-toggle { padding: 2px 8px; gap: 5px; border: 1px solid #e5e7eb; background: #fff; font-weight: 600; }
+.hist-toggle .hist-label { font-size: .74rem; }
+.hist-toggle .hist-count { font-size: .72rem; padding: 0 6px; min-width: 18px; }
+.hist-toggle.is-open { color: var(--bb-accent); border-color: #a5b4fc; background: #eef0ff; }
+
+.follow-comment-row.hist-open > td { border-bottom: none !important; }
+.follow-history-row > td {
+  background: #fff;
+  border-top: none !important;
+  border-bottom: 2px solid #e5e7eb !important;
+  padding: 0 !important;
+}
+.follow-history-row > td:first-child { border-left: 2px solid #e5e7eb; border-right: 2px solid #e5e7eb; }
+.hist-row-td { padding: 0 12px 12px !important; }
+.hist-panel { border-top: 1px solid #e5e7eb; padding-top: 8px; }
+.hist-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.hist-title { font-size: .76rem; font-weight: 700; color: #374151; display: inline-flex; align-items: center; gap: 5px; }
+.hist-title-n { background: #e5e7eb; border-radius: 10px; padding: 0 7px; font-size: .7rem; }
+.hist-expand-all { background: none; border: none; color: var(--bb-accent); font-size: .74rem; cursor: pointer; padding: 0; }
+.hist-expand-all:hover { text-decoration: underline; }
+.hist-empty { font-size: .78rem; color: var(--bb-muted); padding: 4px 0; }
+.hist-list { gap: 4px; padding: 0; }
+.hist-entry { background: #fff; border: 1px solid #e5e7eb; border-left-width: 3px; user-select: text; }
+.hist-entry-summary { cursor: pointer; padding: 5px 8px; }
+.hist-entry-summary:hover { background: #f5f6ff; }
+.hist-entry-detail { padding: 6px 10px 8px; background: #fafafa; }
+.hist-entry-body { margin-top: 6px; padding: 8px 10px; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px;
+  white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; color: #374151; }
+.hist-k-note   { border-left-color: #9ca3af; }
+.hist-k-in     { border-left-color: #16a34a; }
+.hist-k-out    { border-left-color: #2563eb; }
+.hist-k-sent   { border-left-color: #7c3aed; }
+.hist-k-bounce { border-left-color: #dc2626; }
+.hist-type-note   { background: #f3f4f6; color: #4b5563; }
+.hist-type-sent   { background: #ede9fe; color: #6d28d9; }
+.hist-type-bounce { background: #fee2e2; color: #b91c1c; }
+.hist-type-badge { min-width: 62px; text-align: center; }
+.hist-entry-email-in, .hist-entry-email-out { background: #fff; }
+
+/* highlight: history row joins the hover / focus highlight */
+.follow-history-row:hover > td,
+.follow-comment-row:has(+ .follow-history-row:hover) > td,
+.follow-data-row:has(+ .follow-comment-row + .follow-history-row:hover) > td,
+.follow-data-row:has(+ .follow-comment-row:hover + .follow-history-row) > td,
+.follow-comment-row:hover + .follow-history-row > td,
+.follow-data-row:hover + .follow-comment-row + .follow-history-row > td,
+.follow-comment-row:focus-within + .follow-history-row > td { background: #eef0ff !important; }
+.follow-history-row:hover > td:first-child,
+.follow-comment-row:hover + .follow-history-row > td:first-child,
+.follow-data-row:hover + .follow-comment-row + .follow-history-row > td:first-child { border-left-color: #a5b4fc; border-right-color: #a5b4fc; }
+.follow-history-row:hover > td,
+.follow-comment-row:hover + .follow-history-row > td,
+.follow-data-row:hover + .follow-comment-row + .follow-history-row > td { border-bottom-color: #a5b4fc !important; }
+
+/* history polish: no inner scrollbar, no heavy coloured stripe */
+.hist-entry-body { max-height: none !important; overflow: visible !important; }
+.hist-entry { border-left-width: 1px !important; border-left-color: #e5e7eb !important; }
+.hist-entry-detail { overflow: visible; }
+
+/* header controls: labelled, grouped */
+.hdr-cap { font-size: .72rem; color: var(--bb-muted); white-space: nowrap; }
+.view-toggle .btn, #collapse-all-btn { display: inline-flex; align-items: center; gap: 4px; font-size: .76rem; white-space: nowrap; }
+.view-toggle { gap: 6px; }
+.view-toggle .btn.btn-primary { box-shadow: none; }
+#collapse-all-btn { border-color: var(--bb-border); }
+@media (max-width: 1100px) { .view-toggle .btn { font-size: 0; gap: 0; } .view-toggle .btn i { font-size: .95rem; } }
+
+/* history panel margins: inset from the card edges */
+.follow-history-row > td.hist-row-td { padding: 0 16px 14px !important; }
+.hist-panel { margin-top: 2px; padding-top: 12px; }
+.hist-head { margin-bottom: 10px; padding: 0 2px; }
+.hist-list { gap: 6px; }
+.hist-entry-summary { padding: 7px 12px; gap: 10px; }
+.hist-entry-detail { padding: 10px 14px 12px; }
+.follow-comment-row.hist-open > td { padding-bottom: 8px; }
+
+/* history panel: spacing set on the panel itself so no td rule can squash it */
+.hist-panel { margin: 4px 24px 18px !important; padding-top: 14px !important; box-sizing: border-box; }
+.hist-head { margin-bottom: 12px !important; }
+.hist-list { gap: 8px !important; }
+.hist-entry-summary { padding: 9px 14px !important; }
+.hist-empty { padding: 6px 0 4px; }

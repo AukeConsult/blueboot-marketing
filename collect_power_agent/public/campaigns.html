@@ -142,8 +142,9 @@ async function load() {
   document.getElementById('list-container').innerHTML = '<div class="text-center py-5" style="color:var(--bb-muted)"><div class="spinner-border spinner-border-sm me-2"></div>Loading…</div>';
   try {
     const d = await fetchJSON(BASE + '/api/crm/campaigns');
-    allCampaigns = d.campaigns || [];
+    allCampaigns = crmScopeCampaigns(d.campaigns || []);
     populateOwnerFilter();
+    crmLockOwnerSelect(document.getElementById('owner-filter'));
     filter();
   } catch(e) {
     const msg = e.message || 'Unknown error';
@@ -210,7 +211,7 @@ async function discover() {
   btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover campaigns';
 }
 
-load();
+requireAuth().then(load);
 </script>
 </body>
 </html>

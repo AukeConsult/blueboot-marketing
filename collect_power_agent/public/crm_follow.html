@@ -7,8 +7,8 @@
 <link rel="stylesheet" href="vendor/bootstrap.min.css">
 <link rel="stylesheet" href="vendor/tabler-icons.min.css">
 <link rel="stylesheet" href="vendor/quill.snow.css">
-<link rel="stylesheet" href="css/styles.css">
-<link rel="stylesheet" href="css/crm-follow.css">
+<link rel="stylesheet" href="css/styles.css?v=20261017o">
+<link rel="stylesheet" href="css/crm-follow.css?v=20261017o">
 </head>
 <body>
 
@@ -132,6 +132,10 @@
       <button class="btn btn-sm btn-outline-secondary py-0" id="ab-owner-btn" onclick="showAssignOwnerPanel()">
         <i class="ti ti-user-check me-1"></i>Assign owner
       </button>
+      <div class="action-bar-divider"></div>
+      <button class="btn btn-sm btn-outline-danger py-0" id="ab-exclude-btn" onclick="excludeSelected()">
+        <i class="ti ti-user-x me-1"></i>Exclude
+      </button>
     </div>
 
     <!-- Inline date panel -->
@@ -226,7 +230,17 @@
       <span class="fw-500 small"><i class="ti ti-list-check me-1 text-primary"></i>Contacts</span>
       <div class="d-flex align-items-center gap-2">
         <span id="focus-active-note" class="focus-active-note"><i class="ti ti-target"></i>Focus queue</span>
+        <button id="contacts-refresh" class="header-action-btn" title="Reload contacts" onclick="refreshWith('contacts-refresh', load)"><i class="ti ti-refresh"></i> Reload</button>
+        <div class="view-toggle" style="width:auto">
+          <button id="focus-queue-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleFocusQueue()" title="Show only contacts due today or overdue">
+            <i class="ti ti-target-arrow"></i> Due today
+          </button>
+          <button id="view-group-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleView('group')" title="Group contacts by status, owner, date…">
+            <i class="ti ti-layout-rows"></i> Grouped
+          </button>
+        </div>
         <div id="group-selectors" class="d-flex align-items-center gap-1" style="display:none">
+          <span class="hdr-cap">Group by</span>
           <select id="group-primary" class="group-select" title="Group by" onchange="applyFilter()">
             <option value="followup_status">Follow-up status</option>
             <option value="status">Contact status</option>
@@ -235,9 +249,9 @@
             <option value="owner">Owner</option>
             <option value="followup_owner">F/U owner</option>
           </select>
-          <i class="ti ti-chevron-right" style="color:var(--bb-muted);font-size:.7rem"></i>
+          <span class="hdr-cap">then by</span>
           <select id="group-secondary" class="group-select" title="Then by" onchange="applyFilter()">
-            <option value="">then by…</option>
+            <option value="">— none —</option>
             <option value="followup_status">Follow-up status</option>
             <option value="status">Contact status</option>
             <option value="followup_importance">Importance</option>
@@ -246,22 +260,15 @@
             <option value="followup_owner">F/U owner</option>
           </select>
           <button id="collapse-all-btn" class="collapse-all-btn" onclick="toggleAllGroups()" title="Collapse all groups">
-            <i class="ti ti-arrows-minimize"></i>
+            <i class="ti ti-arrows-minimize"></i> Collapse groups
           </button>
         </div>
-        <button id="contacts-refresh" class="header-action-btn" title="Reload contacts" onclick="refreshWith('contacts-refresh', load)"><i class="ti ti-refresh"></i></button>
         <div class="view-toggle">
-          <button id="focus-queue-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleFocusQueue()" title="Today / overdue focus queue">
-            <i class="ti ti-target-arrow"></i>
+          <button id="view-list-btn" class="btn btn-sm btn-primary" onclick="toggleView('list')" title="One flat list">
+            <i class="ti ti-list"></i> List
           </button>
-          <button id="view-group-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleView('group')" title="Grouped view">
-            <i class="ti ti-layout-rows"></i>
-          </button>
-          <button id="view-list-btn" class="btn btn-sm btn-primary" onclick="toggleView('list')" title="Full list view">
-            <i class="ti ti-list"></i>
-          </button>
-          <button id="side-panel-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleSidePanel()" title="Toggle contact detail panel">
-            <i class="ti ti-layout-sidebar-right"></i>
+          <button id="side-panel-btn" class="btn btn-sm btn-outline-secondary" onclick="toggleSidePanel()" title="Show / hide the contact detail panel">
+            <i class="ti ti-layout-sidebar-right"></i> Details
           </button>
         </div>
       </div>
@@ -373,18 +380,18 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="firebase-config.js"></script>
 <script src="js/auth.js"></script>
-<script src="js/crm-common.js"></script>
+<script src="js/crm-common.js?v=20261017o"></script>
 <script src="vendor/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
 <script src="js/mail-editor-component.js"></script>
-<script src="js/crm-defs.js"></script>
-<script src="js/crm-follow-data.js"></script>
-<script src="js/crm-follow-render.js"></script>
-<script src="js/crm-follow-side-panel.js"></script>
-<script src="js/crm-follow-actions.js"></script>
+<script src="js/crm-defs.js?v=20261017o"></script>
+<script src="js/crm-follow-data.js?v=20261017o"></script>
+<script src="js/crm-follow-render.js?v=20261017o"></script>
+<script src="js/crm-follow-side-panel.js?v=20261017o"></script>
+<script src="js/crm-follow-actions.js?v=20261017o"></script>
 <script src="js/crm-follow-history.js"></script>
 <script src="js/crm-follow-prefs.js"></script>
-<script src="js/crm-follow-sites.js"></script>
-<script src="js/crm-follow-activity.js"></script>
+<script src="js/crm-follow-sites.js?v=20261017o"></script>
+<script src="js/crm-follow-activity.js?v=20261017o"></script>
 </body>
 </html>
