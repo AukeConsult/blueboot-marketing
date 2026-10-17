@@ -447,7 +447,8 @@ function _filterContactRows(ignoreSite) {
     else if (fu && r.followup_status !== fu) return false;
     if (imp === '__none__') { if (r.followup_importance) return false; }
     else if (imp && r.followup_importance !== imp) return false;
-    if (cst && r.status !== cst) return false;
+    if (r.status === 'excluded') return false;   // excluded contacts never show here
+    if (cst && r.status !== cst && !(cst === 'active' && r.status === 'pending' && r.followup_status === 'auto_replied')) return false;
     if (due === 'none'    && r.followup_date) return false;
     if (due === 'overdue' && !(r.followup_date && r.followup_date < today)) return false;
     if (due === 'today'   && r.followup_date !== today) return false;

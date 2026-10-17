@@ -535,7 +535,7 @@ def worker(name, job_id):
         elif name == "outreach-send":
             from smart_mail.outreach_sender import send_outreach
             mode = str(body.get("mode") or "both").strip().lower()
-            modes = ["intro", "followup"] if mode == "both" else [mode]
+            modes = ["followup", "intro"] if mode == "both" else [mode]   # reminders first: they must not starve behind a big intro list
             passes = []
             import time as _time
             _deadline = _time.monotonic() + int(os.getenv("OUTREACH_MAX_RUN_SECONDS", "780"))   # shared by both passes

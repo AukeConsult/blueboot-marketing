@@ -506,7 +506,9 @@ def _contact_filter_from_args(args):
 def _contact_passes(d: dict, cid: str, camp_owner: str, f: dict, include_pending: bool) -> bool:
     """Same rules as /followup-contacts + the follow-up page filters, for one contact doc."""
     status = _contact_status(d.get("status"))
-    if status == "excluded" or (status == "pending" and not include_pending):
+    # A pending contact that answered with an auto-reply is shown in follow-up like an active one.
+    auto_pending = status == "pending" and str(d.get("followup_status") or "").strip().lower() == "auto_replied"
+    if status == "excluded" or (status == "pending" and not include_pending and not auto_pending):
         return False
     owner = f["owner"]
     if owner:
@@ -519,9 +521,11 @@ def _contact_passes(d: dict, cid: str, camp_owner: str, f: dict, include_pending
                 return False
         elif camp_owner != owner:
             return False
-    if f["cst"] and status != f["cst"]:
+    if f["cst"] and status != f["cst"] and not (auto_pending and f["cst"] == "active"):
         return False
     fstat = str(d.get("followup_status") or "").strip().lower()
+    if fstat == "received":       # retired: same as "replied"
+        fstat = "replied"
     if f["fu"] == "__none__":
         if fstat:
             return False

@@ -327,6 +327,34 @@ _UNKNOWN_ADDRESS_RE = re.compile(
     r"|(recipient|address|mailbox|user|account) (does not exist|doesn't exist|not found)"
     r"|unrouteable address|(host or )?domain (name )?(not found|does not exist)|\bno mx\b",
     re.IGNORECASE)
+# Follow-up statuses an incoming reply may overwrite with "replied" ("received" is the retired name).
+_REPLY_OVERWRITES = ("", "contacted", "auto_replied", "received", "replied")
+# Automatic replies (out of office, vacation, "we received your mail"): a machine answered, not the person.
+_AUTO_SUBJECT_RE = re.compile(
+    r"^\s*(auto(matic|matisk|matische|mated)?[ -]?(reply|response|svar|antwort|respuesta)"
+    r"|autosvar|autoreply|auto-reply|out of (the )?office|ooo\b|away from (my )?(desk|office)"
+    r"|on (annual |maternity |paternity )?(leave|vacation|holiday)|vacation reply"
+    r"|abwesenheit|abwesend|automatische antwort|frav[æe]r|fravaer|ferie|ikke til stede|"
+    r"r[ée]ponse automatique|absence du bureau|respuesta autom[áa]tica|risposta automatica)",
+    re.IGNORECASE)
+
+
+def _is_auto_reply(msg, subject: str = "") -> bool:
+    """True for an automatic reply: Auto-Submitted / autoreply headers, bulk precedence, or a typical subject."""
+    try:
+        auto = str(msg.get("Auto-Submitted", "") or "").strip().lower()
+        if auto and auto != "no":
+            return True
+        for h in ("X-Autoreply", "X-Autorespond", "X-Auto-Response-Suppress"):
+            if msg.get(h):
+                return True
+        if str(msg.get("Precedence", "") or "").strip().lower() in ("auto_reply", "auto-reply", "bulk", "junk"):
+            return True
+    except Exception:
+        pass
+    return bool(_AUTO_SUBJECT_RE.search(subject or ""))
+
+
 _SMTP_REASON_RE = re.compile(r"\b[45]\d\d[ -]\d\.\d{1,3}\.\d{1,3}[^\r\n]{0,160}")
 
 
@@ -663,6 +691,7 @@ def _process_account(
                     "original_message_ids": (_our_message_ids(raw.decode("utf-8", "ignore"))
                                              if message_type == "bounce" else []),
                     "email_date":         email_date,
+                    "auto_reply":         message_type == "reply" and _is_auto_reply(msg, subject),
                 }
 
                 processed += 1
@@ -1016,7 +1045,8 @@ def _apply_actions(
     history_entry = {
         "date":       received_at,
         "user":       from_addr,
-        "text":       f"Reply: {subject}" if subject else "Reply received",
+        "text":       (f"Auto-reply: {subject}" if message.get("auto_reply") else f"Reply: {subject}") if subject
+                      else ("Auto-reply received" if message.get("auto_reply") else "Reply received"),
         "type":       "EMAIL_IN",
         "message_id": message_id,
         "email_date": message.get("email_date", ""),
@@ -1041,6 +1071,14 @@ def _apply_actions(
     if _already_handled(cc_data, message_id, _entry_fingerprint(history_entry)):
         print(f"[reply_matcher]       action  → ALREADY HANDLED "
               f"(reply already in comment_history)")
+        # Repair: a reply stored by an older run may never have been marked "replied".
+        if not dry_run and (cc_data.get("followup_status") or "").strip().lower() in ("", "contacted"):
+            try:
+                fixed = "auto_replied" if message.get("auto_reply") else "replied"
+                cc_ref.update({"followup_status": fixed})
+                print(f"[reply_matcher]       action  → followup_status set to {fixed} (repair)")
+            except Exception as ex:
+                print(f"[reply_matcher]       action  → ✗ repair failed: {ex}")
         return "already_handled"
 
     if dry_run:
@@ -1048,34 +1086,45 @@ def _apply_actions(
               f"followup_status=replied  message_id={message_id!r}")
         if lead_id:
             print(f"[reply_matcher]       lead    → [dry-run] campaign_leads/{lead_id}: status=active")
-            print(f"[reply_matcher]       lead    → [dry-run] site followup_status=received if empty/contacted")
+            print(f"[reply_matcher]       lead    → [dry-run] site followup_status=replied if empty/contacted")
         return "dry_run"
 
     try:
         current = cc_data.get("status", "pending")
         update  = {**reply_payload, "comment_history": ArrayUnion([history_entry])}
         update["new_mail"] = True   # flag the contact as having new incoming mail
-        if current == "pending":
-            update["status"]          = "active"
-            update["followup_status"] = "replied"
+        # A reply is marked "replied", an automatic reply "auto_replied" (whatever the contact status), but never
+        # over a later stage somebody set by hand (meeting, offer, in work, not interested). An auto-reply
+        # never downgrades "replied" and leaves the contact status alone. A real reply turns pending into active.
+        is_auto = bool(message.get("auto_reply"))
+        new_fu  = "auto_replied" if is_auto else "replied"
+        cur_fu  = (cc_data.get("followup_status") or "").strip().lower()
+        if cur_fu in (("", "contacted") if is_auto else _REPLY_OVERWRITES):
+            update["followup_status"] = new_fu
+        if update.get("followup_status") == "auto_replied":
+            # the person has not really answered: stay (or go back to) pending so reminders continue
+            if current != "excluded":
+                update["status"] = "pending"          # always written on the contact document
+                status_change = f"{current} → pending"
+            else:
+                status_change = "excluded (no change)"
+        elif current == "pending" and not is_auto:
+            update["status"] = "active"
             status_change = "pending → active"
-        elif current == "active":
-            update["followup_status"] = "replied"
-            status_change = "active (no change)"
         else:
             status_change = f"{current} (no change)"
         cc_ref.update(update)
         print(f"[reply_matcher]       action  → UPDATED  "
-              f"campaign_contacts status={status_change}  followup_status=replied")
+              f"campaign_contacts status={status_change}  followup_status={update.get('followup_status', cur_fu)}")
     except Exception as ex:
         print(f"[reply_matcher]       action  → ✗ campaign_contacts failed: {ex}")
         return "error"          # the reply stays in the INBOX and is retried next run
 
-    # Site follow-up: a mail came in -> "received", but only over an empty / "contacted" status.
+    # Site follow-up: a mail came in -> "replied", but only over an empty / "contacted" status.
     if lead_id:
         from smart_mail.site_followup import set_site_followup
-        if set_site_followup(db, campaign_id, lead_id, "received", ("", "contacted"), received_at):
-            print(f"[reply_matcher]       lead    → followup_status=received  campaign_leads/{lead_id}")
+        if set_site_followup(db, campaign_id, lead_id, new_fu, ("", "contacted") if is_auto else ("", "contacted", "auto_replied", "received"), received_at):
+            print(f"[reply_matcher]       lead    → followup_status={new_fu}  campaign_leads/{lead_id}")
 
     if lead_id:
         try:
@@ -1157,10 +1206,10 @@ def _apply_bounce_actions(
     try:
         current = cc_data.get("status", "pending")
         update  = {"comment_history": ArrayUnion([history_entry])}
-        # Only a still-pending contact whose ADDRESS failed is excluded on bounce.
-        # active / replied / any other status, and bounces that are not an address failure
-        # (our mail was blocked, mailbox full ...), are only recorded in comment_history.
-        if current == "pending" and address_failed:
+        # A contact whose ADDRESS failed is excluded on bounce, whether pending or active
+        # (a mailed contact is "active", so it must be covered). Bounces that are not an address
+        # failure (our mail was blocked, mailbox full ...) are only recorded in comment_history.
+        if current != "excluded" and address_failed:
             update.update({
                 "status":          "excluded",
                 "bounce_detected": True,
@@ -1168,7 +1217,7 @@ def _apply_bounce_actions(
                 "bounce_reason":   bounce_reason,
             })
             print(f"[reply_matcher]       action  → UPDATED  "
-                  f"campaign_contacts status=pending → excluded  bounce_detected=True")
+                  f"campaign_contacts status={current!r} → excluded  bounce_detected=True")
         else:
             print(f"[reply_matcher]       action  → no status change  "
                   f"campaign_contacts status={current!r} (bounce noted in history only)")

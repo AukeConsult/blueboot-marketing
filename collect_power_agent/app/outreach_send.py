@@ -59,7 +59,7 @@ def _run(args) -> None:
     from smart_mail.outreach_sender import send_outreach
 
     dry_run = not args.send
-    modes = ["intro", "followup"] if args.mode == "both" else [args.mode]
+    modes = ["followup", "intro"] if args.mode == "both" else [args.mode]   # reminders first
     campaign_ids = _split_list_arg(args.campaigns)
 
     print(

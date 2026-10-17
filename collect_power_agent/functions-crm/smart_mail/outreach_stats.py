@@ -13,7 +13,6 @@ def refresh_campaign_stats(campaign_id: str):
     pending = 0
     excluded = 0
     contacted = 0
-    received = 0
     replied = 0
 
     for doc in contacts:
@@ -30,9 +29,7 @@ def refresh_campaign_stats(campaign_id: str):
 
         if followup_status == "contacted":
             contacted += 1
-        elif followup_status == "received":
-            received += 1
-        elif followup_status == "replied":
+        elif followup_status in ("replied", "received"):    # "received" is the retired name
             replied += 1
 
     db.collection("campaigns").document(campaign_id).update(
@@ -42,8 +39,7 @@ def refresh_campaign_stats(campaign_id: str):
             "pending_count": pending,
             "excluded_count": excluded,
             "contacted_count": contacted,
-            "received_count": received,
-            "reply_count": received + replied,
+            "reply_count": replied,
             "status_breakdown": {
                 "pending": pending,
                 "active": active,

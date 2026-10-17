@@ -99,6 +99,7 @@ function render() {
   const initials = (r.name || r.email || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
   document.getElementById('cc-avatar').textContent = initials;
   document.getElementById('cc-status-badge').innerHTML = statusBadgeHtml(r.status);
+  updateExcludeBtn();
   document.getElementById('f-name').value  = r.name  || '';
 
   // send confirmation (first mail only)
@@ -171,10 +172,28 @@ function bindSaves() {
     el._bound = true;
     el.addEventListener('change', () => patchField(el.dataset.field, el.value));
   });
+  const exb = document.getElementById('cc-exclude-btn');
+  if (exb && !exb._bound) { exb._bound = true; exb.addEventListener('click', toggleExclude); }
   const ack = document.getElementById('cc-ack-btn');
   if (ack && !ack._bound) { ack._bound = true; ack.addEventListener('click', () => patchField('new_mail', false, true)); }
   const sendBtn = document.getElementById('cc-mail-send');
   if (sendBtn && !sendBtn._bound) { sendBtn._bound = true; sendBtn.addEventListener('click', sendMail); }
+}
+
+function updateExcludeBtn() {
+  const b = document.getElementById('cc-exclude-btn');
+  if (!b) return;
+  const ex = (contact.status || 'pending') === 'excluded';
+  b.className = 'btn btn-sm align-self-center ' + (ex ? 'btn-danger' : 'btn-outline-danger');
+  b.innerHTML = `<i class="ti ti-user-x me-1"></i>${ex ? 'Remove exclusion' : 'Exclude'}`;
+}
+
+// Exclude / restore this contact (same status change as Exclude on the campaign page).
+async function toggleExclude() {
+  const ex = (contact.status || 'pending') === 'excluded';
+  if (!ex && !await crmConfirmExclude(contact.name || contact.email)) return;
+  await patchField('status', ex ? 'pending' : 'excluded');
+  updateExcludeBtn();
 }
 
 async function patchField(field, value, ackMail) {

@@ -60,8 +60,8 @@
       <select id="f-intro" class="form-select form-select-sm ms-auto" style="width:150px" onchange="render()" title="Filter on the Intro to send column">
         <option value="">Intro: all</option><option value="gt">Intro to send &gt; 0</option><option value="zero">Intro to send = 0</option>
       </select>
-      <select id="f-ready" class="form-select form-select-sm" style="width:150px" onchange="render()">
-        <option value="">All</option><option value="mine">My campaigns</option><option value="yes">Ready</option><option value="no">Not ready</option>
+      <select id="f-ready" class="form-select form-select-sm" style="width:210px" onchange="render()">
+        <option value="send" selected>Ready with mail to send</option><option value="">All</option><option value="mine">My campaigns</option><option value="yes">Ready</option><option value="no">Not ready</option>
       </select>
       <input id="f-search" class="form-control form-control-sm" style="width:180px" placeholder="Search…" oninput="render()">
     </div>
@@ -210,6 +210,7 @@ function render() {
   let list = DATA.campaigns || [];
   if (fi === 'gt') list = list.filter(c => (c.intro_sendable || 0) > 0);
   if (fi === 'zero') list = list.filter(c => !(c.intro_sendable || 0));
+  if (f === 'send') list = list.filter(c => c.ready && ((c.intro_sendable || 0) + (c.followup_sendable || 0)) > 0);
   if (f === 'mine') list = list.filter(isMine);
   if (f === 'yes') list = list.filter(c => c.ready);
   if (f === 'no') list = list.filter(c => !c.ready);
@@ -337,6 +338,9 @@ function smToggleAll(on) { smBoxes().forEach(b => { b.checked = on; }); smUpdate
 
 function smSelected() { return smBoxes().filter(b => b.checked).map(b => b.value); }
 
+// Nothing ticked means ALL ready campaigns with something to send.
+function smEffective() { const ids = smSelected(); return ids.length ? ids : smBoxes().map(b => b.value); }
+
 // What the run would send for the chosen campaigns, capped by each account's budget.
 function smEstimate(ids) {
   const per = {};
@@ -360,7 +364,7 @@ function smUpdate() {
   const all = document.getElementById('sm-all');
   all.checked = boxes.length > 0 && ids.length === boxes.length;
   all.indeterminate = ids.length > 0 && ids.length < boxes.length;
-  const e = smEstimate(ids);
+  const e = smEstimate(smEffective());
   document.getElementById('sm-budget').innerHTML = e.rows.length ? `
     <div class="small fw-500 mb-1"><i class="ti ti-battery me-1"></i>Budget check per mail account</div>
     <table class="table table-sm small mb-0"><thead class="bb-thead"><tr>
@@ -372,14 +376,15 @@ function smUpdate() {
       <td class="text-end">${r.waiting}</td><td class="text-end">${r.budget}</td>
       <td class="text-end fw-500">${r.send}</td><td class="text-end">${r.over}</td></tr>`).join('') +
     '</tbody></table>' : '';
-  document.getElementById('sm-summary').innerHTML = ids.length
-    ? `<b>${e.total}</b> mail(s) will be sent now` + (e.waiting > e.total ? ` <span class="text-warning">(${e.waiting - e.total} over budget stay waiting for a later run)</span>` : '')
-    : 'Select at least one campaign.';
-  document.getElementById('sm-go').disabled = !ids.length;   // the budget check is information only, it never blocks
+  document.getElementById('sm-summary').innerHTML =
+    (ids.length ? '' : '<span class="text-muted">None ticked: all ready campaigns. </span>') +
+    `<b>${e.total}</b> mail(s) will be sent now` + (e.waiting > e.total ? ` <span class="text-warning">(${e.waiting - e.total} over budget stay waiting for a later run)</span>` : '');
+  document.getElementById('sm-go').disabled = !boxes.length;   // the budget check is information only, it never blocks
 }
 
 async function smGo() {
-  const ids = smSelected();
+  const sel = smSelected();
+  const ids = sel.length ? sel : smBoxes().map(b => b.value);      // nothing ticked = all
   const allSelected = ids.length === smBoxes().length;
   if (!ids.length) return;
   SM_MODAL.hide();

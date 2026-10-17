@@ -12,7 +12,7 @@ bp = Blueprint("contacts", __name__)
 
 _FOLLOWUP_FIELDS = {"followup_date", "followup_status", "followup_comment", "followup_importance", "followup_owner"}
 _CONTACT_STATUSES = {"pending", "active", "excluded"}
-_FOLLOWUP_STATUSES = {"", "in_work", "contacted", "received", "auto_replied", "replied", "meeting", "offer", "not_interested"}
+_FOLLOWUP_STATUSES = {"", "in_work", "contacted", "auto_replied", "replied", "meeting", "offer", "not_interested"}
 
 _FOLLOWUP_HISTORY_TYPE = {
     "followup_status":     "STATUS",
@@ -39,9 +39,11 @@ def _followup_history_text(field: str, value: str) -> str:
 
 def _followup_status(value, *, strict: bool = False) -> str:
     status = str(value or "").strip().lower()
+    if status == "received":      # retired: same as "replied" (an incoming mail)
+        status = "replied"
     if status not in _FOLLOWUP_STATUSES:
         if strict:
-            raise ValueError("Invalid follow-up status. Must be one of: in_work, contacted, received, auto_replied, replied, meeting, offer, not_interested.")
+            raise ValueError("Invalid follow-up status. Must be one of: in_work, contacted, auto_replied, replied, meeting, offer, not_interested.")
         return ""
     return status
 
@@ -165,8 +167,14 @@ def update_campaign_contact(campaign_id, doc_id):
 
         ref = (db.collection("campaigns").document(campaign_id)
                  .collection("campaign_contacts").document(doc_id))
-        if not ref.get().exists:
+        snap0 = ref.get()
+        if not snap0.exists:
             return _err(f"Contact '{doc_id}' not found in campaign '{campaign_id}'", 404)
+        # Marked as auto-replied: the person has not really answered, so the contact is set back
+        # to pending (reminders continue). Excluded stays excluded; an explicit status in the call wins.
+        if (update.get("followup_status") == "auto_replied" and "status" not in update
+                and str((snap0.to_dict() or {}).get("status") or "").strip().lower() != "excluded"):
+            update["status"] = "pending"          # always written on the contact document
 
         changed_fu = [f for f in _FOLLOWUP_FIELDS if f in update]
         from flask import g as _g
@@ -521,6 +529,34 @@ def followup_contacts():
                   .stream()
             )
 
+        # Contacts of an excluded site are never shown either (lead ids / hosts per campaign).
+        excluded_sites: dict = {}
+
+        from handlers.campaigns import _host_of
+
+        def _site_excluded(cid: str, d: dict) -> bool:
+            if cid not in excluded_sites:
+                ids, hosts = set(), set()
+                try:
+                    for ldoc in (db.collection("campaigns").document(cid)
+                                   .collection("campaign_leads").stream()):
+                        ld = ldoc.to_dict() or {}
+                        if (ld.get("status") or "").strip().lower() != "excluded":
+                            continue
+                        ids.add(ld.get("lead_id") or ldoc.id)
+                        h = _host_of(ld.get("domain") or ld.get("website"))
+                        if h:
+                            hosts.add(h)
+                except Exception:
+                    pass
+                excluded_sites[cid] = (ids, hosts)
+            ids, hosts = excluded_sites[cid]
+            if not ids:
+                return False
+            if d.get("lead_id") and d["lead_id"] in ids:
+                return True
+            return bool(hosts and (_host_of(d.get("website")) in hosts or _host_of(d.get("domain")) in hosts))
+
         contacts = []
         for doc in contacts_iter:
             d     = doc.to_dict() or {}
@@ -529,11 +565,15 @@ def followup_contacts():
             # pending only shown when include_pending is set
             if status == "excluded":
                 continue
-            if not include_pending and status == "pending":
+            # (a pending contact that answered with an auto-reply is shown too)
+            if (not include_pending and status == "pending"
+                    and _followup_status(d.get("followup_status", "")) != "auto_replied"):
                 continue
             parts = doc.reference.path.split("/")
             cid   = parts[1] if len(parts) >= 4 else campaign_id
             info  = camp_map.get(cid, {})
+            if _site_excluded(cid, d):
+                continue
             if owner_filter:
                 fu_owner   = d.get("followup_owner", "") or ""
                 camp_owner = info.get("owner", "") or ""

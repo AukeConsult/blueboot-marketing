@@ -102,8 +102,11 @@ function _actCardHtml(r, last) {
       </div>
       <div class="ms-auto d-flex align-items-center gap-2 flex-wrap">
         ${due}
-        <button class="btn btn-sm btn-outline-secondary py-0" onclick="openActivityContact(${gidx})">
-          <i class="ti ti-external-link me-1"></i>Open</button>
+        <button class="btn btn-sm btn-outline-danger py-0" onclick="excludeFollowContact(${gidx}, event)"
+          title="Exclude contact (hide from follow-up and campaign)"><i class="ti ti-user-x me-1"></i>Exclude</button>
+        <a class="btn btn-sm btn-outline-secondary py-0"
+           href="crm-contact.html?campaign=${encodeURIComponent(r.campaign_id)}&doc=${encodeURIComponent(r.doc_id)}">
+          <i class="ti ti-external-link me-1"></i>Open</a>
       </div>
     </div>
     <div class="btn-group btn-group-sm act-st-group" role="group" aria-label="Follow-up status">${radios}</div>

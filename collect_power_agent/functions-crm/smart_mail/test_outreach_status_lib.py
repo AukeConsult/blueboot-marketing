@@ -153,7 +153,7 @@ class SiteContactedTest(unittest.TestCase):
 
 
 class SiteReceivedTest(unittest.TestCase):
-    def test_received_only_over_empty_or_contacted(self):
+    def test_replied_only_over_empty_or_contacted(self):
         from smart_mail.site_followup import set_site_followup
         base = "campaigns/c/campaign_leads/"
         db = FakeDB({base + "a": {}, base + "b": {"followup_status": "contacted"},
@@ -161,9 +161,9 @@ class SiteReceivedTest(unittest.TestCase):
         updates = {}
         DocRef.update = lambda self, data: updates.__setitem__(self.path, data)
         try:
-            ok = {k: set_site_followup(db, "c", k, "received", ("", "contacted")) for k in "abcd"}
+            ok = {k: set_site_followup(db, "c", k, "replied", ("", "contacted")) for k in "abcd"}
         finally:
             del DocRef.update
         self.assertEqual(ok, {"a": True, "b": True, "c": False, "d": True})
-        self.assertEqual(updates[base + "b"]["followup_status"], "received")
+        self.assertEqual(updates[base + "b"]["followup_status"], "replied")
         self.assertNotIn(base + "c", updates)

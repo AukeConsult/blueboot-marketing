@@ -460,3 +460,22 @@ async function syncAllEmails() {
   }
 }
 
+
+// Exclude a contact (same as "Exclude" in the campaign page): saved on the campaign contact,
+// then hidden from the follow-up lists at once.
+async function excludeFollowContact(gidx, ev) {
+  if (ev) ev.stopPropagation();
+  const r = allRows[gidx];
+  if (!r) return;
+  if (!await crmConfirmExclude(r.name || r.email)) return;
+  const prev = r.status;
+  r.status = 'excluded';
+  applyFilter();
+  try {
+    await crmSetContactStatus(r.campaign_id, r.doc_id, 'excluded');
+  } catch (e) {
+    r.status = prev;
+    applyFilter();
+    alert('Could not exclude: ' + e.message);
+  }
+}

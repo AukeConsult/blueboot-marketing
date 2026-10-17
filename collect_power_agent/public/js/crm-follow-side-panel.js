@@ -516,6 +516,7 @@ async function saveField(el) {
 
   try {
     await apiPatchContact(row, { [field]: value });
+    if (field === 'followup_status' && value === 'auto_replied' && row.status !== 'excluded') row.status = 'pending';  // same as the server
 
     const user = (window._authUser && (window._authUser.email || window._authUser.uid)) || 'unknown';
     const entry = buildLocalHistoryEntry(field, value, user);

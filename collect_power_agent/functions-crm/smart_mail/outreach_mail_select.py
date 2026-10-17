@@ -482,6 +482,9 @@ def read_outreach(
         print(f"[outreach_mail_select] {unconfirmed_skipped} intro contact(s) skipped -- "
               f"not confirmed to send", flush=True)
     if not by_campaign:
+        print(f"[outreach_mail_select] mode={mode}: no pending contact"
+              + (" with a sent mail" if mode == "followup" else " without a sent mail")
+              + (f" in {sorted(campaign_filter)}" if campaign_filter else " in any campaign"), flush=True)
         return []
 
     # Step 1b: filter contacts whose site (campaign_lead) exists but is not pending.
@@ -550,7 +553,11 @@ def read_outreach(
 
         if mode == "followup":
             now = datetime.now(timezone.utc)
+            n_before = len(contacts)
             contacts = [c for c in contacts if _next_step_due(c, campaign, now)]
+            print(f"[outreach_mail_select] campaign '{campaign_id}' status={campaign.status!r}: "
+                  f"{n_before} mailed pending contact(s), {len(contacts)} reminder(s) due "
+                  f"(sequence has {len(campaign.mail_sequence)} step(s))", flush=True)
             if not contacts:
                 continue
 
@@ -655,7 +662,6 @@ def confirm_sent(
     if not message_id:
         message_id = make_msgid()
     subject_text = (subject or "").strip()
-    history_text = "Mail sent: %s" % subject_text if subject_text else "Mail sent: %s" % mail_type
     db = _get_db()
     contact_ref = (
         db.collection("campaigns")
@@ -665,6 +671,12 @@ def confirm_sent(
     )
     contact_doc = contact_ref.get()
     contact_data = contact_doc.to_dict() if contact_doc.exists else {}
+
+    # Name the step in the history line, so the intro and each reminder can be told apart
+    # (reminders often share the intro's subject).
+    n_before = len((contact_data or {}).get("mail_sent") or [])
+    step_label = "intro" if n_before == 0 else f"reminder {n_before}"
+    history_text = f"Mail sent ({step_label}): {subject_text}" if subject_text else f"Mail sent ({step_label}): {mail_type}"
 
     # --- build the single update dict ---
     update: dict = {

@@ -9,7 +9,6 @@ const FU_STATUSES = [
   { value: '',               label: '— none —' },
   { value: 'in_work',        label: 'In-work' },
   { value: 'contacted',      label: 'Contacted' },
-  { value: 'received',       label: 'Received' },
   { value: 'auto_replied',   label: 'Auto-replied' },
   { value: 'replied',        label: 'Replied' },
   { value: 'meeting',        label: 'Meeting' },

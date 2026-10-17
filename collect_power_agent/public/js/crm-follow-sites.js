@@ -48,7 +48,7 @@ const _SITE_FU_STATUSES = [
   {value:'',              label:'— no status —'},
   {value:'to_contact',    label:'To contact'},
   {value:'contacted',     label:'Contacted'},
-  {value:'received',      label:'Received'},
+  {value:'replied',       label:'Replied'},
   {value:'auto_replied',  label:'Auto-replied'},
   {value:'in_work',       label:'In work'},
   {value:'not_interested',label:'Not interested'},
@@ -161,7 +161,7 @@ function renderSitesTabTable(leads) {
   tbody.innerHTML = leads.map(l => {
     const idx    = _allSiteLeads.indexOf(l);
     const fuOpts = _SITE_FU_STATUSES.map(s =>
-      `<option value="${s.value}"${l.followup_status === s.value ? ' selected' : ''}>${escapeHtml(s.label)}</option>`
+      `<option value="${s.value}"${(l.followup_status === 'received' ? 'replied' : l.followup_status) === s.value ? ' selected' : ''}>${escapeHtml(s.label)}</option>`
     ).join('');
     const impCls = (IMPORTANCE_LEVELS.find(i => i.value === (l.followup_importance||'')) || IMPORTANCE_LEVELS[0]).cls;
     const impOpts = IMPORTANCE_LEVELS.map(i =>

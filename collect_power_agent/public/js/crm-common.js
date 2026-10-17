@@ -354,3 +354,48 @@ const PUBLIC_PAGES = new Set(['login.html', 'register.html', 'index.html', 'doc-
 })();
 
 // Back button: go to the previous page if there i
+
+// ── Exclude a campaign contact (shared by the follow-up lists and the contact page) ──────────
+// One confirm dialog (centered Bootstrap modal) and one API call, so every place behaves the same.
+function crmConfirmExclude(label) {
+  return new Promise(resolve => {
+    const wrap = document.createElement('div');
+    wrap.className = 'modal fade';
+    wrap.tabIndex = -1;
+    wrap.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow">
+          <div class="modal-body text-center p-4">
+            <div class="mx-auto mb-3 d-flex align-items-center justify-content-center rounded-circle"
+                 style="width:52px;height:52px;background:#fee2e2;color:#b91c1c;font-size:1.6rem">
+              <i class="ti ti-user-x"></i></div>
+            <h6 class="mb-1">Exclude contact?</h6>
+            <div class="fw-semibold small text-break mb-2"></div>
+            <p class="small text-muted mb-3">Hidden from follow-up and never gets mail.
+              You can restore it from the campaign page.</p>
+            <div class="d-flex gap-2 justify-content-center">
+              <button type="button" class="btn btn-sm btn-outline-secondary px-3" data-act="no">Cancel</button>
+              <button type="button" class="btn btn-sm btn-danger px-3" data-act="yes">Exclude</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    wrap.querySelector('.fw-semibold').textContent = label || '';
+    document.body.appendChild(wrap);
+    const modal = new bootstrap.Modal(wrap);
+    let answer = false;
+    wrap.querySelector('[data-act="yes"]').onclick = () => { answer = true; modal.hide(); };
+    wrap.querySelector('[data-act="no"]').onclick  = () => modal.hide();
+    wrap.addEventListener('hidden.bs.modal', () => { wrap.remove(); resolve(answer); });
+    modal.show();
+    setTimeout(() => wrap.querySelector('[data-act="no"]').focus(), 250);
+  });
+}
+
+function crmSetContactStatus(campaignId, docId, status, extra) {
+  return fetchJSON(BASE + '/api/crm/campaigns/' + encodeURIComponent(campaignId)
+    + '/contacts/' + encodeURIComponent(docId), {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, ...(extra || {}) }),
+  });
+}

@@ -68,21 +68,47 @@ PROTECTED_CONTACT_FIELDS = {
     "send_confirmation", "send_confirmed_by", "send_confirmed_at", "send_confirm_note",
 }
 
-COUNTRY_CODES = {
-    "denmark": "DK", "finland": "FI", "germany": "DE", "sweden": "SE",
-    "norway": "NO", "united kingdom": "UK", "uk": "UK", "great britain": "UK",
-    "gb": "UK", "england": "UK", "united states": "US", "usa": "US", "us": "US",
-    "netherlands": "NL", "france": "FR", "spain": "ES", "italy": "IT",
-    "ireland": "IE", "poland": "PL", "canada": "CA", "australia": "AU",
-    "china": "CN", "mainland china": "CN", "prc": "CN", "peoples republic of china": "CN",
-    "people's republic of china": "CN",
+# code -> (name, extra spellings). "UK" is used instead of ISO "GB" (existing campaigns are BS_UK).
+_COUNTRIES = {
+    "DK": ("Denmark", ()), "FI": ("Finland", ()), "DE": ("Germany", ("deutschland",)),
+    "SE": ("Sweden", ("sverige",)), "NO": ("Norway", ("norge",)),
+    "UK": ("United Kingdom", ("uk", "great britain", "gb", "england", "scotland", "wales",
+                              "northern ireland")),
+    "US": ("United States", ("usa", "us", "united states of america", "u.s.", "u.s.a.")),
+    "NL": ("Netherlands", ("the netherlands", "holland", "nederland")),
+    "FR": ("France", ()), "ES": ("Spain", ("espana", "españa")), "IT": ("Italy", ("italia",)),
+    "IE": ("Ireland", ()), "PL": ("Poland", ("polska",)), "CA": ("Canada", ()),
+    "AU": ("Australia", ()),
+    "CN": ("China", ("mainland china", "prc", "peoples republic of china",
+                     "people's republic of china")),
+    "BR": ("Brazil", ("brasil",)), "PT": ("Portugal", ()), "BE": ("Belgium", ("belgie", "belgique")),
+    "CH": ("Switzerland", ("schweiz", "suisse")), "AT": ("Austria", ("osterreich", "österreich")),
+    "LU": ("Luxembourg", ()), "IS": ("Iceland", ()), "EE": ("Estonia", ()), "LV": ("Latvia", ()),
+    "LT": ("Lithuania", ()), "CZ": ("Czech Republic", ("czechia",)), "SK": ("Slovakia", ()),
+    "HU": ("Hungary", ()), "RO": ("Romania", ()), "BG": ("Bulgaria", ()), "GR": ("Greece", ()),
+    "HR": ("Croatia", ()), "SI": ("Slovenia", ()), "RS": ("Serbia", ()), "UA": ("Ukraine", ()),
+    "MT": ("Malta", ()), "CY": ("Cyprus", ()), "TR": ("Turkey", ("turkiye", "türkiye")),
+    "RU": ("Russia", ("russian federation",)), "IL": ("Israel", ()),
+    "AE": ("United Arab Emirates", ("uae", "dubai")), "SA": ("Saudi Arabia", ()),
+    "QA": ("Qatar", ()), "KW": ("Kuwait", ()), "EG": ("Egypt", ()), "MA": ("Morocco", ()),
+    "ZA": ("South Africa", ()), "NG": ("Nigeria", ()), "KE": ("Kenya", ()), "GH": ("Ghana", ()),
+    "IN": ("India", ()), "PK": ("Pakistan", ()), "BD": ("Bangladesh", ()), "LK": ("Sri Lanka", ()),
+    "JP": ("Japan", ()), "KR": ("South Korea", ("korea", "republic of korea")),
+    "TW": ("Taiwan", ()), "HK": ("Hong Kong", ()), "SG": ("Singapore", ()),
+    "MY": ("Malaysia", ()), "TH": ("Thailand", ()), "VN": ("Vietnam", ("viet nam",)),
+    "ID": ("Indonesia", ()), "PH": ("Philippines", ()), "NZ": ("New Zealand", ()),
+    "MX": ("Mexico", ("méxico",)), "AR": ("Argentina", ()), "CL": ("Chile", ()),
+    "CO": ("Colombia", ()), "PE": ("Peru", ()), "UY": ("Uruguay", ()), "VE": ("Venezuela", ()),
+    "EC": ("Ecuador", ()), "CR": ("Costa Rica", ()), "PA": ("Panama", ()),
 }
-COUNTRY_NAMES = {
-    "DK": "Denmark", "FI": "Finland", "DE": "Germany", "SE": "Sweden",
-    "NO": "Norway", "UK": "United Kingdom", "US": "United States",
-    "NL": "Netherlands", "FR": "France", "ES": "Spain", "IT": "Italy",
-    "IE": "Ireland", "PL": "Poland", "CA": "Canada", "AU": "Australia", "CN": "China",
-}
+COUNTRY_CODES = {}
+COUNTRY_NAMES = {}
+for _cc, (_nm, _alt) in _COUNTRIES.items():
+    COUNTRY_NAMES[_cc] = _nm
+    COUNTRY_CODES[_nm.lower()] = _cc
+    COUNTRY_CODES[_cc.lower()] = _cc
+    for _a in _alt:
+        COUNTRY_CODES[_a.lower()] = _cc
 
 _HEADERS = {
     "priority": "priority", "company": "company", "country": "country",

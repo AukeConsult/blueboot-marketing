@@ -163,6 +163,75 @@ class TestApplyReply(unittest.TestCase):
         self.assertEqual(cc["comment_history"][0]["type"], "EMAIL_IN")
         self.assertNotIn("email_contacts", db.collections_accessed)
 
+    def _reply(self, contact, mid="<r1>"):
+        db = FakeDB(docstore={("CAMP1", "campaign_contacts", "c1"): contact})
+        msg = {"message_id": mid, "subject": "Re: hi", "from_email": "a@b.com",
+               "body_text": "hello", "received_at": "2026-06-23T00:00:00+00:00"}
+        out = rm._apply_actions(db, "c1", "CAMP1", None, None, msg, "doc_id")
+        return out, db.docstore[("CAMP1", "campaign_contacts", "c1")]
+
+    def test_excluded_contact_reply_is_marked_replied_but_stays_excluded(self):
+        out, cc = self._reply({"status": "excluded"})
+        self.assertEqual(out, "updated")
+        self.assertEqual(cc["status"], "excluded")
+        self.assertEqual(cc["followup_status"], "replied")
+
+    def test_reply_does_not_overwrite_a_later_stage(self):
+        _, cc = self._reply({"status": "active", "followup_status": "meeting"})
+        self.assertEqual(cc["followup_status"], "meeting")
+
+    def test_already_handled_reply_repairs_missing_replied(self):
+        out, cc = self._reply({"status": "active", "followup_status": "contacted",
+                               "comment_history": [{"type": "EMAIL_IN", "message_id": "<r1>"}]})
+        self.assertEqual(out, "already_handled")
+        self.assertEqual(cc["followup_status"], "replied")
+
+    def _auto(self, contact, auto=True):
+        db = FakeDB(docstore={("CAMP1", "campaign_contacts", "c1"): contact})
+        msg = {"message_id": "<a1>", "subject": "Out of office", "from_email": "a@b.com",
+               "body_text": "I am away", "received_at": "2026-06-23T00:00:00+00:00", "auto_reply": auto}
+        rm._apply_actions(db, "c1", "CAMP1", None, None, msg, "doc_id")
+        return db.docstore[("CAMP1", "campaign_contacts", "c1")]
+
+    def test_auto_reply_keeps_pending_and_marks_auto_replied(self):
+        cc = self._auto({"status": "pending", "followup_status": "contacted"})
+        self.assertEqual(cc["status"], "pending")
+        self.assertEqual(cc["followup_status"], "auto_replied")
+        self.assertTrue(cc["comment_history"][0]["text"].startswith("Auto-reply"))
+
+    def test_auto_reply_sends_an_active_contact_back_to_pending(self):
+        cc = self._auto({"status": "active", "followup_status": "contacted"})
+        self.assertEqual(cc["status"], "pending")
+        self.assertEqual(cc["followup_status"], "auto_replied")
+
+    def test_auto_reply_writes_status_even_when_missing(self):
+        cc = self._auto({"followup_status": ""})
+        self.assertEqual(cc["status"], "pending")
+
+    def test_auto_reply_leaves_excluded_alone(self):
+        cc = self._auto({"status": "excluded", "followup_status": ""})
+        self.assertEqual(cc["status"], "excluded")
+
+    def test_auto_reply_never_downgrades_replied(self):
+        cc = self._auto({"status": "active", "followup_status": "replied"})
+        self.assertEqual(cc["followup_status"], "replied")
+        self.assertEqual(cc["status"], "active")
+
+    def test_real_reply_replaces_auto_replied(self):
+        cc = self._auto({"status": "active", "followup_status": "auto_replied"}, auto=False)
+        self.assertEqual(cc["followup_status"], "replied")
+
+    def test_auto_reply_detection(self):
+        import email
+        def m(h, subj="Hi"): return email.message_from_string(h + "\nSubject: " + subj + "\n\nbody")
+        self.assertTrue(rm._is_auto_reply(m("Auto-Submitted: auto-replied")))
+        self.assertTrue(rm._is_auto_reply(m("X-Autoreply: yes")))
+        self.assertTrue(rm._is_auto_reply(m("From: a@b.no"), "Automatic reply: hello"))
+        self.assertTrue(rm._is_auto_reply(m("From: a@b.no"), "Abwesenheitsnotiz"))
+        self.assertTrue(rm._is_auto_reply(m("From: a@b.no"), "Out of Office"))
+        self.assertFalse(rm._is_auto_reply(m("Auto-Submitted: no"), "Re: your offer"))
+        self.assertFalse(rm._is_auto_reply(m("From: a@b.no"), "Re: hello"))
+
     def test_idempotent_skip(self):
         existing = {"status": "active",
                     "comment_history": [{"type": "EMAIL_IN", "message_id": "<dup>"}]}
@@ -182,15 +251,15 @@ class TestApplyBounce(unittest.TestCase):
         self.assertEqual(cc["status"], "excluded")
         self.assertTrue(cc["bounce_detected"])
 
-    def test_active_is_left_as_is(self):
+    def test_active_contact_is_excluded_too(self):
         db = FakeDB(docstore={("CAMP1", "campaign_contacts", "c1"): {"status": "active"}})
         msg = {"message_id": "<b2>", "subject": "Undeliverable",
                "received_at": "2026-06-23T00:00:00+00:00"}
         rm._apply_bounce_actions(db, "c1", "CAMP1", None, None, msg)
         cc = db.docstore[("CAMP1", "campaign_contacts", "c1")]
-        self.assertEqual(cc["status"], "active")                  # unchanged
-        self.assertNotIn("bounce_detected", cc)                   # no exclusion fields
-        self.assertEqual(cc["comment_history"][0]["type"], "BOUNCE")  # but logged
+        self.assertEqual(cc["status"], "excluded")
+        self.assertTrue(cc["bounce_detected"])
+        self.assertEqual(cc["comment_history"][0]["type"], "BOUNCE")  # and logged
         self.assertNotIn("email_contacts", db.collections_accessed)
 
 
@@ -385,8 +454,8 @@ class TestBounceKind(unittest.TestCase):
     def test_reason_is_the_smtp_line(self):
         self.assertTrue(rm._bounce_reason(self.BLOCKED, "Mail delivery failed").startswith("550 5.7.1"))
 
-    def _contact_after(self, kind):
-        db = FakeDB(docstore={("C", "campaign_contacts", "c1"): {"status": "pending"}})
+    def _contact_after(self, kind, status="pending"):
+        db = FakeDB(docstore={("C", "campaign_contacts", "c1"): {"status": status}})
         rm._apply_bounce_actions(db, "c1", "C", None, None,
                                  {"message_id": "<b1>", "subject": "x", "bounce_kind": kind,
                                   "received_at": "2026-10-15T00:00:00+00:00"})
@@ -394,6 +463,9 @@ class TestBounceKind(unittest.TestCase):
 
     def test_unknown_address_excludes_the_contact(self):
         self.assertEqual(self._contact_after("unknown_address")["status"], "excluded")
+
+    def test_unknown_address_excludes_an_active_contact(self):
+        self.assertEqual(self._contact_after("unknown_address", "active")["status"], "excluded")
 
     def test_blocked_mail_keeps_the_contact(self):
         self.assertEqual(self._contact_after("other")["status"], "pending")

@@ -4,7 +4,8 @@
 // FU_STATUSES and IMPORTANCE_LEVELS are defined in crm-defs.js (shared).
 
 function currentFollowupStatus(value) {
-  const st = String(value || '').trim().toLowerCase();
+  let st = String(value || '').trim().toLowerCase();
+  if (st === 'received') st = 'replied';   // retired name
   return FU_STATUSES.some(s => s.value === st) ? st : '';
 }
 
@@ -78,6 +79,9 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
               title="Open full contact page">
               <i class="ti ti-external-link me-1"></i>Open
             </a>
+            <button class="detail-btn text-danger" onclick="excludeFollowContact(${gidx}, event)" title="Exclude contact (hide from follow-up and campaign)">
+              <i class="ti ti-user-x"></i>
+            </button>
             <button class="detail-btn" onclick="openSidePanelFromButton(${gidx}, event)" title="Quick view (side panel)">
               <i class="ti ti-layout-sidebar-right"></i>
             </button>
