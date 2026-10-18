@@ -715,6 +715,7 @@ def confirm_sent(
     })
 
     # 2 - write contact row
+    update["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     contact_ref.update(update)
 
     # The site the contact belongs to: "contacted" unless it already has a follow-up status.

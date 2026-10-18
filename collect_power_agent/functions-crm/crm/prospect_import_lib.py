@@ -649,7 +649,7 @@ def apply_plan(db, plan: dict, *, source_files: list[str]) -> dict:
         for i in range(0, len(ops), BATCH_SIZE):
             batch = db.batch()
             for op in ops[i:i + BATCH_SIZE]:
-                batch.set(op.ref, op.payload, merge=True)
+                batch.set(op.ref, {**op.payload, "last_updated_at": now}, merge=True)
             batch.commit()
             n += len(ops[i:i + BATCH_SIZE])
         return n

@@ -519,14 +519,14 @@ def _write_contacts(db, campaign_id: str, lead_id: str,
             doc["name_raw"] = raw_name              # audit trail of what was cleaned
         if cid in existing:
             batch.update(contacts_col.document(cid),
-                         {k: v for k, v in doc.items() if k not in _PROTECTED})
+                         {**{k: v for k, v in doc.items() if k not in _PROTECTED}, "last_updated_at": now})
             upd_count += 1
         else:
-            doc.update({"status": "pending", "created_at": now})
+            doc.update({"status": "pending", "created_at": now, "last_updated_at": now})
             batch.set(contacts_col.document(cid), doc)
             existing.add(cid)
             new_count += 1
-    lead_upd = {"email_scraped_at": now}
+    lead_upd = {"email_scraped_at": now, "last_updated_at": now}
     if people:
         lead_upd["people"] = people
     batch.update(leads_ref, lead_upd)
@@ -702,7 +702,7 @@ async def _run(db, campaign_id: str, leads: list,
                                       .document(campaign_id)
                                       .collection(CAMPAIGN_LEADS_SUB)
                                       .document(_lid)
-                                      .update({"page_count": _pc})
+                                      .update({"page_count": _pc, "last_updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
                                 ),
                             ),
                             timeout=WRITE_TIMEOUT,
@@ -731,7 +731,7 @@ async def _run(db, campaign_id: str, leads: list,
                                       .document(campaign_id)
                                       .collection(CAMPAIGN_LEADS_SUB)
                                       .document(_lid)
-                                      .update({"email_scraped_at": now, **({"people": _pp} if _pp else {})})
+                                      .update({"email_scraped_at": now, "last_updated_at": now, **({"people": _pp} if _pp else {})})
                                 ),
                             ),
                             timeout=WRITE_TIMEOUT,
@@ -838,6 +838,7 @@ def recalculate_contacts(db, campaign_id: str, dry_run: bool = False) -> dict:
                 upd["name_raw"] = name_now
             stats["recalc_names"] += 1
         if upd and not dry_run:
+            upd["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
             batch.update(snap.reference, upd)
             pending += 1
             if pending >= 400:

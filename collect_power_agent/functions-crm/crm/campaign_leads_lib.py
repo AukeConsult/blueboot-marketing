@@ -235,6 +235,7 @@ def populate_campaign_leads(
         chunk = to_write[i:i + BATCH_SIZE]
         batch = db.batch()
         for lead_id, doc in chunk:
+            doc["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
             batch.set(leads_col.document(lead_id), doc, merge=True)
         batch.commit()
         written += len(chunk)
@@ -352,6 +353,7 @@ def enrich_contacts_from_email_contacts(db, campaign_id: str, dry_run: bool = Fa
         if dry_run:
             print(f"  [DRY] {c['email']}: {list(update.keys())}", flush=True)
         else:
+            update["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
             batch.update(c["ref"], update)
             batch_count += 1
             if batch_count >= 400:

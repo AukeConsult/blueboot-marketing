@@ -26,7 +26,8 @@ _OUTREACH  = "outreach_sent"
 _CAMPAIGNS = "campaigns"
 _CC        = "campaign_contacts"
 _CL        = "campaign_leads"
-_PROCESSED_FOLDER = "Processed"      # handled replies are moved here out of the INBOX
+_PROCESSED_FOLDER = "Processed"      # target folder when _MOVE_REPLIES is on
+_MOVE_REPLIES = False             # False: handled replies stay in the INBOX (they are skipped next run via the audit log)
 imaplib.Commands.setdefault("MOVE", ("SELECTED",))     # lets mail.uid("MOVE", ...) work (RFC 6851)
 
 
@@ -751,8 +752,8 @@ def _process_account(
                                 "match_via":            matched_via,
                                 "match_outcome":        outcome,
                             })
-                            # The reply is saved on the contact: move it out of the INBOX
-                            # so the next run does not read it again.
+                            # The reply is saved on the contact. It stays in the INBOX (unless _MOVE_REPLIES);
+                            # the audit log makes the next run skip it.
                             if outcome in ("updated", "already_handled"):
                                 reply_to_move.append(eid)
                     else:
@@ -769,7 +770,7 @@ def _process_account(
         if not dry_run:
             moved = flagged = 0
             folder = _PROCESSED_FOLDER
-            if reply_to_move:
+            if reply_to_move and _MOVE_REPLIES:
                 folder, exists = _processed_folder(mail)
                 if not exists:
                     try:
@@ -777,6 +778,10 @@ def _process_account(
                         print(f"[reply_matcher]   create folder {folder!r}: {typ} {resp}")
                     except Exception as ex:
                         print(f"[reply_matcher]   create folder {folder!r} failed: {ex}")
+                try:
+                    mail.subscribe(f'"{folder}"')    # unsubscribed folders are hidden in many mail clients
+                except Exception as ex:
+                    print(f"[reply_matcher]   subscribe {folder!r} failed: {ex}")
                 can_move = "MOVE" in (getattr(mail, "capabilities", ()) or ())
                 for eid in reply_to_move:
                     try:
@@ -1075,7 +1080,7 @@ def _apply_actions(
         if not dry_run and (cc_data.get("followup_status") or "").strip().lower() in ("", "contacted"):
             try:
                 fixed = "auto_replied" if message.get("auto_reply") else "replied"
-                cc_ref.update({"followup_status": fixed})
+                cc_ref.update({"followup_status": fixed, "last_updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
                 print(f"[reply_matcher]       action  → followup_status set to {fixed} (repair)")
             except Exception as ex:
                 print(f"[reply_matcher]       action  → ✗ repair failed: {ex}")
@@ -1093,6 +1098,7 @@ def _apply_actions(
         current = cc_data.get("status", "pending")
         update  = {**reply_payload, "comment_history": ArrayUnion([history_entry])}
         update["new_mail"] = True   # flag the contact as having new incoming mail
+        update["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         # A reply is marked "replied", an automatic reply "auto_replied" (whatever the contact status), but never
         # over a later stage somebody set by hand (meeting, offer, in work, not interested). An auto-reply
         # never downgrades "replied" and leaves the contact status alone. A real reply turns pending into active.
@@ -1133,7 +1139,7 @@ def _apply_actions(
             cl_snap = cl_ref.get()
             cl_status = (cl_snap.to_dict() or {}).get("status", "pending") if cl_snap.exists else "pending"
             if cl_status == "pending":
-                cl_ref.update({"status": "active"})
+                cl_ref.update({"status": "active", "last_updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
                 print(f"[reply_matcher]       lead    → UPDATED  "
                       f"campaign_leads/{lead_id}: pending → active")
             else:
@@ -1215,6 +1221,7 @@ def _apply_bounce_actions(
                 "bounce_detected": True,
                 "bounced_at":      received_at,
                 "bounce_reason":   bounce_reason,
+                "last_updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             })
             print(f"[reply_matcher]       action  → UPDATED  "
                   f"campaign_contacts status={current!r} → excluded  bounce_detected=True")

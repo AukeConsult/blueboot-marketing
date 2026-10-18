@@ -217,6 +217,7 @@ def _upsert_campaign_contacts(db, campaign_id: str, records: list[dict]) -> dict
     for i in range(0, len(to_write), BATCH_SIZE):
         batch = db.batch()
         for doc_id, data in to_write[i:i+BATCH_SIZE]:
+            data["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
             batch.set(col.document(doc_id), data, merge=True)
         batch.commit()
 

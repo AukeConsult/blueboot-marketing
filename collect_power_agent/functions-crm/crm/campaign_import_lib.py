@@ -312,6 +312,7 @@ def run_campaign_import(
         batch = db.batch()
         for lead_id, lead_doc in lead_items[i:i + BATCH_SIZE]:
             lead_doc["synced_at"] = now
+            lead_doc["last_updated_at"] = now
             batch.set(leads_col.document(lead_id), lead_doc, merge=True)
         batch.commit()
         written_leads += len(lead_items[i:i + BATCH_SIZE])
@@ -323,6 +324,7 @@ def run_campaign_import(
     for i in range(0, len(contact_items), BATCH_SIZE):
         batch = db.batch()
         for doc_id, contact_doc in contact_items[i:i + BATCH_SIZE]:
+            contact_doc["last_updated_at"] = now
             if doc_id in existing_contacts:
                 # Existing contact: remove protected fields so merge=True leaves them intact
                 safe = {k: v for k, v in contact_doc.items()

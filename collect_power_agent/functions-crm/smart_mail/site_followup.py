@@ -31,7 +31,8 @@ def set_site_followup(db, campaign_id: str, lead_id, new_status: str,
         if current not in allowed_current:
             return False
         ref.update({"followup_status": new_status,
-                    "updated_at": when_iso or datetime.now(timezone.utc).isoformat()})
+                    "updated_at": when_iso or datetime.now(timezone.utc).isoformat(),
+                    "last_updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
         return True
     except Exception as exc:
         print(f"[site_followup] could not set {new_status!r} on site {lead_id!r}: {exc}", flush=True)

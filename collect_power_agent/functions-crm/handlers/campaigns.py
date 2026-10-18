@@ -113,6 +113,7 @@ def get_campaign(campaign_id):
         contacts = []
         for c in contacts_docs:
             contact = c.to_dict() or {}
+            contact["doc_id"] = c.id          # the real Firestore id (a stored "doc_id" field can differ)
             contact["status"] = _contact_status(contact.get("status"))
             contacts.append(contact)
         data["campaign_contacts"] = contacts
@@ -779,6 +780,7 @@ def create_lead_contact(campaign_id, lead_id):
             "mail_sent":          [],
             "created_at":         now,
             "added_manually":     True,
+            "last_updated_at":    now,
         }
 
         contacts_col.document(doc_id).set(contact)
@@ -824,6 +826,7 @@ def patch_campaign_lead(campaign_id, lead_id):
             updates["followup_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
         # Update the lead doc
+        updates["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         campaign_ref.collection("campaign_leads").document(lead_id).update(updates)
 
         # Cascade status to campaign_contacts for this lead
@@ -837,7 +840,7 @@ def patch_campaign_lead(campaign_id, lead_id):
             batch = db.batch()
             count = 0
             for doc in query.stream():
-                batch.update(doc.reference, {"status": new_status})
+                batch.update(doc.reference, {"status": new_status, "last_updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
                 count += 1
                 if count % 400 == 0:
                     batch.commit()
@@ -864,6 +867,7 @@ def patch_campaign_lead(campaign_id, lead_id):
                 campaign_ref.collection("campaign_leads").document(lead_id).update({
                     "pending_count":  pending_count,
                     "excluded_count": excluded_count,
+                    "last_updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 })
             except Exception:
                 pass  # best-effort
@@ -945,6 +949,7 @@ def reset_campaign(campaign_id):
                 "new_mail":        False,
                 "last_action":        "",
                 "last_action_status": "",
+                "last_updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             })
             if (i + 1) % 400 == 0:
                 batch.commit()
@@ -955,7 +960,7 @@ def reset_campaign(campaign_id):
         # ── 5. Reset campaign_leads (batched) ─────────────────────────────────
         batch = db.batch()
         for i, doc in enumerate(lead_docs):
-            batch.update(doc.reference, {"status": "pending"})
+            batch.update(doc.reference, {"status": "pending", "last_updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds")})
             if (i + 1) % 400 == 0:
                 batch.commit()
                 batch = db.batch()

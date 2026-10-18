@@ -176,6 +176,7 @@ def run_campaign_move(
             if not isinstance(history, list):
                 history = []
             data["comment_history"] = history + [move_entry]
+            data["last_updated_at"] = now
             transaction.set(tgt_col.document(did), data)
             transaction.delete(src_col.document(did))
 
@@ -191,6 +192,7 @@ def run_campaign_move(
                 lead_data = (src_lead_snap.to_dict() if src_lead_snap.exists else {}).copy()
                 lead_data["campaign_id"] = target_campaign_id
                 lead_data["synced_at"]   = now
+                lead_data["last_updated_at"] = now
                 transaction.set(tgt_leads_col.document(lid), lead_data)
             # If it already exists in target, leave it — counts will be slightly
             # off until the next campaign_leads_populate run, but data is intact.

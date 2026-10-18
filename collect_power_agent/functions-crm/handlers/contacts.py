@@ -206,6 +206,7 @@ def update_campaign_contact(campaign_id, doc_id):
         if entries:
             update["comment_history"] = _gfs.ArrayUnion(entries)
 
+        update["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
         ref.update(update)
 
         # ── Recount pending/excluded on the parent lead after status change ──
@@ -234,6 +235,7 @@ def update_campaign_contact(campaign_id, doc_id):
                         lead_ref.update({
                             "pending_count":  pending_count,
                             "excluded_count": excluded_count,
+                            "last_updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                         })
             except Exception:
                 pass  # counter update is best-effort; don't fail the main response
@@ -307,6 +309,7 @@ def send_mail_to_campaign_contact(campaign_id, doc_id):
         user = getattr(_g, "user_email", None) or (body.get("_user") or outreach_email or "api").strip()
         contact_ref.update({
             "followup_status": "contacted",
+            "last_updated_at": now,
             "new_mail": False,
             "comment_history": _gfs.ArrayUnion([{
                 "date": now,
@@ -390,7 +393,7 @@ def confirm_campaign_contacts(campaign_id):
             if bool(d.get("send_confirmation", False)) == value:
                 continue
             batch.update(s.reference, {"send_confirmation": value, "send_confirmed_by": user,
-                                       "send_confirmed_at": now})
+                                       "send_confirmed_at": now, "last_updated_at": now})
             changed += 1
             n += 1
             if n >= 400:

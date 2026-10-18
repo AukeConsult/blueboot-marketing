@@ -550,6 +550,7 @@ def _run_facet_campaign_site_leads(
                 prev = existing[doc_id]
                 for field in LIFECYCLE:
                     contact_doc[field] = prev.get(field, "" if field != "sent_at" else None)
+                contact_doc["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
                 batch.set(contacts_col.document(doc_id), contact_doc, merge=True)
                 refreshed += 1
             elif doc_id in reserved:
@@ -562,6 +563,7 @@ def _run_facet_campaign_site_leads(
                     "last_action":        "",
                     "last_action_status": "",
                 })
+                contact_doc["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
                 batch.set(contacts_col.document(doc_id), contact_doc, merge=False)
                 added += 1
         batch.commit()
@@ -797,6 +799,7 @@ def run_facet_campaign_leads(
                 prev = existing[doc_id]
                 for field in LIFECYCLE:
                     contact_doc[field] = prev.get(field, "" if field != "sent_at" else None)
+                contact_doc["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
                 batch.set(contacts_col.document(doc_id), contact_doc, merge=True)
                 refreshed += 1
             else:
@@ -804,6 +807,7 @@ def run_facet_campaign_leads(
                     "status": "pending", "sent_at": None,
                     "last_action": "", "last_action_status": "",
                 })
+                contact_doc["last_updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
                 batch.set(contacts_col.document(doc_id), contact_doc, merge=False)
                 added += 1
         batch.commit()
