@@ -25,6 +25,15 @@ from email.utils import formatdate
 
 _SMTP_PORTS = {25, 465, 587, 2525}
 
+# Where a copy of a sent mail is filed on IMAP accounts (SMTP never saves one by itself):
+#   "sent"      -> the Sent folder        (mail a person sent by hand: CRM page, test mails)
+#   "processed" -> the Processed_Sent folder (mail the automatic outreach run sent)
+#   "none"      -> no copy
+# Gmail accounts already get every mail in Sent from Gmail itself, so nothing is appended there.
+SAVE_SENT, SAVE_PROCESSED, SAVE_NONE = "sent", "processed", "none"
+_SENT_NAMES = ("sent", "sent items", "sent messages", "inbox.sent", "inbox/sent", "[gmail]/sent mail")
+_PROCESSED_NAME = "Processed_Sent"
+
 
 def _imap_host(ma: dict) -> str:
     imap_host = str(ma.get("imap_host") or "").strip()
@@ -49,18 +58,22 @@ class MailSender:
         self._smtp_username = ""
         self._smtp_host = ""
         self._smtp_port = 0
+        self._imap_conn = None          # lazily opened, reused for every copy of one run
+        self._folder_cache: dict = {}
 
     # ── Public API ────────────────────────────────────────────────────────
 
     def send(self, *, to: str, subject: str,
              body_plain: str = "", body_html: str = "",
-             in_reply_to: str | None = None, headers: dict | None = None) -> dict:
+             in_reply_to: str | None = None, headers: dict | None = None,
+             save_copy: str = SAVE_SENT) -> dict:
+        """One-off send (manual: CRM page, test mails). A copy goes to the Sent folder."""
         try:
             msg = self._build_message(to=to, subject=subject,
                                       body_plain=body_plain, body_html=body_html,
                                       in_reply_to=in_reply_to, headers=headers)
             if self.account_type == "imap":
-                return self._send_smtp(msg, to)
+                return self._send_smtp(msg, to, save_copy)
             elif self.account_type == "gmail":
                 return self._send_gmail(msg, to)
             return {"status": "error", "message": f"Unknown account type: {self.account_type}"}
@@ -98,6 +111,13 @@ class MailSender:
             return {"status": "error", "message": str(exc)}
 
     def close(self) -> None:
+        conn, self._imap_conn = self._imap_conn, None
+        self._folder_cache = {}
+        if conn is not None:
+            try:
+                conn.logout()
+            except Exception:
+                pass
         server = self._smtp_server
         self._smtp_server = None
         self._smtp_username = ""
@@ -112,8 +132,10 @@ class MailSender:
     def send_open(self, *, to: str, subject: str,
                   body_plain: str = "", body_html: str = "",
                   in_reply_to: str | None = None,
-                  headers: dict | None = None, _retry: bool = True) -> dict:
-        """Send through the currently open SMTP session.
+                  headers: dict | None = None, _retry: bool = True,
+                  save_copy: str = SAVE_PROCESSED) -> dict:
+        """Send through the currently open SMTP session (the automatic outreach run).
+        A copy goes to the Processed_Sent folder, not Sent.
         If the server dropped the connection, it is reopened once and the mail is sent again."""
         if self._smtp_server is None:
             return {"status": "error", "message": "MailSender is not open"}
@@ -129,6 +151,7 @@ class MailSender:
                     "status": "ok",
                     "message": f"Email sent to {to} via {self._smtp_host}:{self._smtp_port}",
                     "message_id": msg.get("Message-ID", ""),
+                    **self._save_copy(msg, save_copy),
                 }
             if self.account_type == "gmail":
                 msg["From"] = self._from_header(self.email)
@@ -142,7 +165,8 @@ class MailSender:
         except smtplib.SMTPServerDisconnected as exc:
             if _retry and self.open().get("status") == "ok":
                 return self.send_open(to=to, subject=subject, body_plain=body_plain, body_html=body_html,
-                                      in_reply_to=in_reply_to, headers=headers, _retry=False)
+                                      in_reply_to=in_reply_to, headers=headers, _retry=False,
+                                      save_copy=save_copy)
             return {"status": "error", "message": f"SMTP connection lost: {exc}"}
         except Exception as exc:
             return {"status": "error", "message": str(exc)}
@@ -306,26 +330,35 @@ class MailSender:
         server.login(username, password)
         return server, username, smtp_host, smtp_port
 
-    def _send_smtp(self, msg, to: str) -> dict:
+    def _send_smtp(self, msg, to: str, save_copy: str = SAVE_SENT) -> dict:
         username = self.ma.get("username", "").strip()
         _, _, smtp_host, smtp_port, _ = self._smtp_params()
         if not smtp_host or not username:
             return {"status": "error", "message": "SMTP host and username are required"}
         msg["From"] = self._from_header(username)
+        print(f"[mail_sender] SMTP send to {to} via {smtp_host}:{smtp_port} as {username}")
         try:
             server, username, smtp_host, smtp_port = self._smtp_connect()
             with server:
                 server.sendmail(username, [to], msg.as_string())
-            return {"status": "ok",
-                    "message": f"Email sent to {to} via {smtp_host}:{smtp_port}",
-                    "message_id": msg.get("Message-ID", "")}
+            res = {"status": "ok",
+                   "message": f"Email sent to {to} via {smtp_host}:{smtp_port}",
+                   "message_id": msg.get("Message-ID", "")}
+            res.update(self._save_copy(msg, save_copy))
+            try:
+                self.close()          # the IMAP connection used for the copy (one-off send)
+            except Exception:
+                pass
+            return res
         except smtplib.SMTPAuthenticationError as e:
+            print(f"[mail_sender] SMTP auth failed for {username} on {smtp_host}:{smtp_port}: {e}")
             return {"status": "error", "message": f"SMTP auth failed: {e}"}
         except Exception as e:
+            print(f"[mail_sender] SMTP error on {smtp_host}:{smtp_port}: {type(e).__name__}: {e}")
             return {"status": "error",
                     "message": f"SMTP error ({smtp_host}:{smtp_port}): {e}"}
 
-    def _imap_connect(self):
+    def _imap_connect(self, timeout: float | None = None):
         host     = _imap_host(self.ma)
         username = self.ma.get("username", "").strip()
         password = self.ma.get("password", "")
@@ -333,11 +366,79 @@ class MailSender:
         port     = self._imap_port(self.ma, use_ssl)
         if use_ssl:
             conn = imaplib.IMAP4_SSL(host, port,
-                   ssl_context=ssl.create_default_context())
+                   ssl_context=ssl.create_default_context(), timeout=timeout)
         else:
-            conn = imaplib.IMAP4(host, port)
+            conn = imaplib.IMAP4(host, port, timeout=timeout)
         conn.login(username, password)
         return conn
+
+    # ── Copy of a sent mail into an IMAP folder ───────────────────────────
+
+    def _save_copy(self, msg, kind: str) -> dict:
+        """File a copy of the sent mail (IMAP accounts only). Never raises: the mail is already sent."""
+        if kind == SAVE_NONE or self.account_type != "imap":
+            return {}
+        try:
+            if self._imap_conn is None:
+                print(f"[mail_sender] opening IMAP to file the {kind!r} copy for {self.email}")
+                self._imap_conn = self._imap_connect(timeout=15)   # never let the copy hang a sent mail
+            conn = self._imap_conn
+            folder = self._folder_cache.get(kind)
+            if folder is None:
+                folder = self._ensure_folder(conn, kind)
+                self._folder_cache[kind] = folder
+            typ, resp = conn.append(f'"{folder}"', "(\\Seen)", imaplib.Time2Internaldate(time.time()),
+                                    msg.as_bytes())
+            if typ != "OK":
+                raise RuntimeError(f"APPEND refused: {resp}")
+            print(f"[mail_sender] copy saved in {folder!r} for {self.email}")
+            return {"copy_folder": folder}
+        except Exception as exc:
+            print(f"[mail_sender] could not save a copy in the {kind!r} folder: {exc}")
+            self._imap_conn = None        # reconnect next time
+            return {"copy_error": str(exc)}
+
+    @staticmethod
+    def _list_folders(conn) -> tuple[list[tuple[str, str]], str]:
+        """([(folder name, flags)], hierarchy delimiter)"""
+        out, delim = [], "/"
+        _typ, items = conn.list()
+        for it in items or []:
+            raw = it.decode(errors="replace") if isinstance(it, bytes) else str(it)
+            m = re.match(r'\((?P<fl>[^)]*)\)\s+(?:"(?P<d>[^"]*)"|NIL)\s+(?P<n>.+)$', raw)
+            if not m:
+                continue
+            delim = m.group("d") or delim
+            out.append((m.group("n").strip().strip('"'), m.group("fl")))
+        return out, delim
+
+    def _ensure_folder(self, conn, kind: str) -> str:
+        """Name of the Sent / Processed folder on this server; created and subscribed when missing."""
+        folders, delim = self._list_folders(conn)
+        wanted = _PROCESSED_NAME if kind == SAVE_PROCESSED else "Sent"
+        found = None
+        for name, flags in folders:
+            low = name.lower()
+            if kind == SAVE_SENT and "\\sent" in flags.lower():
+                found = name
+                break
+            if kind == SAVE_SENT and low in _SENT_NAMES:
+                found = found or name
+            if kind == SAVE_PROCESSED and low in (_PROCESSED_NAME.lower(), f"inbox{delim}{_PROCESSED_NAME}".lower()):
+                found = name
+                break
+        if found is None:
+            # cPanel / Dovecot keep folders under INBOX (INBOX.Sent): only INBOX.<name> is accepted there
+            prefix = f"INBOX{delim}" if any(n.startswith(f"INBOX{delim}") for n, _f in folders) else ""
+            found = prefix + wanted
+            typ, resp = conn.create(f'"{found}"')
+            if typ != "OK":
+                raise RuntimeError(f"could not create folder {found!r}: {resp}")
+        try:
+            conn.subscribe(f'"{found}"')     # unsubscribed folders are hidden in many mail clients
+        except Exception:
+            pass
+        return found
 
     def _ping_imap(self) -> dict:
         host     = _imap_host(self.ma)
