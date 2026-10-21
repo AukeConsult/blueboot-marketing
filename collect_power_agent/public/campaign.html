@@ -202,6 +202,8 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
     grid-template-columns: 1fr;
   }
 }
+@keyframes cp-spin { to { transform: rotate(360deg); } }
+.bb-btn-refresh.is-spinning i { display: inline-block; animation: cp-spin .8s linear infinite; }
 </style>
 </head>
 <body>
@@ -213,7 +215,10 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
     <div class="campaign-list-head">
       <div class="d-flex align-items-center gap-2">
         <h5 class="page-title mb-0"><i class="ti ti-speakerphone text-primary"></i>Campaigns</h5>
-        <button class="bb-btn-refresh ms-auto" onclick="loadCampaignList()" title="Refresh campaigns"><i class="ti ti-refresh"></i></button>
+        <a href="outreach_status.html" id="outreach-link" class="btn btn-sm btn-outline-secondary ms-auto py-0 px-2" title="Outreach send/check">
+          <i class="ti ti-send me-1"></i>Outreach
+        </a>
+        <button class="bb-btn-refresh" onclick="loadCampaignList()" title="Refresh campaigns"><i class="ti ti-refresh"></i></button>
       </div>
       <div class="campaign-list-tools">
         <input id="campaign-search" class="form-control form-control-sm" placeholder="Search campaigns..." oninput="filterCampaignList()">
@@ -253,23 +258,11 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
     </h5>
     <div class="d-flex align-items-center gap-2" id="campaign-actions" style="display:none">
       <span class="bb-badge" id="c-status-badge"></span>
+      <button class="bb-btn-refresh" id="c-refresh-btn" onclick="refreshThisCampaign()" title="Refresh this campaign (details, contacts and sites)"><i class="ti ti-refresh"></i></button>
       <span id="c-source-badge" style="display:none" class="bb-badge" title="Created from master CRM sheet"
             style="background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;font-size:.68rem">
         <i class="ti ti-table me-1"></i>master-sheet
       </span>
-      <div class="btn-group btn-group-sm" id="sheet-action-group"
-           style="font-size:.78rem;opacity:.75;transition:opacity .15s"
-           onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.75'"
-           title="Spreadsheet actions">
-        <a id="sheet-link" href="#" target="_blank"
-           class="btn btn-outline-secondary text-decoration-none"
-           style="pointer-events:none;color:var(--bb-muted)" title="Open connected sheet">
-          <i class="ti ti-table-spark me-1"></i>Sheet
-        </a>
-        <button id="override-btn" class="btn btn-outline-secondary" onclick="confirmFullOverride()" title="Regenerate sheet from database">
-          <i class="ti ti-table-export me-1"></i>Full override
-        </button>
-      </div>
 <button id="scrape-btn" class="btn btn-sm btn-outline-secondary" onclick="scrapeEmails()" title="Update info: scrape each site for emails and page count, then refresh the contact counts">
         <i class="ti ti-mail-search me-1"></i>Update info
       </button>
@@ -668,28 +661,6 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
   </div>
 </div>
 
-<!-- Full override modal -->
-<div class="modal fade" id="fullOverrideModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
-      <div class="modal-header border-0 pb-0">
-        <h6 class="modal-title"><i class="ti ti-alert-triangle text-warning me-2"></i>Full override</h6>
-      </div>
-      <div class="modal-body">
-        <p class="mb-2">This will overwrite the campaign spreadsheet with all data from the database.</p>
-        <div class="alert alert-warning py-2 small mb-0">
-          <i class="ti ti-eraser me-1"></i>Any manual edits in the sheet — except <strong>Last action</strong> and <strong>Last action status</strong> — will be lost. This cannot be undone.
-        </div>
-      </div>
-      <div class="modal-footer border-0 pt-0">
-        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button class="btn btn-warning btn-sm" onclick="doFullOverride()">
-          <i class="ti ti-table-export me-1"></i>Yes, override
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- Send modal -->
 <div class="modal fade" id="holdModal" tabindex="-1">
@@ -972,6 +943,8 @@ async function loadCampaignList() {
   listEl.innerHTML = '<div class="text-center py-5 small" style="color:var(--bb-muted)"><div class="spinner-border spinner-border-sm me-2"></div>Loading...</div>';
   try {
     const d = await fetchJSON(BASE + '/api/crm/campaigns');
+    const _r = window._userRole;
+    if (_r && _r !== 'admin' && _r !== 'campaign-user') document.getElementById('outreach-link').style.display = 'none';   // page is not open to plain users
     allCampaigns = crmScopeCampaigns(d.campaigns || []);
     populateCampaignOwnerFilter();
     crmLockOwnerSelect(document.getElementById('campaign-owner-filter'));
@@ -998,6 +971,14 @@ async function selectCampaign(id, event) {
 
 // Reload BOTH the contact list (inside the campaign document) and the sites list.
 // Used when a campaign is opened/switched and after anything that changes either list.
+async function refreshThisCampaign() {
+  const btn = document.getElementById('c-refresh-btn');
+  if (btn) { btn.disabled = true; btn.classList.add('is-spinning'); }
+  const minSpin = new Promise(r => setTimeout(r, 600));      // fast loads still show the spin
+  try { await Promise.all([refreshCampaignData({ keepView: true }), minSpin]); }
+  finally { if (btn) { btn.disabled = false; btn.classList.remove('is-spinning'); } }
+}
+
 async function refreshCampaignData(opts) {
   const id = document.getElementById('campaign-select').value;
   if (!id) return;
@@ -1615,16 +1596,6 @@ async function loadCampaign(opts) {
     document.getElementById('page-title-campaign').textContent = c.campaign_id;
     const sourceBadge = document.getElementById('c-source-badge');
     sourceBadge.style.display = c.source === 'master-sheet' ? '' : 'none';
-    const sheetLink = document.getElementById('sheet-link');
-    if (c.sheet_url) {
-      sheetLink.href = c.sheet_url;
-      sheetLink.style.pointerEvents = '';
-      sheetLink.style.color = '';
-    } else {
-      sheetLink.href = '#';
-      sheetLink.style.pointerEvents = 'none';
-      sheetLink.style.color = 'var(--bb-muted)';
-    }
     const st = campaignStatus(c.status || 'draft');
     c.status = st;
     const badge = document.getElementById('c-status-badge');
@@ -1700,73 +1671,6 @@ async function loadCampaign(opts) {
     document.getElementById('campaign-empty').style.display = '';
   }
 }
-
-
-function confirmFullOverride() {
-  new bootstrap.Modal(document.getElementById('fullOverrideModal')).show();
-}
-
-function doFullOverride() {
-  const modal = bootstrap.Modal.getInstance(document.getElementById('fullOverrideModal'));
-  if (modal) modal.hide();
-  exportToDrive();
-}
-
-async function exportToDrive() {
-  const id = document.getElementById('campaign-select').value;
-  if (!id) return;
-  const fb = document.getElementById('sync-feedback');
-  const btn = document.getElementById('override-btn');
-  btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Exporting…';
-  fb.style.display = 'none';
-  try {
-    const r = await fetch(`${BASE}/api/crm/campaign-export?campaign_id=${encodeURIComponent(id)}`);
-    const d = await r.json();
-    if (d.status === 'error') throw new Error(d.message || 'export failed');
-    fb.className = 'alert alert-info py-1 px-2 small mt-2 mb-0';
-    fb.innerHTML = `Export job queued (${d.job_id||''}) — building sheet \u201c${id}\u201d…`;
-    fb.style.display = '';
-    if (d.job_id) pollExport(d.job_id, id);
-    else btnReset();
-  } catch(e) {
-    fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
-    fb.textContent = 'Export failed: ' + (e.message||e);
-    fb.style.display = ''; btnReset();
-  }
-  function btnReset(){ btn.disabled = false; btn.innerHTML = '<i class="ti ti-table-export me-1"></i>Full override'; }
-}
-
-async function pollExport(jobId, id) {
-  const fb = document.getElementById('sync-feedback');
-  const btn = document.getElementById('override-btn');
-  for (let i = 0; i < 60; i++) {
-    await new Promise(r => setTimeout(r, 2000));
-    try {
-      const r = await fetch(`${BASE}/api/crm/status/${jobId}`);
-      const j = await r.json();
-      if (j.status === 'done') {
-        const res = j.result || {};
-        fb.className = 'alert alert-success py-1 px-2 small mt-2 mb-0';
-        fb.innerHTML = `Exported ${res.contacts ?? ''} contacts to sheet \u201c${id}\u201d `
-          + (res.url ? `\u2014 <a href="${res.url}" target="_blank">open sheet</a>` : '');
-        if (res.url) {
-          const sl = document.getElementById('sheet-link');
-          sl.href = res.url;
-          sl.style.pointerEvents = '';
-          sl.style.color = '';
-        }
-        break;
-      }
-      if (j.status === 'error') {
-        fb.className = 'alert alert-danger py-1 px-2 small mt-2 mb-0';
-        fb.textContent = 'Export job failed: ' + (j.error || 'unknown');
-        break;
-      }
-    } catch(_) { /* keep polling */ }
-  }
-  btn.disabled = false; btn.innerHTML = '<i class="ti ti-table-export me-1"></i>Full override';
-}
-
 
 
 async function openLeadPopup(evt, website, pipeline) {

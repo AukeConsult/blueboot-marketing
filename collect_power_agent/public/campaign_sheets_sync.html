@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blueboot — Campaign sheets sync</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div id="nav"></div>
+
+<div class="container py-4" style="max-width:860px">
+
+  <div class="page-header mb-3">
+    <h5 class="page-title"><i class="ti ti-table-export text-primary"></i>Campaign sheets sync</h5>
+  </div>
+
+  <p class="small text-muted mb-3">
+    Builds the spreadsheet of one campaign from the database (<strong>Full override</strong>). The sheet is named after the campaign
+    and lives in the Drive folder. Any manual edits in the sheet are lost, except the <strong>Last action</strong> and
+    <strong>Last action status</strong> columns.
+  </p>
+
+  <div class="bb-card p-3 mb-3">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <label class="small fw-500 mb-0 text-nowrap" style="color:var(--bb-muted)" for="cs-campaign">Campaign</label>
+      <select id="cs-campaign" class="form-select form-select-sm" style="max-width:280px" onchange="campaignChanged()">
+        <option value="">Loading…</option>
+      </select>
+      <a id="cs-sheet-link" href="#" target="_blank" class="btn btn-sm btn-outline-secondary text-decoration-none"
+         style="pointer-events:none;color:var(--bb-muted)" title="Open connected sheet">
+        <i class="ti ti-table-spark me-1"></i>Sheet
+      </a>
+      <button class="btn btn-sm btn-warning ms-auto" id="cs-override-btn" onclick="confirmOverride()" disabled>
+        <i class="ti ti-table-export me-1"></i>Full override
+      </button>
+    </div>
+  </div>
+
+  <div id="cs-feedback" class="alert py-2 px-3 small mb-3" style="display:none"></div>
+
+  <div class="bb-card">
+    <div class="px-3 py-2 d-flex align-items-center justify-content-between border-bottom"
+         style="background:#f9fafb;border-radius:10px 10px 0 0">
+      <span class="fw-500 small"><i class="ti ti-history me-1 text-primary"></i>Recent exports</span>
+      <button class="btn btn-xs btn-outline-secondary py-0 px-2" onclick="loadJobs()"><i class="ti ti-refresh"></i></button>
+    </div>
+    <div id="cs-jobs" class="p-2">
+      <div class="text-center py-3 small text-muted"><div class="spinner-border spinner-border-sm me-1"></div>Loading…</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Full override modal -->
+<div class="modal fade" id="csOverrideModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0" style="border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.15)">
+      <div class="modal-header border-0 pb-0">
+        <h6 class="modal-title"><i class="ti ti-alert-triangle text-warning me-2"></i>Full override</h6>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">This overwrites the spreadsheet of <strong id="cs-modal-campaign"></strong> with all data from the database.</p>
+        <div class="alert alert-warning py-2 small mb-0">
+          <i class="ti ti-eraser me-1"></i>Any manual edits in the sheet — except <strong>Last action</strong> and <strong>Last action status</strong> — will be lost. This cannot be undone.
+        </div>
+      </div>
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-warning btn-sm" onclick="doOverride()"><i class="ti ti-table-export me-1"></i>Yes, override</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+<script>
+const BTN_HTML = '<i class="ti ti-table-export me-1"></i>Full override';
+let _busy = false;
+
+function selected() { return document.getElementById('cs-campaign').value; }
+
+function setSheetLink(url) {
+  const a = document.getElementById('cs-sheet-link');
+  a.href = url || '#';
+  a.style.pointerEvents = url ? '' : 'none';
+  a.style.color = url ? '' : 'var(--bb-muted)';
+}
+
+function showFeedback(kind, html) {
+  const fb = document.getElementById('cs-feedback');
+  fb.className = `alert alert-${kind} py-2 px-3 small mb-3`;
+  fb.innerHTML = html;
+  fb.style.display = '';
+}
+
+async function loadCampaigns() {
+  const sel = document.getElementById('cs-campaign');
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/campaigns');
+    const list = crmScopeCampaigns(d.campaigns || []).map(c => c.campaign_id).filter(Boolean).sort();
+    sel.innerHTML = '<option value="">— choose campaign —</option>'
+      + list.map(id => `<option value="${escapeHtml(id)}">${escapeHtml(id)}</option>`).join('');
+    const want = new URLSearchParams(location.search).get('campaign_id');
+    if (want && list.includes(want)) { sel.value = want; campaignChanged(); }
+  } catch (e) {
+    sel.innerHTML = '<option value="">Could not load campaigns</option>';
+    showFeedback('danger', 'Error: ' + escapeHtml(e.message));
+  }
+}
+
+async function campaignChanged() {
+  const id = selected();
+  document.getElementById('cs-override-btn').disabled = !id || _busy;
+  setSheetLink('');
+  if (!id) return;
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`);
+    const c = await r.json();
+    if (selected() === id && c.sheet_url) setSheetLink(c.sheet_url);
+  } catch (_) { /* link stays disabled */ }
+}
+
+function confirmOverride() {
+  if (!selected()) return;
+  document.getElementById('cs-modal-campaign').textContent = selected();
+  new bootstrap.Modal(document.getElementById('csOverrideModal')).show();
+}
+
+function setBusy(on) {
+  _busy = on;
+  const btn = document.getElementById('cs-override-btn');
+  btn.disabled = on || !selected();
+  btn.innerHTML = on ? '<i class="ti ti-loader me-1"></i>Exporting…' : BTN_HTML;
+}
+
+async function doOverride() {
+  const modal = bootstrap.Modal.getInstance(document.getElementById('csOverrideModal'));
+  if (modal) modal.hide();
+  const id = selected();
+  if (!id) return;
+  setBusy(true);
+  document.getElementById('cs-feedback').style.display = 'none';
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaign-export?campaign_id=${encodeURIComponent(id)}`);
+    const d = await r.json();
+    if (d.status === 'error' || !d.job_id) throw new Error(d.message || 'export failed');
+    showFeedback('info', `Export job queued (<code>${escapeHtml(d.job_id)}</code>) — building sheet “${escapeHtml(id)}”…`);
+    loadJobs();
+    pollExport(d.job_id, id);
+  } catch (e) {
+    showFeedback('danger', 'Export failed: ' + escapeHtml(e.message || String(e)));
+    setBusy(false);
+  }
+}
+
+async function pollExport(jobId, id) {
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const j = await (await fetch(`${BASE}/api/crm/status/${jobId}`)).json();
+      if (j.status === 'done') {
+        const res = j.result || {};
+        showFeedback('success', `Exported ${escapeHtml(String(res.contacts ?? ''))} contacts to sheet “${escapeHtml(id)}” `
+          + (res.url ? `— <a href="${escapeHtml(res.url)}" target="_blank" rel="noopener">open sheet</a>` : ''));
+        if (res.url && selected() === id) setSheetLink(res.url);
+        break;
+      }
+      if (j.status === 'error') { showFeedback('danger', 'Export job failed: ' + escapeHtml(j.error || 'unknown')); break; }
+    } catch (_) { /* keep polling */ }
+  }
+  setBusy(false);
+  loadJobs();
+}
+
+async function loadJobs() {
+  const el = document.getElementById('cs-jobs');
+  try {
+    const d = await fetchJSON(`${BASE}/api/crm/jobs?name=campaign-export&limit=10`);
+    const jobs = d.jobs || [];
+    if (!jobs.length) { el.innerHTML = '<div class="small text-muted px-1 py-2">No exports yet.</div>'; return; }
+    el.innerHTML = jobs.map(j => {
+      const cls = j.status === 'done' ? 'sent' : j.status === 'error' ? 'excluded' : 'pending';
+      const camp = (j.params || {}).campaign_id || '';
+      const url = (j.result || {}).url;
+      return `<div class="d-flex align-items-center gap-2 py-2 border-bottom small">
+        <span class="bb-badge bb-badge-${cls}">${escapeHtml(j.status || '')}</span>
+        <span class="text-muted">${escapeHtml(fmtDateTimeShort(j.queued_at))}</span>
+        <span><i class="ti ti-speakerphone me-1 text-muted"></i>${escapeHtml(camp)}</span>
+        ${url ? `<a class="ms-auto" href="${escapeHtml(url)}" target="_blank" rel="noopener">open sheet</a>` : ''}
+        ${j.status === 'error' ? `<span class="ms-auto text-danger">${escapeHtml(j.error || '')}</span>` : ''}
+      </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="small text-danger px-1">Error: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+requireAuth().then(() => { loadCampaigns(); loadJobs(); });
+</script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -31,6 +31,9 @@
       <button class="btn btn-sm btn-outline-primary" onclick="discover()" id="discover-btn">
         <i class="ti ti-search me-1"></i>Discover campaigns
       </button>
+      <a href="outreach_status.html" id="outreach-link" class="btn btn-sm btn-outline-secondary" title="Outreach send/check">
+        <i class="ti ti-send me-1"></i>Outreach
+      </a>
       <button class="bb-btn-refresh" onclick="load()" title="Refresh"><i class="ti ti-refresh"></i></button>
     </div>
   </div>
@@ -211,7 +214,11 @@ async function discover() {
   btn.innerHTML = '<i class="ti ti-search me-1"></i>Discover campaigns';
 }
 
-requireAuth().then(load);
+requireAuth().then(() => {
+  const r = window._userRole;
+  if (r && r !== 'admin' && r !== 'campaign-user') document.getElementById('outreach-link').style.display = 'none';   // page is not open to plain users
+  load();
+});
 </script>
 </body>
 </html>
