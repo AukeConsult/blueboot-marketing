@@ -27,6 +27,7 @@ from collections import defaultdict
 from google.cloud.firestore_v1.base_query import FieldFilter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
+import os
 import re
 
 
@@ -279,6 +280,25 @@ def _coerce_id_set(values) -> set[str]:
     return out
 
 
+# Never mail the same contact twice within this many days. The sequence delays count from the FIRST
+# mail, so after a pause or an edited sequence two steps can both be overdue; without this gap the
+# second reminder would follow the first one minutes later.
+MIN_DAYS_BETWEEN_MAILS = float(os.getenv("OUTREACH_MIN_DAYS_BETWEEN_MAILS", "1"))
+
+# A contact in one of these follow-up states must not get another automatic mail.
+_NO_MORE_MAIL_FOLLOWUP = {"replied", "meeting", "offer", "not_interested"}
+
+
+def _last_mail_too_recent(mail_sent: list, now: datetime) -> bool:
+    """True when the newest mail in mail_sent went out less than MIN_DAYS_BETWEEN_MAILS ago."""
+    times = []
+    for m in mail_sent or []:
+        dt = _parse_dt((m or {}).get("sent_at")) if isinstance(m, dict) else None
+        if dt:
+            times.append(dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc))
+    return bool(times) and now < max(times) + timedelta(days=MIN_DAYS_BETWEEN_MAILS)
+
+
 def _next_step_due(contact: ContactRow, campaign: CampaignMail, now: datetime) -> bool:
     mail_sent = contact.mail_sent or []
     next_idx = len(mail_sent)
@@ -289,6 +309,8 @@ def _next_step_due(contact: ContactRow, campaign: CampaignMail, now: datetime) -
     if "delay_days" not in step:
         return False
     delay_days = int(step.get("delay_days") or 0)
+    if _last_mail_too_recent(mail_sent, now):
+        return False
     first_sent_at = _parse_dt((mail_sent[0] or {}).get("sent_at"))
     if not first_sent_at:
         return True
@@ -615,8 +637,15 @@ def contact_not_sendable_reason(campaign_id: str, contact_doc_id: str, mails_alr
     status = str(d.get("status", "")).strip().lower()
     if status != "pending":
         return f"contact status is now {status!r}"
-    if len(d.get("mail_sent") or []) != mails_already_sent:
+    sent = d.get("mail_sent") or []
+    if len(sent) != mails_already_sent:
         return "contact was mailed by another run since this run started"
+    if sent:       # a reminder: the contact must not have answered, and the last mail must not be fresh
+        fu = str(d.get("followup_status", "")).strip().lower()
+        if fu in _NO_MORE_MAIL_FOLLOWUP:
+            return f"follow-up status is now {fu!r}"
+        if _last_mail_too_recent(sent, datetime.now(timezone.utc)):
+            return "the last mail to this contact was sent less than a day ago"
     return ""
 
 
