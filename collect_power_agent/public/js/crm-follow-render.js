@@ -47,6 +47,12 @@ const GROUP_FIELDS = {
 };
 
 
+function unsubBadge(r) {
+  return r && r.unsubscribed
+    ? ' <span class="bb-badge bb-badge-excluded" title="Contact used the unsubscribe link or asked to stop"><i class="ti ti-mail-off"></i> unsubscribed</span>'
+    : '';
+}
+
 function statusBadge(s) {
   const status = ['pending', 'active', 'excluded'].includes(s) ? s : 'pending';
   const map = { pending: 'bb-badge-pending', active: 'bb-badge-active', excluded: 'bb-badge-excluded' };
@@ -79,7 +85,7 @@ function renderContactListCells(r, gidx, siteShort, fuOpts, impCls, dateCls) {
               ${websiteHtml}
             </div>
           <div class="crm-contact-actions">
-            ${statusBadge(r.status)}
+            ${statusBadge(r.status)}${unsubBadge(r)}
             <a class="btn btn-sm btn-outline-primary crm-open-btn"
               href="crm-contact.html?campaign=${encodeURIComponent(r.campaign_id)}&doc=${encodeURIComponent(r.doc_id)}"
               title="Open full contact page">

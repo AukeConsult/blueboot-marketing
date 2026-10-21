@@ -130,6 +130,9 @@ function render() {
     } else {
       parts.push('<span class="badge bg-light text-muted border">Nothing sent yet</span>');
     }
+    if (r.unsubscribed) {
+      parts.push(`<span class="badge bg-danger-subtle text-danger-emphasis"><i class="ti ti-mail-off"></i> Unsubscribed${r.unsubscribed_at ? ' · ' + escapeHtml(fmt(r.unsubscribed_at)) : ''}</span>`);
+    }
     document.getElementById('cc-sent-info').innerHTML = parts.join(' ');
     if (!cb._bound) { cb._bound = true; cb.addEventListener('change', () => patchField('send_confirmation', cb.checked)); }
   }

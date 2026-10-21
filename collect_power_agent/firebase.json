@@ -6,7 +6,10 @@
   },
   "hosting": {
     "public": "public",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "/unsubscribe", "function": { "functionId": "crmApi", "region": "us-central1" } }
+    ]
   },
   "functions": [
     {

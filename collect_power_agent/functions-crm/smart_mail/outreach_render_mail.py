@@ -111,7 +111,8 @@ class RenderedMail:
 # render_mail
 # ---------------------------------------------------------------------------
 
-def render_mail(step: MailStep, contact: Any, trailer: dict | None = None) -> RenderedMail:
+def render_mail(step: MailStep, contact: Any, trailer: dict | None = None,
+                footer: tuple[str, str] | None = None) -> RenderedMail:
     """Render a MailStep template against a ContactRow.
 
     Parameters
@@ -124,6 +125,8 @@ def render_mail(step: MailStep, contact: Any, trailer: dict | None = None) -> Re
         Result of mail_trailer.load_trailer(). When enabled, its html part is added to
         HTML mails and its text part to plain-text mails (and to the plain-text part of
         HTML mails). Placeholders in the trailer are filled like the body.
+    footer : (html, text), optional
+        Unsubscribe footer (smart_mail.unsubscribe.footers), added last.
 
     Returns
     -------
@@ -161,12 +164,17 @@ def render_mail(step: MailStep, contact: Any, trailer: dict | None = None) -> Re
             html_body += "<hr>" + trailer_html
         if trailer_text:
             text_body += "\n\n---\n" + trailer_text
+        if footer:
+            html_body += footer[0]
+            text_body += "\n\n" + footer[1]
         return RenderedMail(subject=subject, text_body=text_body, html_body=html_body)
 
     if step.body_text:
         text_body = _render_template(step.body_text, contact_dict)
         if trailer_text:
             text_body += "\n\n---\n" + trailer_text
+        if footer:
+            text_body += "\n\n" + footer[1]
         return RenderedMail(subject=subject, text_body=text_body, html_body=None)
 
     # Both body fields empty — misconfigured step; degrade gracefully

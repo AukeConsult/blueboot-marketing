@@ -45,12 +45,13 @@ from handlers.auth          import bp as auth_bp
 from handlers.user_prefs    import bp as user_prefs_bp
 from handlers.send_limits   import bp as send_limits_bp
 from handlers.batch         import bp as batch_bp
+from handlers.unsubscribe   import bp as unsubscribe_bp
 
 for bp in (
     campaigns_bp, contacts_bp, jobs_bp, mailbox_bp,
     mail_tags_bp, mail_accounts_bp, inbound_read_bp,
     gdisk_bp, filter_facets_bp, leads_bp, statistics_bp, auth_bp,
-    user_prefs_bp, batch_bp, send_limits_bp,
+    user_prefs_bp, batch_bp, send_limits_bp, unsubscribe_bp,
 ):
     app.register_blueprint(bp)
 
@@ -103,6 +104,7 @@ _ADMIN_ENDPOINTS = frozenset({
     "mail_tags.put_mail_tag_statuses",   # PUT /api/crm/settings/mail-tag-statuses
     "send_limits.put_send_limits",       # PUT /api/crm/settings/send-limits
     "send_limits.put_mail_trailer",      # PUT /api/crm/settings/mail-trailer
+    "send_limits.put_unsubscribe_settings",  # PUT /api/crm/settings/unsubscribe
     "jobs.outreach_send_now",            # POST /api/crm/outreach/send-now (real mail)
     "campaigns.reset_campaign",          # POST /api/crm/campaigns/{id}/reset
 })
@@ -143,6 +145,9 @@ def check_auth():
 
     if req.path.startswith("/api/crm/worker/"):
         return  # Cloud Tasks authenticates these with OIDC
+
+    if req.path == "/unsubscribe":
+        return  # public: recipients of our mail (signed link; a GET changes nothing)
 
     import logging as _log
 

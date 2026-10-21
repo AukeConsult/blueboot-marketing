@@ -110,6 +110,56 @@ def put_mail_trailer():
         return _err(str(exc), 500)
 
 
+@bp.route("/api/crm/settings/unsubscribe", methods=["GET"])
+def get_unsubscribe_settings():
+    """Unsubscribe settings (the signing secret is never returned)."""
+    try:
+        from smart_mail import unsubscribe as unsub
+        cfg = unsub.load_config(_get_db())
+        return jsonify({
+            "status": "ok",
+            "enabled": cfg["enabled"], "base_url": cfg["base_url"], "mailto": cfg["mailto"],
+            "footer_html": cfg["footer_html"], "footer_text": cfg["footer_text"],
+            "default_footer_html": unsub.DEFAULT_FOOTER_HTML,
+            "default_footer_text": unsub.DEFAULT_FOOTER_TEXT,
+        })
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/settings/unsubscribe", methods=["PUT"])
+def put_unsubscribe_settings():
+    """Save unsubscribe settings.  Admin only (enforced via _ADMIN_ENDPOINTS). Keeps the secret."""
+    try:
+        import re
+        from smart_mail import unsubscribe as unsub
+        from smart_mail.mail_trailer import clean_html
+        body = request.get_json(silent=True) or {}
+        enabled = bool(body.get("enabled"))
+        base_url = str(body.get("base_url") or "").strip().rstrip("/")
+        mailto = str(body.get("mailto") or "").strip()
+        f_html = clean_html(str(body.get("footer_html") or "")).strip()
+        f_text = str(body.get("footer_text") or "").strip()
+        if base_url and not base_url.lower().startswith("https://"):
+            return _err("Link address must start with https://", 400)
+        if mailto and not re.fullmatch(r"[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+", mailto):
+            return _err("Mail address for unsubscribe replies is not valid.", 400)
+        if f_html and "{url}" not in f_html:
+            return _err("The HTML footer must contain {url} where the link goes.", 400)
+        if f_text and "{url}" not in f_text:
+            return _err("The plain-text footer must contain {url} where the link goes.", 400)
+        _get_db().collection(unsub.DOC_PATH[0]).document(unsub.DOC_PATH[1]).set({
+            "enabled": enabled, "base_url": base_url, "mailto": mailto,
+            "footer_html": f_html, "footer_text": f_text,
+        }, merge=True)
+        unsub._cache.clear()
+        cfg = unsub.load_config(_get_db())
+        return _ok("Unsubscribe settings saved.", enabled=cfg["enabled"], base_url=cfg["base_url"],
+                   mailto=cfg["mailto"], footer_html=cfg["footer_html"], footer_text=cfg["footer_text"])
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
 @bp.route("/api/crm/settings/send-run-reservations", methods=["GET"])
 def get_send_run_reservations():
     """Return recent send_run_reservations, newest first."""

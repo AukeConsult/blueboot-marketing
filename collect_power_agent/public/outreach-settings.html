@@ -91,6 +91,41 @@
     </div>
   </div>
 
+  <!-- Unsubscribe -->
+  <div class="card p-3 mb-3">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+      <h6 class="fw-semibold mb-0"><i class="ti ti-mail-off me-1 text-primary"></i>Unsubscribe</h6>
+      <div class="form-check form-switch mb-0">
+        <input class="form-check-input" type="checkbox" id="us-enabled">
+        <label class="form-check-label small" for="us-enabled">Add to every automatic mail</label>
+      </div>
+    </div>
+    <p class="small text-muted mb-3">Adds an unsubscribe link at the bottom of every automatic mail, plus the <code>List-Unsubscribe</code> headers that Gmail and Outlook show as an "Unsubscribe" button. A contact who uses it is excluded and marked not-interested. Replies like "unsubscribe" or "stop" do the same. Manual one-to-one mails are not touched. Changes reach the next run within a minute.</p>
+    <div class="row g-2 mb-3">
+      <div class="col-md-6">
+        <label class="form-label small fw-500">Mail address for unsubscribe replies</label>
+        <input id="us-mailto" type="email" class="form-control form-control-sm" placeholder="empty = the mailbox the mail is sent from">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small fw-500">Link address (base URL)</label>
+        <input id="us-base" type="text" class="form-control form-control-sm" placeholder="https://…/crmApi">
+      </div>
+    </div>
+    <label class="form-label small fw-semibold">HTML footer <span class="text-muted fw-normal">- must contain <code>{url}</code></span></label>
+    <textarea id="us-html" class="form-control form-control-sm font-monospace mb-2" rows="3" spellcheck="false"></textarea>
+    <label class="form-label small fw-semibold">Plain-text footer <span class="text-muted fw-normal">- must contain <code>{url}</code></span></label>
+    <textarea id="us-text" class="form-control form-control-sm mb-2" rows="2"></textarea>
+    <div class="mb-3">
+      <button type="button" class="btn btn-sm btn-link p-0" onclick="resetUnsubFooter()">Reset footer texts to default</button>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-outline-primary btn-sm" onclick="saveUnsub()">
+        <i class="ti ti-device-floppy me-1"></i>Save unsubscribe settings
+      </button>
+      <span id="us-status" class="small text-muted"></span>
+    </div>
+  </div>
+
   <!-- Budget remaining -->
   <div class="card p-3 mb-3">
     <div class="d-flex align-items-center justify-content-between mb-2">
@@ -249,6 +284,56 @@ async function saveTrailer() {
   }
 }
 
+// ── Unsubscribe ───────────────────────────────────────────────────────────────
+
+let unsubDefaults = { html: '', text: '' };
+
+function fillUnsub(d) {
+  document.getElementById('us-enabled').checked = !!d.enabled;
+  document.getElementById('us-mailto').value = d.mailto || '';
+  document.getElementById('us-base').value = d.base_url || '';
+  document.getElementById('us-html').value = d.footer_html || '';
+  document.getElementById('us-text').value = d.footer_text || '';
+}
+
+function resetUnsubFooter() {
+  document.getElementById('us-html').value = unsubDefaults.html;
+  document.getElementById('us-text').value = unsubDefaults.text;
+}
+
+async function loadUnsub() {
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/settings/unsubscribe');
+    unsubDefaults = { html: d.default_footer_html || '', text: d.default_footer_text || '' };
+    fillUnsub(d);
+  } catch (e) {
+    setStatus('us-status', 'Could not load: ' + prettyError(e.message) + ' (deploy the functions if this is new)', 'err', true);
+  }
+}
+
+async function saveUnsub() {
+  setStatus('us-status', 'Saving…');
+  try {
+    const r = await fetch(BASE + '/api/crm/settings/unsubscribe', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        enabled:     document.getElementById('us-enabled').checked,
+        mailto:      document.getElementById('us-mailto').value,
+        base_url:    document.getElementById('us-base').value,
+        footer_html: document.getElementById('us-html').value,
+        footer_text: document.getElementById('us-text').value,
+      }),
+    });
+    const d = await r.json();
+    if (d.status !== 'ok') throw new Error(d.message);
+    fillUnsub(d);
+    setStatus('us-status', 'Saved.', 'ok');
+  } catch (e) {
+    setStatus('us-status', 'Save failed: ' + prettyError(e.message), 'err', true);
+  }
+}
+
 // ── Budget remaining ──────────────────────────────────────────────────────────
 
 function _bar(used, max, depleted) {
@@ -373,6 +458,7 @@ requireAuth().then(() => {
   });
   loadSendLimits();
   loadTrailer();
+  loadUnsub();
   loadBudget();
   loadReservations();
 });

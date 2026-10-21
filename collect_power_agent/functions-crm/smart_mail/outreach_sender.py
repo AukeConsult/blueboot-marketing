@@ -365,6 +365,12 @@ def send_outreach(
 
     db = get_firestore()
     trailer = load_trailer(db)      # one default trailer for all mails, read once per run
+    from smart_mail.unsubscribe import load_config as _load_unsub      # noqa: PLC0415
+    try:
+        unsub_cfg = _load_unsub(db)
+    except Exception as ex:
+        print(f"[sender] unsubscribe settings not available ({ex}); mails go out without unsubscribe link")
+        unsub_cfg = {"enabled": False}
 
 
     summary: dict = {
@@ -492,7 +498,13 @@ def send_outreach(
                         body_text = step_dict.get("body_text", ""),
                     )
 
-                    rendered = render_mail(step, contact, trailer)
+                    unsub_url = ""
+                    footer = None
+                    if unsub_cfg.get("enabled"):
+                        from smart_mail.unsubscribe import unsubscribe_url as _unsub_url, footers as _unsub_footers  # noqa: PLC0415
+                        unsub_url = _unsub_url(unsub_cfg, contact.campaign_id, contact.contact_doc_id)
+                        footer = _unsub_footers(unsub_cfg, unsub_url)
+                    rendered = render_mail(step, contact, trailer, footer)
 
                     problem = _mail_problem(contact, step, rendered)
                     if problem:
@@ -521,7 +533,11 @@ def send_outreach(
                             print(f"[sender] {seq} SKIPPED {contact.email}: {why}")
                             continue
 
-                        unsub, unsub_post = _build_unsubscribe_headers(contact.contact_doc_id)
+                        if unsub_url:
+                            from smart_mail.unsubscribe import list_headers as _unsub_headers  # noqa: PLC0415
+                            unsub, unsub_post = _unsub_headers(unsub_cfg, unsub_url, account.email)
+                        else:
+                            unsub, unsub_post = _build_unsubscribe_headers(contact.contact_doc_id)
                         headers = {}
                         if unsub:
                             headers["List-Unsubscribe"] = unsub

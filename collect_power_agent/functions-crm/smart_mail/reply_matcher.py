@@ -1119,6 +1119,14 @@ def _apply_actions(
             status_change = "pending → active"
         else:
             status_change = f"{current} (no change)"
+        from smart_mail.unsubscribe import is_unsubscribe_request
+        if not is_auto and is_unsubscribe_request(subject, message.get("body_text") or ""):
+            # the person asked to stop: no more mail, whatever the status was
+            update["status"] = "excluded"
+            update["followup_status"] = "not_interested"
+            update["unsubscribed"] = True
+            update["unsubscribed_at"] = update["last_updated_at"]
+            status_change = f"{current} → excluded (unsubscribe request)"
         cc_ref.update(update)
         print(f"[reply_matcher]       action  → UPDATED  "
               f"campaign_contacts status={status_change}  followup_status={update.get('followup_status', cur_fu)}")
