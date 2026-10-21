@@ -382,6 +382,13 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
               <option value="">— none —</option>
             </select>
           </div>
+          <div class="col-12">
+            <label class="mb-1" style="color:var(--bb-muted)" for="c-control-email">Control mail address</label>
+            <input id="c-control-email" type="email" class="form-control form-control-sm" style="font-size:.82rem"
+                   placeholder="empty = no control mail" onchange="saveControlEmail(this)">
+            <div class="small mt-1" style="color:var(--bb-muted)">If set, every automatic send run for this campaign also sends one copy of its first mail to this address, so you can see where it lands (Inbox or Spam).</div>
+            <span id="c-control-email-status" class="small"></span>
+          </div>
           <div class="col-6" id="c-sent-at-row" style="display:none">
             <label class="mb-1" style="color:var(--bb-muted)">Active since</label>
             <div class="pt-1"><i class="ti ti-rocket me-1"></i><span id="c-sent-at">—</span></div>
@@ -1370,6 +1377,24 @@ function confirmAllHeader(box) {
   confirmShown(value);
 }
 
+async function saveControlEmail(inp) {
+  const id = document.getElementById('campaign-select').value;
+  const st = document.getElementById('c-control-email-status');
+  const value = inp.value.trim();
+  if (!id) return;
+  st.textContent = 'Saving…'; st.className = 'small text-muted';
+  try {
+    const r = await fetch(`${BASE}/api/crm/campaigns/${encodeURIComponent(id)}`, {
+      method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({control_email: value})
+    });
+    const d = await r.json();
+    if (!r.ok || d.status === 'error') throw new Error(d.message || 'Save failed');
+    if (window._campaignData) window._campaignData.control_email = value.toLowerCase();
+    inp.value = value.toLowerCase();
+    st.textContent = value ? 'Saved.' : 'Control mail off.'; st.className = 'small text-success';
+  } catch (e) { st.textContent = e.message; st.className = 'small text-danger'; }
+}
+
 async function toggleRequireConfirm(sw) {
   const id = document.getElementById('campaign-select').value;
   const value = sw.checked;
@@ -1616,6 +1641,7 @@ async function loadCampaign(opts) {
     document.getElementById('c-email-account-preview').textContent = fromFormatted;
     await populateEmailAccountSelect(c.outreach_email_account || '');
     await populateOwnerSelect(c.owner || '');
+    { const ce = document.getElementById('c-control-email'); if (ce) ce.value = c.control_email || ''; }
     const hasMailAccount = !!(c.mail_account && c.mail_account.account_type);
     const viewBtn = document.getElementById('view-mail-account-btn');
     if (viewBtn) viewBtn.style.display = hasMailAccount ? '' : 'none';

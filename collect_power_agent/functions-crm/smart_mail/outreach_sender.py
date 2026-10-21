@@ -333,6 +333,7 @@ def send_outreach(
     preview: bool = False,
     progress=None,
     deadline: float | None = None,
+    control_state: dict | None = None,
 ) -> dict:
     """One-pass send loop for intro or followup outreach.
 
@@ -348,10 +349,15 @@ def send_outreach(
 
     progress(summary) is called after every mail so the caller can store live counts.
     deadline (time.monotonic() value) stops the run cleanly; default is MAX_RUN_SECONDS from now.
+    control_state is a dict shared by the passes of one job. A campaign with a control mail address
+    (campaign field control_email) gets ONE extra copy of its first real mail sent to that address per job
+    (None = once per call).
 
     Returns a summary dict.
     """
     deadline = deadline if deadline is not None else time.monotonic() + MAX_RUN_SECONDS
+    if control_state is None:
+        control_state = {}
     # Lazy imports keep dry-run cheap and avoid import-time Firestore work.
     if not dry_run:
         from smart_mail.mail_sender import MailSender              # noqa: PLC0415
@@ -592,6 +598,39 @@ def send_outreach(
                                 {"sent_so_far": firestore.Increment(1)})
                         except Exception as rex:
                             print(f"[budget] could not update reservation: {rex}")
+
+                        control_to = str((campaign.extra or {}).get("control_email") or "").strip().lower()
+                        done_set = control_state.setdefault("campaigns", set())
+                        if control_to and campaign.campaign_id not in done_set and not stop_run:
+                            done_set.add(campaign.campaign_id)      # once per campaign and job, whatever the result
+                            try:
+                                if (contact.email or "").strip().lower() != control_to:
+                                    c_headers = dict(headers)
+                                    c_rendered = rendered
+                                    if unsub_cfg.get("enabled"):
+                                        # own link: opening it must not unsubscribe the real contact
+                                        from smart_mail.unsubscribe import (  # noqa: PLC0415
+                                            unsubscribe_url as _cu, footers as _cf, list_headers as _ch)
+                                        c_url = _cu(unsub_cfg, contact.campaign_id, "control-mail")
+                                        c_rendered = render_mail(step, contact, trailer, _cf(unsub_cfg, c_url))
+                                        c_headers["List-Unsubscribe"], c_headers["List-Unsubscribe-Post"] = \
+                                            _ch(unsub_cfg, c_url, account.email)
+                                    c_res = sender.send_open(
+                                        to          = control_to,
+                                        subject     = c_rendered.subject,
+                                        body_plain  = c_rendered.text_body,
+                                        body_html   = c_rendered.html_body,
+                                        headers     = c_headers,
+                                        save_copy   = "none",
+                                    )
+                                    ok = c_res.get("status") == "ok"
+                                    print(f"[sender] control mail ({campaign.campaign_id}) to {control_to}: {'sent' if ok else 'FAILED ' + str(c_res.get('message'))}")
+                                    summary["notes"].append(
+                                        f"{campaign.campaign_id}: control mail "
+                                        + (f"sent to {control_to} (copy of the mail to {contact.email})" if ok
+                                           else f"to {control_to} failed: {c_res.get('message')}"))
+                            except Exception as cex2:
+                                print(f"[sender] control mail failed: {cex2}")
 
                     except Exception as ex:
                         failed_batch       += 1

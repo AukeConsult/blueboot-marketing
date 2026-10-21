@@ -2,13 +2,14 @@ import sys
 import types
 import unittest
 
-# The VM running tests may lack google-cloud-firestore; stub ArrayUnion.
-if "google.cloud.firestore_v1" not in sys.modules:
-    try:
-        import google.cloud.firestore_v1  # noqa: F401
-    except Exception:
-        for _n in ("google", "google.cloud", "google.cloud.firestore_v1"):
-            sys.modules.setdefault(_n, types.ModuleType(_n))
+# The VM running tests may lack google-cloud-firestore (or another test stubbed it
+# without ArrayUnion); make sure ArrayUnion exists.
+try:
+    from google.cloud.firestore_v1 import ArrayUnion  # noqa: F401
+except Exception:
+    for _n in ("google", "google.cloud", "google.cloud.firestore_v1"):
+        sys.modules.setdefault(_n, types.ModuleType(_n))
+    if not hasattr(sys.modules["google.cloud.firestore_v1"], "ArrayUnion"):
         sys.modules["google.cloud.firestore_v1"].ArrayUnion = lambda v: ("ArrayUnion", v)
 
 from smart_mail import unsubscribe as u

@@ -210,6 +210,11 @@ def update_campaign(campaign_id):
             update["campaign_lang"] = lang
         if "require_send_confirmation" in body:
             update["require_send_confirmation"] = bool(body["require_send_confirmation"])
+        if "control_email" in body:
+            ctl = str(body["control_email"] or "").strip().lower()
+            if ctl and not re.fullmatch(r"[^@\s<>,;]+@[^@\s<>,;]+\.[^@\s<>,;]+", ctl):
+                return _err("Control mail address is not a valid email address", 400)
+            update["control_email"] = ctl
 
         if "mail" in body:
             existing_mail = (doc.to_dict() or {}).get("mail", {})

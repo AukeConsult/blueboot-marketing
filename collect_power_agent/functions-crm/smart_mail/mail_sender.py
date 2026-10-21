@@ -272,7 +272,9 @@ class MailSender:
         msg["Subject"]    = subject
         msg["To"]         = to
         msg["Date"]       = formatdate(localtime=False)
-        msg["Message-ID"] = f"<{uuid.uuid4().hex}@blueboot.ai>"
+        # Message-ID uses the domain of the mailbox we send from (matches From/DKIM).
+        _dom = (getattr(self, "email", "") or "").rpartition("@")[2].strip().lower() or "blueboot.ai"
+        msg["Message-ID"] = f"<{uuid.uuid4().hex}@{_dom}>"
         # Tag CRM-originated mail so the SENT-folder sync (run_sent_sync) can
         # recognise it and NOT re-log it (outreach + manual already log at send
         # time). Only mail sent from OUTSIDE the CRM lacks this header.
@@ -319,11 +321,14 @@ class MailSender:
 
     def _smtp_connect(self):
         username, password, smtp_host, smtp_port, smtp_ssl = self._smtp_params()
+        # Say a real hostname in EHLO; the default in Cloud Functions is "[127.0.0.1]",
+        # which then shows up in the first Received header.
+        helo = (self.email or "").rpartition("@")[2].strip().lower() or "blueboot.ai"
         if smtp_ssl:
-            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
+            server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15, local_hostname=helo)
             server.ehlo()
         else:
-            server = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+            server = smtplib.SMTP(smtp_host, smtp_port, timeout=15, local_hostname=helo)
             server.ehlo()
             server.starttls()
             server.ehlo()

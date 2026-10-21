@@ -540,6 +540,7 @@ def worker(name, job_id):
             import time as _time
             _deadline = _time.monotonic() + int(os.getenv("OUTREACH_MAX_RUN_SECONDS", "780"))   # shared by both passes
             _done = {"sent": 0, "failed": 0}
+            _control = {}   # one control mail per job, shared by the follow-up and intro passes
 
             def _progress(s, _done=_done):
                 # live counts on the job, so a killed worker still shows what went out
@@ -554,6 +555,7 @@ def worker(name, job_id):
                     preview      = bool(body.get("preview", False)),
                     progress     = _progress,
                     deadline     = _deadline,
+                    control_state = _control,
                 ))
                 _done["sent"] += passes[-1].get("sent", 0); _done["failed"] += passes[-1].get("failed", 0)
             result = {
