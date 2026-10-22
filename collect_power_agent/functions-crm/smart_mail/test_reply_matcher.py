@@ -420,6 +420,18 @@ class TestForwardHopBounce(unittest.TestCase):
         self.assertEqual(rm._our_message_ids(self.RAW), ["<c45f987096394aa3817b521fced67462@blueboot.ai>"])
 
 
+class TestFollowupDate(unittest.TestCase):
+    def test_dates(self):
+        from datetime import datetime, timedelta, timezone
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        week = (datetime.now(timezone.utc) + timedelta(days=7)).strftime("%Y-%m-%d")
+        self.assertEqual(rm._followup_date_for("replied", ""), today)
+        self.assertEqual(rm._followup_date_for("replied", "2099-01-01"), today)
+        self.assertIsNone(rm._followup_date_for("replied", "2020-01-01"))
+        self.assertEqual(rm._followup_date_for("auto_replied", ""), week)
+        self.assertIsNone(rm._followup_date_for("auto_replied", today))
+
+
 class TestEximBounce(unittest.TestCase):
     def test_failed_block_recipient_recovered(self):
         msg = _make_exim_bounce("realcontact@acme.no")

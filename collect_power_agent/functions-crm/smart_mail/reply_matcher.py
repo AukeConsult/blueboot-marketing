@@ -344,6 +344,20 @@ _UNKNOWN_ADDRESS_RE = re.compile(
     r"|unrouteable address|(host or )?domain (name )?(not found|does not exist)|\bno mx\b"
     r"|name service error|host not found|\bnxdomain\b|\b5\.4\.4\b|domain .{0,40}(has no|does not have) (a )?(mx|valid)",
     re.IGNORECASE)
+# Follow-up DATE set by an incoming mail: a real reply is due today, an automatic reply (out of office)
+# is looked at again after this many days.
+_AUTO_REPLY_FOLLOWUP_DAYS = 7
+
+
+def _followup_date_for(new_fu: str, current: str) -> str | None:
+    """YYYY-MM-DD to write as followup_date after a reply, or None to leave it. A date that is already
+    due earlier than the new one is kept (never postponed); an empty or later date is replaced."""
+    days = _AUTO_REPLY_FOLLOWUP_DAYS if new_fu == "auto_replied" else 0
+    new = (datetime.now(timezone.utc) + timedelta(days=days)).strftime("%Y-%m-%d")
+    cur = str(current or "").strip()[:10]
+    return new if (not cur or cur > new) else None
+
+
 # Follow-up statuses an incoming reply may overwrite with "replied" ("received" is the retired name).
 _REPLY_OVERWRITES = ("", "contacted", "auto_replied", "received", "replied")
 # Automatic replies (out of office, vacation, "we received your mail"): a machine answered, not the person.
@@ -1133,6 +1147,9 @@ def _apply_actions(
         cur_fu  = (cc_data.get("followup_status") or "").strip().lower()
         if cur_fu in (("", "contacted") if is_auto else _REPLY_OVERWRITES):
             update["followup_status"] = new_fu
+            fu_date = _followup_date_for(new_fu, cc_data.get("followup_date"))
+            if fu_date:
+                update["followup_date"] = fu_date
         if update.get("followup_status") == "auto_replied":
             # the person has not really answered: stay (or go back to) pending so reminders continue
             if current != "excluded":
@@ -1150,6 +1167,7 @@ def _apply_actions(
             # the person asked to stop: no more mail, whatever the status was
             update["status"] = "excluded"
             update["followup_status"] = "not_interested"
+            update.pop("followup_date", None)
             update["unsubscribed"] = True
             update["unsubscribed_at"] = update["last_updated_at"]
             status_change = f"{current} → excluded (unsubscribe request)"
