@@ -169,7 +169,8 @@ function renderTiles() {
     tile('Reminders due', t.followup_due, '', 'Contacts whose next sequence step is due') +
     tile('Intro not confirmed', t.intro_not_confirmed, t.intro_not_confirmed ? 'text-warning' : '', 'Held back until ticked in the Send column') +
     tile('Next run sends', t.next_run_sends, 'text-primary', 'Limited by the send budget per account') +
-    tile('Mails sent', t.mails_sent ?? 0, 'text-success', `Total mails sent in all campaigns (intro + reminders) to ${t.contacts_mailed ?? 0} contacts`) +
+    tile('Mails sent, all time', t.mails_sent ?? 0, 'text-success', `Every mail recorded on a contact in the ready/active campaigns, over their whole life (intro + reminders), to ${t.contacts_mailed ?? 0} contacts. Not what was sent today.`) +
+    tile('Sent last 24 h', (DATA.accounts || []).reduce((n, a) => n + (a.sent_last_day || 0), 0), 'text-success', 'Mails sent in the last 24 hours by all mailboxes (from the send log)') +
     tile('Left over', t.left_over, t.left_over ? 'text-warning' : '', 'Waiting, but over the budget: goes in a later run');
 }
 

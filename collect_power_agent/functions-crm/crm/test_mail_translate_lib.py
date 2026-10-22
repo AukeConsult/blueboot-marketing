@@ -61,5 +61,49 @@ class TranslateTests(unittest.TestCase):
         self.assertIn("xx", language_name("xx"))     # unknown code is passed on as it is
 
 
+class SeparateVersions(unittest.TestCase):
+    TEXT = "Hi {{name}},\n\nSee https://blueboot.ai/x?ref=A or mail info@blueboot.ai"
+
+    def _tr(self, p):
+        out = {"subject": "Hej"}
+        if "body" in p:
+            out["body"] = p["body"].replace("Hi", "Hej HTML")
+        if "text" in p:
+            out["text"] = p["text"].replace("Hi", "Hej TEXT")
+        return out
+
+    def test_html_and_text_translated_separately_into_their_own_fields(self):
+        c = FakeClient(self._tr)
+        out = translate_mail("Hello", HTML, "Danish", client=c, text=self.TEXT)
+        self.assertEqual(c.sent[0]["text"], self.TEXT)
+        self.assertIn("Hej HTML", out["body"])
+        self.assertNotIn("Hej TEXT", out["body"])
+        self.assertIn("Hej TEXT", out["text"])
+        self.assertNotIn("<p>", out["text"])
+
+    def test_empty_plain_text_is_not_translated(self):
+        c = FakeClient(self._tr)
+        out = translate_mail("Hello", HTML, "Danish", client=c, text="  ")
+        self.assertNotIn("text", c.sent[0])
+        self.assertNotIn("text", out)
+
+    def test_empty_html_is_not_translated_only_the_text(self):
+        c = FakeClient(self._tr)
+        out = translate_mail("Hello", "", "Danish", client=c, text=self.TEXT)
+        self.assertNotIn("body", c.sent[0])
+        self.assertEqual(out["body"], "")
+        self.assertIn("Hej TEXT", out["text"])
+
+    def test_html_leaking_into_text_is_refused(self):
+        c = FakeClient(lambda p: {"subject": "Hej", "body": p["body"], "text": "<p>Hej</p>"})
+        with self.assertRaises(ValueError):
+            translate_mail("Hello", HTML, "Danish", client=c, text="Hi there")
+
+    def test_text_placeholder_must_survive(self):
+        c = FakeClient(lambda p: {"subject": "Hej", "body": p["body"], "text": p["text"].replace("{{name}}", "{{navn}}")})
+        with self.assertRaises(ValueError):
+            translate_mail("Hello", HTML, "Danish", client=c, text=self.TEXT)
+
+
 if __name__ == "__main__":
     unittest.main()

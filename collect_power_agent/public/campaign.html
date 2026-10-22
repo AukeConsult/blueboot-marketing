@@ -809,7 +809,7 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
 <script src="js/crm-common.js"></script>
 <script src="js/crm-defs.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
-<script src="js/mail-editor-component.js"></script>
+<script src="js/mail-editor-component.js?v=20261022a"></script>
 <script src="vendor/bootstrap.bundle.min.js"></script>
 <script>
 // Activate Bootstrap tooltips
@@ -1031,6 +1031,7 @@ function ensureMailEditor() {
         body: d.body || '',
         type: d.type || 'plain',
         css: d.css || '',
+        text: d.text || '',
         outreach_email: d.account || '',
         _display_name: ((window._campaignData || {}).mail_account || {}).display_name || ''
       };
@@ -1184,6 +1185,7 @@ function openCampaignTestMailStep(stepIndex) {
     subject: step.subject || '',
     body,
     type,
+    text: step.body_html ? (step.body_text || '') : '',
     css: step.css || '',
     outreach_email: (window._campaignData || {}).outreach_email_account || '',
     _display_name:  ((window._campaignData || {}).mail_account || {}).display_name || ''
@@ -2047,7 +2049,7 @@ async function doSendCampaignTestMail() {
         to,
         subject:    subject || mail.subject || 'Test email',
         body_html:  mail.body  || '',
-        body_plain: mail.body_plain || '',
+        body_plain: mail.body_plain || mail.text || '',
       })
     });
     const d = await r.json();

@@ -80,9 +80,10 @@ class MailStep:
     Stored as an element of campaign.mail_sequence in Firestore:
         { index, mail_type, subject, body_html, body_text }
 
-    Exactly one of body_html / body_text should be non-empty.
-    If both are set, body_html takes precedence and body_text is ignored
-    (plain text will be derived automatically from the HTML).
+    body_html set    -> an HTML mail. body_text, when also set, is its separate plain-text version
+                        (its own text, translated on its own); when empty the plain text is derived
+                        from the HTML.
+    body_html empty  -> a plain-text mail made from body_text.
     """
     index:      int
     mail_type:  str   # "intro" | "followup_1" | "followup_2" | ...
@@ -140,7 +141,8 @@ def render_mail(step: MailStep, contact: Any, trailer: dict | None = None,
     1. subject is always rendered through render_template().
     2. If step.body_html is non-empty:
          - html_body = render_template(body_html, contact)
-         - text_body = _html_to_text(html_body)  or subject as last resort
+         - text_body = render_template(body_text, contact) when step.body_text is set (the separate
+           plain-text version), else _html_to_text(html_body), else subject as last resort
     3. If step.body_html is empty and step.body_text is non-empty:
          - text_body = render_template(body_text, contact)
          - html_body = None
@@ -159,7 +161,8 @@ def render_mail(step: MailStep, contact: Any, trailer: dict | None = None,
 
     if step.body_html:
         html_body  = _render_template(step.body_html, contact_dict)
-        text_body  = _html_to_text(html_body) or subject
+        own_text   = _render_template(step.body_text, contact_dict).strip() if (step.body_text or "").strip() else ""
+        text_body  = own_text or _html_to_text(html_body) or subject
         if trailer_html:
             html_body += "<hr>" + trailer_html
         if trailer_text:

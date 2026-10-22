@@ -63,6 +63,11 @@ _FAILED_BLOCK_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Postfix style (MailChannels relay): "<user@host>: Host or domain name not found. ..." at line start.
+# Taken RAW (no clean_email): a scraped junk address such as _@astro.cd-udwwk.css is rejected by
+# find_emails, yet it is exactly the address we mailed and must be matched.
+_POSTFIX_RCPT_RE = re.compile(r"^[ \t]*<([\w.+%-]+@[\w.-]+)>[ \t]*(?::|\()", re.MULTILINE)
+
 # DMARC report subject pattern
 _DMARC_SUBJECT_RE = re.compile(
     r"Report\s+domain:\s*(?P<domain>[\w.-]+)"
@@ -305,6 +310,10 @@ def _bounce_candidates(msg, sender_addr: str = "") -> list[str]:
         m = rx.search(body)
         if m:
             add(1, m.group(1))
+    for m in _POSTFIX_RCPT_RE.finditer(body):
+        raw_addr = m.group(1).lower()           # raw on purpose: _bare()/clean_email would drop junk like *.css
+        if not _is_daemon_addr(raw_addr) and raw_addr != sender_addr:
+            found.append((1, raw_addr))
 
     # P3 — generic: first plain address that is not a daemon / not the sender
     for addr in find_emails(body):
@@ -326,7 +335,8 @@ _UNKNOWN_ADDRESS_RE = re.compile(
     r"|no such (user|recipient|mailbox|address)|invalid (recipient|address|mailbox)"
     r"|mailbox (not found|unavailable|does not exist|doesn't exist)"
     r"|(recipient|address|mailbox|user|account) (does not exist|doesn't exist|not found)"
-    r"|unrouteable address|(host or )?domain (name )?(not found|does not exist)|\bno mx\b",
+    r"|unrouteable address|(host or )?domain (name )?(not found|does not exist)|\bno mx\b"
+    r"|name service error|host not found|\bnxdomain\b|\b5\.4\.4\b|domain .{0,40}(has no|does not have) (a )?(mx|valid)",
     re.IGNORECASE)
 # Follow-up statuses an incoming reply may overwrite with "replied" ("received" is the retired name).
 _REPLY_OVERWRITES = ("", "contacted", "auto_replied", "received", "replied")

@@ -381,7 +381,7 @@ def translate_mail_route():
         from crm.mail_translate_lib import translate_mail
         body = request.get_json(silent=True) or {}
         result = translate_mail(str(body.get("subject") or ""), str(body.get("body") or ""),
-                                str(body.get("language") or ""))
+                                str(body.get("language") or ""), text=str(body.get("text") or ""))
         return jsonify({"status": "ok", **result})
     except ValueError as exc:
         return _err(str(exc), 400)

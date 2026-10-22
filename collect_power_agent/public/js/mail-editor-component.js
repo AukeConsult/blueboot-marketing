@@ -169,6 +169,12 @@
               <textarea data-me="bodyHtml" class="form-control" rows="10" style="font-family:monospace;font-size:12px;border-radius:8px"></textarea>
             </div>
             <div data-me="previewPane" class="border border-top-0 rounded-bottom p-3 mb-2" style="display:none;background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;min-height:230px"></div>
+            <div data-me="textPane" class="mb-2">
+              <label class="form-label small fw-semibold mb-1">Plain-text version
+                <span class="text-muted fw-normal">- sent as the text-only part of this mail. Empty = made from the HTML when sent.</span></label>
+              <textarea data-me="bodyText" class="form-control" rows="6" style="font-size:13px;border-radius:8px" placeholder="Hei {{name}},"></textarea>
+              <button type="button" class="btn btn-sm btn-link p-0 mt-1" data-me="textFromHtml">Make it from the HTML now</button>
+            </div>
           </div>
           <textarea data-me="css" style="display:none"></textarea>
         </div>`;
@@ -177,7 +183,7 @@
     }
 
     bind() {
-      ['subject', 'bodyPlain', 'bodyHtml', 'css', 'stepDelay'].forEach(name => {
+      ['subject', 'bodyPlain', 'bodyHtml', 'bodyText', 'css', 'stepDelay'].forEach(name => {
         const el = this.$(name);
         if (el) el.addEventListener('input', () => this.autoSave());
       });
@@ -197,6 +203,10 @@
       this.$('campaignRef').addEventListener('input', () => this.autoSave());
       this.$('campaignLang').addEventListener('input', () => this.autoSave());
       this.$('applyBtn').addEventListener('click', () => this.applyRefLang());
+      this.$('textFromHtml').addEventListener('click', () => {
+        this.$('bodyText').value = MailEditorComponent.htmlToText(this.$('bodyHtml').value);
+        this.autoSave();
+      });
       this.$('trailerBtn').addEventListener('click', () => this.insertTrailer());
       this.$('trBtn').addEventListener('click', () => this.translate());
       this.$('trUndo').addEventListener('click', () => this.undoTranslate());
@@ -237,11 +247,13 @@
         badge.textContent = label;
         badge.style.display = '';
         this.$('stepBar').style.display = 'flex';
+        this.$('textPane').style.display = '';
         this.$('stepDelay').value = step ? (step.delay_days ?? 0) : (delay || 0);
         if (step) {
           const body = step.body_html || step.body_text || '';
           const type = step.body_html ? 'html' : 'plain';
-          this.applyMail({ subject: step.subject || '', body, type, css: step.css || DEFAULT_CSS });
+          this.applyMail({ subject: step.subject || '', body, type, css: step.css || DEFAULT_CSS,
+                          text: step.body_html ? (step.body_text || '') : '' });
         } else {
           this.applyMail({ subject: stepName || '', body: '', type: 'plain', css: DEFAULT_CSS });
         }
@@ -269,14 +281,16 @@
       this.$('subtitle').textContent = subtitle;
       this.$('stepBar').style.display = 'none';
       this.$('tools').style.display = 'none';     // ref, language, translation and trailer belong to a campaign
+      this.$('textPane').style.display = 'none';  // a separate plain-text version exists on sequence steps only
       this.applyMail({ type: 'plain', css: DEFAULT_CSS, ...mail });
     }
 
     applyMail(mail) {
       const type = mail.type || 'plain';
       this.$('subject').value = mail.subject || '';
-      this.$('bodyPlain').value = mail.body || '';
+      this.$('bodyPlain').value = type === 'plain' ? (mail.body || '') : '';    // never the HTML source
       this.$('bodyHtml').value = mail.body || '';
+      this.$('bodyText').value = type === 'html' ? (mail.text || '') : '';
       this.$('css').value = mail.css || DEFAULT_CSS;
       this.$(type === 'html' ? 'typeHtml' : 'typePlain').checked = true;
       this.switchMode();
@@ -518,6 +532,12 @@
       const html = this.$('typeHtml').checked;
       this.$('plainPane').style.display = html ? 'none' : '';
       this.$('htmlPane').style.display = html ? '' : 'none';
+      if (!html && !this.$('bodyPlain').value.trim() && this.$('bodyText').value.trim()) {
+        this.$('bodyPlain').value = this.$('bodyText').value;       // the plain-text version becomes the plain body
+      }
+      if (html && !this.$('bodyText').value.trim() && this.$('bodyPlain').value.trim()) {
+        this.$('bodyText').value = this.$('bodyPlain').value;       // and the other way round
+      }
       if (html) {
         this.initQuill();
         if (this.quill && !this.$('bodyHtml').value && this.$('bodyPlain').value) {
@@ -544,6 +564,11 @@
       return this.$('typeHtml').checked ? 'html' : 'plain';
     }
 
+    // The separate plain-text version of an HTML mail ('' for plain mails).
+    getText() {
+      return this.getType() === 'html' ? this.$('bodyText').value : '';
+    }
+
     getBody() {
       if (this.getType() !== 'html') return this.$('bodyPlain').value;
       return this.$('bodyHtml').value;
@@ -562,7 +587,7 @@
             delay_days: parseInt(this.$('stepDelay').value || '0', 10) || 0,
             subject:    this.$('subject').value.trim(),
             body_html:  isHtml ? body : '',
-            body_text:  isHtml ? '' : body,
+            body_text:  isHtml ? this.getText().trim() : body,
             css:        this.$('css').value || DEFAULT_CSS,
           }
         };
@@ -618,6 +643,22 @@
         : `Updated ${links} blueboot.ai link(s).`);
     }
 
+    // HTML -> readable plain text (block ends become blank lines, <br> a line break, links keep their address).
+    static htmlToText(html) {
+      let h = String(html || '')
+        .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '')
+        .replace(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (m, href, label) => {
+          const t = label.replace(/<[^>]+>/g, '').trim();
+          return !t || t === href || /^mailto:/i.test(href) ? (t || href) : `${t} (${href})`;
+        })
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(p|div|h[1-6]|ul|ol|table|tr|blockquote)>/gi, '\n\n')
+        .replace(/<li\b[^>]*>/gi, '- ')
+        .replace(/<\/li>/gi, '\n');
+      const doc = new DOMParser().parseFromString(h, 'text/html');    // inert: nothing loads or runs
+      return (doc.body.textContent || '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
+
     // Works on the mail text, so it covers href="..." in HTML and plain URLs in plain mails.
     static mergeRefLang(text, lang, ref) {
       let links = 0;
@@ -660,8 +701,8 @@
       const language = this.$('campaignLang').value.trim().toLowerCase();
       const btn = this.$('trBtn');
       if (!language) { this.toolsMessage('Write the language code to translate into, for example da.', true); return; }
-      if (!confirm(`Translate the subject and text into "${language}"? It replaces the current text (Undo is available).`)) return;
-      const before = { subject: this.$('subject').value, body: this.getBody() };
+      if (!confirm(`Translate the subject and the mail text into "${language}"? The HTML and the plain-text version are translated separately, an empty one is left empty. It replaces the current text (Undo is available).`)) return;
+      const before = { subject: this.$('subject').value, body: this.getBody(), text: this.getText() };
       btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader me-1"></i>Translating…';
       this.toolsMessage('Translating…');
       try {
@@ -673,7 +714,10 @@
         if (d.status !== 'ok') throw new Error(d.message || 'Translation failed');
         this._beforeTranslate = before;
         this.$('subject').value = d.subject;
-        this.setBody(d.body);
+        // Each version goes back into its own field; an empty version was not translated and stays empty.
+        if (before.body.trim()) this.setBody(d.body);
+        if (before.text.trim() && typeof d.text === 'string') this.$('bodyText').value = d.text;
+        this.autoSave();
         this.$('trUndo').style.display = '';
         this.toolsMessage(`Translated into "${language}" and saved. Check the text, then use Apply to set the language in the links.`);
       } catch (e) {
@@ -686,6 +730,8 @@
       if (!this._beforeTranslate) return;
       this.$('subject').value = this._beforeTranslate.subject;
       this.setBody(this._beforeTranslate.body);
+      if (this.getType() === 'html') this.$('bodyText').value = this._beforeTranslate.text || '';
+      this.autoSave();
       this._beforeTranslate = null;
       this.$('trUndo').style.display = 'none';
       this.toolsMessage('Translation undone.');
@@ -764,6 +810,7 @@
         account: this.campaign?.outreach_email_account || '',
         subject: this.$('subject').value.trim(),
         body: this.getBody(),
+        text: this.getText(),
         type: this.getType(),
         css: this.$('css').value || DEFAULT_CSS
       };

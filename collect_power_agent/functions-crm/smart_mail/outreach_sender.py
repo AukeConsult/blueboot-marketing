@@ -203,10 +203,26 @@ def _release_send_run(
 _PLACEHOLDER_RE = re.compile(r"\{\{[^{}]*\}\}")
 
 
+_JUNK_TLDS = {"css", "js", "png", "jpg", "jpeg", "gif", "svg", "webp", "avif", "ico", "woff", "woff2",
+              "ttf", "eot", "map", "json", "xml", "html", "htm", "php", "pdf", "mp4", "scss", "ts"}
+
+
+def _plausible_address(email: str) -> bool:
+    """False for scraped junk: file-extension TLD (.css, .png ...), local part without a letter or digit."""
+    local, _, domain = (email or "").strip().lower().rpartition("@")
+    if not local or not domain or "." not in domain:
+        return False
+    if not any(c.isalnum() for c in local):
+        return False
+    return domain.rsplit(".", 1)[1] not in _JUNK_TLDS
+
+
 def _mail_problem(contact, step, rendered) -> str:
     """Why this mail must NOT be sent ("" when it is fine). A broken mail to a real prospect cannot be undone."""
     if "@" not in (contact.email or ""):
         return "the contact has no valid email address"
+    if not _plausible_address(contact.email):
+        return "the contact's email address is not a real address (scraped junk)"
     if not (rendered.subject or "").strip():
         return "the subject is empty"
     if not ((step.body_html or "").strip() or (step.body_text or "").strip()):

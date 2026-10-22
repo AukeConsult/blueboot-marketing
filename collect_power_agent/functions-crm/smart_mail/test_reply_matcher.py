@@ -382,6 +382,25 @@ def _make_exim_bounce(failed_to, original_from="cpanel@blueboot.ai"):
     return _emaillib.message_from_bytes(raw.encode())
 
 
+class TestPostfixDnsBounce(unittest.TestCase):
+    TEXT = ("This is the mail system at host relay.mailchannels.net.\r\n\r\n"
+            "<_@astro.cd-udwwk.css>: Host or domain name not found. Name service error for\r\n"
+            "    name=astro.cd-udwwk.css type=A: Host not found\r\n")
+
+    def _msg(self):
+        raw = ("From: MAILER-DAEMON@relay.mailchannels.net\r\nSubject: Undelivered Mail Returned to Sender\r\n"
+               "Content-Type: text/plain\r\n\r\n" + self.TEXT)
+        return _emaillib.message_from_bytes(raw.encode())
+
+    def test_candidate_found_raw(self):
+        c = rm._bounce_candidates(self._msg(), "mailer-daemon@relay.mailchannels.net")
+        self.assertEqual(c[0], "_@astro.cd-udwwk.css")
+
+    def test_kind_unknown_address(self):
+        self.assertEqual(rm._bounce_kind(self.TEXT), "unknown_address")
+        self.assertEqual(rm._bounce_kind("Name service error for name=x.y type=A: Host not found"), "unknown_address")
+
+
 class TestEximBounce(unittest.TestCase):
     def test_failed_block_recipient_recovered(self):
         msg = _make_exim_bounce("realcontact@acme.no")
