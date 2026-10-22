@@ -396,9 +396,28 @@ class TestPostfixDnsBounce(unittest.TestCase):
         c = rm._bounce_candidates(self._msg(), "mailer-daemon@relay.mailchannels.net")
         self.assertEqual(c[0], "_@astro.cd-udwwk.css")
 
+    def test_structured_dsn_keeps_junk_address(self):
+        m = _make_dsn_bounce("_@astro.cd-udwwk.css")
+        self.assertEqual(rm._bounce_candidates(m, "")[0], "_@astro.cd-udwwk.css")
+
     def test_kind_unknown_address(self):
         self.assertEqual(rm._bounce_kind(self.TEXT), "unknown_address")
         self.assertEqual(rm._bounce_kind("Name service error for name=x.y type=A: Host not found"), "unknown_address")
+
+
+class TestForwardHopBounce(unittest.TestCase):
+    RAW = ("From: Mail Delivery Subsystem <mailer-daemon@googlemail.com>\r\nSubject: Delivery Status Notification (Failure)\r\n"
+           "Content-Type: text/plain\r\n\r\n"
+           "Delivery to the following recipient failed permanently:\r\n\r\n     sales@blueboot.ai\r\n\r\n"
+           "554.5.7.1 policy prohibited the mail\r\n\r\n----- Original message headers -----\r\n\r\n"
+           "Delivered-To: tim.hufermann@jungmut.com\r\nTo: tim.hufermann@jungmut.com\r\n"
+           "Message-ID: <c45f987096394aa3817b521fced67462@blueboot.ai>\r\nFrom: Blueboot <sales@blueboot.ai>\r\n")
+
+    def test_outside_candidate_and_message_id_available(self):
+        m = _emaillib.message_from_bytes(self.RAW.encode())
+        c = rm._bounce_candidates(m, "mailer-daemon@googlemail.com")
+        self.assertIn("tim.hufermann@jungmut.com", c)
+        self.assertEqual(rm._our_message_ids(self.RAW), ["<c45f987096394aa3817b521fced67462@blueboot.ai>"])
 
 
 class TestEximBounce(unittest.TestCase):

@@ -66,6 +66,7 @@ _FAILED_BLOCK_RE = re.compile(
 # Postfix style (MailChannels relay): "<user@host>: Host or domain name not found. ..." at line start.
 # Taken RAW (no clean_email): a scraped junk address such as _@astro.cd-udwwk.css is rejected by
 # find_emails, yet it is exactly the address we mailed and must be matched.
+_RAW_ADDR_RE = re.compile(r"[\w.+%-]+@[\w.-]+\.[A-Za-z]{2,}")
 _POSTFIX_RCPT_RE = re.compile(r"^[ \t]*<([\w.+%-]+@[\w.-]+)>[ \t]*(?::|\()", re.MULTILINE)
 
 # DMARC report subject pattern
@@ -246,6 +247,11 @@ def _bounce_candidates(msg, sender_addr: str = "") -> list[str]:
 
     def add(pri: int, value: str) -> None:
         addr = _bare(value) if value and "@" in value else (value or "").lower()
+        if not addr and pri <= 1 and value:
+            # Structured sources (Final-Recipient, X-Failed-Recipients, failed-address block) name the
+            # address we really mailed; keep it even when clean_email() rejects it as junk (*.css ...).
+            rm_ = _RAW_ADDR_RE.search(value)
+            addr = rm_.group(0).lower() if rm_ else ""
         if addr and not _is_daemon_addr(addr) and addr != sender_addr:
             found.append((pri, addr))
 
@@ -667,6 +673,16 @@ def _process_account(
 
                 # ── Skip internal / system mail (own-domain, cpanel@, etc.) ───
                 subject_addr = orig_rcpt if message_type == "bounce" else from_addr
+                if message_type == "bounce":
+                    # A bounce whose "failed" address is ours (a contact's mailbox forwards to
+                    # sales@blueboot.ai and that hop failed) is still the bounce of OUR mail to the contact:
+                    # keep it when it quotes our Message-ID or names an outside address.
+                    _cands = _bounce_candidates(msg, from_addr)
+                    _outside = [c for c in _cands if not _is_self_or_system(c, own_domains)]
+                    if _outside:
+                        subject_addr = _outside[0]
+                    elif _our_message_ids(raw.decode("utf-8", "ignore")):
+                        subject_addr = ""
                 if subject_addr and _is_self_or_system(subject_addr, own_domains):
                     counts["skipped"] += 1
                     label = "BOUNCE" if message_type == "bounce" else "REPLY"
