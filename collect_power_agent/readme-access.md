@@ -79,6 +79,7 @@ const PAGE_ROLES = {
   'gdisk.html':         ['admin', 'campaign-user', 'user'],
   'settings.html':      ['admin'],
   'users.html':         ['admin'],
+  'mail-layout.html':   ['admin'],
 };
 ```
 
@@ -136,6 +137,7 @@ not by Flask blueprint internals:
 | Campaign work | `campaign-user` | campaign writes, contact writes, job triggers, Smart Mail, batch mutations, Drive file writes |
 | Smart Mail direct aliases | service role | `/outreach-send`, `/inbound-read`, `/reply-match` |
 | Settings and users | `admin` | all `/api/crm/settings/...`, `/api/crm/gdisk/settings`, `/api/crm/auth/users...` |
+| Scheduled job switches | `admin` | `GET/PUT /api/crm/settings/outreach-schedule` (`settings/outreach_schedule`; PUT also listed in `_ADMIN_ENDPOINTS`) |
 
 Service-role access is defined at the top of `functions-crm/auth_settings.py` in
 `SERVICE_ROLE_POLICIES`. The code should validate service identity by Google/IAM

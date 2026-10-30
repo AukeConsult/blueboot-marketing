@@ -22,10 +22,13 @@
   <div class="d-flex align-items-center justify-content-between mb-3">
     <h5 class="page-title"><i class="ti ti-list-check me-2 text-primary"></i>Jobs</h5>
     <div class="d-flex align-items-center gap-2">
+      <label class="small mb-0" style="color:var(--bb-muted)" for="job-type">Type</label>
+      <select id="job-type" class="form-select form-select-sm w-auto" onchange="onTypeChange()"></select>
+      <small id="job-counts-note" class="text-muted"></small>
       <label class="small mb-0" style="color:var(--bb-muted)" for="job-limit">Show</label>
-      <input id="job-limit" type="number" min="1" max="500" value="50"
+      <input id="job-limit" type="number" min="1" max="500" value="100"
              class="form-control form-control-sm" style="width:80px"
-             onchange="loadJobs()">
+             onchange="loadJobs();loadCounts()">
       <button class="bb-btn-refresh" onclick="loadJobs()" title="Refresh"><i class="ti ti-refresh"></i></button>
     </div>
   </div>
@@ -46,18 +49,88 @@
 <script>
 // BASE + helpers from js/crm-common.js
 
-const fmt = fmtTime;            // shared; elapsed() also from the library
+// Today: time only ("7:16:19 PM"). Other days: date + time ("10/29/26, 7:16:19 PM"). elapsed() comes from the shared library.
+const fmt = iso => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toDateString() === new Date().toDateString()
+    ? d.toLocaleTimeString([], {timeStyle:'medium'})
+    : d.toLocaleString([], {dateStyle:'short', timeStyle:'medium'});
+};
 
 function jobPill(status){
   return `<span class="bb-badge bb-badge-${({queued:'ready',running:'pending',done:'active',error:'error'})[status]||'ready'}">${status}</span>`;
 }
 
-const JOB_NAMES = {'contact-sync':'Import contacts','push-and-sync':'Push selected to campaign','template-sync':'Sync CRM to Leads Database','campaign-export':'Export campaign'};
+const JOB_NAMES = {
+  'contact-sync':'Import contacts','push-and-sync':'Push selected to campaign','template-sync':'Sync CRM to Leads Database',
+  'campaign-export':'Export campaign','outreach-send':'Outreach send','inbound-read':'Inbound mail read',
+  'reply-match':'Reply match','site-enrich':'Site enrich','name-enrich':'Name enrich','campaign-move':'Move contacts',
+  'campaign-delete':'Delete campaign','build-facets':'Build filters','facet-campaign':'Campaign filters',
+  'filter-count':'Filter count','crm-sync':'CRM sync','statistics':'Statistics',
+  'scheduled-send':'Scheduled send check','scheduled-reply':'Scheduled reply read',
+};
+
+// ── Job type selector ─────────────────────────────────────────────────────────
+// The type filter runs on the server, so a frequent type (scheduled sends) cannot push the others
+// out of the list. The selector lists the types found in the newest N jobs (N = the Show box).
+const TYPE_KEY = 'jobs.type';
+let _counts = {};          // jobs per type among the newest N jobs (N = the "Show" box)
+let _total = 0;
+const fmtN = n => Number(n).toLocaleString();
+
+function savedType(){ try { return localStorage.getItem(TYPE_KEY) || ''; } catch(e){ return ''; } }
+function showLimit(){ return Math.min(Math.max(parseInt(document.getElementById('job-limit').value) || 100, 1), 500); }
+
+// Types seen in the newest N jobs, most jobs first (ties by name). The selected type always stays.
+function fillTypes(selected){
+  const sel = document.getElementById('job-type');
+  const label = n => JOB_NAMES[n] || n;
+  const names = new Set(Object.keys(_counts));
+  if (selected) names.add(selected);
+  const opts = [...names].sort((a,b) => (_counts[b]||0) - (_counts[a]||0) || label(a).localeCompare(label(b)));
+  sel.innerHTML = `<option value="">All types (${fmtN(_total)})</option>` +
+    opts.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(label(n))} (${fmtN(_counts[n]||0)})</option>`).join('');
+  sel.value = selected || '';
+}
+
+// Counts always come from the newest N jobs of ALL types, also while a type filter is active.
+async function loadCounts(){
+  const note = document.getElementById('job-counts-note');
+  try {
+    const n = showLimit();
+    const d = await fetchJSON(BASE+'/api/crm/jobs?limit='+n);
+    const jobs = d.jobs || [];
+    _counts = {};
+    jobs.forEach(j => { if (j.name) _counts[j.name] = (_counts[j.name] || 0) + 1; });
+    _total = jobs.length;
+    note.textContent = 'counts: newest ' + jobs.length;
+    fillTypes(document.getElementById('job-type').value);
+  } catch(e){
+    note.textContent = 'counts unavailable';
+  }
+}
+
+function onTypeChange(){
+  try { localStorage.setItem(TYPE_KEY, document.getElementById('job-type').value); } catch(e){}
+  loadJobs();
+}
+
+// Scheduled runs: what the run decided, and how many runs in a row had the same outcome.
+function schedSummary(j){
+  if (!j.name || !j.name.startsWith('scheduled-') || !j.result) return '';
+  const r = j.result, n = r.runs > 1 ? ` <span class="badge bg-light text-muted border">×${r.runs}</span>` : '';
+  return ` <span class="fw-normal" style="color:var(--bb-muted)">· ${escapeHtml(r.reason || r.outcome || '')}</span>${n}`;
+}
+
+// full date + time, used for the start and end lines in the details
+const fmtFull = iso => iso ? new Date(iso).toLocaleString([], {dateStyle:'short', timeStyle:'medium'}) : '—';
 
 function renderJobs(jobs){
   const el = document.getElementById('jobs-list');
   if(!jobs.length){
-    el.innerHTML='<div class="text-center py-4 small" style="color:var(--bb-muted)"><i class="ti ti-inbox me-1"></i>No jobs yet</div>';
+    el.innerHTML='<div class="text-center py-4 small" style="color:var(--bb-muted)"><i class="ti ti-inbox me-1"></i>' +
+      (document.getElementById('job-type').value ? 'No jobs of this type' : 'No jobs yet') + '</div>';
     return;
   }
   el.innerHTML = jobs.map(j=>{
@@ -72,11 +145,12 @@ function renderJobs(jobs){
         <div class="d-flex align-items-center gap-2" onclick="toggle('${j.id}')" style="cursor:pointer">
           ${spin}
           ${jobPill(j.status)}
-          <span class="fw-500 flex-grow-1 small">${JOB_NAMES[j.name]||j.name}</span>
+          <span class="fw-500 flex-grow-1 small">${JOB_NAMES[j.name]||j.name}${schedSummary(j)}</span>
           <small style="color:var(--bb-muted)">${fmt(j.queued_at)}${duration?' · '+duration:''}</small>
           <i class="ti ti-chevron-down" style="color:var(--bb-muted);font-size:.8rem"></i>
         </div>
         <div class="detail mt-2 pt-2 border-top" id="d-${j.id}">
+          <div class="small mb-1" style="color:var(--bb-muted)">started: ${fmtFull(j.started_at)} &nbsp; ended: ${fmtFull(j.finished_at)}</div>
           <div class="small mb-1" style="color:var(--bb-muted)">id: <code>${j.id}</code>${params?' &nbsp; params: <code>'+params+'</code>':''}</div>
           ${result?'<pre>'+result+'</pre>':''}
           ${err?'<pre class="text-danger">'+err+'</pre>':''}
@@ -97,9 +171,11 @@ function toggle(id){
 
 async function loadJobs(){
   try{
-    const limit = Math.min(Math.max(parseInt(document.getElementById('job-limit').value) || 50, 1), 500);
-    const d = await fetchJSON(BASE+'/api/crm/jobs?limit='+limit);
-    renderJobs(d.jobs||[]);
+    const limit = Math.min(Math.max(parseInt(document.getElementById('job-limit').value) || 100, 1), 500);
+    const type = document.getElementById('job-type').value;
+    const d = await fetchJSON(BASE+'/api/crm/jobs?limit='+limit + (type ? '&name='+encodeURIComponent(type) : ''));
+    const jobs = d.jobs || [];
+    renderJobs(jobs);
     // Restore previously open rows
     _openRows.forEach(id => {
       const el = document.getElementById('d-'+id);
@@ -110,8 +186,11 @@ async function loadJobs(){
   }
 }
 
+fillTypes(savedType());
+loadCounts();
 loadJobs();
 setInterval(loadJobs, 5000);
+setInterval(loadCounts, 30000);
 </script>
 </body>
 </html>

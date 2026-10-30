@@ -358,15 +358,33 @@ def ping_mail_account(campaign_id):
         return _err(str(exc), 500)
 
 
-@bp.route("/api/crm/mail-trailer", methods=["GET"])
-def get_mail_trailer_for_editor():
-    """The default mail trailer (HTML + plain text), readable by every signed-in user.
+def _sample_outreach_mail(db, subject: str, body_html: str, body_text: str, account_email: str):
+    """A mail as outreach sends it, for a sample contact: mail layout (frame, footer, unsubscribe) with a sample link.
 
-    The mail editor copies it into a mail. Saving it is admin-only (settings/mail-trailer).
+    body_html is the HTML mail (empty for a plain-text mail); body_text the plain-text version or the plain mail.
+    """
+    from smart_mail.mail_layout import SAMPLE_CONTACT, SAMPLE_UNSUBSCRIBE_URL, load_layout
+    from smart_mail.outreach_render_mail import MailStep, render_mail
+    ma = _get_mail_account(db, account_email) if account_email else None
+    sender = {"name": str((ma or {}).get("from_name") or (ma or {}).get("email") or "Sender Name"),
+              "email": str((ma or {}).get("email") or "sender@example.com")}
+    step = MailStep(index=0, mail_type="intro", subject=subject, body_html=body_html, body_text=body_text)
+    return render_mail(step, dict(SAMPLE_CONTACT), layout=load_layout(db), sender=sender,
+                       unsubscribe_url=SAMPLE_UNSUBSCRIBE_URL)
+
+
+@bp.route("/api/crm/mail-preview", methods=["POST"])
+def preview_outreach_mail():
+    """The mail being edited as outreach sends it: mail layout (frame, footer, unsubscribe) and a sample contact.
+
+    Body: {subject, body, text, account}. body is the HTML (empty for a plain-text mail), text the plain-text version.
+    Returns {html, text, subject}; html is null for a plain-text mail. Nothing is saved or sent.
     """
     try:
-        from smart_mail.mail_trailer import load_trailer
-        return jsonify({"status": "ok", **load_trailer(_get_db())})
+        data = request.get_json(silent=True) or {}
+        mail = _sample_outreach_mail(_get_db(), str(data.get("subject") or ""), str(data.get("body") or ""),
+                                     str(data.get("text") or ""), str(data.get("account") or ""))
+        return jsonify({"status": "ok", "subject": mail.subject, "html": mail.html_body, "text": mail.text_body})
     except Exception as exc:
         return _err(str(exc), 500)
 
@@ -391,7 +409,11 @@ def translate_mail_route():
 
 @bp.route("/api/crm/campaigns/<campaign_id>/send-test-mail", methods=["POST"])
 def send_test_mail(campaign_id):
-    """Send a test email using the campaign mail account settings."""
+    """Send a test email using the campaign mail account settings.
+
+    The mail is built as outreach builds it (mail layout, sample contact, sample unsubscribe link), so the test
+    shows what a contact gets. body_html is the HTML mail (empty for a plain-text mail); body_plain the plain text.
+    """
     try:
         db  = _get_db()
         doc = db.collection("campaigns").document(campaign_id).get()
@@ -410,8 +432,9 @@ def send_test_mail(campaign_id):
         if not to_addr:
             return _err("'to' is required", 400)
         from smart_mail.mail_sender import MailSender
-        result = MailSender(ma).send(to=to_addr, subject=subject,
-                                     body_plain=body_plain, body_html=body_html)
+        mail = _sample_outreach_mail(db, subject, body_html, body_plain, outreach_email)
+        result = MailSender(ma).send(to=to_addr, subject=mail.subject,
+                                     body_plain=mail.text_body, body_html=mail.html_body or "")
         return jsonify(result)
     except Exception as exc:
         return _err(str(exc), 500)

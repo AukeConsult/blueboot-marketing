@@ -284,3 +284,10 @@ pre { background: #f8f9fa; border-radius: 6px; padding: .5rem .75rem; font-size:
 .popover                              { z-index: 10060 !important; }
 .tooltip                              { z-index: 10070 !important; }
 .toast-container                      { z-index: 10080 !important; }
+
+/* ── Mail layout page ─────────────────────────────────────── */
+.bb-container-wide   { max-width: 860px; }
+.bb-select-auto      { width: auto; max-width: 240px; }
+.bb-input-narrow     { max-width: 420px; }
+.bb-preview-frame    { width: 100%; height: 420px; border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .375rem; background: #fff; }
+.bb-source           { white-space: pre-wrap; word-break: break-all; max-height: 420px; overflow: auto; }

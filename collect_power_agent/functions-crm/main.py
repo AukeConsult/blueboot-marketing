@@ -18,7 +18,7 @@ for _path in (_HERE,):
     if _path not in sys.path:
         sys.path.insert(0, _path)
 
-from firebase_functions import https_fn, options as fn_options
+from firebase_functions import https_fn, scheduler_fn, options as fn_options
 from flask import Flask, jsonify
 from flask_cors import CORS
 
@@ -46,12 +46,13 @@ from handlers.user_prefs    import bp as user_prefs_bp
 from handlers.send_limits   import bp as send_limits_bp
 from handlers.batch         import bp as batch_bp
 from handlers.unsubscribe   import bp as unsubscribe_bp
+from handlers.mail_layout   import bp as mail_layout_bp
 
 for bp in (
     campaigns_bp, contacts_bp, jobs_bp, mailbox_bp,
     mail_tags_bp, mail_accounts_bp, inbound_read_bp,
     gdisk_bp, filter_facets_bp, leads_bp, statistics_bp, auth_bp,
-    user_prefs_bp, batch_bp, send_limits_bp, unsubscribe_bp,
+    user_prefs_bp, batch_bp, send_limits_bp, unsubscribe_bp, mail_layout_bp,
 ):
     app.register_blueprint(bp)
 
@@ -72,6 +73,7 @@ _BLUEPRINT_MIN_READ_ROLES: dict[str, str] = {
     "mail_accounts": "campaign-user",  # mail account credentials (settings/mail_accounts)
     "auth":          "campaign-user",  # user role docs (settings/users)
     "send_limits":   "campaign-user",  # send limits + run reservations
+    "mail_layout":   "campaign-user",  # mail layout settings (admin-only via _ADMIN_ENDPOINTS)
     "mail_tags":     "campaign-user",  # settings/mail_tag_statuses
     "mailbox":       "campaign-user",  # IMAP mailbox contents - no read for user/guest
     "batch":         "campaign-user",  # cloud_batch job definitions and run history
@@ -103,8 +105,12 @@ _ADMIN_ENDPOINTS = frozenset({
     "gdisk.gdisk_set_settings",          # POST/PATCH /api/crm/gdisk/settings
     "mail_tags.put_mail_tag_statuses",   # PUT /api/crm/settings/mail-tag-statuses
     "send_limits.put_send_limits",       # PUT /api/crm/settings/send-limits
-    "send_limits.put_mail_trailer",      # PUT /api/crm/settings/mail-trailer
     "send_limits.put_unsubscribe_settings",  # PUT /api/crm/settings/unsubscribe
+    "send_limits.put_outreach_schedule", # PUT /api/crm/settings/outreach-schedule
+    "mail_layout.get_mail_layout",       # GET  /api/crm/settings/mail-layout
+    "mail_layout.put_mail_layout",       # PUT  /api/crm/settings/mail-layout
+    "mail_layout.preview_mail_layout",   # POST /api/crm/settings/mail-layout/preview
+    "mail_layout.send_test_mail_layout", # POST /api/crm/settings/mail-layout/send-test (real mail)
     "jobs.outreach_send_now",            # POST /api/crm/outreach/send-now (real mail)
     "campaigns.reset_campaign",          # POST /api/crm/campaigns/{id}/reset
 })
@@ -121,6 +127,7 @@ _BLUEPRINT_MIN_ROLES: dict[str, str] = {
     "jobs":           "campaign-user",
     "filter_facets":  "campaign-user",
     "mail_accounts":  "admin",
+    "mail_layout":    "admin",
     "auth":           "admin",
     "user_prefs":     "campaign-user",
     "batch":          "campaign-user",
@@ -312,6 +319,137 @@ def smartMail(req: https_fn.Request) -> https_fn.Response:
             return app.full_dispatch_request()
         except Exception as exc:
             return _err(str(exc), 500)
+
+
+@scheduler_fn.on_schedule(
+    schedule="*/30 * * * *",         # every 30 min (UTC); the send budget decides if anything goes out
+    region="us-central1",
+    timeout_sec=540,
+    memory=fn_options.MemoryOption.MB_512,
+    max_instances=1,
+)
+def outreachHourly(event: scheduler_fn.ScheduledEvent) -> None:
+    """Every 30 min: if a sending account has send budget, queue one outreach-send.
+
+    Every run is written to the job list (type "scheduled-send") with its start and end time and
+    what it decided; repeats of the same outcome update one row (see _log_scheduled_run).
+    The budget is a rolling 60-minute window (settings/send_limits), so capacity frees up
+    continuously. A fixed hourly run would see its own previous mails still inside the window
+    and miss the budget; checking often and acting only when budget exists never misses it.
+    The send is queued through _start_outreach_send, so the 409 overlap guard, job record
+    and per-account limits still apply. Replies are read by replyHourly.
+    """
+    from datetime import datetime, timezone
+    from handlers.shared import _log_scheduled_run
+    started = datetime.now(timezone.utc).isoformat()
+    try:
+        outcome, reason, extra = _outreach_hourly_run()
+    except Exception as exc:
+        print(f"[outreachHourly] error: {exc}")
+        _log_scheduled_run("outreachHourly", "scheduled-send", "error", str(exc), started)
+        raise
+    print(f"[outreachHourly] {outcome}: {reason}")
+    _log_scheduled_run("outreachHourly", "scheduled-send", outcome, reason, started, **extra)
+
+
+def _outreach_hourly_run() -> tuple[str, str, dict]:
+    """One check of the scheduled send. Returns (outcome, reason, extra) for the job list.
+
+    Goes account by account, the one with the most send budget first. An account without budget
+    (below OUTREACH_SCHEDULE_MIN_BUDGET) is skipped, and so is one with nothing to send; the first
+    account that has both gets ONE outreach-send job for its own campaigns only. So a spent account
+    can never use up the 50-mail fill of the others. The next account is served by the next run.
+    """
+    from handlers.jobs import _start_outreach_send
+    from handlers.shared import _get_db
+    from smart_mail.outreach_status_lib import account_budget, load_limits
+    from smart_mail.outreach_schedule import load_schedule_flags
+    from smart_mail.outreach_mail_select import has_outreach_work, explain_empty
+
+    min_budget = int(os.getenv("OUTREACH_SCHEDULE_MIN_BUDGET", "10"))   # don't start a job for a trickle
+    db = _get_db()
+    if not load_schedule_flags(db)["send_enabled"]:
+        return "switched_off", "switched off in Outreach Settings", {}
+    by_account: dict[str, list[str]] = {}
+    for d in db.collection("campaigns").stream():
+        c = d.to_dict() or {}
+        if str(c.get("status", "")).strip().lower() in ("ready", "active"):
+            sender = (c.get("outreach_email_account") or c.get("sender_account") or "").strip().lower()
+            if sender:
+                by_account.setdefault(sender, []).append(d.id)
+    if not by_account:
+        return "no_campaigns", "no ready or active campaigns with a mail account", {}
+
+    limits = load_limits(db)
+    budgets = {a: account_budget(db, a, limits)["budget"] for a in sorted(by_account)}
+    candidates = sorted((a for a in by_account if budgets[a] >= min_budget), key=lambda a: (-budgets[a], a))
+    if not candidates:
+        return "budget_low", f"no mail account has send budget (needs {min_budget})", {"budgets": budgets}
+
+    skipped: dict[str, str] = {}          # accounts with budget but nothing to send, and why
+    for account in candidates:
+        ids = sorted(by_account[account])
+        diag: dict = {}
+        work, why = has_outreach_work(ids, diag=diag)
+        if not work:
+            skipped[account] = " | ".join(f"{m}: {explain_empty(diag.get(m), m)}" for m in ("followup", "intro"))
+            continue
+        with app.app_context():
+            resp = _start_outreach_send({
+                "mode": "both", "limit": 500, "campaign_ids": ids, "account": account,
+                "dry_run": False, "preview": False, "started_by": "scheduler",
+            })
+            body, code = resp if isinstance(resp, tuple) else (resp, getattr(resp, "status_code", 200))
+            data = body.get_json(silent=True) or {}
+        extra = {"account": account, "campaigns": len(ids), "budgets": budgets}
+        if skipped:
+            extra["skipped"] = skipped
+        if code == 202:
+            return "queued", f"queued job {data.get('job_id')} for {account}", {**extra, "job_id": data.get("job_id")}
+        return "not_queued", str(data.get("message") or data.get("error") or f"HTTP {code}"), {**extra, "http": code}
+    return "nothing_to_send", "nothing to send for the accounts that have budget", {
+        "budgets": budgets, "detail": skipped}
+
+
+@scheduler_fn.on_schedule(
+    schedule="55 * * * *",           # minute 55 of every hour (UTC), just before the :00 / :30 sends
+    region="us-central1",
+    timeout_sec=540,
+    memory=fn_options.MemoryOption.MB_512,
+    max_instances=1,
+)
+def replyHourly(event: scheduler_fn.ScheduledEvent) -> None:
+    """Hourly: read replies/bounces for ready/active campaigns so replied contacts get no further mail.
+
+    Every run is written to the job list (type "scheduled-reply") with its start and end time.
+    """
+    from datetime import datetime, timezone
+    from handlers.shared import _get_db, _log_scheduled_run
+    from smart_mail.reply_matcher import match_new_replies
+    from smart_mail.outreach_schedule import load_schedule_flags
+
+    started = datetime.now(timezone.utc).isoformat()
+
+    def log(outcome, reason, **extra):
+        print(f"[replyHourly] {outcome}: {reason}")
+        _log_scheduled_run("replyHourly", "scheduled-reply", outcome, reason, started, **extra)
+
+    try:
+        db = _get_db()
+        if not load_schedule_flags(db)["reply_enabled"]:
+            return log("switched_off", "switched off in Outreach Settings")
+        ids = [
+            d.id for d in db.collection("campaigns").stream()
+            if str((d.to_dict() or {}).get("status", "")).strip().lower() in ("ready", "active")
+        ]
+        if not ids:
+            return log("no_campaigns", "no ready or active campaigns")
+        res = match_new_replies(campaigns=ids, days=7)
+        matched, bounced = int(res.get("matched", 0)), int(res.get("bounced", 0))
+        log("replies_found" if (matched or bounced) else "done",
+            f"read replies for {len(ids)} campaigns", campaigns=len(ids), matched=matched, bounced=bounced)
+    except Exception as exc:
+        log("error", str(exc))
 
 
 @https_fn.on_request(region="us-central1", timeout_sec=900,

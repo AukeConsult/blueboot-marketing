@@ -153,6 +153,14 @@ class SentConfirmation:
 # Private helpers
 # ---------------------------------------------------------------------------
 
+# A send run collects at most this many SENDABLE mails (intro or due reminder), going through the
+# campaigns one at a time, and stops reading as soon as it has them. Contacts that are pending but
+# not sendable (mailed, reminder not due yet) are skipped without counting, so they never block
+# the ones behind them. 0 = no cap. The rest waits for the next run.
+FILL_LIMIT = int(os.getenv("OUTREACH_FILL_LIMIT", "50"))
+_SCAN_PAGE = 100          # pending contacts fetched per Firestore read while filling
+
+
 _CONTACT_KNOWN = {
     "send_confirmation", "send_confirmed_by", "send_confirmed_at", "send_confirm_note",
     "email", "contact_name", "company", "domain", "country",
@@ -289,6 +297,13 @@ MIN_DAYS_BETWEEN_MAILS = float(os.getenv("OUTREACH_MIN_DAYS_BETWEEN_MAILS", "1")
 _NO_MORE_MAIL_FOLLOWUP = {"replied", "meeting", "offer", "not_interested"}
 
 
+def _answered(contact: dict) -> bool:
+    """True when the contact has answered or is done (replied, meeting, offer, not interested),
+    so no further reminder may go out. Used by the selection, the scheduled check and the status page,
+    so they agree with what the sender refuses at send time."""
+    return str(contact.get("followup_status", "")).strip().lower() in _NO_MORE_MAIL_FOLLOWUP
+
+
 def _last_mail_too_recent(mail_sent: list, now: datetime) -> bool:
     """True when the newest mail in mail_sent went out less than MIN_DAYS_BETWEEN_MAILS ago."""
     times = []
@@ -371,8 +386,18 @@ def read_outreach(
     mode:        str = "intro",
     limit:       int = 500,
     campaign_ids: list[str] | None = None,
+    scan_cache:  dict | None = None,
+    diag:        dict | None = None,
+    log_skips:   bool = True,
 ) -> list[AccountBatch]:
     """Read outreach candidates grouped by sending account.
+
+    diag: optional dict that is filled with per-campaign counters (pending, mailed, answered, site_blocked,
+    unconfirmed, not_due, due) and a "skip" reason, so an empty result can be explained
+    (see explain_empty()).
+
+    scan_cache: optional dict shared by the passes of one job. The pending contacts are read from
+    Firestore once and reused by the next pass (both passes filter the same snapshot by mode).
 
     Two modes:
 
@@ -420,6 +445,8 @@ def read_outreach(
 
     # Step 1: query contacts. If campaign_ids is set, read those campaigns'
     # subcollections directly so non-matching campaigns can never leak in.
+    if FILL_LIMIT > 0:
+        limit = min(limit, FILL_LIMIT)
     campaign_filter = _coerce_id_set(campaign_ids)
     if campaign_filter:
         queries = []
@@ -460,45 +487,87 @@ def read_outreach(
             _require_cache[cid] = bool(cd.get("require_send_confirmation", False))
         return _require_cache[cid]
 
-    for query in queries:
-        for doc in query.stream():
-            if total >= limit:
-                break
-            d           = doc.to_dict() or {}
-            contact_status = str(d.get("status", "")).strip().lower()
-            mail_sent = d.get("mail_sent") or []
-            if not isinstance(mail_sent, list):
-                mail_sent = []
-            if contact_status != "pending":
-                continue
-            if mode == "followup" and not mail_sent:
-                continue
-            if mode != "followup" and mail_sent:
-                continue
-            doc_campaign_id = doc.reference.parent.parent.id
-            if campaign_filter and doc_campaign_id not in campaign_filter:
-                continue
-            # The tick "Send" decides the INTRO only; reminders follow the intro that was sent.
-            if (mode != "followup" and not d.get("send_confirmation")
-                    and _requires_confirmation(doc_campaign_id)):
-                unconfirmed_skipped += 1
-                continue
-            by_campaign[doc_campaign_id].append(ContactRow(
-                contact_doc_id = doc.id,
-                campaign_id    = doc_campaign_id,
-                email          = d.get("email", ""),
-                contact_name   = d.get("contact_name", ""),
-                company        = d.get("company", ""),
-                domain         = d.get("domain", ""),
-                country        = d.get("country", ""),
-                status         = contact_status,
-                mail_sent      = mail_sent,
-                lead_id        = str(d.get("lead_id") or "").strip(),
-                extra          = {k: v for k, v in d.items() if k not in _CONTACT_KNOWN},
-            ))
-            total += 1
+    def _bump(cid: str, key: str, n: int = 1) -> None:
+        if diag is not None and n:
+            row = diag.setdefault(cid, {})
+            row[key] = row.get(key, 0) + n
+
+    def _skip(cid: str, why: str) -> None:
+        if diag is not None:
+            diag.setdefault(cid, {})["skip"] = why
+
+    def _scan_docs():
+        """Pending contacts, one campaign (query) at a time, read in small pages and only as far as the
+        caller keeps asking. With a scan_cache the docs already read are kept, so the next pass of the
+        same job re-uses them and only reads further when it needs more."""
+        key = ("pending", tuple(sorted(campaign_filter)))
+        state = (scan_cache if scan_cache is not None else {}).setdefault(
+            key, {"docs": [], "qi": 0, "last": None})
+        i = 0
+        while True:
+            while i < len(state["docs"]):
+                yield state["docs"][i]
+                i += 1
+            # need one more page: continue the current campaign, or move on to the next one
+            while True:
+                if state["qi"] >= len(queries):
+                    return
+                q = queries[state["qi"]]
+                if state["last"] is not None:
+                    q = q.start_after(state["last"])
+                page = list(q.limit(_SCAN_PAGE).stream())
+                if page:
+                    state["docs"].extend(page)
+                    state["last"] = page[-1]
+                if len(page) < _SCAN_PAGE:
+                    state["qi"] += 1
+                    state["last"] = None
+                if page:
+                    break
+
+    for doc in _scan_docs():
         if total >= limit:
             break
+        d           = doc.to_dict() or {}
+        contact_status = str(d.get("status", "")).strip().lower()
+        mail_sent = d.get("mail_sent") or []
+        if not isinstance(mail_sent, list):
+            mail_sent = []
+        if contact_status != "pending":
+            continue
+        doc_campaign_id = doc.reference.parent.parent.id
+        _bump(doc_campaign_id, "pending")
+        if mail_sent:
+            _bump(doc_campaign_id, "mailed")
+        if mode == "followup" and not mail_sent:
+            continue
+        if mode != "followup" and mail_sent:
+            continue
+        if mode == "followup" and _answered(d):
+            _bump(doc_campaign_id, "answered")
+            continue
+        if campaign_filter and doc_campaign_id not in campaign_filter:
+            continue
+        # The tick "Send" decides the INTRO only; reminders follow the intro that was sent.
+        if (mode != "followup" and not d.get("send_confirmation")
+                and _requires_confirmation(doc_campaign_id)):
+            unconfirmed_skipped += 1
+            _bump(doc_campaign_id, "unconfirmed")
+            continue
+        by_campaign[doc_campaign_id].append(ContactRow(
+            contact_doc_id = doc.id,
+            campaign_id    = doc_campaign_id,
+            email          = d.get("email", ""),
+            contact_name   = d.get("contact_name", ""),
+            company        = d.get("company", ""),
+            domain         = d.get("domain", ""),
+            country        = d.get("country", ""),
+            status         = contact_status,
+            mail_sent      = mail_sent,
+            lead_id        = str(d.get("lead_id") or "").strip(),
+            extra          = {k: v for k, v in d.items() if k not in _CONTACT_KNOWN},
+        ))
+        total += 1
 
     if unconfirmed_skipped:
         print(f"[outreach_mail_select] {unconfirmed_skipped} intro contact(s) skipped -- "
@@ -518,9 +587,14 @@ def read_outreach(
               .document(camp_id)
               .collection("campaign_leads")
         )
+        # Read only the leads these contacts belong to, not the whole campaign_leads collection.
+        wanted_leads = sorted({c.lead_id for c in contacts if c.lead_id})
         lead_statuses: dict[str, str] = {}
-        for ldoc in leads_col.select(["status"]).stream():
-            lead_statuses[ldoc.id] = str((ldoc.to_dict() or {}).get("status", "")).strip().lower()
+        for i in range(0, len(wanted_leads), 300):
+            refs = [leads_col.document(lid) for lid in wanted_leads[i:i + 300]]
+            for ldoc in db.get_all(refs, field_paths=["status"]):
+                if ldoc.exists:
+                    lead_statuses[ldoc.id] = str((ldoc.to_dict() or {}).get("status", "")).strip().lower()
 
         filtered: list = []
         for contact in contacts:
@@ -531,6 +605,7 @@ def read_outreach(
                     f"-- site lead '{lid}' status='{lead_statuses[lid]}'",
                     flush=True,
                 )
+                _bump(camp_id, "site_blocked")
                 continue
             filtered.append(contact)
 
@@ -552,11 +627,13 @@ def read_outreach(
         campaign = _load_campaign(db, campaign_id)
         if campaign is None:
             print(f"[outreach_mail_select] campaign '{campaign_id}' not found -- skipping")
+            _skip(campaign_id, "campaign not found")
             continue
 
         campaign.status = _campaign_status(campaign.status)
         allowed_statuses = {"active"} if mode == "followup" else {"ready", "active"}
         if campaign.status not in allowed_statuses:
+            _skip(campaign_id, f"campaign status is '{campaign.status}'")
             print(
                 f"[outreach_mail_select] {mode} send requires campaign status "
                 f"{allowed_statuses}; campaign '{campaign_id}' is "
@@ -566,7 +643,9 @@ def read_outreach(
 
         campaign.mail_sequence = _prepare_mail_sequence(campaign.mail_sequence)
         if not campaign.mail_sequence:
-            _log_campaign_skip(db, campaign_id, "Automatic outreach skipped: campaign has no Intro mail step.")
+            _skip(campaign_id, "no Intro mail step")
+            if log_skips:
+                _log_campaign_skip(db, campaign_id, "Automatic outreach skipped: campaign has no Intro mail step.")
             print(
                 f"[outreach_mail_select] campaign '{campaign_id}' has no Intro "
                 f"mail step -- skipping"
@@ -577,6 +656,8 @@ def read_outreach(
             now = datetime.now(timezone.utc)
             n_before = len(contacts)
             contacts = [c for c in contacts if _next_step_due(c, campaign, now)]
+            _bump(campaign_id, "due", len(contacts))
+            _bump(campaign_id, "not_due", n_before - len(contacts))
             print(f"[outreach_mail_select] campaign '{campaign_id}' status={campaign.status!r}: "
                   f"{n_before} mailed pending contact(s), {len(contacts)} reminder(s) due "
                   f"(sequence has {len(campaign.mail_sequence)} step(s))", flush=True)
@@ -596,6 +677,7 @@ def read_outreach(
                 f"[outreach_mail_select] mail account '{sender_email}' "
                 f"not found for campaign '{campaign_id}' -- skipping"
             )
+            _skip(campaign_id, f"mail account '{sender_email}' not found")
             continue
 
         by_account[sender_email].append(
@@ -611,6 +693,50 @@ def read_outreach(
         batches.append(AccountBatch(account=account, campaigns=campaign_list))
 
     return batches
+
+
+def explain_empty(diag: dict | None, mode: str, max_campaigns: int = 4) -> str:
+    """One line saying why read_outreach() found nothing, from the counters it filled in `diag`."""
+    if not diag:
+        return "no pending contacts in the selected campaigns"
+    labels = (("pending", "pending"), ("mailed", "already mailed"), ("answered", "replied/closed"),
+              ("site_blocked", "site blocked"), ("unconfirmed", "not confirmed"),
+              ("not_due", "reminder not due yet"), ("due", "due"))
+    rows = sorted(diag.items(), key=lambda kv: -kv[1].get("pending", 0))
+    out = []
+    for cid, c in rows[:max_campaigns]:
+        parts = [f"{c[k]} {text}" for k, text in labels if c.get(k)]
+        if c.get("skip"):
+            parts.append(c["skip"])
+        out.append(f"{cid}: " + (", ".join(parts) or "nothing pending"))
+    more = len(rows) - max_campaigns
+    return "; ".join(out) + (f"; +{more} more campaigns" if more > 0 else "")
+
+
+def has_outreach_work(campaign_ids: list[str] | None, diag: dict | None = None) -> tuple[bool, str]:
+    """Exact yes/no: would a send run find at least one mail to send in these campaigns?
+
+    Runs the SAME selection as the send (read_outreach, reminders then intros, first match only,
+    without writing anything), so this check and the real run can never disagree: campaign status,
+    due reminders, replied contacts, site status, send confirmation and the mail account all count.
+    Used by the scheduled job to skip queueing a worker when nothing is waiting.
+
+    diag, if given, is filled with {"followup": {...}, "intro": {...}} counters (see explain_empty()).
+    """
+    ids = sorted(_coerce_id_set(campaign_ids))
+    if not ids:
+        return False, "no campaigns"
+    cache: dict = {}                              # both passes share one read of the pending contacts
+    for mode in ("followup", "intro"):
+        counters: dict = {}
+        if diag is not None:
+            diag[mode] = counters
+        batches = read_outreach(mode=mode, limit=1, campaign_ids=ids, scan_cache=cache,
+                                diag=counters, log_skips=False)
+        if batches:
+            what = "reminder due" if mode == "followup" else "intro waiting"
+            return True, f"{what} in {batches[0].campaigns[0].campaign.campaign_id}"
+    return False, "nothing to send"
 
 
 def _mark_site_contacted(db, campaign_id: str, lead_id: str, when_iso: str) -> bool:

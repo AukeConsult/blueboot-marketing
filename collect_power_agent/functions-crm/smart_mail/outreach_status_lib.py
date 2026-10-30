@@ -22,6 +22,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 from .outreach_mail_select import (
     ContactRow,
     CampaignMail,
+    _answered,
     _campaign_status,
     _load_account,
     _next_step_due,
@@ -73,12 +74,22 @@ def load_limits(db) -> dict:
     return out
 
 
+def count_query(query) -> int:
+    """Number of documents a query matches, using a Firestore count aggregation (billed as a
+    handful of index entries instead of one read per document). Falls back to streaming
+    when the client or backend cannot aggregate."""
+    try:
+        return int(query.count().get()[0][0].value)
+    except Exception:
+        return sum(1 for _ in query.stream())
+
+
 def _count(db, account: str, since_iso: str) -> int:
-    docs = (db.collection("outreach_sent")
-            .where(filter=FieldFilter("sender_account", "==", account))
-            .where(filter=FieldFilter("sent_at", ">=", since_iso))
-            .stream())
-    return sum(1 for _ in docs)
+    return count_query(
+        db.collection("outreach_sent")
+        .where(filter=FieldFilter("sender_account", "==", account))
+        .where(filter=FieldFilter("sent_at", ">=", since_iso))
+    )
 
 
 def account_budget(db, account: str, limits: dict, now: datetime | None = None) -> dict:
@@ -163,7 +174,7 @@ def _campaign_status_row(db, cdoc, now, account_cache) -> dict:
                         subject_template="", body_html="", sender_email=sender, mail_sequence=seq)
     pending = 0
     for cd in (db.collection("campaigns").document(cid).collection("campaign_contacts")
-               .select(["status", "mail_sent", "send_confirmation", "lead_id"]).stream()):
+               .select(["status", "mail_sent", "send_confirmation", "lead_id", "followup_status"]).stream()):
         c = cd.to_dict() or {}
         row["total"] += 1
         st = str(c.get("status", "")).strip().lower()
@@ -190,7 +201,7 @@ def _campaign_status_row(db, cdoc, now, account_cache) -> dict:
                 row["intro_to_send"] += 1
         else:                                         # reminder candidate
             row["followup_waiting"] += 1
-            if site_blocked:
+            if site_blocked or _answered(c):
                 row["followup_not_due"] += 1
                 continue
             cr = ContactRow(contact_doc_id=cd.id, campaign_id=cid, email="", contact_name="",

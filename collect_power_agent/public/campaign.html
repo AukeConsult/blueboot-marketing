@@ -809,7 +809,7 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
 <script src="js/crm-common.js"></script>
 <script src="js/crm-defs.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
-<script src="js/mail-editor-component.js?v=20261022a"></script>
+<script src="js/mail-editor-component.js?v=20261030f"></script>
 <script src="vendor/bootstrap.bundle.min.js"></script>
 <script>
 // Activate Bootstrap tooltips
@@ -894,6 +894,45 @@ function populateCampaignOwnerFilter() {
     + owners.map(o => `<option value="${escapeHtml(o)}"${o === cur ? ' selected' : ''}>${escapeHtml(o)}</option>`).join('');
 }
 
+// ── Mails ready to send, per campaign ─────────────────────────────────────────
+// From the same calculation as the Outreach Status page: first mails (intro) plus reminders that are due.
+// Loaded after the list is shown and kept for 3 minutes, because it reads the contacts of each campaign.
+let readyCounts = {};
+const READY_CACHE_KEY = 'campaignReadyCounts';
+const READY_CACHE_MS = 3 * 60 * 1000;
+
+function readyPill(id) {
+  const r = readyCounts[id];
+  if (!r) return '';
+  if (!r.ready) {
+    const why = (r.blockers || []).join('; ') || 'not ready to send';
+    return `<span class="bb-badge bb-badge-pending" title="${escapeHtml(why)}"><i class="ti ti-alert-triangle"></i>blocked</span>`;
+  }
+  const n = (r.intro_sendable || 0) + (r.followup_sendable || 0);
+  const tip = `${r.intro_sendable || 0} first mails + ${r.followup_sendable || 0} due reminders`;
+  return `<span class="bb-badge ${n ? 'bb-badge-ready' : 'bb-badge-muted'}" title="${tip}"><i class="ti ti-send"></i>${n} ready</span>`;
+}
+
+async function loadReadyCounts() {
+  const role = window._userRole;
+  if (role && role !== 'admin' && role !== 'campaign-user') return;        // plain users have no outreach access
+  const ids = allCampaigns.filter(c => ['ready', 'active'].includes(campaignStatus(c.status))).map(c => c.campaign_id);
+  if (!ids.length) return;
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(READY_CACHE_KEY) || 'null');
+    if (cached && Date.now() - cached.at < READY_CACHE_MS && ids.every(i => i in cached.rows)) {
+      readyCounts = cached.rows; filterCampaignList(); return;
+    }
+  } catch (e) {}
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/outreach/status?campaign_ids=' + encodeURIComponent(ids.join(',')));
+    readyCounts = {};
+    (d.campaigns || []).forEach(c => { readyCounts[c.campaign_id] = c; });
+    try { sessionStorage.setItem(READY_CACHE_KEY, JSON.stringify({ at: Date.now(), rows: readyCounts })); } catch (e) {}
+    filterCampaignList();
+  } catch (e) { /* the counts are extra information; the list works without them */ }
+}
+
 function renderCampaignList(list) {
   const el = document.getElementById('campaign-list');
   const selected = document.getElementById('campaign-select').value;
@@ -917,6 +956,7 @@ function renderCampaignList(list) {
         <span class="bb-badge bb-badge-muted"><i class="ti ti-users"></i>${c.contact_count || 0}</span>
         <span class="bb-badge bb-badge-muted"><i class="ti ti-building-store"></i>${c.sites_count || 0}</span>
         ${activePill}
+        ${readyPill(id)}
         ${owner}
       </div>
       <div class="small mt-1" style="color:var(--bb-muted)"><i class="ti ti-clock me-1"></i>${fmt(c.updated_at)}</div>
@@ -949,6 +989,7 @@ async function loadCampaignList() {
     populateCampaignOwnerFilter();
     crmLockOwnerSelect(document.getElementById('campaign-owner-filter'));
     filterCampaignList();
+    loadReadyCounts();                 // not awaited: the list is already visible
     return allCampaigns;
   } catch(e) {
     listEl.innerHTML = `<div class="text-center py-4 small text-danger"><i class="ti ti-alert-circle me-1"></i>${escapeHtml(e.message)}</div>`;
@@ -2048,8 +2089,9 @@ async function doSendCampaignTestMail() {
       body: JSON.stringify({
         to,
         subject:    subject || mail.subject || 'Test email',
-        body_html:  mail.body  || '',
-        body_plain: mail.body_plain || mail.text || '',
+        // plain mails keep their text in body_plain, HTML mails in body_html (+ their own plain-text version)
+        body_html:  mail.type !== 'plain' ? (mail.body || '') : '',
+        body_plain: mail.type !== 'plain' ? (mail.body_plain || mail.text || '') : (mail.body || ''),
       })
     });
     const d = await r.json();

@@ -80,36 +80,6 @@ def get_ai_model():
     })
 
 
-@bp.route("/api/crm/settings/mail-trailer", methods=["GET"])
-def get_mail_trailer():
-    """Return the trailer added to every outreach mail (defaults when not saved yet)."""
-    try:
-        from smart_mail.mail_trailer import load_trailer
-        return jsonify({"status": "ok", **load_trailer(_get_db())})
-    except Exception as exc:
-        return _err(str(exc), 500)
-
-
-@bp.route("/api/crm/settings/mail-trailer", methods=["PUT"])
-def put_mail_trailer():
-    """Save the mail trailer (HTML + plain-text version).  Admin only (enforced via _ADMIN_ENDPOINTS)."""
-    try:
-        from smart_mail.mail_trailer import clean_html, DOC_PATH
-        from smart_mail.outreach_render_mail import _html_to_text
-        body = request.get_json(silent=True) or {}
-        html = clean_html(str(body.get("html") or ""))
-        text = str(body.get("text") or "").strip() or _html_to_text(html)
-        enabled = bool(body.get("enabled"))
-        if enabled and not (html or text):
-            return _err("Write a trailer text before switching it on.", 400)
-        _get_db().collection(DOC_PATH[0]).document(DOC_PATH[1]).set({
-            "enabled": enabled, "html": html, "text": text,
-        })
-        return _ok("Mail trailer saved.", enabled=enabled, html=html, text=text)
-    except Exception as exc:
-        return _err(str(exc), 500)
-
-
 @bp.route("/api/crm/settings/unsubscribe", methods=["GET"])
 def get_unsubscribe_settings():
     """Unsubscribe settings (the signing secret is never returned)."""
@@ -133,7 +103,7 @@ def put_unsubscribe_settings():
     try:
         import re
         from smart_mail import unsubscribe as unsub
-        from smart_mail.mail_trailer import clean_html
+        from smart_mail.mail_layout import clean_html
         body = request.get_json(silent=True) or {}
         enabled = bool(body.get("enabled"))
         base_url = str(body.get("base_url") or "").strip().rstrip("/")
@@ -245,5 +215,48 @@ def get_outreach_status():
         from smart_mail.outreach_status_lib import compute_outreach_status
         ids = [x.strip() for x in (request.args.get("campaign_ids") or "").split(",") if x.strip()]
         return jsonify(compute_outreach_status(_get_db(), ids))
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+
+@bp.route("/api/crm/settings/outreach-schedule", methods=["GET"])
+def get_outreach_schedule():
+    """On/off switches of the scheduled send job and the scheduled reply read."""
+    try:
+        from smart_mail.outreach_schedule import load_schedule_flags, DOC_PATH
+        db = _get_db()
+        flags = load_schedule_flags(db)
+        d = db.collection(DOC_PATH[0]).document(DOC_PATH[1]).get().to_dict() or {}
+        return jsonify({"status": "ok", **flags,
+                        "updated_at": d.get("updated_at", ""), "updated_by": d.get("updated_by", "")})
+    except Exception as exc:
+        return _err(str(exc), 500)
+
+
+@bp.route("/api/crm/settings/outreach-schedule", methods=["PUT"])
+def put_outreach_schedule():
+    """Turn the scheduled jobs on or off.  Admin only (enforced via _ADMIN_ENDPOINTS).
+
+    Body: {"send_enabled": bool, "reply_enabled": bool}; a field left out keeps its value.
+    """
+    try:
+        from datetime import datetime, timezone
+        from flask import g
+        from smart_mail.outreach_schedule import load_schedule_flags, DOC_PATH
+        db = _get_db()
+        body = request.get_json(silent=True) or {}
+        flags = load_schedule_flags(db)
+        for key in flags:
+            if key in body:
+                if not isinstance(body[key], bool):
+                    return _err(f"{key} must be true or false", 400)
+                flags[key] = body[key]
+        db.collection(DOC_PATH[0]).document(DOC_PATH[1]).set({
+            **flags,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": getattr(g, "user_email", ""),
+        })
+        return _ok("Schedule saved.", **flags)
     except Exception as exc:
         return _err(str(exc), 500)

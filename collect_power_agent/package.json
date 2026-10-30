@@ -4,6 +4,7 @@
   },
   "scripts": {
     "deploy:hosting": "firebase deploy --only hosting",
+    "deploy:indexes": "firebase deploy --only firestore:indexes",
     "deploy:functions": "firebase deploy --only functions",
     "deploy:crm": "firebase deploy --only functions:crm",
     "deploy:crm:full": "deploy_crm.bat",

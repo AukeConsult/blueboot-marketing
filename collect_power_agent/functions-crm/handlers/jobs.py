@@ -541,23 +541,32 @@ def worker(name, job_id):
             _deadline = _time.monotonic() + int(os.getenv("OUTREACH_MAX_RUN_SECONDS", "780"))   # shared by both passes
             _done = {"sent": 0, "failed": 0}
             _control = {}   # one control mail per job, shared by the follow-up and intro passes
+            _scan = {}      # pending contacts are read from Firestore once and shared by both passes
+            from smart_mail.outreach_mail_select import FILL_LIMIT
+            _left = int(body.get("limit") or 500)          # mails still to collect; reminders first, intros get the rest
+            if FILL_LIMIT > 0:
+                _left = min(_left, FILL_LIMIT)
 
             def _progress(s, _done=_done):
                 # live counts on the job, so a killed worker still shows what went out
                 _update_job(job_id, progress={"sent": _done["sent"] + s["sent"], "failed": _done["failed"] + s["failed"]})
 
             for pass_mode in modes:
+                if _left <= 0:
+                    break
                 passes.append(send_outreach(
                     mode         = pass_mode,
-                    limit        = int(body.get("limit") or 500),
+                    limit        = _left,
                     campaign_ids = body.get("campaign_ids") or None,
                     dry_run      = bool(body.get("dry_run", False)),
                     preview      = bool(body.get("preview", False)),
                     progress     = _progress,
                     deadline     = _deadline,
                     control_state = _control,
+                    scan_cache    = _scan,
                 ))
                 _done["sent"] += passes[-1].get("sent", 0); _done["failed"] += passes[-1].get("failed", 0)
+                _left -= (passes[-1].get("sent", 0) + passes[-1].get("failed", 0) + passes[-1].get("skipped", 0))
             result = {
                 "mode": mode,
                 "passes": passes,
@@ -627,18 +636,34 @@ def job_status(job_id):
     return jsonify(doc.to_dict())
 
 
+def _mails_sent(job: dict) -> int:
+    """Mails a job has sent: the final result, or the live progress while it is still running."""
+    for part in ("result", "progress"):
+        v = (job.get(part) or {}).get("sent")
+        try:
+            if v and int(v) > 0:
+                return int(v)
+        except (TypeError, ValueError):
+            pass
+    return 0
+
+
 @bp.route("/api/crm/jobs", methods=["GET"])
 def list_jobs():
     """List recent jobs sorted by queued_at descending.
     ?limit=20       max results (default 20, max 500)
     ?running=true   only return running or queued jobs
     ?campaign_id=X  only return jobs for a specific campaign
-    ?name=outreach-send  only return jobs with this name (looks at the 200 newest)
+    ?name=outreach-send  only return jobs with this name (needs the crm_jobs name+queued_at index)
+    ?has_sent=true  only return jobs that really sent mail (result.sent or live progress.sent > 0);
+                    looks at the 200 newest jobs of that type, then returns up to `limit` of them
     """
     limit = min(int(request.args.get("limit", 20)), 500)
     running = request.args.get("running", "").lower() in ("1", "true", "yes")
     campaign_id = request.args.get("campaign_id", "").strip()
     name = request.args.get("name", "").strip()
+    has_sent = request.args.get("has_sent", "").lower() in ("1", "true", "yes")
+    scan = 200 if has_sent else limit      # has_sent filters after reading, so read more than `limit`
 
     query = _jobs_col().order_by("queued_at", direction="DESCENDING")
 
@@ -650,11 +675,23 @@ def list_jobs():
     if running:
         query = query.where(filter=FieldFilter("status", "in", ["queued", "running"]))
 
-    docs = list(query.limit(200 if name else limit).stream())
+    docs = None
+    if name:
+        # Filter in the query so a busy job type (scheduled sends) cannot push the others out of
+        # the newest-200 window. Needs the (name, queued_at) index; without it, fall back to the
+        # old behaviour of filtering the 200 newest in Python.
+        try:
+            docs = list(query.where(filter=FieldFilter("name", "==", name)).limit(scan).stream())
+        except Exception as exc:
+            print(f"[jobs] name filter in query failed ({exc}); filtering the newest 200 instead", flush=True)
+    if docs is None:
+        docs = list(query.limit(200 if name else scan).stream())
     jobs = []
     for d in docs:
         j = d.to_dict()
         if name and j.get("name") != name:
+            continue
+        if has_sent and _mails_sent(j) <= 0:
             continue
         if len(jobs) >= limit:
             break

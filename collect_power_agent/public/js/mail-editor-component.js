@@ -139,9 +139,6 @@
               <button class="btn btn-sm btn-outline-secondary" type="button" data-me="trUndo" style="display:none">
                 <i class="ti ti-arrow-back-up me-1"></i>Undo translation
               </button>
-              <button class="btn btn-sm btn-outline-primary" type="button" data-me="trailerBtn" title="Copy the default mail trailer to the end of this mail">
-                <i class="ti ti-file-text me-1"></i>Add default trailer
-              </button>
             </div>
             <div class="form-text mt-0 mb-0" data-me="toolsMsg">Ref and language belong to the campaign (all steps). <strong>Apply</strong> changes <code>/lang/xx</code> and <code>?ref=</code> in blueboot.ai links, e.g. <code>https://blueboot.ai/lang/en/bs/docs/why-use/?ref=hot-no2</code>. <strong>Translate</strong> is a pure AI translation into the language code; placeholders, links and formatting are kept, it replaces the current text and is saved (Undo is available).</div>
           </div>
@@ -153,7 +150,12 @@
           </div>
 
           <div data-me="plainPane">
+            <ul class="nav nav-tabs mb-0" style="border-bottom:none">
+              <li class="nav-item"><button class="nav-link active" data-me-ptab="edit" type="button"><i class="ti ti-pencil me-1"></i>Editor</button></li>
+              <li class="nav-item"><button class="nav-link" data-me-ptab="preview" type="button"><i class="ti ti-eye me-1"></i>Preview</button></li>
+            </ul>
             <textarea data-me="bodyPlain" class="form-control" rows="8" style="font-size:13px;border-radius:8px" placeholder="Hei {{name}},"></textarea>
+            <div data-me="plainPreviewPane" class="border border-top-0 rounded-bottom p-3 mb-2" style="display:none;background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;min-height:230px"></div>
           </div>
 
           <div data-me="htmlPane" style="display:none">
@@ -207,7 +209,6 @@
         this.$('bodyText').value = MailEditorComponent.htmlToText(this.$('bodyHtml').value);
         this.autoSave();
       });
-      this.$('trailerBtn').addEventListener('click', () => this.insertTrailer());
       this.$('trBtn').addEventListener('click', () => this.translate());
       this.$('trUndo').addEventListener('click', () => this.undoTranslate());
       this.$('mainBtn').addEventListener('click', () => this.editCampaignMail());
@@ -215,6 +216,9 @@
       this.$('testBtn').addEventListener('click', () => this.openTest());
       this.root.querySelectorAll('[data-me-tab]').forEach(btn => {
         btn.addEventListener('click', () => this.showTab(btn.dataset.meTab));
+      });
+      this.root.querySelectorAll('[data-me-ptab]').forEach(btn => {
+        btn.addEventListener('click', () => this.showPlainTab(btn.dataset.mePtab));
       });
     }
 
@@ -280,7 +284,7 @@
       this.$('title').textContent = title;
       this.$('subtitle').textContent = subtitle;
       this.$('stepBar').style.display = 'none';
-      this.$('tools').style.display = 'none';     // ref, language, translation and trailer belong to a campaign
+      this.$('tools').style.display = 'none';     // ref, language and translation belong to a campaign
       this.$('textPane').style.display = 'none';  // a separate plain-text version exists on sequence steps only
       this.applyMail({ type: 'plain', css: DEFAULT_CSS, ...mail });
     }
@@ -560,6 +564,18 @@
       if (tab === 'preview') this.updatePreview();
     }
 
+    // Plain mails: the text box or the preview of the finished mail (HTML and plain-text version).
+    showPlainTab(tab) {
+      this.$('bodyPlain').style.display = tab === 'edit' ? '' : 'none';
+      this.$('plainPreviewPane').style.display = tab === 'preview' ? '' : 'none';
+      this.root.querySelectorAll('[data-me-ptab]').forEach(b => b.classList.toggle('active', b.dataset.mePtab === tab));
+      if (tab === 'preview') this.updatePreview();
+    }
+
+    previewPane() {
+      return this.$(this.getType() === 'html' ? 'previewPane' : 'plainPreviewPane');
+    }
+
     getType() {
       return this.$('typeHtml').checked ? 'html' : 'plain';
     }
@@ -680,23 +696,6 @@
       return { text: out, links };
     }
 
-    // Copy the default trailer (Outreach Settings) to the end of the mail: the HTML version into
-    // an HTML mail, the plain-text version into a plain mail.
-    async insertTrailer() {
-      try {
-        const r = await fetch(`${this.base}/api/crm/mail-trailer`);
-        const t = await r.json();
-        if (t.status !== 'ok') throw new Error(t.message || 'Could not load the trailer');
-        if (t.enabled && !confirm('The trailer is switched on, so it is already added to every mail when it is sent. Copy it into this mail anyway?')) return;
-        const body = this.getBody();
-        this.setBody(this.getType() === 'html'
-          ? body + '<p><br></p>' + (t.html || '')
-          : body.replace(/\s+$/, '') + '\n\n---\n' + (t.text || ''));
-      } catch (e) {
-        this.feedback(e.message, true);
-      }
-    }
-
     async translate() {
       const language = this.$('campaignLang').value.trim().toLowerCase();
       const btn = this.$('trBtn');
@@ -788,9 +787,36 @@
       if (!err) setTimeout(() => { fb.style.display = 'none'; }, 1800);
     }
 
-    updatePreview() {
-      const pane = this.$('previewPane');
+    // The preview is made by the server, so it is the mail as outreach sends it (mail layout, sample contact).
+    // If the server cannot be reached, the plain local preview below is shown.
+    async updatePreview() {
+      const pane = this.previewPane();
       if (pane.style.display === 'none') return;
+      const seq = this._previewSeq = (this._previewSeq || 0) + 1;
+      try {
+        const r = await fetch(`${this.base}/api/crm/mail-preview`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subject: this.$('subject').value, body: this.getType() === 'html' ? this.getBody() : '',
+                                 text: this.getType() === 'html' ? this.getText() : this.getBody(),
+                                 account: this.campaign?.outreach_email_account || '' })
+        });
+        const d = await r.json();
+        if (d.status !== 'ok') throw new Error(d.message || 'Preview failed');
+        if (seq !== this._previewSeq) return;
+        const head = t => `<div class="small fw-semibold text-muted mb-1">${t}</div>`;
+        const html = d.html
+          ? head('HTML version') + `<iframe sandbox style="width:100%;height:420px;border:1px solid #e5e7eb;border-radius:6px" srcdoc="${esc('<!doctype html><meta charset="utf-8"><style>' + (this.$('css').value || '') + '</style>' + d.html)}"></iframe>`
+          : '';
+        pane.innerHTML = html
+          + head('Plain-text version').replace('mb-1', 'mb-1 mt-3')
+          + `<pre style="white-space:pre-wrap;margin:0;padding:10px;border:1px solid #e5e7eb;border-radius:6px;font-family:Arial,sans-serif">${esc(d.text)}</pre>`;
+        return;
+      } catch (_) { /* fall back to the local preview */ }
+      this.updateLocalPreview();
+    }
+
+    updateLocalPreview() {
+      const pane = this.previewPane();
       const rendered = this.getBody()
         .replace(/\{\{name\}\}/g, 'Tone Hansen')
         .replace(/\{\{company\}\}/g, 'Blueboot AS')

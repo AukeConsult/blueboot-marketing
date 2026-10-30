@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mail layout — Blueboot CRM</title>
+<link rel="stylesheet" href="vendor/bootstrap.min.css">
+<link rel="stylesheet" href="vendor/tabler-icons.min.css">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body class="bg-alt">
+
+<div id="nav"></div>
+
+<div class="container py-4 bb-container-wide">
+
+  <div class="d-flex align-items-center gap-2 mb-3">
+    <a href="outreach-settings.html" class="btn btn-sm btn-outline-secondary" title="Outreach settings">
+      <i class="ti ti-arrow-left"></i>
+    </a>
+    <h5 class="page-title"><i class="ti ti-layout-board me-2"></i>Mail layout</h5>
+  </div>
+
+  <div id="ml-feedback" class="alert py-2 px-3 small mb-3 d-none"></div>
+
+  <!-- On / off + company -->
+  <div class="card p-3 mb-3">
+    <p class="small text-muted mb-3">
+      Every outreach mail is put in the frame below, with its footer and unsubscribe block, in both the HTML and the plain text version.
+
+    </p>
+    <div class="row g-2">
+      <div class="col-md-5">
+        <label class="form-label small fw-500" for="ml-company-name">Company name</label>
+        <input id="ml-company-name" class="form-control form-control-sm" maxlength="100" autocomplete="organization">
+      </div>
+      <div class="col-md-7">
+        <label class="form-label small fw-500" for="ml-company-address">Company address</label>
+        <textarea id="ml-company-address" class="form-control form-control-sm" rows="2" maxlength="300"></textarea>
+      </div>
+    </div>
+    <div class="form-text">
+      Used in the footer as <code>{{company_name}}</code> and <code>{{company_address}}</code>. Without a company name the name of the sending account is used;
+      an empty address leaves its line out. Mass mail should show a postal address.
+    </div>
+  </div>
+
+  <!-- Frame, footer, unsubscribe -->
+  <div class="card p-3 mb-3">
+    <ul class="nav nav-tabs small mb-3" id="ml-tabs">
+      <li class="nav-item"><button type="button" class="nav-link" data-kind="text">Plain text</button></li>
+      <li class="nav-item"><button type="button" class="nav-link active" data-kind="html">HTML</button></li>
+    </ul>
+
+    <div id="ml-fields"></div>
+
+    <div class="form-text mt-2">
+      The frame says where the parts go: <code>{{message}}</code> is the mail, <code>{{footer}}</code> the footer, <code>{{unsubscribe}}</code> the unsubscribe block
+      (left out when a mail has no unsubscribe link). Leave the frame empty to stack the three one below the other.
+      Inside the three: <code>{{sender_name}}</code>, <code>{{sender_email}}</code>, <code>{{company_name}}</code>, <code>{{company_address}}</code>,
+      <code>{{unsubscribe_url}}</code>, and the contact placeholders of the campaign mails such as <code>{{name}}</code> and <code>{{company}}</code>.
+    </div>
+
+    <div class="d-flex align-items-center gap-2 mt-3">
+      <button id="ml-save" class="btn btn-primary btn-sm" type="button"><i class="ti ti-device-floppy me-1"></i>Save mail layout</button>
+      <span id="ml-save-status" class="small text-muted"></span>
+    </div>
+  </div>
+
+  <!-- Preview -->
+  <div class="card p-3 mb-3">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+      <h6 class="fw-semibold mb-0"><i class="ti ti-eye me-1 text-primary"></i>Preview</h6>
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <select id="ml-account" class="form-select form-select-sm bb-select-auto" title="Sending account for the sample"></select>
+        <div class="btn-group btn-group-sm" role="group">
+          <button type="button" class="btn btn-outline-secondary" id="ml-mass-off">Without unsubscribe</button>
+          <button type="button" class="btn btn-outline-secondary active" id="ml-mass-on">With unsubscribe</button>
+        </div>
+      </div>
+    </div>
+    <p class="small text-muted mb-2">A sample mail for a sample contact. The preview shows what is in the fields now, also before you save.</p>
+    <div id="ml-preview-error" class="small text-danger mb-2 d-none"></div>
+    <iframe id="ml-preview-frame" sandbox="" title="Preview" class="bb-preview-frame"></iframe>
+
+    <details class="small mt-2">
+      <summary>HTML source of the mail</summary>
+      <div class="d-flex justify-content-end mt-1">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="ml-copy">Copy HTML</button>
+      </div>
+      <pre id="ml-source" class="small bg-body-tertiary border rounded p-2 mt-1 mb-0 bb-source"></pre>
+    </details>
+    <details class="small mt-2">
+      <summary>Plain text version (sent together with the HTML)</summary>
+      <pre id="ml-text" class="small bg-body-tertiary border rounded p-2 mt-1 mb-0 bb-source"></pre>
+    </details>
+  </div>
+
+  <!-- Test mail -->
+  <div class="card p-3 mb-3">
+    <h6 class="fw-semibold mb-2"><i class="ti ti-send me-1 text-primary"></i>Send a test mail</h6>
+    <p class="small text-muted mb-2">Sends the sample mail with the fields as they are now (also unsaved) through the mail account you choose here, so you can see it in a real inbox.</p>
+    <div class="input-group input-group-sm bb-input-narrow">
+      <select id="ml-test-account" class="form-select" title="Sending account"></select>
+      <input id="ml-test-to" type="email" class="form-control" placeholder="you@example.com" autocomplete="email">
+      <button id="ml-test-send" class="btn btn-outline-primary" type="button">Send test</button>
+    </div>
+    <div id="ml-test-status" class="small mt-2"></div>
+  </div>
+
+  <p class="small text-muted">
+    The unsubscribe link itself, its address and the List-Unsubscribe headers are set in <a href="outreach-settings.html">Outreach settings</a>.
+    While the mail layout is on, the unsubscribe text above replaces the unsubscribe footer there.
+  </p>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/crm-common.js"></script>
+<script>
+const esc = escapeHtml;
+const PARTS = [
+  { key: 'frame',       label: 'Frame around every mail', rows: { text: 5, html: 8 } },
+  { key: 'footer',      label: 'Footer',                  rows: { text: 4, html: 7 } },
+  { key: 'unsubscribe', label: 'Unsubscribe block',       rows: { text: 3, html: 5 } },
+];
+const LIMITS = { text: { frame: 2000, footer: 1000, unsubscribe: 1000 }, html: { frame: 10000, footer: 5000, unsubscribe: 3000 } };
+
+let defaults = null;
+let kind = 'html';
+let mass = true;
+let current = { text: {}, html: {} };      // what is in the fields, for the tab that is not shown
+let previewTimer = null;
+let previewSeq = 0;
+let lastHtml = '';
+
+const $ = id => document.getElementById(id);
+
+function feedback(msg, type) {
+  const fb = $('ml-feedback');
+  if (!type) { fb.classList.add('d-none'); return; }
+  fb.className = `alert alert-${type} py-2 px-3 small mb-3`;
+  fb.innerHTML = msg;
+}
+
+function renderFields() {
+  $('ml-fields').innerHTML = PARTS.map(p => `
+    <div class="mb-3">
+      <div class="d-flex align-items-center justify-content-between mb-1">
+        <label class="form-label small fw-500 mb-0" for="ml-f-${p.key}">${esc(p.label)}</label>
+        <button type="button" class="btn btn-link btn-sm py-0" data-default="${p.key}">Use default</button>
+      </div>
+      <textarea id="ml-f-${p.key}" class="form-control form-control-sm font-monospace" rows="${p.rows[kind]}"
+                maxlength="${LIMITS[kind][p.key]}" data-part="${p.key}">${esc(current[kind][p.key] ?? '')}</textarea>
+    </div>`).join('');
+  $('ml-fields').querySelectorAll('textarea').forEach(t => t.addEventListener('input', onChange));
+  $('ml-fields').querySelectorAll('[data-default]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.default;
+    $('ml-f-' + k).value = defaults[kind][k];
+    onChange();
+  }));
+}
+
+function keepVisible() {
+  PARTS.forEach(p => { const t = $('ml-f-' + p.key); if (t) current[kind][p.key] = t.value; });
+}
+
+function selectTab(next) {
+  keepVisible();
+  kind = next;
+  document.querySelectorAll('#ml-tabs .nav-link').forEach(b => b.classList.toggle('active', b.dataset.kind === kind));
+  renderFields();
+}
+
+function collect() {
+  keepVisible();
+  return {
+    company_name: $('ml-company-name').value,
+    company_address: $('ml-company-address').value,
+    layout: { text: { ...current.text }, html: { ...current.html } },
+  };
+}
+
+function onChange() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(preview, 400);
+}
+
+async function preview() {
+  const seq = ++previewSeq;
+  const err = $('ml-preview-error');
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/settings/mail-layout/preview', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...collect(), mass, account: $('ml-account').value }),
+    });
+    if (seq !== previewSeq) return;
+    if (d.status !== 'ok') throw new Error(d.message);
+    err.classList.add('d-none');
+    lastHtml = d.html || '';
+    $('ml-preview-frame').srcdoc = '<!doctype html><meta charset="utf-8">' + lastHtml;
+    $('ml-source').textContent = lastHtml;
+    $('ml-text').textContent = d.text || '';
+  } catch (e) {
+    if (seq !== previewSeq) return;
+    err.textContent = String(e.message || e);
+    err.classList.remove('d-none');
+  }
+}
+
+function setMass(on) {
+  mass = on;
+  $('ml-mass-on').classList.toggle('active', on);
+  $('ml-mass-off').classList.toggle('active', !on);
+  preview();
+}
+
+async function load() {
+  const [d, accounts] = await Promise.all([
+    fetchJSON(BASE + '/api/crm/settings/mail-layout'),
+    fetchJSON(BASE + '/api/crm/settings/mail-accounts').catch(() => ({ accounts: [] })),
+  ]);
+  defaults = d.defaults;
+  current = { text: { ...d.layout.text }, html: { ...d.layout.html } };
+  $('ml-company-name').value = d.company_name || '';
+  $('ml-company-address').value = d.company_address || '';
+  const list = (accounts.accounts || []).map(a => a.email).filter(Boolean);
+  const opts = list.map(e => `<option value="${esc(e)}">${esc(e)}</option>`).join('');
+  $('ml-account').innerHTML = '<option value="">Sample sender</option>' + opts;
+  $('ml-test-account').innerHTML = '<option value="">Choose mail account…</option>' + opts;
+  renderFields();
+  preview();
+}
+
+async function save() {
+  const btn = $('ml-save');
+  btn.disabled = true;
+  setStatusEl('ml-save-status', 'Saving…');
+  try {
+    const r = await fetch(BASE + '/api/crm/settings/mail-layout', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collect()),
+    });
+    const d = await r.json();
+    if (d.status !== 'ok') throw new Error(d.message);
+    setStatusEl('ml-save-status', 'Saved.', 'ok');
+    feedback('<i class="ti ti-check me-1"></i>Mail layout saved — it is used for the next outreach run.', 'success');
+  } catch (e) {
+    setStatusEl('ml-save-status', 'Save failed: ' + e.message, 'err');
+    feedback('<i class="ti ti-circle-x me-1"></i>Not saved: ' + esc(e.message), 'danger');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function sendTest() {
+  const to = $('ml-test-to').value.trim();
+  const account = $('ml-test-account').value;
+  if (!account) { setStatusEl('ml-test-status', 'Choose a mail account to send from.', 'err'); return; }
+  if (!to) { setStatusEl('ml-test-status', 'Enter an address to send to.', 'err'); return; }
+  const btn = $('ml-test-send');
+  btn.disabled = true;
+  setStatusEl('ml-test-status', 'Sending…');
+  try {
+    const d = await fetchJSON(BASE + '/api/crm/settings/mail-layout/send-test', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...collect(), mass, account, to }),
+    });
+    if (d.status !== 'ok') throw new Error(d.message || 'The mail was not sent');
+    setStatusEl('ml-test-status', 'Sent to ' + to + '.', 'ok');
+  } catch (e) {
+    setStatusEl('ml-test-status', 'Not sent: ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.querySelectorAll('#ml-tabs .nav-link').forEach(b => b.addEventListener('click', () => selectTab(b.dataset.kind)));
+$('ml-mass-on').addEventListener('click', () => setMass(true));
+$('ml-mass-off').addEventListener('click', () => setMass(false));
+$('ml-save').addEventListener('click', save);
+$('ml-test-send').addEventListener('click', sendTest);
+$('ml-account').addEventListener('change', preview);
+['ml-company-name', 'ml-company-address'].forEach(id => $(id).addEventListener('input', onChange));
+$('ml-copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(lastHtml);
+    $('ml-copy').textContent = 'Copied';
+    setTimeout(() => { $('ml-copy').textContent = 'Copy HTML'; }, 1500);
+  } catch (_) { /* clipboard not allowed here: the source is selectable in the box */ }
+});
+
+requireAuth().then(() => {
+  requireRole(['admin']);
+  load().catch(e => feedback('<i class="ti ti-circle-x me-1"></i>Could not load the mail layout: ' + esc(prettyError(e.message)) + ' (deploy the functions if this is new)', 'danger'));
+});
+</script>
+<script src="vendor/bootstrap.bundle.min.js"></script>
+</body>
+</html>

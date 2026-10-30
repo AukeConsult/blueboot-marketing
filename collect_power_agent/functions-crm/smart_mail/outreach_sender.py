@@ -45,13 +45,12 @@ _MIN_ATTEMPTS_BEFORE_BREAKER = 8
 
 def _sent_count_since(db, sender_account: str, since_iso: str) -> int:
     try:
-        docs = (
+        from .outreach_status_lib import count_query
+        return count_query(
             db.collection("outreach_sent")
             .where(filter=FieldFilter("sender_account", "==", sender_account))
             .where(filter=FieldFilter("sent_at", ">=", since_iso))
-            .stream()
         )
-        return sum(1 for _ in docs)
     except Exception as ex:
         print(f"[throttle] count query failed ({ex}); assuming budget exhausted")
         return 10**9
@@ -350,6 +349,7 @@ def send_outreach(
     progress=None,
     deadline: float | None = None,
     control_state: dict | None = None,
+    scan_cache: dict | None = None,
 ) -> dict:
     """One-pass send loop for intro or followup outreach.
 
@@ -380,13 +380,17 @@ def send_outreach(
     else:
         MailSender = None
     from smart_mail.outreach_mail_select import (                    # noqa: PLC0415
-        read_outreach, confirm_sent, contact_not_sendable_reason,
+        read_outreach, confirm_sent, contact_not_sendable_reason, explain_empty,
     )
     from smart_mail.outreach_render_mail import render_mail, MailStep  # noqa: PLC0415
-    from smart_mail.mail_trailer import load_trailer                   # noqa: PLC0415
 
     db = get_firestore()
-    trailer = load_trailer(db)      # one default trailer for all mails, read once per run
+    from smart_mail.mail_layout import load_layout                     # noqa: PLC0415
+    try:
+        layout = load_layout(db)    # the frame around every mail (Mail layout page), read once per run
+    except Exception as ex:
+        print(f"[sender] mail layout not available ({ex}); mails go out without it")
+        layout = None
     from smart_mail.unsubscribe import load_config as _load_unsub      # noqa: PLC0415
     try:
         unsub_cfg = _load_unsub(db)
@@ -407,10 +411,13 @@ def send_outreach(
     }
     campaign_filter = _coerce_id_set(campaign_ids)
 
-    batches = read_outreach(mode=mode, limit=limit, campaign_ids=sorted(campaign_filter))
+    diag: dict = {}
+    batches = read_outreach(mode=mode, limit=limit, campaign_ids=sorted(campaign_filter),
+                            scan_cache=scan_cache, diag=diag)
     if not batches:
-        print(f"[sender] no outreach candidates for mode={mode!r}")
-        summary["notes"].append(f"{mode}: nothing waiting to send")
+        why = explain_empty(diag, mode)
+        print(f"[sender] no outreach candidates for mode={mode!r}: {why}")
+        summary["notes"].append(f"{mode}: nothing waiting to send ({why})")
         return summary
 
     problems_noted: set = set()
@@ -526,7 +533,9 @@ def send_outreach(
                         from smart_mail.unsubscribe import unsubscribe_url as _unsub_url, footers as _unsub_footers  # noqa: PLC0415
                         unsub_url = _unsub_url(unsub_cfg, contact.campaign_id, contact.contact_doc_id)
                         footer = _unsub_footers(unsub_cfg, unsub_url)
-                    rendered = render_mail(step, contact, trailer, footer)
+                    rendered = render_mail(step, contact, footer, layout=layout,
+                                           sender={"name": account.from_name, "email": account.email},
+                                           unsubscribe_url=unsub_url)
 
                     problem = _mail_problem(contact, step, rendered)
                     if problem:
@@ -628,7 +637,9 @@ def send_outreach(
                                         from smart_mail.unsubscribe import (  # noqa: PLC0415
                                             unsubscribe_url as _cu, footers as _cf, list_headers as _ch)
                                         c_url = _cu(unsub_cfg, contact.campaign_id, "control-mail")
-                                        c_rendered = render_mail(step, contact, trailer, _cf(unsub_cfg, c_url))
+                                        c_rendered = render_mail(step, contact, _cf(unsub_cfg, c_url), layout=layout,
+                                                                 sender={"name": account.from_name, "email": account.email},
+                                                                 unsubscribe_url=c_url)
                                         c_headers["List-Unsubscribe"], c_headers["List-Unsubscribe-Post"] = \
                                             _ch(unsub_cfg, c_url, account.email)
                                     c_res = sender.send_open(

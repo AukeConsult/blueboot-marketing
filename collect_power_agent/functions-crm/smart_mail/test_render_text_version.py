@@ -23,7 +23,7 @@ class Render(unittest.TestCase):
 
     def test_plain_only_mail(self):
         r = render_mail(_step("", "Just text"), CONTACT)
-        self.assertIsNone(r.html_body)
+        self.assertEqual(r.html_body, "<p>Just text</p>")
         self.assertEqual(r.text_body, "Just text")
 
 

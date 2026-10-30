@@ -200,19 +200,23 @@ In the mail editor, write the language code (the same **Language** field as abov
 
 - Placeholders such as `{{name}}`, links, e-mail addresses, formatting and embedded images are kept as they are. The result is checked, and if the AI changed any of them nothing is replaced and you are asked to try again.
 - The translation replaces the current text and is saved at once. **Undo translation** brings the old text back. Read the result before you send. Afterwards press **Apply ref and language to links** so the links point to the right language.
-- It translates one step at a time, so open each reminder and translate it too. The mail trailer is separate: it has its own HTML and plain-text version on the Outreach Settings page.
+- It translates one step at a time, so open each reminder and translate it too.
 - It needs `OPENAI_API_KEY` in the root `.env` (the same key the name enrichment uses). `OPENAI_MODEL` in the same file sets the model; the default is `gpt-5.4-mini`. The model in use, and whether the key is set, is shown in the **AI model** card on the Settings page. Every functions deploy copies these two values (and the batch settings and `CAMPAIGN_SEND_DELAY_SECONDS`) from the root `.env` into `functions-crm/.env`, which is the file the cloud function actually receives; never edit that file by hand.
 
-## Mail trailer: one text at the end of every mail
+## Mail layout: a frame, footer and unsubscribe link around every mail
 
-On **Settings → Outreach Settings → Mail trailer** (admin only) you can set one text that is added at the end of every outreach mail, intro and reminder, after a divider line. It is meant for a standing paragraph such as "Who is BlueSearch built for?".
+On **Daily Admin → Mail layout** (admin only) you design what surrounds the text you write: a **frame** around the whole mail, a **footer** with your company name and address, and an **unsubscribe block** with the opt-out link. Plain text and HTML each have their own tab.
 
-- There are two versions: an **HTML version** (formatted, edited in the editor) and a **plain-text version**. HTML mails get the HTML version, and the plain-text part of every mail gets the plain version. Plain-text-only mails get the plain version. If you leave the plain-text box empty when saving, it is made from the HTML version.
-- It is **off by default**. The page is filled with the BlueSearch text, but nothing is added until you switch on **Add to every mail** and save.
-- Placeholders such as `{{name}}` work in the trailer.
-- It applies to the next run, whether started from **Send now**, the command line or the scheduler, and to the dry-run preview. Mails already sent are not changed.
-- You can also copy it into a single mail by hand: in the mail editor press **Add default trailer**. The HTML version goes to the end of an HTML mail and the plain-text version to the end of a plain mail. If the trailer is switched on it is added automatically when sending, so use the button only when it is switched off (the page asks before copying).
-- It is the same text for all campaigns. To leave it out of a mail, switch it off and save.
+- It is always used: every outreach mail goes out in the layout, and the defaults are used until you change them.
+- In the frame, `{{message}}` is the mail you wrote, `{{footer}}` is the footer and `{{unsubscribe}}` is the unsubscribe block. `{{message}}` is required.
+- Inside the footer and unsubscribe block you can use `{{sender_name}}`, `{{sender_email}}`, `{{company_name}}`, `{{company_address}}` and `{{unsubscribe_url}}`. The contact placeholders such as `{{name}}` work as before.
+- The unsubscribe block is only added when a mail has an unsubscribe link.
+- **Use default** on each field restores the suggested text.
+- The preview shows the whole mail with or without the unsubscribe block. You can copy the HTML source, and send a test mail to yourself from a chosen sending account.
+- The footer texts under Outreach Settings are not used.
+- It is the same layout for all campaigns and applies to the next run.
+- Every mail is sent as HTML together with a plain-text version. A mail you write as plain text is turned into HTML for you (paragraphs, line breaks and links), so it gets the same frame, footer and unsubscribe block.
+- The **Preview** tab of the mail editor shows the mail the way it will be sent, the HTML version and the plain-text version, with the layout around them and a sample contact.
 
 ## What protects you from a wrong or double mail
 

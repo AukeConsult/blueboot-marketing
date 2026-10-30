@@ -84,7 +84,7 @@
   <div class="card mt-3">
     <div class="card-header py-2 d-flex align-items-center gap-2">
       <span class="fw-600 small"><i class="ti ti-history me-1 text-primary"></i>Latest send runs</span>
-      <span class="small text-muted ms-auto">last 5</span>
+      <span class="small text-muted ms-auto">last 5 that sent mail</span>
     </div>
     <div class="table-responsive"><table class="table table-sm table-hover small mb-0">
       <thead class="bb-thead"><tr>
@@ -94,7 +94,7 @@
       </tr></thead>
       <tbody id="runs-body"></tbody>
     </table></div>
-    <div id="runs-empty" class="text-center py-3 small text-muted" style="display:none">No send runs yet.</div>
+    <div id="runs-empty" class="text-center py-3 small text-muted" style="display:none">No send run has sent mail yet.</div>
   </div>
 </div>
 
@@ -347,16 +347,22 @@ function smEstimate(ids) {
   const per = {};
   (DATA.campaigns || []).filter(c => ids.includes(c.campaign_id)).forEach(c => {
     const w = (c.intro_sendable || 0) + (c.followup_sendable || 0);
-    per[c.sender] = per[c.sender] || { account: c.sender, waiting: 0, campaigns: 0 };
+    per[c.sender] = per[c.sender] || { account: c.sender, waiting: 0, intro: 0, reminders: 0, campaigns: 0 };
     per[c.sender].waiting += w;
+    per[c.sender].intro += c.intro_sendable || 0;
+    per[c.sender].reminders += c.followup_sendable || 0;
     per[c.sender].campaigns += 1;
   });
   const rows = Object.values(per).map(r => {
     const a = (DATA.accounts || []).find(x => x.account === r.account);
     const send = a && !a.problem ? Math.min(a.budget, r.waiting) : 0;
-    return { ...r, budget: a ? a.budget : 0, problem: a ? a.problem : 'no mail account', send, over: r.waiting - send };
+    // The real run sends reminders first, then intros with what is left of the budget.
+    const sendRem = Math.min(send, r.reminders);
+    const sendIntro = send - sendRem;
+    return { ...r, budget: a ? a.budget : 0, problem: a ? a.problem : 'no mail account', send, sendRem, sendIntro, over: r.waiting - send };
   });
-  return { rows, total: rows.reduce((n, r) => n + r.send, 0), waiting: rows.reduce((n, r) => n + r.waiting, 0) };
+  const sum = k => rows.reduce((n, r) => n + r[k], 0);
+  return { rows, total: sum('send'), waiting: sum('waiting'), sendRem: sum('sendRem'), sendIntro: sum('sendIntro') };
 }
 
 function smUpdate() {
@@ -370,16 +376,18 @@ function smUpdate() {
     <div class="small fw-500 mb-1"><i class="ti ti-battery me-1"></i>Budget check per mail account</div>
     <table class="table table-sm small mb-0"><thead class="bb-thead"><tr>
       <th>Account</th><th class="text-end">Waiting</th><th class="text-end">Budget now</th>
-      <th class="text-end">Sends now</th><th class="text-end">Stays waiting</th></tr></thead><tbody>` +
+      <th class="text-end">Sends now</th><th class="text-end">Intro</th><th class="text-end">Reminders</th>
+      <th class="text-end">Stays waiting</th></tr></thead><tbody>` +
     e.rows.map(r => `<tr class="${r.problem || r.over ? 'table-warning' : ''}">
       <td class="text-truncate" style="max-width:220px" title="${esc(r.account || '')}">${esc(r.account || '—')}
         <span class="text-muted">· ${r.campaigns} campaign(s)</span>${r.problem ? ` <span class="badge bg-danger">${esc(r.problem)}</span>` : ''}</td>
       <td class="text-end">${r.waiting}</td><td class="text-end">${r.budget}</td>
-      <td class="text-end fw-500">${r.send}</td><td class="text-end">${r.over}</td></tr>`).join('') +
+      <td class="text-end fw-500">${r.send}</td><td class="text-end">${r.sendIntro}</td><td class="text-end">${r.sendRem}</td>
+      <td class="text-end">${r.over}</td></tr>`).join('') +
     '</tbody></table>' : '';
   document.getElementById('sm-summary').innerHTML =
     (ids.length ? '' : '<span class="text-muted">None ticked: all ready campaigns. </span>') +
-    `<b>${e.total}</b> mail(s) will be sent now` + (e.waiting > e.total ? ` <span class="text-warning">(${e.waiting - e.total} over budget stay waiting for a later run)</span>` : '');
+    `<b>${e.total}</b> mail(s) will be sent now (${e.sendIntro} intro + ${e.sendRem} reminders)` + (e.waiting > e.total ? ` <span class="text-warning">(${e.waiting - e.total} over budget stay waiting for a later run)</span>` : '');
   document.getElementById('sm-go').disabled = !boxes.length;   // the budget check is information only, it never blocks
 }
 
@@ -479,7 +487,7 @@ function renderRuns(jobs) {
 }
 async function loadRuns() {
   try {
-    const d = await fetchJSON(BASE + '/api/crm/jobs?name=outreach-send&limit=' + RUNS_LIMIT, { cache: 'no-store' });
+    const d = await fetchJSON(BASE + '/api/crm/jobs?name=outreach-send&has_sent=true&limit=' + RUNS_LIMIT, { cache: 'no-store' });
     renderRuns(d.jobs || []);
   } catch (e) {
     document.getElementById('runs-body').innerHTML =

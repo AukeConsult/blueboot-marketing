@@ -217,6 +217,33 @@ https://us-central1-blueboot-market.cloudfunctions.net/smartMail/reply-match
 
 Scheduled Smart Mail triggers should use `POST`. Do not expose `outreach-send` as an unauthenticated public GET URL.
 
+### Scheduled jobs (Firebase scheduled functions)
+
+Two scheduled functions in `functions-crm/main.py`, each switched on or off in **Outreach Settings -> Scheduled jobs**
+(Firestore `settings/outreach_schedule`: `send_enabled`, `reply_enabled`; a missing document means both OFF):
+
+| Function | Runs | What it does |
+|---|---|---|
+| `outreachHourly` | every 30 min (UTC) | Goes through the mail accounts of the `ready`/`active` campaigns, the one with the most send budget first. An account with less than `OUTREACH_SCHEDULE_MIN_BUDGET` (default 10) mails of room in its rolling 60-minute budget is skipped, and so is an account with nothing to send. The first account that has both gets one `outreach-send` job (mode both) for its own campaigns only; the next account is served by the next run. "Nothing to send" is decided by running the real selection (`has_outreach_work()`), so the check and the send cannot disagree. Uses `_start_outreach_send`, so the overlap guard and send limits apply. |
+| `replyHourly` | minute 55 of every hour (UTC) | Reads replies and bounces for `ready`/`active` campaigns (last 7 days) so replied contacts get no further reminders. |
+
+`outreachHourly` skips quickly when there is nothing to do: it checks the send budget with count aggregations, then
+`has_outreach_work()` (`smart_mail/outreach_mail_select.py`) stops at the first intro or due reminder; only then is a job queued.
+Inside a job, the reminder and intro passes share one read of the pending contacts, and site-lead statuses are fetched
+only for the leads those contacts belong to.
+A send run collects at most `OUTREACH_FILL_LIMIT` (default 50, 0 = no cap) sendable mails: it goes through the
+campaigns one at a time, reads pending contacts in pages of 100, and stops as soon as it has them. Reminders are
+collected first and intros fill what is left. Pending contacts that are not sendable yet (mailed, reminder not due)
+are skipped and do not count, so they never block the ones behind them. The rest waits for the next run.
+
+Every scheduled run is written to the **Jobs** page (types `scheduled-send` and `scheduled-reply`) with its start and
+end time, its outcome (`queued`, `switched_off`, `no_campaigns`, `budget_low`, `nothing_to_send`, `not_queued`,
+`replies_found`, `done`, `error`) and the reason. Repeats of the same outcome update one row (`×N`, first and last run
+time in the details) instead of adding one per run; a change of outcome adds a new row. A run that is killed before it
+finishes leaves no row. A queued send also has its own `outreach-send` job.
+
+Deploy: `firebase deploy --only functions:crm:outreachHourly,functions:crm:replyHourly`.
+
 ---
 
 ## Outreach Sender — Contact Eligibility Rules

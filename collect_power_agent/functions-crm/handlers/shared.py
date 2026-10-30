@@ -91,6 +91,43 @@ def _update_job(job_id: str, **kwargs):
     _jobs_col().document(job_id).update(kwargs)
 
 
+def _log_scheduled_run(function: str, job_name: str, outcome: str, reason: str, started_at: str, **extra):
+    """Write one scheduled-function run to the job list (collection crm_jobs). Never raises.
+
+    The row carries the start and end of the LATEST run (started_at / finished_at), so the duration
+    shown on the Jobs page is that run's own. A run with the same outcome and reason as the previous
+    run of the same function updates that row instead of adding one (result.runs counts them,
+    result.first_run_at keeps the first), so a skip every 30 minutes does not flood the list.
+    """
+    try:
+        db = _get_db()
+        finished = datetime.now(timezone.utc).isoformat()
+        status = "error" if outcome == "error" else "done"
+        state_ref = db.collection("settings").document("scheduler_last")
+        last = (state_ref.get().to_dict() or {}).get(function) or {}
+        sig = f"{outcome}|{reason}"
+        if last.get("sig") == sig and last.get("job_id"):
+            try:
+                _jobs_col().document(last["job_id"]).update({
+                    "queued_at": started_at, "started_at": started_at, "finished_at": finished,
+                    "status": status, "result.runs": fs.Increment(1), "result.last_run_at": started_at,
+                    **{f"result.{k}": v for k, v in extra.items()},
+                })
+                return last["job_id"]
+            except Exception:
+                pass                      # the row was deleted: start a new one below
+        job_id = _new_job(job_name, {"function": function})
+        _update_job(job_id, queued_at=started_at, started_at=started_at, finished_at=finished,
+                    status=status, error=reason if status == "error" else None,
+                    result={"outcome": outcome, "reason": reason, "runs": 1,
+                            "first_run_at": started_at, "last_run_at": started_at, **extra})
+        state_ref.set({function: {"sig": sig, "job_id": job_id}}, merge=True)
+        return job_id
+    except Exception as exc:
+        print(f"[scheduler-log] could not write run record: {exc}", flush=True)
+        return None
+
+
 # ── Cloud Tasks enqueue ───────────────────────────────────────────────────────
 
 def _enqueue_task(name: str, job_id: str, params: dict):

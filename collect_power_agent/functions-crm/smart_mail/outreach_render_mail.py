@@ -12,7 +12,8 @@ Rules enforced here so the send loop never has to think about them:
     from template_engine.py
   - When a step has HTML: plain text is auto-derived via html_to_text() from
     outreach_sender.py; html_body is set
-  - When a step has plain text only: html_body is None
+  - When a step has plain text only: html_body is made from the text (paragraphs, line breaks, links),
+    so every mail goes out as HTML and plain text
   - RFC 2045 multipart/alternative order: plain FIRST, HTML SECOND
     (mail clients render the last part they understand, so HTML goes last
     to be preferred when supported)
@@ -24,7 +25,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from html import unescape
+from html import escape as html_escape, unescape
 from typing import Any
 
 
@@ -67,6 +68,27 @@ def _html_to_text(html: str) -> str:
     text = _SPACE_RUN_RE.sub(" ", text)
     text = _BLANK_RUN_RE.sub("\n\n", text)
     return text.strip()
+
+
+_URL_RE = re.compile(r"https?://[^\s<>\"]+")
+
+
+def _text_to_html(text: str) -> str:
+    """A plain-text mail as HTML: paragraphs on blank lines, <br> on line breaks, web links clickable."""
+    def link(m: "re.Match[str]") -> str:
+        url = m.group(0)
+        tail = ""
+        while url and url[-1] in ".,;:!?)":
+            tail = url[-1] + tail
+            url = url[:-1]
+        return '<a href="%s">%s</a>%s' % (url, url, tail)
+
+    paras = [p for p in re.split(r"\n\s*\n", (text or "").replace("\r\n", "\n").strip()) if p.strip()]
+    out = []
+    for p in paras:
+        safe = _URL_RE.sub(link, html_escape(p.strip(), quote=False))
+        out.append("<p>%s</p>" % safe.replace("\n", "<br>"))
+    return "".join(out)
 
 
 # ---------------------------------------------------------------------------
@@ -112,8 +134,9 @@ class RenderedMail:
 # render_mail
 # ---------------------------------------------------------------------------
 
-def render_mail(step: MailStep, contact: Any, trailer: dict | None = None,
-                footer: tuple[str, str] | None = None) -> RenderedMail:
+def render_mail(step: MailStep, contact: Any,
+                footer: tuple[str, str] | None = None, layout: dict | None = None,
+                sender: dict | None = None, unsubscribe_url: str = "") -> RenderedMail:
     """Render a MailStep template against a ContactRow.
 
     Parameters
@@ -122,12 +145,13 @@ def render_mail(step: MailStep, contact: Any, trailer: dict | None = None,
         The campaign mail step to render (subject + body template).
     contact : ContactRow
         The recipient; converted to a dict for render_template().
-    trailer : dict, optional
-        Result of mail_trailer.load_trailer(). When enabled, its html part is added to
-        HTML mails and its text part to plain-text mails (and to the plain-text part of
-        HTML mails). Placeholders in the trailer are filled like the body.
     footer : (html, text), optional
-        Unsubscribe footer (smart_mail.unsubscribe.footers), added last.
+        Unsubscribe footer (smart_mail.unsubscribe.footers), added last. Not used while the mail layout is on.
+    layout : dict, optional
+        Result of mail_layout.load_layout(). When given, the finished mail is put in the layout's
+        frame with its footer and unsubscribe block, for both the HTML and the plain text version, and `footer` is
+        ignored. `sender` is {"name", "email"} of the sending account; `unsubscribe_url` is the link of this contact
+        (empty: the unsubscribe block is left out).
 
     Returns
     -------
@@ -154,34 +178,40 @@ def render_mail(step: MailStep, contact: Any, trailer: dict | None = None,
 
     subject = _render_template(step.subject, contact_dict)
 
-    trailer_html = trailer_text = ""
-    if trailer and trailer.get("enabled"):
-        trailer_html = _render_template(trailer.get("html") or "", contact_dict).strip()
-        trailer_text = _render_template(trailer.get("text") or "", contact_dict).strip()
+    layout_on = layout is not None
 
     if step.body_html:
         html_body  = _render_template(step.body_html, contact_dict)
         own_text   = _render_template(step.body_text, contact_dict).strip() if (step.body_text or "").strip() else ""
         text_body  = own_text or _html_to_text(html_body) or subject
-        if trailer_html:
-            html_body += "<hr>" + trailer_html
-        if trailer_text:
-            text_body += "\n\n---\n" + trailer_text
-        if footer:
+        if layout_on:
+            text_body, html_body = _apply_layout(layout, text_body, html_body, sender, unsubscribe_url, contact_dict)
+        elif footer:
             html_body += footer[0]
             text_body += "\n\n" + footer[1]
         return RenderedMail(subject=subject, text_body=text_body, html_body=html_body)
 
     if step.body_text:
         text_body = _render_template(step.body_text, contact_dict)
-        if trailer_text:
-            text_body += "\n\n---\n" + trailer_text
-        if footer:
+        html_body = _text_to_html(text_body)     # every mail also goes out as HTML
+        if layout_on:
+            text_body, html_body = _apply_layout(layout, text_body, html_body, sender, unsubscribe_url, contact_dict)
+        elif footer:
+            html_body += footer[0]
             text_body += "\n\n" + footer[1]
-        return RenderedMail(subject=subject, text_body=text_body, html_body=None)
+        return RenderedMail(subject=subject, text_body=text_body, html_body=html_body)
 
     # Both body fields empty — misconfigured step; degrade gracefully
     return RenderedMail(subject=subject, text_body=subject, html_body=None)
+
+
+def _apply_layout(layout: dict, text_body: str, html_body: str | None, sender: dict | None,
+                  unsubscribe_url: str, contact_dict: dict) -> tuple[str, str | None]:
+    """Put the finished mail in the mail layout (smart_mail.mail_layout)."""
+    from smart_mail.mail_layout import compose_mail
+    who = sender or {}
+    return compose_mail(layout, text_body, html_body, sender_name=who.get("name", ""),
+                        sender_email=who.get("email", ""), unsubscribe_url=unsubscribe_url, contact=contact_dict)
 
 
 # ---------------------------------------------------------------------------

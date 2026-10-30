@@ -45,7 +45,7 @@ class Tokens(unittest.TestCase):
 class Footer(unittest.TestCase):
     def test_footer_added_last(self):
         step = MailStep(index=0, mail_type="intro", subject="Hi", body_html="<p>Hello</p>", body_text="")
-        r = render_mail(step, {"email": "a@b.no"}, None, u.footers(CFG, "https://u/x"))
+        r = render_mail(step, {"email": "a@b.no"}, u.footers(CFG, "https://u/x"))
         self.assertTrue(r.html_body.endswith("</p>"))
         self.assertIn('href="https://u/x"', r.html_body)
         self.assertIn("Unsubscribe: https://u/x", r.text_body)
