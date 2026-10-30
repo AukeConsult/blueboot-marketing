@@ -11,6 +11,8 @@
 .job-card { cursor: pointer; transition: border-color .15s; }
 .job-card:hover { border-color: #adb5bd !important; }
 .detail { display: none; }
+/* The list redraws every 5 s, which would reset a scroll box inside a job; the page is the only scroller. */
+.detail pre { max-height: none; overflow: visible; }
 </style>
 </head>
 <body>

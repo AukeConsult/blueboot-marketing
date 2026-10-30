@@ -13,9 +13,9 @@
 .msg-row.unread td { font-weight: 600; }
 .msg-body { background: #fff; border: 1px solid var(--bb-border); border-radius: 8px;
             padding: 1rem; font-size: .85rem; line-height: 1.6; white-space: pre-wrap;
-            word-break: break-word; max-height: 400px; overflow-y: auto; }
+            word-break: break-word; }
 .msg-iframe { width:100%; border:1px solid var(--bb-border); border-radius:8px;
-              min-height:300px; max-height:700px; background:#fff; }
+              min-height:300px; background:#fff; }
 .from-cell    { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .subject-cell { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag-cell     { min-width: 160px; }
@@ -470,8 +470,8 @@ function _renderBody(bodyEl, m) {
     // auto-size to content
     iframe.onload = () => {
       try {
-        const h = iframe.contentDocument.body.scrollHeight;
-        if (h > 100) iframe.style.minHeight = Math.min(h + 20, 500) + 'px';
+        const h = iframe.contentDocument.documentElement.scrollHeight;
+        if (h > 100) iframe.style.height = (h + 4) + 'px';          // the whole mail, no scroll box of its own
       } catch(e) {}
     };
     bodyEl.appendChild(iframe);

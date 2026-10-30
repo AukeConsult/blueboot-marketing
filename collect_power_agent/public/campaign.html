@@ -93,9 +93,12 @@ body { overflow: hidden; }
   width: 100%;
   min-width: 0;
 }
+/* One vertical scroll only: the main pane. A table gets no scroll box of its own (that put a second
+   scrollbar next to the pane's); it only scrolls sideways when it is wider than the pane. */
 .campaign-tab-pane .table-responsive {
-  max-height: calc(100vh - 240px);
-  overflow: auto;
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 .tab-content > .campaign-tab-pane {
   border: 1px solid #dee2e6;
@@ -193,9 +196,6 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
   .campaign-main-pane {
     overflow: visible;
     padding: 14px;
-  }
-  .campaign-tab-pane .table-responsive {
-    max-height: none;
   }
   .contacts-card-header,
   .contacts-toolbar {
@@ -539,7 +539,7 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
 
         <!-- Sites table -->
         <div class="bb-card">
-          <div class="table-responsive" style="max-height:calc(100vh - 270px);overflow:auto">
+          <div class="table-responsive">
             <table class="table table-sm table-hover mb-0" id="sites-table">
               <thead class="bb-thead" id="sites-thead"><tr>
                 <th class="small sites-th" style="width:170px;cursor:pointer" data-col="company">Company <i class="ti ti-arrows-sort sites-sort-icon" style="font-size:10px;opacity:.45"></i></th>
@@ -629,7 +629,7 @@ td:has(.lc-editable) { padding: 2px 4px !important; }
           <span id="ctm-type-badge" class="badge bg-secondary" style="font-size:.65rem"></span>
         </div>
         <div id="ctm-preview" class="border rounded p-3 mb-3"
-             style="background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#333;min-height:60px;max-height:320px;overflow-y:auto"></div>
+             style="background:#fff;font-family:Arial,sans-serif;font-size:13px;line-height:1.6;color:#333;min-height:60px"></div>
         <div id="ctm-feedback" class="alert py-2 small mb-0" style="display:none"></div>
       </div>
       <div class="modal-footer border-0 pt-0">

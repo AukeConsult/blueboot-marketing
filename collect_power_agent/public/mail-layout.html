@@ -81,7 +81,7 @@
     </div>
     <p class="small text-muted mb-2">A sample mail for a sample contact. The preview shows what is in the fields now, also before you save.</p>
     <div id="ml-preview-error" class="small text-danger mb-2 d-none"></div>
-    <iframe id="ml-preview-frame" sandbox="" title="Preview" class="bb-preview-frame"></iframe>
+    <iframe id="ml-preview-frame" sandbox="allow-same-origin" title="Preview" class="bb-preview-frame" scrolling="no" onload="fitPreview()"></iframe>
 
     <details class="small mt-2">
       <summary>HTML source of the mail</summary>
@@ -187,6 +187,20 @@ function onChange() {
   clearTimeout(previewTimer);
   previewTimer = setTimeout(preview, 400);
 }
+
+// The preview grows to the height of the mail instead of scrolling inside a fixed box.
+// sandbox="allow-same-origin" (no allow-scripts) lets this page read the frame's height while
+// scripts in the mail still cannot run.
+function fitPreview() {
+  const f = $('ml-preview-frame');
+  try {
+    const doc = f.contentDocument;
+    if (!doc || !doc.documentElement) return;
+    f.style.height = '0px';                                   // so it can also shrink when the mail got shorter
+    f.style.height = Math.max(doc.documentElement.scrollHeight + 2, 200) + 'px';
+  } catch (e) { /* frame not readable: keep the default height */ }
+}
+window.addEventListener('resize', fitPreview);
 
 async function preview() {
   const seq = ++previewSeq;

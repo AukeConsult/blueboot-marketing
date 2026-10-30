@@ -21,6 +21,19 @@
     }[c]))))(v == null ? '' : String(v));
   }
 
+  // Preview frames grow to the height of the mail instead of scrolling inside a fixed box.
+  // sandbox="allow-same-origin" (without allow-scripts) lets the page read the frame's height
+  // while scripts in the mail still cannot run.
+  function fitFrame(f) {
+    try {
+      const doc = f.contentDocument;
+      if (!doc || !doc.documentElement) return;
+      f.style.height = '0px';                                  // so it can also shrink
+      f.style.height = Math.max(doc.documentElement.scrollHeight + 2, 120) + 'px';
+    } catch (e) { /* not readable: keep the default height */ }
+  }
+  window.addEventListener('resize', () => document.querySelectorAll('iframe[data-autofit]').forEach(fitFrame));
+
   class MailEditorComponent {
     constructor(root, opts = {}) {
       this.root = typeof root === 'string' ? document.querySelector(root) : root;
@@ -805,11 +818,12 @@
         if (seq !== this._previewSeq) return;
         const head = t => `<div class="small fw-semibold text-muted mb-1">${t}</div>`;
         const html = d.html
-          ? head('HTML version') + `<iframe sandbox style="width:100%;height:420px;border:1px solid #e5e7eb;border-radius:6px" srcdoc="${esc('<!doctype html><meta charset="utf-8"><style>' + (this.$('css').value || '') + '</style>' + d.html)}"></iframe>`
+          ? head('HTML version') + `<iframe sandbox="allow-same-origin" data-autofit scrolling="no" style="width:100%;height:420px;border:1px solid #e5e7eb;border-radius:6px" srcdoc="${esc('<!doctype html><meta charset="utf-8"><style>' + (this.$('css').value || '') + '</style>' + d.html)}"></iframe>`
           : '';
         pane.innerHTML = html
           + head('Plain-text version').replace('mb-1', 'mb-1 mt-3')
-          + `<pre style="white-space:pre-wrap;margin:0;padding:10px;border:1px solid #e5e7eb;border-radius:6px;font-family:Arial,sans-serif">${esc(d.text)}</pre>`;
+          + `<pre style="white-space:pre-wrap;margin:0;padding:10px;border:1px solid #e5e7eb;border-radius:6px;font-family:Arial,sans-serif;max-height:none;overflow:visible">${esc(d.text)}</pre>`;
+        pane.querySelectorAll('iframe[data-autofit]').forEach(f => f.addEventListener('load', () => fitFrame(f)));
         return;
       } catch (_) { /* fall back to the local preview */ }
       this.updateLocalPreview();
@@ -827,7 +841,7 @@
         .replace(/\{\{ai_summary\}\}/g, '[AI summary here]');
       pane.innerHTML = this.getType() === 'html'
         ? `<style>${this.$('css').value || ''}</style><div class="mail-wrap">${rendered}</div>`
-        : `<pre style="white-space:pre-wrap;margin:0;font-family:Arial,sans-serif">${esc(rendered)}</pre>`;
+        : `<pre style="white-space:pre-wrap;margin:0;font-family:Arial,sans-serif;max-height:none;overflow:visible">${esc(rendered)}</pre>`;
     }
 
     openTest() {
